@@ -119,7 +119,13 @@ describe("Raukk Shipping: Plan flows", () => {
 
 			expect(flows).toStrictEqual([
 				{
-					flowId: raukkFlowId("ORE", SOURCE_PLANET, OWN_PLANET),
+					flowId: raukkFlowId(
+						"ORE",
+						SOURCE_PLANET,
+						OWN_PLANET,
+						"own"
+					),
+					ownerPlanUuid: "own",
 					ticker: "ORE",
 					fromStop: SOURCE_PLANET,
 					toStop: OWN_PLANET,
@@ -128,7 +134,8 @@ describe("Raukk Shipping: Plan flows", () => {
 					volumePerUnit: 0,
 				},
 				{
-					flowId: raukkFlowId("DW", "AI1", OWN_PLANET),
+					flowId: raukkFlowId("DW", "AI1", OWN_PLANET, "own"),
+					ownerPlanUuid: "own",
 					ticker: "DW",
 					fromStop: "AI1",
 					toStop: OWN_PLANET,
@@ -138,7 +145,8 @@ describe("Raukk Shipping: Plan flows", () => {
 				},
 				{
 					// the subscriber draw never reaches the exchange
-					flowId: raukkFlowId("ALO", OWN_PLANET, "AI1"),
+					flowId: raukkFlowId("ALO", OWN_PLANET, "AI1", "own"),
+					ownerPlanUuid: "own",
 					ticker: "ALO",
 					fromStop: OWN_PLANET,
 					toStop: "AI1",
@@ -179,6 +187,40 @@ describe("Raukk Shipping: Plan flows", () => {
 				[SOURCE_PLANET, 25],
 				["ZV-307c", 75],
 			]);
+		});
+
+		/*
+		 * Review finding 3: two producers on ONE planet give two flows with
+		 * the same ticker and the same endpoints. Sharing an id would make
+		 * the chain pass charge each of them the cost of both.
+		 */
+		it("keeps two same planet aggregate origins apart", () => {
+			const flows = buildPlanChainFlows(
+				cargo(),
+				{
+					...lookups(),
+					originOf: (ticker: string) =>
+						ticker === "ORE"
+							? [
+									{ planUuid: "source", share: 0.5 },
+									{ planUuid: "other", share: 0.5 },
+								]
+							: [],
+					planetOf: () => SOURCE_PLANET,
+				} as IRaukkFlowLookups,
+				config
+			);
+
+			const ore = flows.filter((flow) => flow.ticker === "ORE");
+
+			expect(ore.map((flow) => flow.unitsPerDay)).toStrictEqual([50, 50]);
+			expect(ore[0].flowId).not.toBe(ore[1].flowId);
+			expect(new Set(flows.map((flow) => flow.flowId)).size).toBe(
+				flows.length
+			);
+			expect(flows.every((flow) => flow.ownerPlanUuid === "own")).toBe(
+				true
+			);
 		});
 
 		it("is empty while shipping is disabled", () => {

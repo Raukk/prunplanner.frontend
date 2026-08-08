@@ -544,6 +544,62 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 			expect(chain.perUnit.DW).toBeCloseTo(pair.perUnitBack.DW, 10);
 		});
 
+		/*
+		 * Review finding 4: `sameSystemFlatCost` is a v1 per ROUND TRIP
+		 * constant, so charging it whole on every same system LEG made a
+		 * two stop loop pay it twice.
+		 */
+		it("reproduces a same system pair on the flat cost override", () => {
+			const sameSystemConfig: IRaukkShippingConfig = {
+				...config,
+				sameSystemFlatCost: 42,
+			};
+
+			const chain: IRaukkChainShipping = calculateChainShipping(
+				chainInput(
+					["AA-001a", "AA-001b"],
+					[
+						flow("RAT", "AA-001a", "AA-001b", 500),
+						flow("DW", "AA-001b", "AA-001a", 500),
+					],
+					{ config: sameSystemConfig }
+				)
+			);
+
+			const pair: IRaukkPairShipping = calculatePairShipping(
+				{
+					pairKey: "pair",
+					profile,
+					route: routes.route("sys-AA-001", "sys-AA-001")!,
+					out: [
+						{
+							ticker: "RAT",
+							unitsPerDay: 500,
+							weightPerUnit: 1,
+							volumePerUnit: 1,
+						},
+					],
+					back: [
+						{
+							ticker: "DW",
+							unitsPerDay: 500,
+							weightPerUnit: 1,
+							volumePerUnit: 1,
+						},
+					],
+				},
+				sameSystemConfig,
+				REPAIR_BILL
+			);
+
+			expect(chain.legs[0].sameSystemMode).toBe("flat");
+			expect(chain.tripsPerDay).toBeCloseTo(pair.tripsPerDay, 10);
+			expect(chain.costPerTrip).toBeCloseTo(pair.costPerTrip, 10);
+			expect(chain.dailyCost).toBeCloseTo(pair.dailyCost, 10);
+			expect(chain.perUnit.RAT).toBeCloseTo(pair.perUnitOut.RAT, 10);
+			expect(chain.perUnit.DW).toBeCloseTo(pair.perUnitBack.DW, 10);
+		});
+
 		it("matches a one directional pair on trips and total cost", () => {
 			// empty backhaul: the loaded direction pays the full loop
 			const chain: IRaukkChainShipping = calculateChainShipping(
@@ -757,8 +813,9 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 
 			expect(result.legs[0].sameSystemMode).toBe("flat");
 			expect(result.legs[0].effectiveParsecs).toBe(0);
+			// halved per leg: the v1 constant is a per ROUND TRIP figure
 			expect(result.legs[0].costPerTrip).toBeCloseTo(
-				42 +
+				21 +
 					profile.stlBlockCost +
 					(profile.damagePerStlBlock / 0.8) * REPAIR_BILL,
 				10

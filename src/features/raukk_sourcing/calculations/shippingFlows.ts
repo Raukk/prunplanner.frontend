@@ -74,23 +74,34 @@ export function raukkPlanetCxCode(
 /**
  * Stable id of one plan flow.
  *
- * Endpoints and ticker identify a flow completely — a plan never ships
- * the same ticker twice between the same two stops — and the id survives
- * the CX split, which only prefixes or suffixes it.
+ * Ticker and endpoints alone do NOT identify a flow: two plans sitting
+ * on one planet, or one plan drawing an aggregate ticker from two
+ * producers on one planet, produce the very same triple. Since the chain
+ * pass charges every flow by its id, a collision would bill BOTH flows
+ * the summed cost of both. The owning plan is therefore part of the id,
+ * and a plan local occurrence suffix settles the aggregate case.
+ *
+ * The id survives the CX split, which only prefixes or suffixes it.
  *
  * @author raukk
  *
  * @param {string} ticker Material Ticker
  * @param {string} fromStop Origin stop
  * @param {string} toStop Destination stop
+ * @param {string} ownerPlanUuid Plan owning the flow
+ * @param {number} occurrence Occurrence of the triple within that plan
  * @returns {string} Flow Id
  */
 export function raukkFlowId(
 	ticker: string,
 	fromStop: string,
-	toStop: string
+	toStop: string,
+	ownerPlanUuid: string,
+	occurrence: number = 0
 ): string {
-	return `${ticker}@${fromStop}>${toStop}`;
+	return `${ticker}@${fromStop}>${toStop}@${ownerPlanUuid}${
+		occurrence > 0 ? `#${occurrence}` : ""
+	}`;
 }
 
 /**
@@ -128,6 +139,8 @@ export function buildPlanChainFlows(
 	const cxCode: string | undefined = raukkPlanetCxCode(own, routes);
 
 	const result: IRaukkChainFlow[] = [];
+	/** Occurrences of one ticker and endpoint triple within this plan */
+	const seen: Map<string, number> = new Map();
 
 	function push(
 		entry: IRaukkShippedTicker,
@@ -137,8 +150,19 @@ export function buildPlanChainFlows(
 	): void {
 		if (unitsPerDay <= 0 || fromStop === toStop) return;
 
+		const triple: string = `${entry.ticker}@${fromStop}>${toStop}`;
+		const occurrence: number = seen.get(triple) ?? 0;
+		seen.set(triple, occurrence + 1);
+
 		result.push({
-			flowId: raukkFlowId(entry.ticker, fromStop, toStop),
+			flowId: raukkFlowId(
+				entry.ticker,
+				fromStop,
+				toStop,
+				flows.planUuid,
+				occurrence
+			),
+			ownerPlanUuid: flows.planUuid,
 			ticker: entry.ticker,
 			fromStop,
 			toStop,
@@ -187,6 +211,8 @@ export function buildPlanChainFlows(
 
 /** ȼ per unit a chain charges one claimed flow */
 export interface IRaukkClaimedFlowCost {
+	/** Plan that authored the flow, absent on pre ownership results */
+	ownerPlanUuid?: string;
 	ticker: string;
 	fromStop: string;
 	toStop: string;
@@ -200,9 +226,13 @@ export interface IRaukkClaimedFlowCost {
  * `counterpart` is the other end of the lane: the source plans planet on
  * a sourcing lane, the exchange code on the plans own market lane.
  *
+ * `claimed` must already be OWNERSHIP filtered — only the flows the plan
+ * itself authored. Subtracting a foreign plans flow would empty a lane
+ * this plan still flies.
+ *
  * @author raukk
  *
- * @param {IRaukkClaimedFlowCost[]} claimed Claimed flows of the plan
+ * @param {IRaukkClaimedFlowCost[]} claimed Own claimed flows of the plan
  * @param {string} own Own planet natural id
  * @returns Lookup of claimed units per ticker, counterpart and direction
  */
@@ -289,26 +319,45 @@ function mergeDirection(
  * time of the lanes a plan owns, while a chain is flown for the whole
  * empire and is accounted on the fleet page instead.
  *
+ * OWNERSHIP, the load bearing rule (shipping-plan.md, "Ownership rule"):
+ * only the plan that AUTHORED a flow may fold its freight. A plan to
+ * plan lane belongs to the consumer alone; folding it into the SOURCE
+ * plans outbound as well would raise that plans break even price, which
+ * the consumer then pays a second time through the producer price.
+ * `ownPlanUuid` enforces that here, on top of the ownership filter the
+ * caller already applies.
+ *
  * @author raukk
  *
  * @param {IRaukkShippingResult} result Pair shipping of the plan
  * @param {IRaukkShippingPair[]} pairs Pairs the result was computed from
- * @param {IRaukkClaimedFlowCost[]} claimed Claimed flows of the plan
+ * @param {IRaukkClaimedFlowCost[]} claimed Own claimed flows of the plan
  * @param {string} own Own planet natural id
+ * @param {string | undefined} ownPlanUuid Own plan uuid
  * @returns {IRaukkShippingResult} Result including the claimed freight
  */
 export function mergeClaimedShipping(
 	result: IRaukkShippingResult,
 	pairs: IRaukkShippingPair[],
 	claimed: IRaukkClaimedFlowCost[],
-	own: string
+	own: string,
+	ownPlanUuid?: string
 ): IRaukkShippingResult {
-	if (claimed.length === 0) return result;
+	const owned: IRaukkClaimedFlowCost[] =
+		ownPlanUuid === undefined
+			? claimed
+			: claimed.filter(
+					(flow) =>
+						flow.ownerPlanUuid === undefined ||
+						flow.ownerPlanUuid === ownPlanUuid
+				);
 
-	const inbound: IRaukkClaimedFlowCost[] = claimed.filter(
+	if (owned.length === 0) return result;
+
+	const inbound: IRaukkClaimedFlowCost[] = owned.filter(
 		(flow) => flow.toStop === own
 	);
-	const outbound: IRaukkClaimedFlowCost[] = claimed.filter(
+	const outbound: IRaukkClaimedFlowCost[] = owned.filter(
 		(flow) => flow.fromStop === own
 	);
 

@@ -52,9 +52,14 @@ A chain automatically claims every flow whose BOTH endpoints are
 stops of the chain; claimed flows leave their v1 pairs (those pairs
 drop the flow from their loads — recompute handles it since pair
 construction is derived, not stored). Unclaimed flows stay on v1
-pairs. Validation rule instead of precedence logic: a given ordered
-stop pair may belong to AT MOST ONE chain — the chain editor refuses
-a second chain containing an already-claimed stop pair.
+pairs. Validation rule instead of precedence logic: two chains may
+share AT MOST ONE stop — the chain editor refuses a second chain
+reaching two of the same stops. (revised after review) The rule was
+originally stated over adjacent stop PAIRS, which did not match
+claiming: claiming looks at the stop SET, not at leg adjacency, so
+`[NC1, A, B, C]` and `[NC1, D, A, E]` share no leg yet both claim
+every `A ↔ NC1` flow. Sharing one stop stays legal and necessary —
+that is how several chains meet at an exchange.
 
 ## CX-split rule (USER: "durability over a bit more sublight")
 
@@ -236,6 +241,14 @@ make, all open to veto in C2:
   the same exchange by detour.
 - **Flow boarding with repeated stops** — the origin/destination pair
   with the fewest ridden legs wins, ties towards the earlier position.
+- **`sameSystemFlatCost` is halved per leg** (revised after review) —
+  the v1 override is a per ROUND TRIP constant
+  (`calculateCostPerTrip`), while `priceLeg` prices one LEG. A two stop
+  loop is two legs, so charging the whole constant per leg billed it
+  twice and broke the parity claim below. `priceLeg` therefore charges
+  `sameSystemFlatCost / 2` per same-system leg, which restores exact
+  two-stop parity and keeps a longer loop's same-system legs priced
+  consistently with it.
 - **Allocation versus v1** — a two stop chain reproduces the v1 pair's
   trips, cost per trip, daily cost, round trip time and shipping
   fraction exactly. Per-unit costs also match when both directions

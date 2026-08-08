@@ -141,6 +141,10 @@ function originalFlowId(flowId: string): string {
  * Charges every original plan flow with what the applied costings billed
  * it, halves of a CX split summed back together.
  *
+ * Flow ids are unique per OWNING plan and per occurrence (see
+ * `raukkFlowId`), so no two flows share a bucket here — a shared
+ * one would charge each of them the sum of both.
+ *
  * @author raukk
  *
  * @param {IRaukkChainFlow[]} flows Original plan flows of the chain
@@ -172,6 +176,7 @@ function claimedFlowCosts(
 		const units: number = Math.max(flow.unitsPerDay, 0);
 
 		costs.push({
+			ownerPlanUuid: flow.ownerPlanUuid,
 			ticker: flow.ticker,
 			fromStop: flow.fromStop,
 			toStop: flow.toStop,
@@ -270,6 +275,48 @@ export async function computeChainResults(
 }
 
 /**
+ * Planet a chain is priced at: the first PLANET stop the user authored
+ * that a member plan actually sits on.
+ *
+ * Derived from the AUTHORED stop order, never from the stored member
+ * list — that one follows snapshot record insertion order and would move
+ * the anchor around as plans are recomputed. Several plans on one planet
+ * name the same planet, so the anchor is unaffected by them; only the
+ * fallback for a chain whose stops are all exchanges has to tie break,
+ * which it does over sorted member uuids.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkChain} chain Chain
+ * @param {string[]} memberPlanUuids Member Plan Uuids
+ * @returns {(string | undefined)} Anchor planet, undefined without one
+ */
+function chainAnchorPlanet(
+	chain: IRaukkChain,
+	memberPlanUuids: string[]
+): string | undefined {
+	const sourcingStore = useRaukkSourcingStore();
+
+	const planets: Set<string> = new Set(
+		memberPlanUuids
+			.map(
+				(planUuid) => sourcingStore.snapshots[planUuid]?.planetNaturalId
+			)
+			.filter((planet): planet is string => planet !== undefined)
+	);
+
+	return (
+		chain.stops.find((stop) => planets.has(stop)) ??
+		[...memberPlanUuids]
+			.sort()
+			.map(
+				(planUuid) => sourcingStore.snapshots[planUuid]?.planetNaturalId
+			)
+			.find((planet) => planet !== undefined)
+	);
+}
+
+/**
  * Computes one chains result from the stored snapshots of its members.
  *
  * @author raukk
@@ -300,9 +347,10 @@ async function computeOneChain(
 		return snapshot?.flows ?? [];
 	});
 
-	const anchorPlanet: string | undefined = memberPlanUuids
-		.map((planUuid) => sourcingStore.snapshots[planUuid]?.planetNaturalId)
-		.find((planet) => planet !== undefined);
+	const anchorPlanet: string | undefined = chainAnchorPlanet(
+		chain,
+		memberPlanUuids
+	);
 
 	const resolvePrice: IRaukkShippingPriceResolver =
 		await loadPrices(anchorPlanet);

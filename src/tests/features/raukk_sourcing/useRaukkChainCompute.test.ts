@@ -147,11 +147,58 @@ function planResult(
 	} as unknown as IPlanResult;
 }
 
+/** One extractor turning nothing into ORE */
+function extractorResult(amount: number): IPlanResult {
+	const buildings: IProductionBuilding[] = [
+		{
+			name: "EXT",
+			amount: 1,
+			totalBatchTime: TOTALMSDAY,
+			workforceDailyCost: 0,
+			constructionMaterials: [],
+			activeRecipes: [
+				{
+					recipeId: "EXT#0",
+					amount: 1,
+					dailyShare: 1,
+					time: TOTALMSDAY,
+					cogm: undefined,
+					recipe: {
+						inputs: [],
+						outputs: [
+							{ material_ticker: "ORE", material_amount: amount },
+						],
+					},
+				},
+			],
+		} as unknown as IProductionBuilding,
+	];
+
+	const materialio: IMaterialIO[] = [mio("ORE", 0, amount, 1, 0)];
+
+	return {
+		production: { buildings, materialio: [] },
+		materialio,
+		workforceMaterialIO: [],
+		productionMaterialIO: materialio,
+	} as unknown as IPlanResult;
+}
+
 function context(planResultValue: IPlanResult) {
 	return {
 		planUuid: "consumer",
 		planName: "Consumer",
 		planetNaturalId: CONSUMER_PLANET,
+		cxUuid: undefined,
+		planResult: planResultValue,
+	};
+}
+
+function sourceContext(planResultValue: IPlanResult) {
+	return {
+		planUuid: "source",
+		planName: "Source",
+		planetNaturalId: SOURCE_PLANET,
 		cxUuid: undefined,
 		planResult: planResultValue,
 	};
@@ -224,7 +271,8 @@ describe("Raukk Sourcing: account level chain compute", () => {
 
 			expect(snapshot.flows).toStrictEqual([
 				{
-					flowId: `ORE@${SOURCE_PLANET}>${CONSUMER_PLANET}`,
+					flowId: `ORE@${SOURCE_PLANET}>${CONSUMER_PLANET}@consumer`,
+					ownerPlanUuid: "consumer",
 					ticker: "ORE",
 					fromStop: SOURCE_PLANET,
 					toStop: CONSUMER_PLANET,
@@ -233,7 +281,8 @@ describe("Raukk Sourcing: account level chain compute", () => {
 					volumePerUnit: 0,
 				},
 				{
-					flowId: `ALO@${CONSUMER_PLANET}>AI1`,
+					flowId: `ALO@${CONSUMER_PLANET}>AI1@consumer`,
+					ownerPlanUuid: "consumer",
 					ticker: "ALO",
 					fromStop: CONSUMER_PLANET,
 					toStop: "AI1",
@@ -484,6 +533,100 @@ describe("Raukk Sourcing: account level chain compute", () => {
 			expect(assigned.tripsPerDay).toBeCloseTo(auto.tripsPerDay / 5, 10);
 		});
 
+		/*
+		 * Review finding 1: a plan to plan flow is authored by the
+		 * CONSUMER alone (shipping-plan.md, "Ownership rule"). Folding it
+		 * into the SOURCE plans outbound as well raises the producers
+		 * break even price, which the consumer then pays a second time
+		 * through that very price.
+		 */
+		it("bills a plan to plan flow to its consumer only", async () => {
+			// the extractor sells 100 of its 200 ORE, the smelter draws
+			// the other 100 — CX → extractor → smelter around one loop
+			await computePlanSnapshot(sourceContext(extractorResult(200)));
+			store.setTickerSource("consumer", "ORE", {
+				mode: "plan",
+				sourcePlanUuid: "source",
+			});
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			// second pass: both plans now read the stored chain result
+			await computePlanSnapshot(sourceContext(extractorResult(200)));
+			const smelter = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			const flows = store.chainResults.c1.flows;
+			const sell = flows.find(
+				(flow) =>
+					flow.ticker === "ORE" && flow.ownerPlanUuid === "source"
+			)!;
+			const draw = flows.find(
+				(flow) =>
+					flow.ticker === "ORE" && flow.ownerPlanUuid === "consumer"
+			)!;
+			const alo = flows.find((flow) => flow.ticker === "ALO")!;
+
+			// two distinct ORE lanes, each owned by exactly one plan
+			expect(sell.toStop).toBe("AI1");
+			expect(draw.toStop).toBe(CONSUMER_PLANET);
+			expect(draw.costPerUnit).not.toBeCloseTo(sell.costPerUnit, 6);
+
+			// the extractor pays for its own sell lane and for nothing else
+			expect(
+				store.snapshots.source.outputs.ORE.breakdown.shipping
+			).toBeCloseTo(sell.costPerUnit, 10);
+
+			// the smelter carries the draw lane, exactly once
+			expect(smelter.snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				draw.costPerUnit + alo.costPerUnit,
+				10
+			);
+		});
+
+		/*
+		 * Review finding 3: an aggregate draw from two producers on ONE
+		 * planet yields two flows with the same ticker and endpoints.
+		 * With a shared id each of them was charged the cost of both.
+		 */
+		it("charges two same planet aggregate flows their own share", async () => {
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			const single: number = store.chainResults.c1.perUnit.ORE;
+			const singleFlow = store.chainResults.c1.flows.find(
+				(flow) => flow.ticker === "ORE"
+			)!;
+
+			// a second producer on the very same planet, drawn as one pool
+			store.setSnapshot("source2", {
+				...store.getSnapshot("source")!,
+				planName: "Source Two",
+			});
+			store.setTickerSource("consumer", "ORE", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			const split = store.chainResults.c1.flows.filter(
+				(flow) => flow.ticker === "ORE"
+			);
+
+			expect(split.map((flow) => flow.unitsPerDay)).toStrictEqual([
+				50, 50,
+			]);
+			// the same 100 units on the same lane cost the same in total,
+			// and every flow is billed its own half of it
+			split.forEach((flow) =>
+				expect(flow.costPerUnit).toBeCloseTo(singleFlow.costPerUnit, 8)
+			);
+			expect(store.chainResults.c1.perUnit.ORE).toBeCloseTo(single, 8);
+		});
+
 		it("hires the whole chain at a manual rate", async () => {
 			store.setChain({
 				chainId: "c1",
@@ -546,6 +689,62 @@ describe("Raukk Sourcing: account level chain compute", () => {
 					(row) => row.shipTypeId === RAUKK_DEFAULT_SHIP_PROFILE_ID
 				)?.utilization
 			).toBeNull();
+		});
+	});
+
+	/*
+	 * Review finding 6: the anchor used to be the first entry of the
+	 * derived member list, which follows snapshot RECORD order — the
+	 * price anchor of a chain moved as plans were recomputed.
+	 */
+	describe("price anchor", () => {
+		function bareSnapshot(
+			planName: string,
+			planetNaturalId: string
+		): IRaukkSnapshot {
+			return {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName,
+				planetNaturalId,
+				outputs: {},
+				draws: {},
+			};
+		}
+
+		async function anchorOf(
+			reversed: boolean
+		): Promise<string | undefined> {
+			store.$reset();
+			store.setShippingConfig({ enabled: true });
+			store.setChain({
+				chainId: "c1",
+				stops: ["AI1", CONSUMER_PLANET, SOURCE_PLANET],
+			});
+
+			const records: [string, IRaukkSnapshot][] = [
+				["source", bareSnapshot("Source", SOURCE_PLANET)],
+				["consumer", bareSnapshot("Consumer", CONSUMER_PLANET)],
+			];
+
+			(reversed ? [...records].reverse() : records).forEach(
+				([planUuid, snapshot]) => store.setSnapshot(planUuid, snapshot)
+			);
+
+			let seen: string | undefined;
+
+			await computeChainResults(async (planetNaturalId) => {
+				seen = planetNaturalId;
+
+				return (ticker: string) => PRICES[ticker] ?? 0;
+			});
+
+			return seen;
+		}
+
+		it("anchors at the first authored planet stop, whatever the record order", async () => {
+			expect(await anchorOf(false)).toBe(CONSUMER_PLANET);
+			expect(await anchorOf(true)).toBe(CONSUMER_PLANET);
 		});
 	});
 

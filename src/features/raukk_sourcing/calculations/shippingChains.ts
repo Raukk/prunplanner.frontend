@@ -352,6 +352,10 @@ function pathMeanDensity(
  * flown through, anchored at `densityRef`, and falls back to the flat
  * profile rate whenever the path or a density is unknown.
  *
+ * A same system leg priced by the manual `sameSystemFlatCost` override
+ * pays HALF of it: the v1 constant is a per ROUND TRIP figure and a
+ * round trip is two legs here.
+ *
  * @author raukk
  *
  * @param {IRaukkChainLeg} leg Leg
@@ -405,11 +409,17 @@ function priceLeg(
 		};
 	}
 
-	// same system: the manual override still wins when it is set
+	/*
+	 * Same system: the manual override still wins when it is set, HALVED
+	 * per leg. v1 charges `sameSystemFlatCost` once per ROUND TRIP
+	 * (`calculateCostPerTrip`), and the round trip of a two stop loop is
+	 * two legs — charging it whole per leg would double it and break the
+	 * documented v1 parity of a degenerate chain.
+	 */
 	if (config.sameSystemFlatCost > 0) {
 		return {
 			...flat,
-			distanceCost: config.sameSystemFlatCost,
+			distanceCost: config.sameSystemFlatCost / 2,
 			sameSystemMode: "flat",
 		};
 	}

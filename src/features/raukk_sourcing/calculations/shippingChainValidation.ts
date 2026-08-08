@@ -1,8 +1,10 @@
-// Chain authoring rules that are NOT cost math: which ordered stop pairs
-// a loop occupies and whether another chain already owns one of them.
-// See docs/raukk_sourcing/shipping-chains-v2.md, section "Flow claiming":
-// instead of precedence logic between overlapping chains, an ordered stop
-// pair may belong to AT MOST ONE chain and the editor refuses the second.
+// Chain authoring rules that are NOT cost math: whether another chain
+// already reaches the same stops. See docs/raukk_sourcing/
+// shipping-chains-v2.md, section "Flow claiming": instead of precedence
+// logic between overlapping chains, two chains may share AT MOST ONE
+// stop and the editor refuses the second — the rule claiming actually
+// follows, since `claimChainFlows` claims every flow whose two endpoints
+// both appear in the stop list, adjacent or not.
 
 // Types & Interfaces
 import {
@@ -10,36 +12,46 @@ import {
 	RAUKK_STOP_REF,
 } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 
-/** The other chain already carrying an ordered stop pair */
+/** The other chain already reaching two of these stops */
 export interface IRaukkChainPairConflict {
 	chainId: string;
+	/** The two shared stops, in the order the edited loop lists them */
 	fromStop: RAUKK_STOP_REF;
 	toStop: RAUKK_STOP_REF;
 }
 
 /**
- * The ordered stop pairs a loop occupies, one per leg.
+ * The two stops an edited loop shares with another chain, if any.
  *
- * A loop of n stops has n legs, the last one closing back to the first.
- * Pairs are ORDERED: `A→B` and `B→A` are different lanes and may live in
- * different chains, which is what makes an out and back path expressible
- * at all.
+ * A chain claims a flow when BOTH its endpoints are stops of the chain,
+ * in any position — so any two chains sharing two distinct stops claim
+ * the same flows and would bill the same cargo twice. Sharing ONE stop
+ * is fine and necessary: that is how several chains meet at an exchange.
  *
  * @author raukk
  *
- * @param {RAUKK_STOP_REF[]} stops Ordered loop
- * @returns {string[]} Ordered pair keys, `from>to`
+ * @param {RAUKK_STOP_REF[]} stops Ordered loop being written
+ * @param {RAUKK_STOP_REF[]} otherStops Ordered loop of the other chain
+ * @returns {(RAUKK_STOP_REF[] | null)} The first two shared stops
  */
-export function raukkChainStopPairs(stops: RAUKK_STOP_REF[]): string[] {
-	if (stops.length < 2) return [];
+function sharedStopPair(
+	stops: RAUKK_STOP_REF[],
+	otherStops: RAUKK_STOP_REF[]
+): RAUKK_STOP_REF[] | null {
+	const other: Set<RAUKK_STOP_REF> = new Set(otherStops);
+	const shared: RAUKK_STOP_REF[] = [];
 
-	return stops.map(
-		(stopRef, index) => `${stopRef}>${stops[(index + 1) % stops.length]}`
-	);
+	new Set(stops).forEach((stopRef) => {
+		if (shared.length >= 2 || !other.has(stopRef)) return;
+
+		shared.push(stopRef);
+	});
+
+	return shared.length >= 2 ? shared : null;
 }
 
 /**
- * Checks a loop against the stop pairs the other chains already own.
+ * Checks a loop against the stops the other chains already reach.
  *
  * The chain being edited is excluded by its own id, so saving a chain
  * unchanged never conflicts with itself. The first conflict found is
@@ -57,30 +69,21 @@ export function raukkChainPairConflict(
 	chainId: string,
 	stops: RAUKK_STOP_REF[]
 ): IRaukkChainPairConflict | null {
-	const taken: Map<string, string> = new Map();
-
-	Object.entries(chains).forEach(([otherId, chain]) => {
-		if (otherId === chainId) return;
-
-		raukkChainStopPairs(chain.stops).forEach((pair) => {
-			if (!taken.has(pair)) taken.set(pair, otherId);
-		});
-	});
-
 	let conflict: IRaukkChainPairConflict | null = null;
 
-	raukkChainStopPairs(stops).forEach((pair) => {
-		if (conflict !== null) return;
+	Object.entries(chains).forEach(([otherId, chain]) => {
+		if (conflict !== null || otherId === chainId) return;
 
-		const owner: string | undefined = taken.get(pair);
-		if (owner === undefined) return;
-
-		const separator: number = pair.indexOf(">");
+		const shared: RAUKK_STOP_REF[] | null = sharedStopPair(
+			stops,
+			chain.stops
+		);
+		if (shared === null) return;
 
 		conflict = {
-			chainId: owner,
-			fromStop: pair.slice(0, separator),
-			toStop: pair.slice(separator + 1),
+			chainId: otherId,
+			fromStop: shared[0],
+			toStop: shared[1],
 		};
 	});
 

@@ -222,16 +222,33 @@ function planCargo(input: IRaukkShippingInput): IRaukkPairPlanFlows {
  * Flows a chain already claimed off this plan, from the STORED chain
  * results.
  *
- * Claiming is keyed by the flows endpoints, so two plans sitting on the
- * SAME planet share their claims — a known and accepted limitation of
- * addressing stops by planet, which is what the user authors.
+ * The OWNERSHIP gate of the chain model (shipping-plan.md, "Ownership
+ * rule"): every chain flow was authored by exactly one member plans
+ * snapshot, and only that plan may fold its freight or subtract its
+ * units. Endpoints alone cannot say so — a plan to plan lane touches
+ * both plans, and letting the SOURCE plan fold it too would bill the
+ * same freight twice, once into the producers break even price and once
+ * more into the consumers inbound.
+ *
+ * COMPATIBILITY, chosen and documented: a chain result frozen before
+ * ownership was carried has no `ownerPlanUuid`. Such a flow degrades to
+ * the old endpoint heuristic for INBOUND lanes only — the plan the cargo
+ * arrives at is the plan that draws it, which is the authoring plan in
+ * every case the old heuristic got right. Its outbound half is dropped,
+ * so the worst an old result can do is leave freight on the plans own
+ * pairs, never double bill it. The next chain pass rewrites the result
+ * with owners and the fallback stops applying.
  *
  * @author raukk
  *
+ * @param {string} planUuid Own plan uuid
  * @param {string} planetNaturalId Own planet
- * @returns {IRaukkChainFlowCost[]} Claimed flows touching this planet
+ * @returns {IRaukkChainFlowCost[]} Claimed flows this plan owns
  */
-function planClaimedFlows(planetNaturalId: string): IRaukkChainFlowCost[] {
+function planClaimedFlows(
+	planUuid: string,
+	planetNaturalId: string
+): IRaukkChainFlowCost[] {
 	const sourcingStore = useRaukkSourcingStore();
 
 	const claimed: IRaukkChainFlowCost[] = [];
@@ -239,11 +256,12 @@ function planClaimedFlows(planetNaturalId: string): IRaukkChainFlowCost[] {
 	Object.values(sourcingStore.chainResults).forEach(
 		(result: IRaukkChainResult) =>
 			result.flows.forEach((flow: IRaukkChainFlowCost) => {
-				if (
-					flow.fromStop === planetNaturalId ||
-					flow.toStop === planetNaturalId
-				)
-					claimed.push(flow);
+				if (flow.ownerPlanUuid !== undefined) {
+					if (flow.ownerPlanUuid === planUuid) claimed.push(flow);
+					return;
+				}
+
+				if (flow.toStop === planetNaturalId) claimed.push(flow);
 			})
 	);
 
@@ -255,7 +273,7 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 	const sourcingStore = useRaukkSourcingStore();
 
 	const claimedUnits = raukkClaimedUnitsLookup(
-		planClaimedFlows(input.planetNaturalId),
+		planClaimedFlows(input.planUuid, input.planetNaturalId),
 		input.planetNaturalId
 	);
 	const cxCode: string | undefined = raukkPlanetCxCode(input.planetNaturalId);
@@ -401,8 +419,9 @@ function computePlanShipping(input: IRaukkShippingInput): IRaukkShippingResult {
 	return mergeClaimedShipping(
 		result,
 		pairs,
-		planClaimedFlows(input.planetNaturalId),
-		input.planetNaturalId
+		planClaimedFlows(input.planUuid, input.planetNaturalId),
+		input.planetNaturalId,
+		input.planUuid
 	);
 }
 

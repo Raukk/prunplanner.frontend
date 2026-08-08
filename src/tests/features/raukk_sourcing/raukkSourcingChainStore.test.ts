@@ -121,17 +121,22 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.chains.c1).toBeUndefined();
 		});
 
-		it("refuses an ordered stop pair another chain owns", () => {
+		it("refuses a chain reaching two stops another chain reaches", () => {
 			store.setChain({ chainId: "c1", stops: ["A", "B", "C"] });
 
 			expect(() =>
 				store.setChain({ chainId: "c2", stops: ["B", "C", "D"] })
-			).toThrowError(/already belongs to chain 'c1'/);
+			).toThrowError(/already reaches both/);
 			expect(store.chains.c2).toBeUndefined();
 
-			// the same pair flown the other way round is a different lane
+			// claiming is by stop SET, so the reverse loop is refused too
 			expect(() =>
 				store.setChain({ chainId: "c2", stops: ["C", "B", "D"] })
+			).toThrowError(/already reaches both/);
+
+			// one shared stop stays legal: that is how chains meet at a CX
+			expect(() =>
+				store.setChain({ chainId: "c2", stops: ["C", "D", "E"] })
 			).not.toThrow();
 		});
 
@@ -223,6 +228,53 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.chainConfig.cxSplitDetourParsecs).toBe(12);
 			expect(store.chainResults.c1.stale).toBe(true);
 			expect(store.snapshots.source.stale).toBe(true);
+		});
+
+		/*
+		 * Review finding 5: a chain is costed from the shipping
+		 * configuration and the profile of its ship type, so the account
+		 * global mutations that stale every snapshot have to stale every
+		 * chain result with them.
+		 */
+		it("stales every chain on a shipping or profile change", () => {
+			function freshChain(): void {
+				store.setChain({
+					chainId: "c1",
+					stops: ["ZV-194a", "ZV-759b"],
+				});
+				store.setChainResult("c1", makeChainResult("c1", ["source"]));
+				store.setSnapshot("source", makeSnapshot("Source", "ZV-194a"));
+			}
+
+			store.setShippingConfig({ enabled: true });
+
+			freshChain();
+			store.setShippingConfig({ sameSystemFlatCost: 42 });
+			expect(store.chainResults.c1.stale).toBe(true);
+			expect(store.snapshots.source.stale).toBe(true);
+
+			freshChain();
+			store.setShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
+				costPerParsec: 12,
+			});
+			expect(store.chainResults.c1.stale).toBe(true);
+
+			freshChain();
+			store.resetShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID);
+			expect(store.chainResults.c1.stale).toBe(true);
+		});
+
+		it("leaves the chains fresh while shipping stays off", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setChainResult("c1", makeChainResult("c1", ["source"]));
+
+			// off before and off after: nothing can have moved
+			store.setShippingConfig({ sameSystemFlatCost: 42 });
+			store.setShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
+				costPerParsec: 12,
+			});
+
+			expect(store.chainResults.c1.stale).toBe(false);
 		});
 
 		it("leaves everything alone on a fleet count change", () => {

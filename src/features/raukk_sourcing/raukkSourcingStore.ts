@@ -318,17 +318,27 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
-		 * Marks every stored snapshot stale.
+		 * Marks every stored snapshot AND every stored chain result stale.
 		 *
 		 * Shipping configuration and ship profiles are account global:
 		 * changing them changes the numbers of every plan at once, so
 		 * there is nothing to cascade along the dependency graph — the
 		 * whole store is stale.
+		 *
+		 * Chain results are costed from those very inputs — the shipping
+		 * configuration and the profile of the assigned ship type — so a
+		 * change that stales every snapshot stales every chain with them.
+		 * Leaving them fresh would let a plan keep folding freight priced
+		 * with the previous profile.
 		 * @author raukk
 		 */
 		function markAllStale(): void {
 			Object.values(snapshots.value).forEach((snapshot) => {
 				snapshot.stale = true;
+			});
+
+			Object.values(chainResults.value).forEach((result) => {
+				result.stale = true;
 			});
 		}
 
@@ -443,8 +453,8 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
-		 * Checks a loop against the ordered stop pairs the other chains
-		 * already own, see
+		 * Checks a loop against the stops the other chains already reach —
+		 * two chains may share at most ONE stop, see
 		 * {@link raukkChainPairConflict}. Backs the chain editors refusal
 		 * before {@link setChain} throws.
 		 * @author raukk
@@ -505,10 +515,11 @@ export const useRaukkSourcingStore = defineStore(
 		 *
 		 * Two authoring rules are enforced here rather than in the editor,
 		 * because the store is what everything else reads: a loop needs at
-		 * least two stops, and an ordered stop pair may belong to AT MOST
-		 * ONE chain (shipping-chains-v2.md, "Flow claiming") — that
-		 * uniqueness is what replaces precedence logic between overlapping
-		 * chains. Both violations throw and leave the store untouched.
+		 * least two stops, and two chains may share AT MOST ONE
+		 * stop (shipping-chains-v2.md, "Flow claiming") — sharing two
+		 * would let both claim the same flows, which is what replaces
+		 * precedence logic between overlapping chains. Both violations
+		 * throw and leave the store untouched.
 		 * @author raukk
 		 *
 		 * @param {IRaukkChain} chain Chain
@@ -527,7 +538,7 @@ export const useRaukkSourcingStore = defineStore(
 
 			if (conflict !== null) {
 				throw new Error(
-					`The stop pair ${conflict.fromStop} → ${conflict.toStop} already belongs to chain '${conflict.chainId}'.`
+					`Chain '${conflict.chainId}' already reaches both ${conflict.fromStop} and ${conflict.toStop}; two chains may share at most one stop.`
 				);
 			}
 

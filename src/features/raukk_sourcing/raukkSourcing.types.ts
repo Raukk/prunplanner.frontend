@@ -134,6 +134,10 @@ export interface IRaukkSnapshotLane {
 
 /** ȼ per unit a chain charges one flow it claimed */
 export interface IRaukkChainFlowCost {
+	/** Plan whose snapshot authored the flow, see {@link IRaukkChainFlow}.
+	 * Absent on results computed before ownership was carried; those fall
+	 * back to the old endpoint heuristic, INBOUND only. */
+	ownerPlanUuid?: string;
 	ticker: string;
 	fromStop: RAUKK_STOP_REF;
 	toStop: RAUKK_STOP_REF;

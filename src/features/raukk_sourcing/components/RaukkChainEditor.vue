@@ -98,9 +98,10 @@
 	);
 
 	/**
-	 * The stop pair conflict of the loop as it stands, if any. An ordered
-	 * stop pair may belong to at most one chain, and this is what refuses
-	 * the second one BEFORE the store throws.
+	 * The stop conflict of the loop as it stands, if any. Two chains may
+	 * share at most ONE stop — sharing two would let both claim the same
+	 * flows — and this is what refuses the second one BEFORE the store
+	 * throws.
 	 */
 	const conflict: ComputedRef<IRaukkChainPairConflict | null> = computed(() =>
 		raukkChainPairConflict(
@@ -110,7 +111,8 @@
 		)
 	);
 
-	/** Stops that may still be appended without claiming a taken pair */
+	/** Stops that may still be appended without meeting another chain
+	 * a second time */
 	const appendableOptions: ComputedRef<PSelectOption[]> = computed(() =>
 		props.stopOptions.filter(
 			(option) =>
@@ -121,7 +123,7 @@
 		)
 	);
 
-	/** Stops another chain already owns the connection to, greyed out */
+	/** Stops another chain already reaches as well, greyed out */
 	const blockedLabels: ComputedRef<string[]> = computed(() => {
 		const appendable: Set<string | number | undefined> = new Set(
 			appendableOptions.value.map((option) => option.value)

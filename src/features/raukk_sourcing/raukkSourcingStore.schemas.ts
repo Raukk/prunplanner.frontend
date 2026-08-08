@@ -121,8 +121,14 @@ export const RaukkChainConfigSchema = z.object({
 	sameSystemPricing: z.enum(["average", "worst"]).default("average"),
 });
 
+/**
+ * One frozen plan flow. `ownerPlanUuid` is additive and optional: flows
+ * frozen before ownership was carried know no owner, and the reader
+ * degrades them conservatively rather than guessing one.
+ */
 export const RaukkChainFlowSchema = z.object({
 	flowId: z.string().optional(),
+	ownerPlanUuid: z.string().optional(),
 	ticker: z.string(),
 	fromStop: z.string(),
 	toStop: z.string(),
@@ -132,6 +138,7 @@ export const RaukkChainFlowSchema = z.object({
 });
 
 export const RaukkChainFlowCostSchema = z.object({
+	ownerPlanUuid: z.string().optional(),
 	ticker: z.string(),
 	fromStop: z.string(),
 	toStop: z.string(),
