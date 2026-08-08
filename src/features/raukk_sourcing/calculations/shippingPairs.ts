@@ -117,6 +117,22 @@ export interface IRaukkPairLookups {
 	 */
 	viaCxSoldOf?(ticker: string): number;
 	/**
+	 * True when this plans OUTPUT ticker sells on the local market of its
+	 * OWN planet ("LM sell"). The market bound excess of such a ticker
+	 * never travels to the exchange, so only the units a counterpart draws
+	 * over a rerouted lane — `viaCxSoldOf` — stay outbound. Absent lookup:
+	 * nothing is sold locally, which is the behaviour before the flag.
+	 */
+	localSaleOf?(ticker: string): boolean;
+	/**
+	 * True when this plans INPUT ticker is bought on the local market of
+	 * its OWN planet ("LM buy"). Such a ticker never rides an inbound lane
+	 * at all: it is produced and sold where it is consumed. Per ticker and
+	 * bucket agnostic — production, workforce and repair demand alike.
+	 * Absent lookup: nothing is bought locally.
+	 */
+	localBuyOf?(ticker: string): boolean;
+	/**
 	 * Exchange CODE the plan is anchored at, see `raukkCxAnchorCode`. Only
 	 * the flow list needs the code — a pair is priced by distance, not by
 	 * name — so the pair construction reads `anchorCxSystemId` instead.
@@ -367,6 +383,12 @@ export function raukkCxPairKey(planUuid: string): string {
  * draws here — back into this plans exchange sells. Each plan adds only
  * its OWN half, the ownership rule is untouched.
  *
+ * The local market flags remove cargo outright: `localSaleOf` leaves an
+ * output with nothing but its `viaCxSoldOf` portion outbound — the excess
+ * sells on the own planet — and `localBuyOf` keeps a market bought input
+ * off the exchange lane entirely. Neither touches a plan to plan draw,
+ * which is consumed on another planet and must still travel.
+ *
  * Cargo a chain already claimed is subtracted per lane through
  * `claimedUnitsOf` before anything is loaded: those units ride the chain
  * and take their ȼ per unit from its stored result, so charging them here
@@ -504,6 +526,10 @@ export function buildShippingPairs(
 		}
 
 		if (origins.length === 0) {
+			// an LM bought ticker is bought where it is consumed: no
+			// exchange lane carries it, in any of its buckets
+			if (lookups.localBuyOf?.(ticker) === true) return;
+
 			laneRows(undefined, 1).forEach((row) =>
 				pushMarketBack(row.entry, row.unitsPerDay)
 			);
@@ -593,6 +619,26 @@ export function buildShippingPairs(
 
 	if (cx === null) return pairs;
 
+	/**
+	 * Units of one own output that leave through the exchange.
+	 *
+	 * Normally the whole net output minus what subscribers draw, plus the
+	 * drawn units a rerouted lane no longer hauls. An LM SOLD ticker keeps
+	 * only that second term: its market bound excess is sold on the own
+	 * planets local market and never reaches the exchange, while the units
+	 * a counterpart draws are consumed elsewhere and still have to travel.
+	 */
+	function cxOutUnits(entry: IRaukkShippedTicker): number {
+		const viaCx: number = lookups.viaCxSoldOf?.(entry.ticker) ?? 0;
+
+		if (lookups.localSaleOf?.(entry.ticker) === true) return viaCx;
+
+		return Math.max(
+			entry.unitsPerDay - lookups.subscribedOf(entry.ticker) + viaCx,
+			0
+		);
+	}
+
 	const cxOut: IRaukkShippedTicker[] = flows.outputs
 		.map((entry) => ({
 			...entry,
@@ -600,12 +646,7 @@ export function buildShippingPairs(
 				entry.ticker,
 				undefined,
 				false,
-				Math.max(
-					entry.unitsPerDay -
-						lookups.subscribedOf(entry.ticker) +
-						(lookups.viaCxSoldOf?.(entry.ticker) ?? 0),
-					0
-				)
+				cxOutUnits(entry)
 			),
 		}))
 		.filter((entry) => entry.unitsPerDay > 0);

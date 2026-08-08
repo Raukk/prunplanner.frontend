@@ -163,6 +163,11 @@ export function raukkFlowId(
  *  - one flow per net output ticker, to this plans exchange, after the
  *    subscriber draws other plans already take by other means.
  *
+ * The local market flags drop whole flows: an LM SOLD output emits no
+ * own→CX flow — everything it would carry is the market bound excess,
+ * the drawn units being the consumers own inbound flows — and an LM
+ * BOUGHT input emits no CX→own flow, in any cargo bucket.
+ *
  * Sourcing DELIVERIES are deliberately absent: they are the consuming
  * plans inbound flows and would otherwise be counted twice — the same
  * ownership rule the v1 pairs follow.
@@ -238,6 +243,10 @@ export function buildPlanChainFlows(
 		const origins: IRaukkTickerOrigin[] = lookups.originOf(entry.ticker);
 
 		if (origins.length === 0) {
+			// LM bought: produced and sold on this very planet, so no
+			// inbound flow of any bucket exists to begin with
+			if (lookups.localBuyOf?.(entry.ticker) === true) return;
+
 			if (cxCode !== undefined)
 				push(entry, cxCode, own, entry.unitsPerDay);
 			return;
@@ -264,6 +273,18 @@ export function buildPlanChainFlows(
 	if (cxCode === undefined) return result;
 
 	flows.outputs.forEach((entry) => {
+		/*
+		 * An LM sold output emits NO own→CX flow at all. The pairs model
+		 * keeps the `viaCxSoldOf` portion of such a ticker because its
+		 * exchange lane also carries what a rerouted counterpart draws;
+		 * here those very units are the CONSUMERS own planet to planet
+		 * flow, which it authors and keeps. What is left over on this side
+		 * — `unitsPerDay - subscribedOf` — is exactly the market bound
+		 * excess, and that is what the flag removes. Both models therefore
+		 * still ship the same cargo.
+		 */
+		if (lookups.localSaleOf?.(entry.ticker) === true) return;
+
 		push(
 			entry,
 			own,

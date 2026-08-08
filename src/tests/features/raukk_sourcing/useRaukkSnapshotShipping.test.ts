@@ -1038,4 +1038,172 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			expect(snapshot.shippingFraction).toBeUndefined();
 		});
 	});
+
+	describe("local market", () => {
+		beforeEach(() => {
+			store.setShippingConfig({ enabled: true });
+		});
+
+		it("freezes the resolved local price as the sell price", async () => {
+			const { snapshot: market } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			expect(market.sellPrices).toStrictEqual({ ALO: 200 });
+
+			store.setLocalSale("consumer", "ALO", {
+				basis: "MANUAL",
+				value: 180,
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// flat, for the whole ticker: everything downstream reads it
+			expect(snapshot.sellPrices).toStrictEqual({ ALO: 180 });
+		});
+
+		it("resolves a market basis local price at the plans exchange", async () => {
+			mockGetExchangeTicker.mockImplementation(
+				async (exchangeTicker: string) => {
+					if (!exchangeTicker.startsWith("ALO."))
+						throw new Error("no exchange data");
+
+					return { bid: 190, ask: 210, vwap_7d: 0, vwap_30d: 0 };
+				}
+			);
+
+			store.setLocalSale("consumer", "ALO", { basis: "BID", value: 15 });
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// the bid of 190 undercut by the 15 ȼ offset
+			expect(snapshot.sellPrices).toStrictEqual({ ALO: 175 });
+		});
+
+		it("takes the LM sold excess off the exchange lane", async () => {
+			const { snapshot: market } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			store.setLocalSale("consumer", "ALO", {
+				basis: "MANUAL",
+				value: 180,
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			/*
+			 * 300 t of ALO used to set the trips at 0.3 a day and paid
+			 * three quarters of them. Nobody draws the ALO, so all of it is
+			 * market bound excess and sells on the own planet: only the
+			 * 100 t of ORE are left, at 0.1 trips a day.
+			 */
+			expect(market.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				10
+			);
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				(0.1 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				10
+			);
+			// and no outbound flow of it is left for a chain to claim
+			expect(
+				snapshot.flows?.filter((flow) => flow.ticker === "ALO")
+			).toStrictEqual([]);
+		});
+
+		it("keeps shipping what another plan draws off an LM sold output", async () => {
+			// a plan on another planet drawing all 100 ALO a day
+			store.setSnapshot("other", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Other",
+				planetNaturalId: "ZV-307c",
+				outputs: {},
+				draws: { consumer: { ALO: 100 } },
+			});
+
+			store.setLocalSale("consumer", "ALO", {
+				basis: "MANUAL",
+				value: 180,
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// nothing is market bound excess here, every unit is drawn and
+			// consumed elsewhere: the lane ships exactly as before
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				10
+			);
+		});
+
+		it("charges no inbound freight on an LM bought input", async () => {
+			store.setTickerSource("consumer", "ORE", {
+				mode: "local",
+				price: { basis: "MANUAL", value: 80 },
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// the frozen input price is the bare local price, no freight
+			expect(snapshot.inputPrices).toStrictEqual({ ORE: 80 });
+			expect(snapshot.outputs.ALO.breakdown.inputs).toBe(80);
+			// and no inbound flow of it exists at all
+			expect(
+				snapshot.flows?.filter((flow) => flow.ticker === "ORE")
+			).toStrictEqual([]);
+			// 300 t of ALO out alone still fly the lane, and pay all of it
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				10
+			);
+		});
+
+		it("drops the freight out of an LM bought repair material", async () => {
+			// BSE weighs 0.3 t and takes 0.5 m³, straight from the game
+			// data: repair cargo needs dimensions the material I/O of a
+			// plan never carries
+			// @ts-expect-error test data is plain JSON
+			await materialsStore.setMany(materials);
+
+			const withRepair: IPlanResult = makePlanResult(
+				[["ORE", 100]],
+				[["ALO", 100]],
+				[mio("ALO", 0, 100, 1, 0), mio("ORE", 100, 0, 1, 0)],
+				[{ ticker: "BSE", input: 1800, output: 0 }]
+			);
+
+			const { snapshot: shipped } = await computePlanSnapshot(
+				context(withRepair)
+			);
+
+			// BSE prices at 0 through the mock, so the whole repair
+			// capital cost of this plan IS the freight of the material
+			expect(shipped.outputs.ALO.breakdown.repair).toBeGreaterThan(0);
+
+			store.setTickerSource("consumer", "BSE", {
+				mode: "local",
+				price: { basis: "MANUAL", value: 0 },
+			});
+
+			const { snapshot } = await computePlanSnapshot(context(withRepair));
+
+			expect(snapshot.outputs.ALO.breakdown.repair).toBe(0);
+			// the repair leg is gone with its cargo
+			expect(
+				(snapshot.lanes ?? []).map((lane) => lane.bucket)
+			).toStrictEqual(["production"]);
+		});
+	});
 });
