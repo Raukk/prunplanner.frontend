@@ -43,7 +43,12 @@
 		"repair_cost": "Repair Capital Cost / Day",
 		"no_producers": "No plan produces this ticker",
 		"market": "Market",
-		"empty": "This plan has no net inputs."
+		"empty": "This plan has no net inputs.",
+		"groups": {
+			"workforce": "Workforce Consumables",
+			"repair": "Repair Materials",
+			"production": "Production Inputs"
+		}
 	},
 	"buckets": {
 		"production": "Production",

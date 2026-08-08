@@ -462,6 +462,24 @@ describe("Raukk Sourcing Pricing", () => {
 			]);
 		});
 
+		it("sorts by the default price cost when a getter is given", () => {
+			const rows = buildInputRows(
+				planResult,
+				{ BSE: 4 },
+				{},
+				(ticker: string) =>
+					ticker === "BSE" ? { price: 500 } : resolve(ticker),
+				(ticker: string) => (ticker === "H2O" ? 1000 : 1)
+			);
+
+			// sorted by units * default price, not the effective price
+			expect(rows.map((r) => r.ticker)).toStrictEqual([
+				"H2O",
+				"RAT",
+				"BSE",
+			]);
+		});
+
 		it("badges every bucket a ticker belongs to", () => {
 			const rows = buildInputRows(planResult, { RAT: 1 }, {}, resolve);
 			const rat = rows.find((r) => r.ticker === "RAT");

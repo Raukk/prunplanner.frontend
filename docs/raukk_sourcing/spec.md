@@ -118,7 +118,12 @@ plan's current CX preference behavior.
   numbers below it); plans without a snapshot are skipped. When the
   scope contains a loop the whole ordered scope is recomputed in
   additional passes until the largest relative output-cost change
-  drops below an epsilon, capped at 5 passes total. Each plan is
+  drops below an epsilon, capped at 5 passes total. The settling
+  epsilon and the materially-changed epsilon of the staleness cascade
+  are the SAME shared constant (`RAUKK_SNAPSHOT_EQUAL_EPSILON`, 1e-6):
+  were the cascade tighter, the final pass of a settled loop would
+  re-flag the other loop members stale and a loop would never show
+  current. Each plan is
   calculated in its own empire/CX context; a plan that fails is
   recorded as an error and the run continues with the next one.
   Never auto-recompute the tree on save.
@@ -159,7 +164,13 @@ other stores. Shape (indicative):
    Supply Cart / Repair Analysis):
    - Inputs table: ticker, daily need, bucket (production / workforce /
      repair), market price mode select, source checkbox + dropdown
-     (plan name, ȼ/unit, subscription %), effective ȼ/unit.
+     (plan name, ȼ/unit, subscription %), effective ȼ/unit. Rows are
+     grouped: workforce consumables, then repair materials, then
+     production inputs; a multi-bucket ticker (rare) repeats in every
+     matching group with its total need and one shared source config.
+     Within a group rows sort by daily cost at the CX preference price
+     descending — deliberately NOT the effective price, so configuring
+     a source does not reorder rows under the cursor.
    - Outputs table (the point of it all): ticker, units/day, true
      ȼ/unit with breakdown columns, vs. market sell price → margin.
    - Snapshot controls: compute/update snapshot, stale indicator,
@@ -167,8 +178,11 @@ other stores. Shape (indicative):
 2. Repair Analysis additions: day dropdown limited to 30/60/90/120
    (default 90); plan-total per period AND per day; new per-unit-of-
    output table (runtime-share amortized); an "at sourced prices" note
-   row in the totals from the stored snapshot. Existing per-building
-   view unchanged.
+   row in the totals from the stored snapshot. The day material table
+   additionally notes, per plan-sourced ticker, the same amount at the
+   snapshot's frozen internal price plus a mixed "Total at Sourced
+   Prices" (sourced tickers internal, the rest market). Existing
+   per-building view unchanged.
 3. Per-unit strips on Workforce panel and Supply Cart: one slotted
    raukk sub-component each — upstream diff ≤ ~3 lines per file. The
    strips append the bucket's daily total at sourced prices.
