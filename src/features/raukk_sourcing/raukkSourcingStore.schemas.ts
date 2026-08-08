@@ -5,6 +5,11 @@ import { z } from "zod";
 
 // Calculations
 import { RAUKK_DEFAULT_SHIP_PROFILE_ID } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import {
+	RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
+	RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
+} from "@/features/raukk_sourcing/calculations/shippingCadence";
+import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
 
 export const RaukkPriceModeSchema = z.enum([
 	"BID",
@@ -82,15 +87,44 @@ export const RaukkShipProfileSchema = z.object({
  * Account global shipping configuration. Every field carries a default:
  * there is no migration mechanism, so a v1 export and an existing local
  * storage blob — neither of which knows shipping at all — must still
- * parse into the shipped-off default state.
+ * parse into the default state. Shipping defaults to ON, so such
+ * payloads come up charging freight; their snapshots predate shipping
+ * and keep their freight-free numbers until something marks them stale
+ * (a config edit, a plan save, an upstream recompute).
  */
 export const RaukkShippingConfigSchema = z.object({
-	enabled: z.boolean().default(false),
+	enabled: z.boolean().default(true),
 	defaultProfileId: z.string().default(RAUKK_DEFAULT_SHIP_PROFILE_ID),
 	routingMode: RaukkRoutingModeSchema.default("direct"),
 	sameSystemFlatCost: z.number().default(0),
+	// cadence caps, days per visit: positive day counts only, a zero or
+	// negative cap would mean "visit infinitely often"
+	cadenceInOutDays: z
+		.number()
+		.positive()
+		.default(RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS),
+	cadenceWorkforceDays: z
+		.number()
+		.positive()
+		.default(RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS),
+	// "nearest" or a fixed exchange code; an unknown code degrades to the
+	// nearest exchange at read time rather than failing the import
+	cxAnchorMode: z.string().min(1).default(RAUKK_CX_ANCHOR_NEAREST),
 	perEdgeProfile: z.record(z.string(), z.string()).optional(),
 	lmRates: z.record(z.string(), z.number()).optional(),
+});
+
+/**
+ * Per plan cadence overrides. Every bucket is optional — an absent one
+ * follows the account default — and any positive day count is legal, 365
+ * included: a base whose repair materials weigh a few tonnes is honestly
+ * visited once a year. The repair bucket without an override follows the
+ * plans own repair day.
+ */
+export const RaukkCadenceOverridesSchema = z.object({
+	production: z.number().positive().optional(),
+	workforce: z.number().positive().optional(),
+	repair: z.number().positive().optional(),
 });
 
 /**
@@ -119,17 +153,32 @@ export const RaukkChainConfigSchema = z.object({
 	stlCostPerMegameter: z.number().default(0),
 	autoCxSplit: z.boolean().default(true),
 	sameSystemPricing: z.enum(["average", "worst"]).default("average"),
+	// automatic chains: a share of the shipment and two detour budgets,
+	// all three documented gut numbers of shipping-cadence-plan.md phase 2
+	autoChainMinShare: z.number().min(0).max(1).default(0.05),
+	autoChainDetourInOutParsecs: z.number().nonnegative().default(2),
+	autoChainDetourLooseParsecs: z.number().nonnegative().default(6),
 });
+
+/** Cargo class of one shipped flow, see `RAUKK_CARGO_BUCKET` */
+export const RaukkCargoBucketSchema = z.enum([
+	"production",
+	"workforce",
+	"repair",
+]);
 
 /**
  * One frozen plan flow. `ownerPlanUuid` is additive and optional: flows
  * frozen before ownership was carried know no owner, and the reader
- * degrades them conservatively rather than guessing one.
+ * degrades them conservatively rather than guessing one. `bucket` is
+ * optional for the very same reason — a flow frozen before the cargo
+ * classes existed reads as `production`, the in/out class it carried.
  */
 export const RaukkChainFlowSchema = z.object({
 	flowId: z.string().optional(),
 	ownerPlanUuid: z.string().optional(),
 	ticker: z.string(),
+	bucket: RaukkCargoBucketSchema.optional(),
 	fromStop: z.string(),
 	toStop: z.string(),
 	unitsPerDay: z.number(),
@@ -153,6 +202,20 @@ export const RaukkChainCostingSchema = z.object({
 	bindingLegIndex: z.number(),
 	dailyCost: z.number(),
 	shippingFraction: z.number(),
+});
+
+/**
+ * One unowned hull that would serve a leg — or a whole derived chain —
+ * better, see the fleet page. Declared above the chain result because
+ * that one embeds it.
+ */
+export const RaukkFleetAdvisorySchema = z.object({
+	pairKey: z.string(),
+	bucket: RaukkCargoBucketSchema,
+	shipTypeId: z.string(),
+	tripsPerDay: z.number(),
+	suggestedShipTypeId: z.string(),
+	suggestedTripsPerDay: z.number(),
 });
 
 /**
@@ -187,6 +250,11 @@ export const RaukkChainResultSchema = z.object({
 	perUnit: z.record(z.string(), z.number()).default({}),
 	memberPlanUuids: z.array(z.string()).default([]),
 	config: RaukkChainConfigSchema.prefault({}),
+	// derived chains: absent on every result written before phase 2 and
+	// on every user authored chain
+	auto: z.boolean().optional(),
+	capDays: z.number().positive().optional(),
+	advisories: z.array(RaukkFleetAdvisorySchema).default([]),
 });
 
 /**
@@ -199,9 +267,16 @@ export const RaukkFleetShipSchema = z.object({
 	designName: z.string().optional(),
 });
 
+/**
+ * One leg of a lane. `bucket` and `visitDays` are optional: a snapshot
+ * frozen before the cadence model carried one row per LANE and knew
+ * neither.
+ */
 export const RaukkSnapshotLaneSchema = z.object({
 	pairKey: z.string(),
+	bucket: RaukkCargoBucketSchema.optional(),
 	shipTypeId: z.string(),
+	visitDays: z.number().optional(),
 	tripsPerDay: z.number(),
 	roundTripMinutes: z.number(),
 	hired: z.boolean(),
@@ -210,6 +285,10 @@ export const RaukkSnapshotLaneSchema = z.object({
 export const RaukkPlanConfigSchema = z.object({
 	repairDay: RaukkRepairDaySchema,
 	sources: z.record(z.string(), RaukkTickerSourceSchema),
+	// absent in every payload predating the cadence model
+	cadence: RaukkCadenceOverridesSchema.optional(),
+	// exchange this plan is anchored at, absent means the account mode
+	cxAnchor: z.string().min(1).optional(),
 	// only ever set on the copy a snapshot embeds, and only while
 	// shipping is enabled
 	shipping: RaukkShippingConfigSchema.optional(),
@@ -246,6 +325,8 @@ export const RaukkSnapshotSchema = z.object({
 	// written before the chain and fleet slices existed
 	flows: z.array(RaukkChainFlowSchema).optional(),
 	lanes: z.array(RaukkSnapshotLaneSchema).optional(),
+	// cadence model: absent in every payload written before it
+	advisories: z.array(RaukkFleetAdvisorySchema).optional(),
 	// null: the profile of a pair claims no ship at all, so the fraction
 	// has no denominator and is displayed as an em-dash
 	shippingFraction: z.number().nullable().optional(),

@@ -10,6 +10,7 @@ import {
 	RAUKK_SHIP_HULLS,
 	raukkShipProfileId,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
 // Types & Interfaces
 import {
@@ -108,8 +109,10 @@ export function raukkShipTypeOptions(): IRaukkShipTypeOption[] {
  * The rollup already reports every type the fleet owns AND every type
  * work is assigned to, so this only dresses those rows: the bay code and
  * the hull figures come from the ship PROFILE of the same id — a ship
- * type is a profile id — and the over-ration flag is the plain
- * `utilization > 1`, never clamped. A null utilization is carried
+ * type is a profile id — and the over-ration flag is `utilization`
+ * past 1 by more than {@link RAUKK_EPSILON_EQUAL}, never clamped: a
+ * fleet a hundredth of a percent over is not over. A null utilization
+ * is carried
  * through untouched: no hull means no denominator, and a zero there
  * would read as infinite capacity.
  *
@@ -137,7 +140,9 @@ export function raukkFleetRows(
 			utilization: entry.utilization,
 			utilizationPercent:
 				entry.utilization === null ? null : entry.utilization * 100,
-			over: entry.utilization !== null && entry.utilization > 1,
+			over:
+				entry.utilization !== null &&
+				entry.utilization > 1 + RAUKK_EPSILON_EQUAL,
 			assignedCount: entry.keys.length,
 		};
 	});

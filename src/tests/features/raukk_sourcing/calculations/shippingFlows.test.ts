@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 
 // Calculations
 import {
+	RAUKK_CX_ANCHOR_NEAREST,
 	buildPlanChainFlows,
 	mergeClaimedShipping,
 	raukkClaimedUnitsLookup,
+	raukkCxAnchorCode,
 	raukkFlowId,
 	raukkPlanetCxCode,
 } from "@/features/raukk_sourcing/calculations/shippingFlows";
@@ -61,12 +63,14 @@ function cargo(): IRaukkPairPlanFlows {
 		inputs: [
 			{
 				ticker: "ORE",
+				bucket: "production",
 				unitsPerDay: 100,
 				weightPerUnit: 1,
 				volumePerUnit: 0,
 			},
 			{
 				ticker: "DW",
+				bucket: "workforce",
 				unitsPerDay: 20,
 				weightPerUnit: 1,
 				volumePerUnit: 0,
@@ -75,6 +79,7 @@ function cargo(): IRaukkPairPlanFlows {
 		outputs: [
 			{
 				ticker: "ALO",
+				bucket: "production",
 				unitsPerDay: 60,
 				weightPerUnit: 1,
 				volumePerUnit: 0,
@@ -109,6 +114,36 @@ describe("Raukk Shipping: Plan flows", () => {
 		});
 	});
 
+	describe("raukkCxAnchorCode", () => {
+		it("anchors at the nearest exchange by default", () => {
+			expect(raukkCxAnchorCode(OWN_PLANET)).toBe("AI1");
+			expect(raukkCxAnchorCode(OWN_PLANET, RAUKK_CX_ANCHOR_NEAREST)).toBe(
+				"AI1"
+			);
+		});
+
+		it("takes the account wide fixed exchange", () => {
+			expect(raukkCxAnchorCode(OWN_PLANET, "NC1")).toBe("NC1");
+		});
+
+		it("lets the per plan override win over the account mode", () => {
+			expect(raukkCxAnchorCode(OWN_PLANET, "NC1", "CI1")).toBe("CI1");
+			expect(
+				raukkCxAnchorCode(OWN_PLANET, RAUKK_CX_ANCHOR_NEAREST, "CI1")
+			).toBe("CI1");
+		});
+
+		it("degrades an unknown code to the nearest exchange", () => {
+			expect(raukkCxAnchorCode(OWN_PLANET, "XX9", "YY9")).toBe("AI1");
+		});
+
+		it("lets a plan opt back into the nearest exchange", () => {
+			expect(
+				raukkCxAnchorCode(OWN_PLANET, "NC1", RAUKK_CX_ANCHOR_NEAREST)
+			).toBe("AI1");
+		});
+	});
+
 	describe("buildPlanChainFlows", () => {
 		it("states the plans cargo as directed flows", () => {
 			const flows = buildPlanChainFlows(
@@ -127,6 +162,7 @@ describe("Raukk Shipping: Plan flows", () => {
 					),
 					ownerPlanUuid: "own",
 					ticker: "ORE",
+					bucket: "production",
 					fromStop: SOURCE_PLANET,
 					toStop: OWN_PLANET,
 					unitsPerDay: 100,
@@ -137,6 +173,7 @@ describe("Raukk Shipping: Plan flows", () => {
 					flowId: raukkFlowId("DW", "AI1", OWN_PLANET, "own"),
 					ownerPlanUuid: "own",
 					ticker: "DW",
+					bucket: "workforce",
 					fromStop: "AI1",
 					toStop: OWN_PLANET,
 					unitsPerDay: 20,
@@ -148,6 +185,7 @@ describe("Raukk Shipping: Plan flows", () => {
 					flowId: raukkFlowId("ALO", OWN_PLANET, "AI1", "own"),
 					ownerPlanUuid: "own",
 					ticker: "ALO",
+					bucket: "production",
 					fromStop: OWN_PLANET,
 					toStop: "AI1",
 					unitsPerDay: 50,
@@ -225,12 +263,33 @@ describe("Raukk Shipping: Plan flows", () => {
 
 		it("is empty while shipping is disabled", () => {
 			expect(
-				buildPlanChainFlows(
-					cargo(),
-					lookups() as IRaukkFlowLookups,
-					raukkDefaultShippingConfig()
-				)
+				buildPlanChainFlows(cargo(), lookups() as IRaukkFlowLookups, {
+					...raukkDefaultShippingConfig(),
+					enabled: false,
+				})
 			).toStrictEqual([]);
+		});
+	});
+
+	describe("anchored exchange", () => {
+		it("names the anchored exchange on the market flows", () => {
+			const flows = buildPlanChainFlows(
+				cargo(),
+				{
+					...lookups(),
+					anchorCxCode: "NC1",
+				} as IRaukkFlowLookups,
+				config
+			);
+
+			expect(
+				flows
+					.filter((flow) => flow.ticker !== "ORE")
+					.map((flow) => [flow.fromStop, flow.toStop])
+			).toStrictEqual([
+				["NC1", OWN_PLANET],
+				[OWN_PLANET, "NC1"],
+			]);
 		});
 	});
 
@@ -283,6 +342,7 @@ describe("Raukk Shipping: Plan flows", () => {
 			expect(pairs[0].out).toStrictEqual([
 				{
 					ticker: "ALO",
+					bucket: "production",
 					unitsPerDay: 30,
 					weightPerUnit: 1,
 					volumePerUnit: 0,

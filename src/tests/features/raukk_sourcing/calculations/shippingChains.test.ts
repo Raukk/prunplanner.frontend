@@ -32,6 +32,7 @@ import {
 
 // Types & Interfaces
 import {
+	IRaukkCadenceCaps,
 	IRaukkPairShipping,
 	IRaukkResolvedShipProfile,
 	IRaukkShippingConfig,
@@ -169,6 +170,17 @@ function chainInput(
 	};
 }
 
+/**
+ * Account default caps. Chain parity holds exactly while the cadence
+ * does not bind: every parity fixture fills its hull in far under 14
+ * days, so the cap never shortens the interval.
+ */
+const CAPS: IRaukkCadenceCaps = {
+	production: 14,
+	workforce: 30,
+	repair: 90,
+};
+
 describe("Raukk Sourcing: Shipping Chains", () => {
 	describe("defaults", () => {
 		it("carries the documented knob defaults", () => {
@@ -179,6 +191,9 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 				stlCostPerMegameter: 0,
 				autoCxSplit: true,
 				sameSystemPricing: "average",
+				autoChainMinShare: 0.05,
+				autoChainDetourInOutParsecs: 2,
+				autoChainDetourLooseParsecs: 6,
 			});
 		});
 
@@ -335,6 +350,35 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 			expect(result.legs[0].loads).toBeCloseTo(0.2, 10);
 			expect(result.legs[1].utilization).toBe(1);
 			expect(result.legs[0].utilization).toBeCloseTo(1 / 3, 10);
+		});
+
+		it("visits at the cadence cap when the binding leg fills slower", () => {
+			const flows = [flow("RAT", "AA-001a", "AA-002b", 50)];
+
+			const uncapped: IRaukkChainShipping = calculateChainShipping(
+				chainInput(["AA-001a", "AA-002b"], flows)
+			);
+			const capped: IRaukkChainShipping = calculateChainShipping(
+				chainInput(["AA-001a", "AA-002b"], flows, { capDays: 5 })
+			);
+
+			// 50 t a day fills the 1000 t hull in 20 days; the cap sends
+			// the ship every 5, a partial load paying a full trip
+			expect(uncapped.tripsPerDay).toBeCloseTo(0.05, 10);
+			expect(capped.tripsPerDay).toBeCloseTo(0.2, 10);
+			expect(capped.legs[0].utilization).toBeCloseTo(0.25, 10);
+			expect(capped.bindingLegIndex).toBe(0);
+		});
+
+		it("leaves a loop that fills faster than its cap alone", () => {
+			const flows = [flow("RAT", "AA-001a", "AA-002b", 500)];
+
+			const capped: IRaukkChainShipping = calculateChainShipping(
+				chainInput(["AA-001a", "AA-002b"], flows, { capDays: 14 })
+			);
+
+			// two days to fill: the cap may only shorten the interval
+			expect(capped.tripsPerDay).toBeCloseTo(0.5, 10);
 		});
 
 		it("prices one sublight block per stop visit and one distance term per leg", () => {
@@ -522,7 +566,8 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 					],
 				},
 				config,
-				REPAIR_BILL
+				REPAIR_BILL,
+				CAPS
 			);
 
 			expect(chain.tripsPerDay).toBeCloseTo(pair.tripsPerDay, 10);
@@ -589,7 +634,8 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 					],
 				},
 				sameSystemConfig,
-				REPAIR_BILL
+				REPAIR_BILL,
+				CAPS
 			);
 
 			expect(chain.legs[0].sameSystemMode).toBe("flat");
@@ -625,7 +671,8 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 					],
 				},
 				config,
-				REPAIR_BILL
+				REPAIR_BILL,
+				CAPS
 			);
 
 			expect(chain.tripsPerDay).toBeCloseTo(pair.tripsPerDay, 10);
@@ -1203,9 +1250,14 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 				mfk.dailyCostWithoutStop + mfk.dailyCostStandalone
 			).toBeCloseTo(mfk.dailyCostAsIs - mfk.savingPerDay, 10);
 
-			// the standalone pair runs at ITS OWN frequency
+			/*
+			 * The standalone pair runs at its own CADENCE: five units a
+			 * day would fill the hull in 200 days, and the in/out cap of
+			 * 14 days is what it really flies — a partial trip every two
+			 * weeks, paying a full trip.
+			 */
 			expect(mfk.standalonePairs).toHaveLength(1);
-			expect(mfk.standalonePairs[0].tripsPerDay).toBeCloseTo(0.005, 10);
+			expect(mfk.standalonePairs[0].tripsPerDay).toBeCloseTo(1 / 14, 10);
 
 			// nothing is mutated, the caller decides
 			expect(input.chain.stops).toStrictEqual([

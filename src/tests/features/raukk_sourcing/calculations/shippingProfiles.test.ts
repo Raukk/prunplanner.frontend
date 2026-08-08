@@ -237,12 +237,15 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 		});
 	});
 
-	it("defaults to a disabled, direct, free configuration", () => {
+	it("defaults to an enabled, direct, free configuration", () => {
 		expect(raukkDefaultShippingConfig()).toStrictEqual({
-			enabled: false,
+			enabled: true,
 			defaultProfileId: RAUKK_DEFAULT_SHIP_PROFILE_ID,
 			routingMode: "direct",
 			sameSystemFlatCost: 0,
+			cadenceInOutDays: 14,
+			cadenceWorkforceDays: 30,
+			cxAnchorMode: "nearest",
 		});
 		expect(RAUKK_DEFAULT_SHIP_PROFILE_ID).toBe("1000x1000-standard");
 	});

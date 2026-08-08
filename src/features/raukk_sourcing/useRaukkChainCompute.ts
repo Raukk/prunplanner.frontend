@@ -7,7 +7,15 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 import { usePrice } from "@/features/cx/usePrice";
 
 // Calculations
-import { calculateChainCxSplit } from "@/features/raukk_sourcing/calculations/shippingChains";
+import {
+	calculateChainCxSplit,
+	calculateChainShipping,
+	RAUKK_CX_SYSTEM_ID_BY_CODE,
+} from "@/features/raukk_sourcing/calculations/shippingChains";
+import {
+	raukkAutoChainDemand,
+	raukkBuildAutoChains,
+} from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 import {
 	calculateRepairBillCost,
 	RAUKK_REPAIR_BILL,
@@ -17,6 +25,13 @@ import {
 	raukkResolveShipProfile,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 import { raukkChainAssignmentKey } from "@/features/raukk_sourcing/calculations/shippingFleet";
+import { raukkPickHull } from "@/features/raukk_sourcing/calculations/shippingHull";
+import { raukkCxAnchorCode } from "@/features/raukk_sourcing/calculations/shippingFlows";
+import {
+	RAUKK_DEFAULT_CADENCE_REPAIR_DAYS,
+	raukkCadenceCaps,
+	raukkCapDaysOf,
+} from "@/features/raukk_sourcing/calculations/shippingCadence";
 
 // Types & Interfaces
 import {
@@ -26,11 +41,17 @@ import {
 	IRaukkChainFlowCost,
 	IRaukkChainCosting,
 	IRaukkChainResult,
+	IRaukkPlanConfig,
 	IRaukkSnapshot,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import {
+	IRaukkFleetAdvisory,
+	IRaukkHullCandidate,
+	IRaukkHullPick,
+	IRaukkLegDemand,
 	IRaukkShippingConfig,
 	IRaukkShippingPriceResolver,
+	RAUKK_CARGO_BUCKET,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 import {
 	IRaukkChainFlowResult,
@@ -38,6 +59,7 @@ import {
 	IRaukkChainShipping,
 	IRaukkCxSplitResult,
 } from "@/features/raukk_sourcing/calculations/shippingChains.types";
+import { IRaukkAutoChain } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
 
 /**
  * Tickers the account level chain step needs prices for: the four ship
@@ -101,6 +123,12 @@ export interface IRaukkChainComputeError {
 interface IRaukkAppliedCosting {
 	results: IRaukkChainShipping[];
 	splitApplied: boolean;
+}
+
+/** One computed chain plus the flow ids it took off the account */
+interface IRaukkComputedChain {
+	result: IRaukkChainResult;
+	claimedFlowIds: string[];
 }
 
 /** One chain costing, reduced to the numbers the store keeps */
@@ -234,6 +262,11 @@ function mergedPerUnit(costs: IRaukkChainFlowCost[]): Record<string, number> {
  * chains are inert and snapshots stay byte identical to the pre shipping
  * ones.
  *
+ * ORDER, the rule of phase 2: the user authored chains claim their flows
+ * FIRST and the automatic builder runs on what is left. An authored loop
+ * is a decision, a derived one is a suggestion — a suggestion never takes
+ * cargo off a decision.
+ *
  * @author raukk
  *
  * @param {IRaukkChainPriceLoader} loadPrices Freight price loader
@@ -251,16 +284,21 @@ export async function computeChainResults(
 
 	const chainConfig: IRaukkChainConfig = sourcingStore.chainConfig;
 
+	/** Flows the authored chains already took over */
+	const claimedFlowIds: Set<string> = new Set();
+
 	for (const chain of Object.values(sourcingStore.chains) as IRaukkChain[]) {
 		try {
-			sourcingStore.setChainResult(
-				chain.chainId,
-				await computeOneChain(
-					chain,
-					shippingConfig,
-					chainConfig,
-					loadPrices
-				)
+			const computed: IRaukkComputedChain = await computeOneChain(
+				chain,
+				shippingConfig,
+				chainConfig,
+				loadPrices
+			);
+
+			sourcingStore.setChainResult(chain.chainId, computed.result);
+			computed.claimedFlowIds.forEach((flowId) =>
+				claimedFlowIds.add(flowId)
 			);
 		} catch (error) {
 			errors.push({
@@ -271,7 +309,305 @@ export async function computeChainResults(
 		}
 	}
 
+	try {
+		sourcingStore.setAutoChainResults(
+			await computeAutoChains(
+				claimedFlowIds,
+				shippingConfig,
+				chainConfig,
+				loadPrices
+			)
+		);
+	} catch (error) {
+		errors.push({
+			chainId: "",
+			message: error instanceof Error ? error.message : "unknown error",
+		});
+	}
+
 	return errors;
+}
+
+/**
+ * Flows of every stored snapshot the authored chains did not claim.
+ *
+ * Frozen flows only, never live numbers — the very rule the authored
+ * chains follow, for the very same reason: a derived loop depends on
+ * every member plans cargo and cannot be built inside one plans snapshot.
+ *
+ * @author raukk
+ *
+ * @param {Set<string>} claimedFlowIds Flow ids the authored chains took
+ * @returns {IRaukkChainFlow[]} Unclaimed flows, account wide
+ */
+function unclaimedAccountFlows(claimedFlowIds: Set<string>): IRaukkChainFlow[] {
+	const sourcingStore = useRaukkSourcingStore();
+
+	return Object.entries(sourcingStore.snapshots)
+		.sort(([left], [right]) => (left < right ? -1 : 1))
+		.flatMap(([planUuid, snapshot]: [string, IRaukkSnapshot]) =>
+			(snapshot.flows ?? []).filter(
+				(flow, index) =>
+					!claimedFlowIds.has(flow.flowId ?? `${planUuid}#${index}`)
+			)
+		);
+}
+
+/**
+ * Cadence cap of one consuming plan for one cargo class.
+ *
+ * @author raukk
+ *
+ * @param {string | undefined} planUuid Consuming Plan Uuid
+ * @param {RAUKK_CARGO_BUCKET} bucket Cargo bucket
+ * @param {IRaukkShippingConfig} shippingConfig Shipping configuration
+ * @returns {number} Days per visit
+ */
+function planCapDays(
+	planUuid: string | undefined,
+	bucket: RAUKK_CARGO_BUCKET,
+	shippingConfig: IRaukkShippingConfig
+): number {
+	const sourcingStore = useRaukkSourcingStore();
+
+	const config: IRaukkPlanConfig | undefined =
+		planUuid === undefined ? undefined : sourcingStore.configs[planUuid];
+
+	return raukkCapDaysOf(
+		raukkCadenceCaps(
+			shippingConfig,
+			config?.repairDay ?? RAUKK_DEFAULT_CADENCE_REPAIR_DAYS,
+			config?.cadence
+		),
+		bucket
+	);
+}
+
+/**
+ * Exchange one planet is anchored at, over the plans sitting on it.
+ *
+ * Several plans may share a planet; their per plan overrides are read in
+ * plan uuid order and the first one wins, so the answer is stable no
+ * matter in which order the snapshots were written.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingConfig} shippingConfig Shipping configuration
+ * @returns {Function} Exchange code of one planet
+ */
+function planetAnchorLookup(
+	shippingConfig: IRaukkShippingConfig
+): (planetNaturalId: string) => string | undefined {
+	const sourcingStore = useRaukkSourcingStore();
+
+	const overrides: Map<string, string> = new Map();
+
+	Object.keys(sourcingStore.snapshots)
+		.sort()
+		.forEach((planUuid) => {
+			const planet: string | undefined =
+				sourcingStore.snapshots[planUuid]?.planetNaturalId;
+			const anchor: string | undefined =
+				sourcingStore.configs[planUuid]?.cxAnchor;
+
+			if (planet === undefined || anchor === undefined) return;
+			if (overrides.has(planet)) return;
+
+			overrides.set(planet, anchor);
+		});
+
+	return (planetNaturalId: string): string | undefined =>
+		raukkCxAnchorCode(
+			planetNaturalId,
+			shippingConfig.cxAnchorMode,
+			overrides.get(planetNaturalId)
+		);
+}
+
+/**
+ * Builds and costs the chains nobody authored.
+ *
+ * Derived from the unclaimed flows on every pass and never stored as
+ * chains: what the store keeps is their RESULT, marked `auto`, and the
+ * next pass replaces the whole set (see `setAutoChainResults`). Member
+ * plans read their claimed freight from those results exactly as they do
+ * from an authored chains one, so a derived loop needs no special case
+ * anywhere downstream.
+ *
+ * @author raukk
+ *
+ * @param {Set<string>} claimedFlowIds Flow ids the authored chains took
+ * @param {IRaukkShippingConfig} shippingConfig Shipping configuration
+ * @param {IRaukkChainConfig} chainConfig Chain configuration
+ * @param {IRaukkChainPriceLoader} loadPrices Freight price loader
+ * @returns {Promise<IRaukkChainResult[]>} Derived chain results
+ */
+async function computeAutoChains(
+	claimedFlowIds: Set<string>,
+	shippingConfig: IRaukkShippingConfig,
+	chainConfig: IRaukkChainConfig,
+	loadPrices: IRaukkChainPriceLoader
+): Promise<IRaukkChainResult[]> {
+	const autoChains: IRaukkAutoChain[] = raukkBuildAutoChains({
+		flows: unclaimedAccountFlows(claimedFlowIds),
+		anchorOf: planetAnchorLookup(shippingConfig),
+		capDaysOf: (planUuid: string | undefined, bucket: RAUKK_CARGO_BUCKET) =>
+			planCapDays(planUuid, bucket, shippingConfig),
+		chainConfig,
+	});
+
+	const results: IRaukkChainResult[] = [];
+
+	for (const autoChain of autoChains) {
+		results.push(
+			await computeOneAutoChain(
+				autoChain,
+				shippingConfig,
+				chainConfig,
+				loadPrices
+			)
+		);
+	}
+
+	return results;
+}
+
+/**
+ * Costs one derived chain.
+ *
+ * Hull: a manual assignment on the derived chains key still wins, exactly
+ * as it does on an authored one; otherwise the automatic pick runs over
+ * the OWNED fleet against the binding legs demand and the loops cadence
+ * cap. A better unowned hull never becomes an assignment, it becomes an
+ * advisory on the chain — the loop is account level and belongs to no
+ * single plan.
+ *
+ * The CX split is not evaluated: a derived loop already opens and closes
+ * at its regions exchange, which is what the split rule exists to
+ * arrange.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkAutoChain} autoChain Derived chain
+ * @param {IRaukkShippingConfig} shippingConfig Shipping configuration
+ * @param {IRaukkChainConfig} chainConfig Chain configuration
+ * @param {IRaukkChainPriceLoader} loadPrices Freight price loader
+ * @returns {Promise<IRaukkChainResult>} Chain Result
+ */
+async function computeOneAutoChain(
+	autoChain: IRaukkAutoChain,
+	shippingConfig: IRaukkShippingConfig,
+	chainConfig: IRaukkChainConfig,
+	loadPrices: IRaukkChainPriceLoader
+): Promise<IRaukkChainResult> {
+	const sourcingStore = useRaukkSourcingStore();
+
+	const anchorPlanet: string | undefined = autoChain.stops.find(
+		(stopRef) => !(stopRef in RAUKK_CX_SYSTEM_ID_BY_CODE)
+	);
+
+	const resolvePrice: IRaukkShippingPriceResolver =
+		await loadPrices(anchorPlanet);
+
+	const candidateOf = (shipTypeId: string): IRaukkHullCandidate => ({
+		shipTypeId,
+		profile: raukkResolveShipProfile(
+			sourcingStore.getShipProfile(shipTypeId),
+			resolvePrice
+		),
+	});
+
+	const manual: string | undefined =
+		sourcingStore.assignments[raukkChainAssignmentKey(autoChain.chainId)];
+
+	const demand: IRaukkLegDemand = raukkAutoChainDemand(
+		autoChain.stops,
+		autoChain.flows
+	);
+
+	const owned: IRaukkHullPick | null =
+		manual !== undefined
+			? null
+			: raukkPickHull(
+					Object.entries(sourcingStore.fleet)
+						.filter(([, ship]) => ship.count > 0)
+						.map(([shipTypeId]) => candidateOf(shipTypeId)),
+					demand,
+					autoChain.capDays
+				);
+
+	const profileId: string =
+		manual ??
+		owned?.candidate.shipTypeId ??
+		shippingConfig.defaultProfileId;
+
+	const ideal: IRaukkHullPick | null =
+		manual !== undefined
+			? null
+			: raukkPickHull(
+					sourcingStore
+						.listShipProfiles()
+						.map((profile) => candidateOf(profile.id)),
+					demand,
+					autoChain.capDays
+				);
+
+	const advisories: IRaukkFleetAdvisory[] =
+		ideal !== null && ideal.candidate.shipTypeId !== profileId
+			? [
+					{
+						pairKey: raukkChainAssignmentKey(autoChain.chainId),
+						bucket: autoChain.bucket,
+						shipTypeId: profileId,
+						tripsPerDay: owned?.tripsPerDay ?? 0,
+						suggestedShipTypeId: ideal.candidate.shipTypeId,
+						suggestedTripsPerDay: ideal.tripsPerDay,
+					},
+				]
+			: [];
+
+	const input: IRaukkChainInput = {
+		chain: { chainId: autoChain.chainId, stops: autoChain.stops },
+		profile: raukkResolveShipProfile(
+			sourcingStore.getShipProfile(profileId),
+			resolvePrice
+		),
+		flows: autoChain.flows,
+		config: shippingConfig,
+		chainConfig,
+		repairBillCost: calculateRepairBillCost(resolvePrice),
+		capDays: autoChain.capDays,
+	};
+
+	const shipping: IRaukkChainShipping = calculateChainShipping(input);
+	const claimed: IRaukkChainFlowCost[] = claimedFlowCosts(autoChain.flows, [
+		shipping,
+	]);
+
+	return {
+		chainId: autoChain.chainId,
+		computedAt: new Date().toISOString(),
+		stale: false,
+		profileId,
+		hired: false,
+		splitApplied: false,
+		unsplit: storedCosting(autoChain.stops, shipping),
+		split: [],
+		splitTrigger: null,
+		tripsPerDay: shipping.tripsPerDay,
+		roundTripMinutes: shipping.roundTripMinutes,
+		bindingLegIndex: shipping.bindingLegIndex,
+		dailyCost: shipping.dailyCost,
+		shippingFraction: shipping.shippingFraction,
+		shipMinutesPerDay: shipping.tripsPerDay * shipping.roundTripMinutes,
+		flows: claimed,
+		perUnit: mergedPerUnit(claimed),
+		memberPlanUuids: autoChain.memberPlanUuids,
+		config: { ...chainConfig },
+		auto: true,
+		capDays: autoChain.capDays,
+		advisories,
+	};
 }
 
 /**
@@ -325,14 +661,14 @@ function chainAnchorPlanet(
  * @param {IRaukkShippingConfig} shippingConfig Shipping configuration
  * @param {IRaukkChainConfig} chainConfig Chain configuration
  * @param {IRaukkChainPriceLoader} loadPrices Freight price loader
- * @returns {Promise<IRaukkChainResult>} Chain Result
+ * @returns {Promise<IRaukkComputedChain>} Result and claimed flow ids
  */
 async function computeOneChain(
 	chain: IRaukkChain,
 	shippingConfig: IRaukkShippingConfig,
 	chainConfig: IRaukkChainConfig,
 	loadPrices: IRaukkChainPriceLoader
-): Promise<IRaukkChainResult> {
+): Promise<IRaukkComputedChain> {
 	const sourcingStore = useRaukkSourcingStore();
 
 	const memberPlanUuids: string[] = sourcingStore.chainMemberPlans(
@@ -405,7 +741,7 @@ async function computeOneChain(
 		applied.results
 	);
 
-	return {
+	const result: IRaukkChainResult = {
 		chainId: chain.chainId,
 		computedAt: new Date().toISOString(),
 		stale: false,
@@ -441,5 +777,15 @@ async function computeOneChain(
 		perUnit: mergedPerUnit(claimed),
 		memberPlanUuids,
 		config: { ...chainConfig },
+		// an authored chain flies the profile the user picked; the
+		// automatic hull advice is a property of the DERIVED chains
+		advisories: [],
+	};
+
+	return {
+		result,
+		claimedFlowIds: applied.results.flatMap((costing) =>
+			costing.flows.map((flow) => originalFlowId(flow.flowId))
+		),
 	};
 }

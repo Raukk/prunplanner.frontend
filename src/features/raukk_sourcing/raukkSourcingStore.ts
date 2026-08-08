@@ -40,6 +40,7 @@ import {
 
 // Types & Interfaces
 import {
+	IRaukkCadenceOverrides,
 	IRaukkChain,
 	IRaukkChainConfig,
 	IRaukkChainResult,
@@ -51,6 +52,7 @@ import {
 	IRaukkTickerSource,
 	RAUKK_REPAIR_DAY,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
+import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
 import {
 	IRaukkExportPayload,
 	IRaukkProducerOption,
@@ -572,6 +574,63 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Replaces every DERIVED chain result with a freshly built set.
+		 *
+		 * Automatic chains are rebuilt from the flows on every account
+		 * level chain pass and are never stored as chains, so their
+		 * results are replaced wholesale rather than patched: a loop the
+		 * new flows no longer justify must LOSE its result, or its stored
+		 * claims would keep taking cargo off the lanes of plans that
+		 * really do fly it themselves.
+		 *
+		 * Member plans are not flagged here, exactly as
+		 * {@link setChainResult} does not flag them — the chain pass
+		 * recomputes them itself and the one round convergence lag is
+		 * documented rather than fought.
+		 * @author raukk
+		 *
+		 * @param {IRaukkChainResult[]} results Derived chain results
+		 */
+		function setAutoChainResults(results: IRaukkChainResult[]): void {
+			Object.entries(chainResults.value).forEach(([chainId, result]) => {
+				if (result.auto === true) delete chainResults.value[chainId];
+			});
+
+			results.forEach((result) => {
+				chainResults.value[result.chainId] = {
+					...inertClone(result),
+					stale: false,
+					auto: true,
+				};
+			});
+		}
+
+		/**
+		 * Sets or clears the exchange one plan is anchored at, `undefined`
+		 * falling back to the account wide anchor mode.
+		 *
+		 * The anchor decides which exchange a plans market cargo travels
+		 * through and which REGION its base belongs to, so it moves the
+		 * plans own numbers and everything downstream of it — the same
+		 * staleness a source or cadence change causes.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 * @param {string | undefined} cxCode Exchange code, undefined clears
+		 */
+		function setPlanCxAnchor(
+			planUuid: string,
+			cxCode: string | undefined
+		): void {
+			const config: IRaukkPlanConfig = ensureConfig(planUuid);
+
+			if (cxCode === undefined) delete config.cxAnchor;
+			else config.cxAnchor = cxCode;
+
+			markStale(planUuid);
+		}
+
+		/**
 		 * Patches the account global chain configuration.
 		 *
 		 * Every chain is priced with these knobs, so every chain result
@@ -727,6 +786,38 @@ export const useRaukkSourcingStore = defineStore(
 			if (!findConfig || findConfig.sources[ticker] === undefined) return;
 
 			delete findConfig.sources[ticker];
+			markStale(planUuid);
+		}
+
+		/**
+		 * Sets or clears one cadence override of a plan, days per visit
+		 * of one cargo bucket. `undefined` drops the override and the
+		 * account default applies again.
+		 *
+		 * Cadence drives the trip count of every leg this plan consumes
+		 * on, so the plan and everything downstream of it go stale —
+		 * exactly like a source or repair day change. Non positive day
+		 * counts are refused rather than stored: a cap of zero would mean
+		 * "visit infinitely often".
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 * @param {RAUKK_CARGO_BUCKET} bucket Cargo Bucket
+		 * @param {number | undefined} days Days per visit, undefined clears
+		 */
+		function setPlanCadence(
+			planUuid: string,
+			bucket: RAUKK_CARGO_BUCKET,
+			days: number | undefined
+		): void {
+			const config: IRaukkPlanConfig = ensureConfig(planUuid);
+			const cadence: IRaukkCadenceOverrides = { ...config.cadence };
+
+			if (days === undefined || days <= 0) delete cadence[bucket];
+			else cadence[bucket] = days;
+
+			config.cadence = cadence;
+
 			markStale(planUuid);
 		}
 
@@ -992,6 +1083,7 @@ export const useRaukkSourcingStore = defineStore(
 			setTickerSource,
 			clearTickerSource,
 			setRepairDay,
+			setPlanCadence,
 			setSnapshot,
 			setShippingConfig,
 			setShipProfile,
@@ -1002,6 +1094,8 @@ export const useRaukkSourcingStore = defineStore(
 			setChain,
 			deleteChain,
 			setChainResult,
+			setAutoChainResults,
+			setPlanCxAnchor,
 			markChainStale,
 			markAllChainsStale,
 			setChainConfig,

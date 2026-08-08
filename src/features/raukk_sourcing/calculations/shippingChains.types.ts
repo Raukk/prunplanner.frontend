@@ -17,6 +17,7 @@ import {
 	IRaukkPairShipping,
 	IRaukkResolvedShipProfile,
 	IRaukkShippingConfig,
+	RAUKK_CARGO_BUCKET,
 	RAUKK_LOAD_DIMENSION,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 
@@ -83,6 +84,26 @@ export interface IRaukkChainConfig {
 	 * "average", the shipped default.
 	 */
 	sameSystemPricing?: RAUKK_SAME_SYSTEM_PRICING;
+	/**
+	 * Share of a shipments weight OR volume a base has to carry before an
+	 * automatic chain stops there, DEFAULT 0.05.
+	 *
+	 * A gut number, configurable exactly like the knobs above it: below it
+	 * a stop costs more detour than the cargo it picks up is worth, and
+	 * the cargo goes hub/spoke through the exchange instead.
+	 */
+	autoChainMinShare?: number;
+	/**
+	 * Parsecs a stop may add to an automatic PRODUCTION in/out loop,
+	 * DEFAULT 2 — the tight budget of the class flown every two weeks.
+	 */
+	autoChainDetourInOutParsecs?: number;
+	/**
+	 * Parsecs a stop may add to an automatic workforce or repair loop,
+	 * DEFAULT 6 — a single short extra jump, which is a rounding error on
+	 * a 30 or 90 day rhythm.
+	 */
+	autoChainDetourLooseParsecs?: number;
 }
 
 /**
@@ -108,6 +129,15 @@ export interface IRaukkChainFlow {
 	 */
 	ownerPlanUuid?: string;
 	ticker: string;
+	/**
+	 * Cargo class of the flow, see {@link RAUKK_CARGO_BUCKET}.
+	 *
+	 * Optional for the same reason `ownerPlanUuid` is: flows frozen onto
+	 * a snapshot before buckets existed name none, and a reader treats
+	 * such a flow as `production` — the in/out class, which is what
+	 * every flow of the pre bucket model carried anyway.
+	 */
+	bucket?: RAUKK_CARGO_BUCKET;
 	fromStop: RAUKK_STOP_REF;
 	toStop: RAUKK_STOP_REF;
 	unitsPerDay: number;
@@ -207,6 +237,16 @@ export interface IRaukkChainInput {
 	chainConfig: IRaukkChainConfig;
 	/** ȼ of a full repair bill, from `calculateRepairBillCost` */
 	repairBillCost: number;
+	/**
+	 * Days per visit the whole loop may not exceed.
+	 *
+	 * A chain is never split per cargo class, so the cap belongs to the
+	 * loop rather than to a leg: an automatic chain serves ONE class and
+	 * flies at the tightest cap of its member consuming plans. Absent —
+	 * every user authored chain — the loop keeps flying purely on how fast
+	 * its binding leg fills, which is the pre cadence behaviour.
+	 */
+	capDays?: number;
 	/** Route lookups, defaults to the real systems graph */
 	routes?: IRaukkRouteDistance;
 	/** Orbit and density lookups, defaults to the shipped assets */

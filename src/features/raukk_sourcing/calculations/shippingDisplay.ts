@@ -6,12 +6,13 @@
 // Calculations
 import {
 	calculateCostPerTrip,
-	calculateDirectionLoad,
+	raukkLaneLegs,
 } from "@/features/raukk_sourcing/calculations/shipping";
 
 // Types & Interfaces
 import {
-	IRaukkDirectionLoad,
+	IRaukkCadenceCaps,
+	IRaukkLaneLeg,
 	IRaukkShippedTicker,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
@@ -106,42 +107,60 @@ function unitsOf(tickers: IRaukkShippedTicker[]): number {
  * Builds the hired versus own fleet comparison of every pair a plan
  * owns.
  *
- * Trips per day are load driven and therefore identical either way —
- * hiring replaces the ȼ per trip, not the amount of freight. A lane
- * moving nothing is still listed with zero trips so the user can enter a
- * rate before the flows exist.
+ * Trips per day are cadence driven and therefore identical either way —
+ * hiring replaces the ȼ per trip, not the amount of freight. They are
+ * summed over the LANES LEGS, one per cargo bucket riding it, and the
+ * own ȼ per trip is the trip weighted mean over those legs: a lane whose
+ * production and repair cargo fly on two different hulls has no single
+ * cost per trip, only an average one. A lane moving nothing is still
+ * listed with zero trips so the user can enter a rate before the flows
+ * exist.
  *
  * @author raukk
  *
  * @param {IRaukkShippingPair[]} pairs Route pairs the plan owns
  * @param {IRaukkShippingConfig} config Shipping configuration
  * @param {number} repairBillCost ȼ of a full repair bill
+ * @param {IRaukkCadenceCaps} caps Cadence caps of the consuming plan
  * @returns {IRaukkLmComparisonRow[]} Comparison rows
  */
 export function buildLmComparison(
 	pairs: IRaukkShippingPair[],
 	config: IRaukkShippingConfig,
-	repairBillCost: number
+	repairBillCost: number,
+	caps: IRaukkCadenceCaps
 ): IRaukkLmComparisonRow[] {
 	return pairs.map((pair) => {
-		const loadOut: IRaukkDirectionLoad = calculateDirectionLoad(
-			pair.out,
-			pair.profile
-		);
-		const loadBack: IRaukkDirectionLoad = calculateDirectionLoad(
-			pair.back,
-			pair.profile
-		);
+		const legs: IRaukkLaneLeg[] = raukkLaneLegs(pair, caps);
 
-		const tripsPerDay: number = Math.max(loadOut.loads, loadBack.loads);
+		const tripsPerDay: number = legs.reduce(
+			(sum, leg) => sum + leg.tripsPerDay,
+			0
+		);
 		const unitsPerDay: number = unitsOf(pair.out) + unitsOf(pair.back);
 
-		const ownCostPerTrip: number = calculateCostPerTrip(
-			pair.route,
-			pair.profile,
-			config,
-			repairBillCost
+		const ownDailyCost: number = legs.reduce(
+			(sum, leg) =>
+				sum +
+				leg.tripsPerDay *
+					calculateCostPerTrip(
+						pair.route,
+						leg.profile,
+						config,
+						repairBillCost
+					),
+			0
 		);
+
+		const ownCostPerTrip: number =
+			tripsPerDay > 0
+				? ownDailyCost / tripsPerDay
+				: calculateCostPerTrip(
+						pair.route,
+						pair.profile,
+						config,
+						repairBillCost
+					);
 
 		const lmRatePerTrip: number | undefined =
 			config.lmRates?.[pair.pairKey];

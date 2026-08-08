@@ -4,6 +4,7 @@
 
 // Calculation Utils
 import { resolveMarketPrice } from "@/features/raukk_sourcing/calculations/priceMode";
+import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
 // Types & Interfaces
 import { ICXData } from "@/stores/planningStore.types";
@@ -367,22 +368,25 @@ export function buildSourceOptions(
 }
 
 /**
- * Largest relative `costPerUnit` difference between two output sets.
+ * Largest absolute `costPerUnit` difference between two output sets.
  *
  * Convergence measure of the loop settling iterations: recomputing a
  * plan that is part of a supply loop (own repairs included) shifts its
- * output costs a little each pass, once the largest relative shift
- * drops below a threshold the loop has settled. Tickers appearing in
- * only one of the two sets count as a full shift of 1, both sides
- * being zero counts as no shift.
+ * output costs a little each pass, once the largest shift drops below
+ * {@link RAUKK_EPSILON_SETTLE} the loop has settled. The measure is ȼ,
+ * not a ratio (round 10): a settled loop is one whose numbers no longer
+ * MOVE on screen, which a relative shift of a near-zero cost misreads.
+ *
+ * A ticker appearing in only one of the two sets is a structural change
+ * and never settles, reported as an infinite shift.
  *
  * @author raukk
  *
  * @param {Record<string, IRaukkOutputCost>} before Previous outputs
  * @param {Record<string, IRaukkOutputCost>} after Current outputs
- * @returns {number} Largest relative cost per unit change, >= 0
+ * @returns {number} Largest cost per unit change in ȼ, >= 0
  */
-export function maxRelativeOutputDelta(
+export function maxAbsoluteOutputDelta(
 	before: Record<string, IRaukkOutputCost>,
 	after: Record<string, IRaukkOutputCost>
 ): number {
@@ -398,44 +402,24 @@ export function maxRelativeOutputDelta(
 		const current: IRaukkOutputCost | undefined = after[ticker];
 
 		if (!previous || !current) {
-			max = Math.max(max, 1);
+			max = Number.POSITIVE_INFINITY;
 			return;
 		}
 
-		const reference: number = Math.max(
-			Math.abs(previous.costPerUnit),
-			Math.abs(current.costPerUnit)
-		);
-
-		if (reference === 0) return;
-
 		max = Math.max(
 			max,
-			Math.abs(current.costPerUnit - previous.costPerUnit) / reference
+			Math.abs(current.costPerUnit - previous.costPerUnit)
 		);
 	});
 
 	return max;
 }
 
-/** Relative difference below which two snapshot numbers count equal.
- * Shared by the chain recompute as its loop settling threshold: it must
- * not be tighter than that settling check, or the final pass of a
- * settled supply loop still cascades staleness onto the other loop
- * members and the loop never shows current. */
-export const RAUKK_SNAPSHOT_EQUAL_EPSILON: number = 1e-6;
-
-/**
- * Relative difference of two numbers against the larger magnitude,
- * 0 when both are 0.
- */
-function relativeDelta(previous: number, current: number): number {
-	const reference: number = Math.max(Math.abs(previous), Math.abs(current));
-
-	if (reference === 0) return 0;
-
-	return Math.abs(current - previous) / reference;
-}
+/** Absolute difference below which two snapshot numbers count equal,
+ * see {@link RAUKK_EPSILON_EQUAL}. A change of less than a cent — or of
+ * less than a hundredth of a unit — is invisible in the two decimal
+ * display and must not cascade staleness onto downstream plans. */
+export const RAUKK_SNAPSHOT_EQUAL_EPSILON: number = RAUKK_EPSILON_EQUAL;
 
 /**
  * Determines if a freshly computed snapshot differs materially from the
@@ -469,9 +453,9 @@ export function snapshotMateriallyChanged(
 		if (!previousOutput || !nextOutput) return true;
 
 		if (
-			relativeDelta(previousOutput.costPerUnit, nextOutput.costPerUnit) >=
+			Math.abs(nextOutput.costPerUnit - previousOutput.costPerUnit) >=
 				RAUKK_SNAPSHOT_EQUAL_EPSILON ||
-			relativeDelta(previousOutput.unitsPerDay, nextOutput.unitsPerDay) >=
+			Math.abs(nextOutput.unitsPerDay - previousOutput.unitsPerDay) >=
 				RAUKK_SNAPSHOT_EQUAL_EPSILON
 		)
 			return true;
@@ -494,9 +478,8 @@ export function snapshotMateriallyChanged(
 
 		for (const ticker of drawTickers) {
 			if (
-				relativeDelta(
-					previousDraws[ticker] ?? 0,
-					nextDraws[ticker] ?? 0
+				Math.abs(
+					(nextDraws[ticker] ?? 0) - (previousDraws[ticker] ?? 0)
 				) >= RAUKK_SNAPSHOT_EQUAL_EPSILON
 			)
 				return true;
@@ -558,10 +541,10 @@ export function formatSourceOptionLabel(
  *
  * Freight folds into the row the same way the pipeline charges it: the
  * per unit shipping of the plans inbound pairs is added on top of the
- * price, but only on the units that actually ride a pair — the material
- * I/O ones. Repair material demand pays no freight in v1, so a ticker
- * that is both an input and a repair material keeps its two unit counts
- * apart. Without a shipping map every row is priced exactly as before.
+ * price of every unit that rides a pair. Since the cadence model that is
+ * every unit of the row — repair materials are cargo of their own bucket
+ * and pay freight like anything else. Without a shipping map every row is
+ * priced exactly as before.
  *
  * With `getDefaultPrice` given, rows sort by their daily cost at that
  * price — the CX preference price — instead of the effective one, so
@@ -625,6 +608,9 @@ export function buildInputRows(
 		if (unitsPerDay <= 0) return;
 
 		units[ticker] = (units[ticker] ?? 0) + unitsPerDay;
+		// repair materials ride the repair leg of a lane since the cadence
+		// model, so they are shipped units like the material I/O ones
+		shippedUnits[ticker] = (shippedUnits[ticker] ?? 0) + unitsPerDay;
 		bucketOf(ticker).repair = true;
 	});
 

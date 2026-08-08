@@ -13,10 +13,12 @@ import {
 	calculateShipping,
 	calculatePairShipping,
 	combineHubRoute,
+	raukkLaneLegs,
 } from "@/features/raukk_sourcing/calculations/shipping";
 
 // Types & Interfaces
 import {
+	IRaukkCadenceCaps,
 	IRaukkDirectionLoad,
 	IRaukkPairShipping,
 	IRaukkResolvedShipProfile,
@@ -24,6 +26,9 @@ import {
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
 	IRaukkShippingResult,
+	IRaukkHullCandidate,
+	IRaukkLaneLeg,
+	RAUKK_CARGO_BUCKET,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 
 const profile: IRaukkResolvedShipProfile = {
@@ -67,13 +72,22 @@ const REPAIR_PER_TRIP: number = 72;
 /** 2 * 10 * 100 + 2 * 50 + 72 */
 const COST_PER_TRIP: number = 2172;
 
+/** Account defaults; the fixtures below fill their hulls well inside
+ * them, so the cap only binds where a test says so */
+const caps: IRaukkCadenceCaps = {
+	production: 14,
+	workforce: 30,
+	repair: 90,
+};
+
 function ticker(
 	name: string,
 	unitsPerDay: number,
 	weightPerUnit: number,
-	volumePerUnit: number
+	volumePerUnit: number,
+	bucket: RAUKK_CARGO_BUCKET = "production"
 ): IRaukkShippedTicker {
-	return { ticker: name, unitsPerDay, weightPerUnit, volumePerUnit };
+	return { ticker: name, bucket, unitsPerDay, weightPerUnit, volumePerUnit };
 }
 
 function pair(
@@ -82,6 +96,18 @@ function pair(
 	pairKey: string = "pair"
 ): IRaukkShippingPair {
 	return { pairKey, profile, route, out, back };
+}
+
+/** One hull candidate of the given capacities */
+function hull(
+	shipTypeId: string,
+	cargoWeight: number,
+	cargoVolume: number
+): IRaukkHullCandidate {
+	return {
+		shipTypeId,
+		profile: { ...profile, id: shipTypeId, cargoWeight, cargoVolume },
+	};
 }
 
 describe("Raukk Sourcing: Shipping", () => {
@@ -248,7 +274,8 @@ describe("Raukk Sourcing: Shipping", () => {
 			const result: IRaukkPairShipping = calculatePairShipping(
 				pair([], [ticker("ORE", 500, 1, 0.5)]),
 				config,
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			expect(result.tripsPerDay).toBeCloseTo(0.5, 10);
@@ -263,7 +290,8 @@ describe("Raukk Sourcing: Shipping", () => {
 			const result: IRaukkPairShipping = calculatePairShipping(
 				pair([ticker("FE", 250, 1, 1)], [ticker("ORE", 500, 1, 0.5)]),
 				config,
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			expect(result.tripsPerDay).toBeCloseTo(0.5, 10);
@@ -284,7 +312,8 @@ describe("Raukk Sourcing: Shipping", () => {
 					[ticker("HEAVY", 100, 5, 1), ticker("BULKY", 200, 0, 4)]
 				),
 				config,
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			const dailyCost: number = result.dailyCost;
@@ -303,7 +332,8 @@ describe("Raukk Sourcing: Shipping", () => {
 			const result: IRaukkPairShipping = calculatePairShipping(
 				pair([ticker("FE", -250, 1, 1)], [ticker("ORE", 500, 1, 0.5)]),
 				config,
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			expect(result.loadOut.loads).toBe(0);
@@ -319,7 +349,8 @@ describe("Raukk Sourcing: Shipping", () => {
 			const result: IRaukkPairShipping = calculatePairShipping(
 				pair([], [ticker("ORE", 3000, 1, 0.1)]),
 				config,
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			expect(result.tripsPerDay).toBeCloseTo(3, 10);
@@ -330,7 +361,8 @@ describe("Raukk Sourcing: Shipping", () => {
 			const result: IRaukkPairShipping = calculatePairShipping(
 				pair([ticker("FE", 0, 1, 1)], [ticker("ORE", -10, 1, 1)]),
 				config,
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			expect(result.tripsPerDay).toBe(0);
@@ -345,7 +377,8 @@ describe("Raukk Sourcing: Shipping", () => {
 			const result: IRaukkPairShipping = calculatePairShipping(
 				pair([ticker("FE", 250, 1, 1)], [ticker("ORE", 500, 1, 0.5)]),
 				config,
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			expect(result.roundTripMinutes).toBeCloseTo(814, 10);
@@ -359,7 +392,8 @@ describe("Raukk Sourcing: Shipping", () => {
 					profile: { ...profile, shipsAvailable: 2 },
 				},
 				config,
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			expect(result.shippingFraction).toBeCloseTo(
@@ -375,7 +409,8 @@ describe("Raukk Sourcing: Shipping", () => {
 					profile: { ...profile, shipsAvailable: 0 },
 				},
 				config,
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			// null, never 0: a zero would read as infinite capacity
@@ -390,7 +425,8 @@ describe("Raukk Sourcing: Shipping", () => {
 					profile: { ...profile, shipsAvailable: 0 },
 				},
 				{ ...config, lmRates: { pair: 4000 } },
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			// somebody elses ship: the own fleet really does fly zero
@@ -401,7 +437,8 @@ describe("Raukk Sourcing: Shipping", () => {
 			const result: IRaukkPairShipping = calculatePairShipping(
 				pair([], [ticker("ORE", 500, 1, 0.5)]),
 				{ ...config, lmRates: { pair: 4000 } },
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			expect(result.hired).toBe(true);
@@ -417,7 +454,8 @@ describe("Raukk Sourcing: Shipping", () => {
 			const result: IRaukkPairShipping = calculatePairShipping(
 				pair([], [ticker("ORE", 500, 1, 0.5)]),
 				{ ...config, lmRates: { other: 4000 } },
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			expect(result.hired).toBe(false);
@@ -428,12 +466,281 @@ describe("Raukk Sourcing: Shipping", () => {
 			const result: IRaukkPairShipping = calculatePairShipping(
 				pair([], [ticker("ORE", 500, 1, 0.5)]),
 				{ ...config, enabled: false },
-				REPAIR_BILL_COST
+				REPAIR_BILL_COST,
+				caps
 			);
 
 			expect(result.tripsPerDay).toBe(0);
 			expect(result.dailyCost).toBe(0);
 			expect(result.perUnitBack).toStrictEqual({});
+		});
+	});
+
+	describe("raukkLaneLegs", () => {
+		it("splits a lane into one leg per cargo bucket present", () => {
+			const legs: IRaukkLaneLeg[] = raukkLaneLegs(
+				pair(
+					[ticker("MET", 100, 1, 1)],
+					[
+						ticker("ORE", 100, 1, 1),
+						ticker("RAT", 200, 1, 1, "workforce"),
+						ticker("BSE", 50, 1, 1, "repair"),
+					]
+				),
+				caps
+			);
+
+			expect(legs.map((leg) => leg.bucket)).toStrictEqual([
+				"production",
+				"workforce",
+				"repair",
+			]);
+
+			// the outbound cargo is production, so only that leg carries it
+			expect(legs[0].out).toHaveLength(1);
+			expect(legs[1].out).toHaveLength(0);
+			expect(legs[2].out).toHaveLength(0);
+		});
+
+		it("gives every leg its own cadence cap", () => {
+			const legs: IRaukkLaneLeg[] = raukkLaneLegs(
+				pair(
+					[],
+					[
+						ticker("ORE", 10, 1, 1),
+						ticker("RAT", 10, 1, 1, "workforce"),
+						ticker("BSE", 10, 1, 1, "repair"),
+					]
+				),
+				caps
+			);
+
+			// 10 t a day fill the 1000 t hull in 100 days, so every leg
+			// runs into its own cap
+			expect(legs.map((leg) => leg.capDays)).toStrictEqual([14, 30, 90]);
+			expect(legs.map((leg) => leg.visitDays)).toStrictEqual([
+				14, 30, 90,
+			]);
+			expect(legs.map((leg) => leg.fillDays)).toStrictEqual([
+				100, 100, 100,
+			]);
+		});
+
+		it("visits on the fill time while the cap is not reached", () => {
+			const [leg] = raukkLaneLegs(
+				pair([], [ticker("ORE", 500, 1, 1)]),
+				caps
+			);
+
+			expect(leg.fillDays).toBeCloseTo(2, 10);
+			expect(leg.visitDays).toBeCloseTo(2, 10);
+			expect(leg.tripsPerDay).toBeCloseTo(0.5, 10);
+		});
+
+		it("drops a bucket without any cargo", () => {
+			const legs: IRaukkLaneLeg[] = raukkLaneLegs(
+				pair([], [ticker("ORE", 100, 1, 1)]),
+				caps
+			);
+
+			expect(legs).toHaveLength(1);
+			expect(legs[0].bucket).toBe("production");
+		});
+
+		it("drops weightless cargo, it fills no hull", () => {
+			expect(
+				raukkLaneLegs(pair([], [ticker("ORE", 100, 0, 0)]), caps)
+			).toStrictEqual([]);
+		});
+
+		it("reads cargo without a bucket as production", () => {
+			const legs: IRaukkLaneLeg[] = raukkLaneLegs(
+				pair(
+					[],
+					[
+						{
+							ticker: "ORE",
+							unitsPerDay: 100,
+							weightPerUnit: 1,
+							volumePerUnit: 1,
+						} as IRaukkShippedTicker,
+					]
+				),
+				caps
+			);
+
+			expect(legs).toHaveLength(1);
+			expect(legs[0].bucket).toBe("production");
+		});
+	});
+
+	describe("cadence driven trips", () => {
+		it("pays a full trip for a partial hull", () => {
+			// 50 t a day fill the hull in 20 days, the cap is 14: the lane
+			// flies once every 14 days, two thirds full, at full price
+			const result: IRaukkPairShipping = calculatePairShipping(
+				pair([], [ticker("ORE", 50, 1, 1)]),
+				config,
+				REPAIR_BILL_COST,
+				caps
+			);
+
+			expect(result.legs[0].fillDays).toBeCloseTo(20, 10);
+			expect(result.legs[0].visitDays).toBe(14);
+			expect(result.tripsPerDay).toBeCloseTo(1 / 14, 10);
+			expect(result.dailyCost).toBeCloseTo(COST_PER_TRIP / 14, 10);
+		});
+
+		it("sums the trips of the legs of one lane", () => {
+			const result: IRaukkPairShipping = calculatePairShipping(
+				pair(
+					[],
+					[
+						ticker("ORE", 50, 1, 1),
+						ticker("RAT", 50, 1, 1, "workforce"),
+					]
+				),
+				config,
+				REPAIR_BILL_COST,
+				caps
+			);
+
+			// 14 day cap on the production leg, 20 day fill on the
+			// workforce one, which stays inside its 30 day cap
+			expect(result.tripsPerDay).toBeCloseTo(1 / 14 + 1 / 20, 10);
+			expect(result.dailyCost).toBeCloseTo(
+				(1 / 14 + 1 / 20) * COST_PER_TRIP,
+				10
+			);
+			// every leg flies the whole round trip on the same route
+			expect(result.costPerTrip).toBeCloseTo(COST_PER_TRIP, 10);
+		});
+
+		it("charges a ticker riding two legs the units weighted mean", () => {
+			const result: IRaukkPairShipping = calculatePairShipping(
+				pair(
+					[],
+					[
+						ticker("ORE", 50, 1, 1),
+						ticker("ORE", 50, 1, 1, "workforce"),
+					]
+				),
+				config,
+				REPAIR_BILL_COST,
+				caps
+			);
+
+			expect(result.perUnitBack.ORE).toBeCloseTo(
+				result.dailyCost / 100,
+				10
+			);
+		});
+
+		it("obeys a per plan override of any length", () => {
+			const result: IRaukkPairShipping = calculatePairShipping(
+				pair([], [ticker("ORE", 50, 1, 1)]),
+				config,
+				REPAIR_BILL_COST,
+				{ ...caps, production: 365 }
+			);
+
+			// the override replaces the cap outright, the hull now fills
+			// long before the year is over
+			expect(result.tripsPerDay).toBeCloseTo(0.05, 10);
+		});
+	});
+
+	describe("automatic hull selection", () => {
+		/** A fleet of the small and the heavy hull */
+		function fleetPair(
+			back: IRaukkShippedTicker[],
+			owned: IRaukkHullCandidate[],
+			manual?: IRaukkHullCandidate
+		): IRaukkShippingPair {
+			return {
+				...pair([], back),
+				hulls: {
+					owned,
+					all: [hull("small", 500, 500), hull("heavy", 5000, 5000)],
+					manual,
+				},
+			};
+		}
+
+		it("keeps the pairs own profile without any fleet", () => {
+			const [leg] = raukkLaneLegs(
+				pair([], [ticker("ORE", 500, 1, 1)]),
+				caps
+			);
+
+			expect(leg.shipTypeId).toBe(profile.id);
+			expect(leg.advisory).toBeNull();
+		});
+
+		it("assigns an owned hull and advises the better unowned one", () => {
+			const [leg] = raukkLaneLegs(
+				fleetPair(
+					[ticker("ORE", 5000, 1, 1)],
+					[hull("small", 500, 500)]
+				),
+				caps
+			);
+
+			expect(leg.shipTypeId).toBe("small");
+			expect(leg.tripsPerDay).toBeCloseTo(10, 10);
+			expect(leg.advisory).toStrictEqual({
+				pairKey: "pair",
+				bucket: "production",
+				shipTypeId: "small",
+				tripsPerDay: 10,
+				suggestedShipTypeId: "heavy",
+				suggestedTripsPerDay: 1,
+			});
+		});
+
+		it("advises nothing once the best hull is owned", () => {
+			const [leg] = raukkLaneLegs(
+				fleetPair(
+					[ticker("ORE", 5000, 1, 1)],
+					[hull("small", 500, 500), hull("heavy", 5000, 5000)]
+				),
+				caps
+			);
+
+			expect(leg.shipTypeId).toBe("heavy");
+			expect(leg.advisory).toBeNull();
+		});
+
+		it("lets a manual assignment win over the heuristic", () => {
+			const [leg] = raukkLaneLegs(
+				fleetPair(
+					[ticker("ORE", 5000, 1, 1)],
+					[hull("heavy", 5000, 5000)],
+					hull("small", 500, 500)
+				),
+				caps
+			);
+
+			expect(leg.shipTypeId).toBe("small");
+			// the user answered, the heuristic does not argue
+			expect(leg.advisory).toBeNull();
+		});
+
+		it("collects the advisories of every pair", () => {
+			const result: IRaukkShippingResult = calculateShipping(
+				[
+					fleetPair(
+						[ticker("ORE", 5000, 1, 1)],
+						[hull("small", 500, 500)]
+					),
+				],
+				config,
+				resolvePrice,
+				caps
+			);
+
+			expect(result.advisories).toHaveLength(1);
+			expect(result.advisories[0].suggestedShipTypeId).toBe("heavy");
 		});
 	});
 
@@ -448,7 +755,8 @@ describe("Raukk Sourcing: Shipping", () => {
 					},
 				],
 				config,
-				resolvePrice
+				resolvePrice,
+				caps
 			);
 
 			// summing over an unknown term would understate the fleet
@@ -468,7 +776,8 @@ describe("Raukk Sourcing: Shipping", () => {
 					),
 				],
 				config,
-				resolvePrice
+				resolvePrice,
+				caps
 			);
 
 			expect(result.pairs).toHaveLength(2);
@@ -489,7 +798,8 @@ describe("Raukk Sourcing: Shipping", () => {
 					pair([], [ticker("ORE", 1500, 1, 0.5)], "b"),
 				],
 				config,
-				resolvePrice
+				resolvePrice,
+				caps
 			);
 
 			// 0.5 trips for 500 units, 1.5 trips for 1500 units, both at
@@ -512,7 +822,8 @@ describe("Raukk Sourcing: Shipping", () => {
 				(name: string) => {
 					seen.push(name);
 					return prices[name] ?? 0;
-				}
+				},
+				caps
 			);
 
 			expect(seen).toStrictEqual(["LHP", "SSC", "MFK", "FLP"]);
@@ -523,13 +834,15 @@ describe("Raukk Sourcing: Shipping", () => {
 				calculateShipping(
 					[pair([], [ticker("ORE", 500, 1, 0.5)])],
 					{ ...config, enabled: false },
-					resolvePrice
+					resolvePrice,
+					caps
 				)
 			).toStrictEqual({
 				pairs: [],
 				shippingFraction: 0,
 				inbound: {},
 				outbound: {},
+				advisories: [],
 			});
 		});
 
@@ -537,7 +850,8 @@ describe("Raukk Sourcing: Shipping", () => {
 			const result: IRaukkShippingResult = calculateShipping(
 				[],
 				config,
-				resolvePrice
+				resolvePrice,
+				caps
 			);
 
 			expect(result.shippingFraction).toBe(0);

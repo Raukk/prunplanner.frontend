@@ -168,7 +168,9 @@ export function raukkFleetUtilization(
 				count > 0
 					? shipMinutesPerDay / (MINUTES_PER_DAY * count)
 					: null,
-			keys: keys[shipTypeId] ?? [],
+			// one lane contributes one entry per LEG since the cadence
+			// model, and several legs may fly the same type
+			keys: Array.from(new Set(keys[shipTypeId] ?? [])),
 		};
 	});
 }

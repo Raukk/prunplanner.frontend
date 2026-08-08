@@ -102,6 +102,24 @@ describe("Raukk Shipping: Fleet Display", () => {
 			expect(row.designName).toBe("");
 		});
 
+		it("does not flag a hair over one as over-rationed", () => {
+			const [row] = raukkFleetRows(
+				[
+					{
+						shipTypeId: "5000x5000-quick-charge",
+						count: 1,
+						designName: undefined,
+						shipMinutesPerDay: 1444,
+						utilization: 1.005,
+						keys: [],
+					},
+				],
+				profileOf
+			);
+
+			expect(row.over).toBe(false);
+		});
+
 		it("carries a null utilization through as null", () => {
 			const [row] = raukkFleetRows(
 				[

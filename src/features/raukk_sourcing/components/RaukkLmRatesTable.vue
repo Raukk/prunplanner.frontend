@@ -4,6 +4,9 @@
 	// Util
 	import { formatNumber } from "@/util/numbers";
 
+	// Calculations
+	import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+
 	// UI
 	import { PInputNumber, PSelect, PTable, PTag } from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
@@ -177,7 +180,7 @@
 				<td
 					class="text-right font-bold"
 					:class="
-						(row.savingPerUnit ?? 0) >= 0
+						(row.savingPerUnit ?? 0) > -RAUKK_EPSILON_EQUAL
 							? 'text-positive'
 							: 'text-negative'
 					">

@@ -72,6 +72,53 @@ export function raukkPlanetCxCode(
 }
 
 /**
+ * Account wide anchor mode meaning "whatever exchange is closest".
+ *
+ * @author raukk
+ */
+export const RAUKK_CX_ANCHOR_NEAREST: string = "nearest";
+
+/**
+ * Exchange one base is ANCHORED at, the base of its region.
+ *
+ * Three sources, in this order: the plans own override, the account wide
+ * mode and — for both the shipped `"nearest"` setting and an unknown code
+ * — the nearest exchange by parsecs. A plan may state `"nearest"`
+ * explicitly, which is an answer of its own and overrides a fixed account
+ * mode. A region is nothing more than the set of bases sharing an anchor,
+ * which is what the automatic chains are built per
+ * (shipping-cadence-plan.md, Phase 2).
+ *
+ * @author raukk
+ *
+ * @param {string} planetNaturalId Planet Natural Id
+ * @param {string} [mode] Account wide anchor mode, a code or "nearest"
+ * @param {string} [override] Per plan anchor override
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @returns {(string | undefined)} Exchange code, undefined if unreachable
+ */
+export function raukkCxAnchorCode(
+	planetNaturalId: string,
+	mode?: string,
+	override?: string,
+	routes: IRaukkRouteDistance = RAUKK_DEFAULT_ROUTES,
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE
+): string | undefined {
+	if (override !== undefined) {
+		if (override in cxSystems) return override;
+		// an explicit "nearest" is an answer of its own: it overrides a
+		// fixed account mode rather than falling through to it
+		if (override === RAUKK_CX_ANCHOR_NEAREST)
+			return raukkPlanetCxCode(planetNaturalId, routes);
+	}
+
+	if (mode !== undefined && mode in cxSystems) return mode;
+
+	return raukkPlanetCxCode(planetNaturalId, routes);
+}
+
+/**
  * Stable id of one plan flow.
  *
  * Ticker and endpoints alone do NOT identify a flow: two plans sitting
@@ -142,7 +189,10 @@ export function buildPlanChainFlows(
 
 	const routes: IRaukkRouteDistance = lookups.routes ?? RAUKK_DEFAULT_ROUTES;
 	const own: string = flows.planetNaturalId;
-	const cxCode: string | undefined = raukkPlanetCxCode(own, routes);
+	// the anchor of the plan when the caller resolved one, the nearest
+	// exchange otherwise — which is what the anchor defaults to anyway
+	const cxCode: string | undefined =
+		lookups.anchorCxCode ?? raukkPlanetCxCode(own, routes);
 
 	const result: IRaukkChainFlow[] = [];
 	/** Occurrences of one ticker and endpoint triple within this plan */
@@ -170,6 +220,7 @@ export function buildPlanChainFlows(
 			),
 			ownerPlanUuid: flows.planUuid,
 			ticker: entry.ticker,
+			bucket: entry.bucket,
 			fromStop,
 			toStop,
 			unitsPerDay,

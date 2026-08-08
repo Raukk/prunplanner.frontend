@@ -7,29 +7,32 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 // Composables
 import { usePrice } from "@/features/cx/usePrice";
 import { useExchangeData } from "@/database/services/useExchangeData";
+import { useMaterialData } from "@/database/services/useMaterialData";
 
 // Calculations
 import { calculateTrueCosts } from "@/features/raukk_sourcing/calculations/trueCost";
-import { calculateRepairCostPerDay } from "@/features/raukk_sourcing/calculations/repairCapitalCost";
+import {
+	calculateRepairCostPerDay,
+	calculateRepairMaterialsPerDay,
+} from "@/features/raukk_sourcing/calculations/repairCapitalCost";
 import { calculateBaseFraction } from "@/features/raukk_sourcing/calculations/baseFraction";
+import { RAUKK_EPSILON_SETTLE } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+import { raukkSplitCargoBuckets } from "@/features/raukk_sourcing/calculations/cargoBuckets";
 import {
 	calculateRepairBillCost,
 	calculateShipping,
 	RAUKK_REPAIR_BILL,
 } from "@/features/raukk_sourcing/calculations/shipping";
-import {
-	buildShippingPairs,
-	raukkLaneCargo,
-	raukkSourcingPairKey,
-	resolveMutualLanes,
-} from "@/features/raukk_sourcing/calculations/shippingPairs";
+import { buildShippingPairs } from "@/features/raukk_sourcing/calculations/shippingPairs";
 import {
 	buildPlanChainFlows,
 	mergeClaimedShipping,
 	raukkClaimedUnitsLookup,
-	raukkPlanetCxCode,
+	raukkCxAnchorCode,
 } from "@/features/raukk_sourcing/calculations/shippingFlows";
+import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
 import { raukkAssignedShipTypeId } from "@/features/raukk_sourcing/calculations/shippingFleet";
+import { raukkCadenceCaps } from "@/features/raukk_sourcing/calculations/shippingCadence";
 import {
 	RAUKK_FUEL_TICKERS,
 	raukkResolveShipProfile,
@@ -39,7 +42,7 @@ import {
 	buildSourceOptions,
 	createRaukkPriceResolver,
 	isAggregateSource,
-	maxRelativeOutputDelta,
+	maxAbsoluteOutputDelta,
 	resolveCxExchangeCode,
 	splitAggregateDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
@@ -58,9 +61,11 @@ import {
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
 	IRaukkSnapshotLane,
-	IRaukkTickerSource,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import {
+	IRaukkCadenceCaps,
+	IRaukkHullCandidate,
+	IRaukkHullSelection,
 	IRaukkResolvedShipProfile,
 	IRaukkShippedTicker,
 	IRaukkShippingPair,
@@ -68,7 +73,6 @@ import {
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 import {
 	IRaukkCargoDimension,
-	IRaukkMutualVerdict,
 	IRaukkPairLookups,
 	IRaukkPairPlanFlows,
 	IRaukkTickerOrigin,
@@ -82,6 +86,7 @@ import {
 	IRaukkTrueCostResult,
 } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 import { IRaukkProducerOption } from "@/features/raukk_sourcing/raukkSourcingStore.types";
+import { IMaterial } from "@/features/api/gameData.types";
 import {
 	IRaukkInputRow,
 	IRaukkOutputRow,
@@ -114,6 +119,16 @@ export interface IRaukkPriceCaches {
 	sellPrices: Record<string, number>;
 	/** Raw exchange data per ticker, backs the explicit price modes */
 	exchangePrices: Record<string, IRaukkExchangePrices>;
+	/**
+	 * Weight and volume per unit of every relevant ticker.
+	 *
+	 * The netted material I/O carries them already; the REPAIR materials
+	 * do not appear in it at all and are cargo since the cadence model, so
+	 * their dimensions are loaded from the material database alongside the
+	 * prices. A ticker the database does not know stays absent and ships
+	 * weightless, the same degradation an unpriced ticker takes.
+	 */
+	dimensions: Record<string, IRaukkCargoDimension>;
 }
 
 /** Outcome of one snapshot computation */
@@ -126,9 +141,9 @@ export interface IRaukkPlanSnapshotResult {
  * {@link computePlanSnapshot} */
 const RAUKK_SELF_LOOP_MAX_ITERATIONS: number = 10;
 
-/** Relative cost change below which a self supply loop counts as
- * settled */
-const RAUKK_SELF_LOOP_EPSILON: number = 1e-9;
+/** Absolute ȼ change below which a self supply loop counts as settled,
+ * see {@link RAUKK_EPSILON_SETTLE} */
+const RAUKK_SELF_LOOP_EPSILON: number = RAUKK_EPSILON_SETTLE;
 
 /**
  * All tickers a plans sourcing numbers need prices for: everything
@@ -177,6 +192,15 @@ interface IRaukkShippingInput {
 	resolver: IRaukkPriceResolver;
 	getProducers: (ticker: string) => IRaukkProducerOption[];
 	shippingConfig: IRaukkShippingConfig;
+	/** Daily repair material demand of the plan, cargo of its own bucket */
+	repairUnitsPerDay: IRaukkMaterialUnits;
+	/** Weight and volume per unit, for cargo the material I/O does not
+	 * carry — the repair materials */
+	dimensionOf: (ticker: string) => IRaukkCargoDimension | undefined;
+	/** Cadence caps of this plan as the consumer, days per visit */
+	caps: IRaukkCadenceCaps;
+	/** Exchange THIS plan is anchored at, overriding the account mode */
+	cxAnchor?: string;
 }
 
 /**
@@ -188,11 +212,13 @@ interface IRaukkShippingInput {
  * answer — a ticker it prices from another plan travels that plans
  * sourcing pair, everything else is a market buy on the CX pair.
  *
- * v1 limitation, deliberate: building repair materials are priced and
- * drawn like any other ticker but never appear in the material I/O, so
- * they ride no pair and pay no freight. The ship repair bill tickers are
- * priced through the resolver as well, without booking a draw — the
- * quantities are tiny and stay out of cycle guard and base fraction.
+ * Building repair materials never appear in the material I/O; since the
+ * cadence model they are cargo all the same, minted from the plans own
+ * repair demand into the `repair` bucket and flown on the repair cadence
+ * — a base repaired every 90 days has its repair materials delivered
+ * every 90 days. The ship repair bill tickers stay out: they are priced
+ * through the resolver without booking a draw, the quantities are tiny
+ * and take part in neither cycle guard nor base fraction.
  *
  * @author raukk
  *
@@ -209,7 +235,22 @@ function buildPlanShippingPairs(
 	);
 }
 
-/** The plans netted material I/O, split into arriving and leaving */
+/**
+ * The plans netted material I/O plus its repair demand, split into
+ * arriving and leaving cargo.
+ *
+ * Arriving cargo is split per CARGO BUCKET as well
+ * ({@link raukkSplitCargoBuckets}): a ticker the workforce and the
+ * production both consume rides as two rows, so every downstream
+ * consumer can attribute it per class. Repair materials are added as a
+ * third kind of row — they are absent from the material I/O and their
+ * dimensions therefore come from the material database. Leaving cargo is
+ * `production` throughout — an output and its exchange sale are the
+ * in/out class by definition.
+ *
+ * This is the ONE place cargo rows are minted; every bucket a lane can
+ * split on originates here.
+ */
 function planCargo(input: IRaukkShippingInput): IRaukkPairPlanFlows {
 	const inputs: IRaukkShippedTicker[] = [];
 	const outputs: IRaukkShippedTicker[] = [];
@@ -217,15 +258,49 @@ function planCargo(input: IRaukkShippingInput): IRaukkPairPlanFlows {
 	input.planResult.materialio.forEach((element) => {
 		if (element.delta === 0) return;
 
-		const cargo: IRaukkShippedTicker = {
-			ticker: element.ticker,
-			unitsPerDay: Math.abs(element.delta),
-			weightPerUnit: element.individualWeight,
-			volumePerUnit: element.individualVolume,
-		};
+		const unitsPerDay: number = Math.abs(element.delta);
 
-		if (element.delta < 0) inputs.push(cargo);
-		else outputs.push(cargo);
+		if (element.delta > 0) {
+			outputs.push({
+				ticker: element.ticker,
+				bucket: "production",
+				unitsPerDay,
+				weightPerUnit: element.individualWeight,
+				volumePerUnit: element.individualVolume,
+			});
+			return;
+		}
+
+		raukkSplitCargoBuckets(
+			element.ticker,
+			unitsPerDay,
+			input.planResult
+		).forEach((share) => {
+			if (share.unitsPerDay <= 0) return;
+
+			inputs.push({
+				ticker: element.ticker,
+				bucket: share.bucket,
+				unitsPerDay: share.unitsPerDay,
+				weightPerUnit: element.individualWeight,
+				volumePerUnit: element.individualVolume,
+			});
+		});
+	});
+
+	Object.entries(input.repairUnitsPerDay).forEach(([ticker, unitsPerDay]) => {
+		if (unitsPerDay <= 0) return;
+
+		const dimension: IRaukkCargoDimension | undefined =
+			input.dimensionOf(ticker);
+
+		inputs.push({
+			ticker,
+			bucket: "repair",
+			unitsPerDay,
+			weightPerUnit: dimension?.weightPerUnit ?? 0,
+			volumePerUnit: dimension?.volumePerUnit ?? 0,
+		});
 	});
 
 	return {
@@ -286,106 +361,10 @@ function planClaimedFlows(
 	return claimed;
 }
 
-/** Outcome of every mutual A⇄B relationship one plan takes part in */
-interface IRaukkMutualRouting {
-	/** Source plans whose lane to this plan routes via both exchanges */
-	viaCxSources: Set<string>;
-	/** Own output units a rerouted counterpart takes off the exchange */
+/** Outcome of the exchange hub/spoke routing of one plan */
+interface IRaukkHubSpokeRouting {
+	/** Own output units a counterpart no longer hauls off this planet */
 	viaCxSold: Record<string, number>;
-}
-
-/**
- * Units per day one plan draws from another: what its STORED snapshot
- * froze, restricted to what its CURRENT sourcing configuration still
- * asks for.
- *
- * Both are account level state, so the two plans of a mutual
- * relationship read exactly the same numbers here — which is what makes
- * the verdict of `resolveMutualLanes` agree on both sides. Draws are
- * pre split onto concrete producer uuids, an aggregate source therefore
- * only has to pass the configuration filter.
- *
- * @author raukk
- *
- * @param {IRaukkSnapshot | undefined} consumer Consuming plans snapshot
- * @param {IRaukkPlanConfig | undefined} config Its sourcing configuration
- * @param {string} sourcePlanUuid Producing Plan Uuid
- * @returns {Record<string, number>} Daily units per ticker
- */
-function drawnFrom(
-	consumer: IRaukkSnapshot | undefined,
-	config: IRaukkPlanConfig | undefined,
-	sourcePlanUuid: string
-): Record<string, number> {
-	const drawn: Record<string, number> | undefined =
-		consumer?.draws[sourcePlanUuid];
-
-	if (drawn === undefined) return {};
-
-	const units: Record<string, number> = {};
-
-	Object.entries(drawn).forEach(([ticker, unitsPerDay]) => {
-		if (unitsPerDay <= 0) return;
-
-		const source: IRaukkTickerSource | undefined = config?.sources[ticker];
-
-		if (source === undefined || source.mode !== "plan") return;
-		if (
-			source.sourcePlanUuid !== sourcePlanUuid &&
-			!isAggregateSource(source.sourcePlanUuid)
-		)
-			return;
-
-		units[ticker] = unitsPerDay;
-	});
-
-	return units;
-}
-
-/**
- * Cargo dimensions of every ticker a mutual verdict weighs.
- *
- * Weight and volume per unit are GAME data, identical wherever a ticker
- * appears, so both plans of a relationship arrive at the same loads. The
- * frozen flows of the two stored snapshots are read first and in plan
- * uuid order — a map neither side can skew — and the plans own live
- * cargo only fills what no snapshot carries, which is the case for a
- * snapshot frozen while shipping was still off.
- *
- * @author raukk
- *
- * @param {(IRaukkSnapshot | undefined)[]} snapshots Snapshots, uuid ordered
- * @param {IRaukkPairPlanFlows} own Own live cargo, the fallback
- * @returns {Function} Cargo dimensions of a ticker
- */
-function cargoDimensions(
-	snapshots: (IRaukkSnapshot | undefined)[],
-	own: IRaukkPairPlanFlows
-): (ticker: string) => IRaukkCargoDimension | undefined {
-	const known: Map<string, IRaukkCargoDimension> = new Map();
-
-	function remember(
-		ticker: string,
-		weightPerUnit: number,
-		volumePerUnit: number
-	): void {
-		if (known.has(ticker)) return;
-
-		known.set(ticker, { weightPerUnit, volumePerUnit });
-	}
-
-	snapshots.forEach((snapshot) =>
-		snapshot?.flows?.forEach((flow) =>
-			remember(flow.ticker, flow.weightPerUnit, flow.volumePerUnit)
-		)
-	);
-
-	[...own.inputs, ...own.outputs].forEach((entry) =>
-		remember(entry.ticker, entry.weightPerUnit, entry.volumePerUnit)
-	);
-
-	return (ticker: string): IRaukkCargoDimension | undefined =>
-		known.get(ticker);
 }
 
 /**
@@ -437,112 +416,55 @@ function chainClaimedUnits(
 }
 
 /**
- * Resolves every mutual A⇄B relationship this plan takes part in
- * (shipping-decisions.md round 7).
+ * The exchange hub/spoke half of this plans routing
+ * (shipping-cadence-plan.md, Phase 2).
  *
- * Mutuality is read from FROZEN data only — the account level sourcing
- * configurations plus the draws of both stored snapshots — exactly as
- * `subscription()` reads its draws. That buys the property the whole
- * rule stands on: plan A and plan B run this independently and reach the
- * same verdict, so the lane one of them drops is the lane the other one
- * flies. It costs the usual one round convergence lag: a relationship
- * only becomes visible once both sides have a stored snapshot, and a
- * verdict follows the previous rounds numbers.
+ * Cargo no chain carries does NOT get a direct lane: the consumer buys
+ * it at its own exchange and the producers excess ships out on its own
+ * exchange lane. A plan to plan haul is worth a ship only when several
+ * bases share it — which is exactly what a chain is — so everything
+ * below the automatic chain cutoff, outside its detour budget or in
+ * another region travels through the exchange as a plain sale and a
+ * plain purchase. The round 7 mutual verdict is the special case this
+ * generalises: the lighter direction of an A⇄B pair already routed this
+ * way, now both do.
  *
- * A counterpart without a stored snapshot is therefore not mutual this
- * round, and neither is anything at all while this plan has no snapshot
- * of its own: reading its LIVE draws instead would let the two sides
- * disagree, which is the one outcome worse than a round of lag.
+ * This half is the PRODUCERS: units a counterpart draws here were taken
+ * off the exchange sells by `subscribedOf` because a direct lane was
+ * hauling them, and nothing does any more. They are read from the same
+ * stored draws that subtracted them, so the two always cancel exactly,
+ * minus whatever a chain really does carry — which the drawing plan
+ * subtracts on its own side as well and must not be shipped twice.
  *
- * Self sourcing is skipped whole: those units never leave the planet,
- * the merge already zeroes their freight share.
+ * Self sourcing is skipped whole: those units never leave the planet.
  *
  * @author raukk
  *
  * @param {IRaukkShippingInput} input Plan flows, resolver and config
- * @param {Function} profileOf Ship profile of one lane
- * @returns {IRaukkMutualRouting} Rerouted lanes of this plan
+ * @returns {IRaukkHubSpokeRouting} Own output sold at the exchange again
  */
-function planMutualRouting(
-	input: IRaukkShippingInput,
-	profileOf: (pairKey: string) => IRaukkResolvedShipProfile
-): IRaukkMutualRouting {
+function planHubSpokeRouting(
+	input: IRaukkShippingInput
+): IRaukkHubSpokeRouting {
 	const sourcingStore = useRaukkSourcingStore();
 
-	const routing: IRaukkMutualRouting = {
-		viaCxSources: new Set(),
-		viaCxSold: {},
-	};
+	const routing: IRaukkHubSpokeRouting = { viaCxSold: {} };
 
 	if (!input.shippingConfig.enabled) return routing;
 
-	const own: IRaukkSnapshot | undefined =
-		sourcingStore.snapshots[input.planUuid];
-	if (own === undefined) return routing;
-
-	const cargo: IRaukkPairPlanFlows = planCargo(input);
-
-	Object.keys(own.draws)
+	Object.keys(sourcingStore.snapshots)
 		.sort()
 		.forEach((counterpartUuid) => {
 			if (counterpartUuid === input.planUuid) return;
 
-			const counterpart: IRaukkSnapshot | undefined =
-				sourcingStore.snapshots[counterpartUuid];
-			if (counterpart === undefined) return;
-
-			const inbound: Record<string, number> = drawnFrom(
-				own,
-				sourcingStore.configs[input.planUuid],
+			const counterpart: IRaukkSnapshot = sourcingStore.snapshots[
 				counterpartUuid
-			);
-			const outbound: Record<string, number> = drawnFrom(
-				counterpart,
-				sourcingStore.configs[counterpartUuid],
-				input.planUuid
-			);
+			] as IRaukkSnapshot;
 
-			if (
-				Object.keys(inbound).length === 0 ||
-				Object.keys(outbound).length === 0
-			)
-				return;
+			const outbound: Record<string, number> | undefined =
+				counterpart.draws[input.planUuid];
+			if (outbound === undefined) return;
 
-			const dimensionOf = cargoDimensions(
-				input.planUuid <= counterpartUuid
-					? [own, counterpart]
-					: [counterpart, own],
-				cargo
-			);
-
-			const verdict: IRaukkMutualVerdict = resolveMutualLanes(
-				{
-					consumerPlanUuid: input.planUuid,
-					cargo: raukkLaneCargo(inbound, dimensionOf),
-					profile: profileOf(
-						raukkSourcingPairKey(input.planUuid, counterpartUuid)
-					),
-				},
-				{
-					consumerPlanUuid: counterpartUuid,
-					cargo: raukkLaneCargo(outbound, dimensionOf),
-					profile: profileOf(
-						raukkSourcingPairKey(counterpartUuid, input.planUuid)
-					),
-				}
-			);
-
-			if (verdict.cxConsumerPlanUuid === input.planUuid) {
-				routing.viaCxSources.add(counterpartUuid);
-				return;
-			}
-
-			/*
-			 * The opposite direction lost: nothing hauls those units off
-			 * this planet any more, so they are sold at this plans own
-			 * exchange after all — minus whatever a chain carries, which
-			 * the counterpart subtracts on its side as well.
-			 */
 			const claimed: Record<string, number> = chainClaimedUnits(
 				counterpartUuid,
 				input.planetNaturalId,
@@ -572,7 +494,19 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 		planClaimedFlows(input.planUuid, input.planetNaturalId),
 		input.planetNaturalId
 	);
-	const cxCode: string | undefined = raukkPlanetCxCode(input.planetNaturalId);
+	/*
+	 * The exchange this base is ANCHORED at, which since phase 2 is what
+	 * "its" exchange means: the account wide mode, a per plan override, or
+	 * the nearest one — the default and the answer every caller predating
+	 * the anchor gets.
+	 */
+	const cxCode: string | undefined = raukkCxAnchorCode(
+		input.planetNaturalId,
+		input.shippingConfig.cxAnchorMode,
+		input.cxAnchor
+	);
+	const cxSystemId: string | undefined =
+		cxCode === undefined ? undefined : RAUKK_CX_SYSTEM_ID_BY_CODE[cxCode];
 
 	/*
 	 * Supply loops are allowed since main's loop change, the plan itself
@@ -598,8 +532,7 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 	 * The ȼ constants of a profile may be "derive": resolving them
 	 * against the plans own price resolver is the ONLY place a price
 	 * meets a profile, everything downstream is pure math over plain
-	 * numbers. Hull capacities are price free, which is why the mutual
-	 * verdict may weigh the counterparts lane with it as well.
+	 * numbers.
 	 */
 	const profileOf = (pairKey: string): IRaukkResolvedShipProfile =>
 		raukkResolveShipProfile(
@@ -613,7 +546,33 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 			(ticker: string) => input.resolver(ticker).price
 		);
 
-	const mutual: IRaukkMutualRouting = planMutualRouting(input, profileOf);
+	const hubSpoke: IRaukkHubSpokeRouting = planHubSpokeRouting(input);
+
+	/** One ship type as a hull candidate, its ȼ constants resolved */
+	function candidateOf(shipTypeId: string): IRaukkHullCandidate {
+		return {
+			shipTypeId,
+			profile: raukkResolveShipProfile(
+				sourcingStore.getShipProfile(shipTypeId),
+				(ticker: string) => input.resolver(ticker).price
+			),
+		};
+	}
+
+	/*
+	 * The automatic hull pick assigns OWNED types only, so the fleet is
+	 * the candidate list: a type without a single hull is an advisory at
+	 * best. `all` is every known type and answers what would be better.
+	 */
+	const ownedCandidates: IRaukkHullCandidate[] = Object.entries(
+		sourcingStore.fleet
+	)
+		.filter(([, ship]) => ship.count > 0)
+		.map(([shipTypeId]) => candidateOf(shipTypeId));
+
+	const allCandidates: IRaukkHullCandidate[] = sourcingStore
+		.listShipProfiles()
+		.map((profile) => candidateOf(profile.id));
 
 	return {
 		originOf: (ticker: string): IRaukkTickerOrigin[] => {
@@ -667,13 +626,36 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 		},
 		profileOf,
 		/*
-		 * Mutual A⇄B sourcing: the lighter direction keeps no direct
-		 * lane, its cargo joins both plans exchange pairs instead. Each
-		 * plan adds only its own half, see {@link planMutualRouting}.
+		 * "Auto" is the density and cadence heuristic over the owned
+		 * fleet since the cadence model, no longer the account default
+		 * profile. A MANUAL assignment still wins outright — and only a
+		 * manual one: the v1 per edge override keeps feeding `profileOf`,
+		 * which is what a leg falls back to when nothing is owned.
 		 */
-		viaCxSourceOf: (sourcePlanUuid: string): boolean =>
-			mutual.viaCxSources.has(sourcePlanUuid),
-		viaCxSoldOf: (ticker: string): number => mutual.viaCxSold[ticker] ?? 0,
+		hullsOf: (pairKey: string): IRaukkHullSelection => {
+			const assigned: string | undefined =
+				sourcingStore.assignments[pairKey];
+
+			return {
+				owned: ownedCandidates,
+				all: allCandidates,
+				manual:
+					assigned === undefined ? undefined : candidateOf(assigned),
+			};
+		},
+		/*
+		 * Exchange hub/spoke (phase 2): a plan to plan haul that no chain
+		 * claimed keeps NO direct lane. What a chain carries was already
+		 * subtracted by `claimedUnitsOf` above; the rest is bought at this
+		 * plans own exchange, so it joins its market lane. The producer
+		 * side of the very same rule is `viaCxSoldOf`, see
+		 * {@link planHubSpokeRouting}.
+		 */
+		viaCxSourceOf: (): boolean => true,
+		viaCxSoldOf: (ticker: string): number =>
+			hubSpoke.viaCxSold[ticker] ?? 0,
+		anchorCxCode: cxCode,
+		anchorCxSystemId: cxSystemId,
 	};
 }
 
@@ -695,31 +677,35 @@ function buildPlanFlows(input: IRaukkShippingInput): IRaukkChainFlow[] {
 }
 
 /**
- * Per lane summary of a plans shipping, the fleet rollups input.
+ * Per LEG summary of a plans shipping, the fleet rollups input.
+ *
+ * One row per leg, not per lane: the legs of one lane may fly different
+ * hulls on different cadences, and a rollup keyed by ship type has to see
+ * them apart. The ship type is the one the leg really flew — the
+ * automatic pick, or the manual assignment where one exists — never the
+ * account default, which since the cadence model is only what a leg
+ * falls back to when the fleet owns nothing.
+ *
+ * A lane whose legs all move nothing contributes no row at all, exactly
+ * as an empty lane did before.
  *
  * @author raukk
  *
  * @param {IRaukkShippingResult} shipping Shipping result of the plan
- * @param {IRaukkShippingConfig} config Shipping configuration
- * @returns {IRaukkSnapshotLane[]} Lane summaries
+ * @returns {IRaukkSnapshotLane[]} Leg summaries
  */
-function buildPlanLanes(
-	shipping: IRaukkShippingResult,
-	config: IRaukkShippingConfig
-): IRaukkSnapshotLane[] {
-	const sourcingStore = useRaukkSourcingStore();
-
-	return shipping.pairs.map((pair) => ({
-		pairKey: pair.pairKey,
-		shipTypeId: raukkAssignedShipTypeId(
-			pair.pairKey,
-			sourcingStore.assignments,
-			config
-		),
-		tripsPerDay: pair.tripsPerDay,
-		roundTripMinutes: pair.roundTripMinutes,
-		hired: pair.hired,
-	}));
+function buildPlanLanes(shipping: IRaukkShippingResult): IRaukkSnapshotLane[] {
+	return shipping.pairs.flatMap((pair) =>
+		pair.legs.map((leg) => ({
+			pairKey: pair.pairKey,
+			bucket: leg.bucket,
+			shipTypeId: leg.shipTypeId,
+			visitDays: leg.visitDays,
+			tripsPerDay: leg.tripsPerDay,
+			roundTripMinutes: leg.roundTripMinutes,
+			hired: pair.hired,
+		}))
+	);
 }
 
 /**
@@ -744,7 +730,8 @@ function computePlanShipping(input: IRaukkShippingInput): IRaukkShippingResult {
 	const result: IRaukkShippingResult = calculateShipping(
 		pairs,
 		input.shippingConfig,
-		(ticker: string) => input.resolver(ticker).price
+		(ticker: string) => input.resolver(ticker).price,
+		input.caps
 	);
 
 	if (!input.shippingConfig.enabled) return result;
@@ -779,13 +766,27 @@ async function loadRaukkPrices(params: {
 	getExchangeTicker: (
 		exchangeTicker: string
 	) => Promise<IRaukkExchangePrices>;
+	getMaterial: (ticker: string) => Promise<IMaterial>;
 }): Promise<IRaukkPriceCaches> {
 	const defaultPrices: Record<string, number> = {};
 	const sellPrices: Record<string, number> = {};
 	const exchangePrices: Record<string, IRaukkExchangePrices> = {};
+	const dimensions: Record<string, IRaukkCargoDimension> = {};
 
 	await Promise.all(
 		params.tickers.map(async (ticker) => {
+			try {
+				const material: IMaterial = await params.getMaterial(ticker);
+
+				dimensions[ticker] = {
+					weightPerUnit: material.weight,
+					volumePerUnit: material.volume,
+				};
+			} catch {
+				// unknown material: the ticker stays without dimensions and
+				// ships weightless, as it did before it was cargo at all
+			}
+
 			try {
 				defaultPrices[ticker] = await params.getPrice(ticker, "BUY");
 				sellPrices[ticker] = await params.getPrice(ticker, "SELL");
@@ -810,7 +811,7 @@ async function loadRaukkPrices(params: {
 		})
 	);
 
-	return { defaultPrices, sellPrices, exchangePrices };
+	return { defaultPrices, sellPrices, exchangePrices, dimensions };
 }
 
 /**
@@ -853,6 +854,7 @@ export async function computePlanSnapshot(
 	const cxUuid: Ref<string | undefined> = ref(context.cxUuid);
 	const { getPrice } = await usePrice(cxUuid, ref(context.planetNaturalId));
 	const { getExchangeTicker } = await useExchangeData();
+	const { getMaterial } = useMaterialData();
 
 	let cxData: ICXData | undefined = undefined;
 
@@ -876,6 +878,7 @@ export async function computePlanSnapshot(
 		exchangeCode: resolveCxExchangeCode(cxData, context.planetNaturalId),
 		getPrice,
 		getExchangeTicker,
+		getMaterial,
 	});
 
 	const getProducers = (ticker: string): IRaukkProducerOption[] =>
@@ -899,15 +902,25 @@ export async function computePlanSnapshot(
 			getProducers,
 		});
 
-		const repairCost: IRaukkRepairCost = calculateRepairCostPerDay(
+		const repairBuildings: IRaukkRepairBuilding[] =
 			context.planResult.production.buildings.map((building) => ({
 				name: building.name,
 				amount: building.amount,
 				constructionMaterials: building.constructionMaterials,
-			})),
-			config.repairDay,
-			(ticker: string) => resolver(ticker).price
-		);
+			}));
+
+		/*
+		 * Repair material UNITS come first: they are cargo since the
+		 * cadence model, so the shipping needs them, and their freight in
+		 * turn is part of what a repair really costs. Units depend on the
+		 * buildings and the repair day alone, never on a price, so there
+		 * is no circle — only an order.
+		 */
+		const repairUnitsPerDay: IRaukkMaterialUnits =
+			calculateRepairMaterialsPerDay(
+				repairBuildings,
+				config.repairDay
+			).total;
 
 		const shippingInput: IRaukkShippingInput = {
 			planUuid: context.planUuid,
@@ -916,10 +929,25 @@ export async function computePlanSnapshot(
 			resolver,
 			getProducers,
 			shippingConfig,
+			repairUnitsPerDay,
+			dimensionOf: (ticker: string) => prices.dimensions[ticker],
+			caps: raukkCadenceCaps(
+				shippingConfig,
+				config.repairDay,
+				config.cadence
+			),
+			cxAnchor: config.cxAnchor,
 		};
 
 		const shipping: IRaukkShippingResult =
 			computePlanShipping(shippingInput);
+
+		const repairCost: IRaukkRepairCost = calculateRepairCostPerDay(
+			repairBuildings,
+			config.repairDay,
+			(ticker: string) =>
+				resolver(ticker).price + (shipping.inbound[ticker] ?? 0)
+		);
 
 		const result: IRaukkTrueCostResult = calculateTrueCosts({
 			planResult: context.planResult,
@@ -981,7 +1009,8 @@ export async function computePlanSnapshot(
 			...(shippingConfig.enabled
 				? {
 						flows: buildPlanFlows(shippingInput),
-						lanes: buildPlanLanes(shipping, shippingConfig),
+						lanes: buildPlanLanes(shipping),
+						advisories: shipping.advisories,
 						shippingFraction: shipping.shippingFraction,
 					}
 				: {}),
@@ -1001,7 +1030,7 @@ export async function computePlanSnapshot(
 	) {
 		const next: IRaukkSnapshot = computeOnce();
 		const settled: boolean =
-			maxRelativeOutputDelta(snapshot.outputs, next.outputs) <
+			maxAbsoluteOutputDelta(snapshot.outputs, next.outputs) <
 			RAUKK_SELF_LOOP_EPSILON;
 
 		snapshot = next;
@@ -1040,11 +1069,14 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		context.planetNaturalId
 	);
 	const { getExchangeTicker } = await useExchangeData();
+	const { getMaterial } = useMaterialData();
 
 	// price caches, filled by refreshPrices
 	const defaultPrices: Ref<Record<string, number>> = ref({});
 	const sellPrices: Ref<Record<string, number>> = ref({});
 	const exchangePrices: Ref<Record<string, IRaukkExchangePrices>> = ref({});
+	/** Cargo dimensions, the repair materials need them */
+	const dimensions: Ref<Record<string, IRaukkCargoDimension>> = ref({});
 
 	// must read through the reactive store state, not getConfig: its
 	// inert clone drops the proxy, nested source changes would not
@@ -1056,7 +1088,12 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		if (!stored)
 			return sourcingStore.getConfig(context.planUuid.value ?? "");
 
-		return { repairDay: stored.repairDay, sources: { ...stored.sources } };
+		return {
+			repairDay: stored.repairDay,
+			sources: { ...stored.sources },
+			cadence: { ...stored.cadence },
+			cxAnchor: stored.cxAnchor,
+		};
 	});
 
 	const cxData: ComputedRef<ICXData | undefined> = computed(() => {
@@ -1097,16 +1134,26 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		}))
 	);
 
-	const repairCost: ComputedRef<IRaukkRepairCost> = computed(() =>
-		calculateRepairCostPerDay(
-			repairBuildings.value,
-			config.value.repairDay,
-			(ticker: string) => resolver.value(ticker).price
-		)
+	/** Repair demand in UNITS, cargo of the repair bucket */
+	const repairUnitsPerDay: ComputedRef<IRaukkMaterialUnits> = computed(
+		() =>
+			calculateRepairMaterialsPerDay(
+				repairBuildings.value,
+				config.value.repairDay
+			).total
 	);
 
 	const shippingConfig: ComputedRef<IRaukkShippingConfig> = computed(
 		() => sourcingStore.shippingConfig
+	);
+
+	/** Days per visit per cargo bucket this plan may not exceed */
+	const caps: ComputedRef<IRaukkCadenceCaps> = computed(() =>
+		raukkCadenceCaps(
+			shippingConfig.value,
+			config.value.repairDay,
+			config.value.cadence
+		)
 	);
 
 	const shippingInput: ComputedRef<IRaukkShippingInput> = computed(() => ({
@@ -1116,11 +1163,31 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		resolver: resolver.value,
 		getProducers,
 		shippingConfig: shippingConfig.value,
+		repairUnitsPerDay: repairUnitsPerDay.value,
+		dimensionOf: (ticker: string) => dimensions.value[ticker],
+		caps: caps.value,
+		cxAnchor: config.value.cxAnchor,
 	}));
 
 	/** Live shipping of the pairs this plan owns, empty while disabled */
 	const shipping: ComputedRef<IRaukkShippingResult> = computed(() =>
 		computePlanShipping(shippingInput.value)
+	);
+
+	/**
+	 * Repair capital cost, freight INCLUDED: repair materials are cargo
+	 * since the cadence model, so what a repair costs is the material
+	 * plus getting it there. Units are priced before the freight is
+	 * known, see {@link computePlanSnapshot} — only the cost waits.
+	 */
+	const repairCost: ComputedRef<IRaukkRepairCost> = computed(() =>
+		calculateRepairCostPerDay(
+			repairBuildings.value,
+			config.value.repairDay,
+			(ticker: string) =>
+				resolver.value(ticker).price +
+				(shipping.value.inbound[ticker] ?? 0)
+		)
 	);
 
 	/** The pairs themselves, the LM rate comparison prices them again */
@@ -1283,6 +1350,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 					),
 					getPrice,
 					getExchangeTicker,
+					getMaterial,
 				})
 			);
 		} finally {
@@ -1301,6 +1369,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		defaultPrices.value = prices.defaultPrices;
 		sellPrices.value = prices.sellPrices;
 		exchangePrices.value = prices.exchangePrices;
+		dimensions.value = prices.dimensions;
 	}
 
 	/**
@@ -1346,6 +1415,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 	return {
 		config,
 		shippingConfig,
+		caps,
 		shipping,
 		shippingPairs,
 		repairBillCost,

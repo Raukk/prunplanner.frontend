@@ -4,6 +4,13 @@
 // docs/raukk_sourcing/shipping-decisions.md, no physics is derived
 // beyond what those logs state.
 
+// Calculations
+import {
+	RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
+	RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
+} from "@/features/raukk_sourcing/calculations/shippingCadence";
+import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
+
 // Types & Interfaces
 import {
 	IRaukkResolvedShipProfile,
@@ -355,9 +362,10 @@ export const RAUKK_DEFAULT_SHIP_PROFILE_ID: string = raukkShipProfileId(
 );
 
 /**
- * Shipping off, direct routing, same system trips free — the state in
- * which snapshots produce exactly the numbers they did before shipping
- * existed.
+ * Shipping on, direct routing, same system trips free — freight is
+ * charged out of the box; turning it off restores the numbers snapshots
+ * produced before shipping existed. Cadence starts at the shipped caps:
+ * production in and out every two weeks, workforce consumables monthly.
  *
  * @author raukk
  *
@@ -365,9 +373,12 @@ export const RAUKK_DEFAULT_SHIP_PROFILE_ID: string = raukkShipProfileId(
  */
 export function raukkDefaultShippingConfig(): IRaukkShippingConfig {
 	return {
-		enabled: false,
+		enabled: true,
 		defaultProfileId: RAUKK_DEFAULT_SHIP_PROFILE_ID,
 		routingMode: "direct",
 		sameSystemFlatCost: 0,
+		cadenceInOutDays: RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
+		cadenceWorkforceDays: RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
+		cxAnchorMode: RAUKK_CX_ANCHOR_NEAREST,
 	};
 }

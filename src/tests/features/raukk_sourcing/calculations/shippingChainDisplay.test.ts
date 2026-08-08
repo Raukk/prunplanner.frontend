@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 import {
 	raukkChainDropSuggestions,
 	raukkChainLegRows,
+	raukkAutoChainListRows,
 	raukkChainListRows,
 	raukkChainReversedComparison,
 	raukkChainSplitComparison,
@@ -127,6 +128,7 @@ function chainResult(
 		perUnit: {},
 		memberPlanUuids: ["p1"],
 		config: raukkDefaultChainConfig(),
+		advisories: [],
 		...overrides,
 	};
 }
@@ -217,6 +219,35 @@ describe("Raukk Shipping: Chain Display", () => {
 			expect(row.stale).toBe(false);
 			expect(row.shipDaysPerDay).toBeCloseTo(0.5);
 			expect(row.stopsSummary).toBe("Extractor → Smelter → Extractor");
+			expect(row.auto).toBe(false);
+		});
+	});
+
+	describe("raukkAutoChainListRows", () => {
+		it("lists the derived chains and nothing else", () => {
+			const rows: IRaukkChainListRow[] = raukkAutoChainListRows(
+				{
+					c1: chainResult(),
+					"auto:production:NC1:1": chainResult({
+						chainId: "auto:production:NC1:1",
+						auto: true,
+						capDays: 14,
+						shipMinutesPerDay: 720,
+					}),
+				},
+				STOP_NAMES
+			);
+
+			expect(rows.map((row) => row.chainId)).toStrictEqual([
+				"auto:production:NC1:1",
+			]);
+			expect(rows[0].auto).toBe(true);
+			expect(rows[0].capDays).toBe(14);
+			expect(rows[0].computed).toBe(true);
+			expect(rows[0].shipDaysPerDay).toBeCloseTo(0.5);
+			expect(rows[0].stopsSummary).toBe(
+				"Extractor → Smelter → Extractor"
+			);
 		});
 	});
 

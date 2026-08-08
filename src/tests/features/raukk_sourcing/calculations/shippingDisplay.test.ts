@@ -12,6 +12,7 @@ import {
 
 // Types & Interfaces
 import {
+	IRaukkCadenceCaps,
 	IRaukkResolvedShipProfile,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
@@ -39,6 +40,13 @@ const config: IRaukkShippingConfig = {
 	defaultProfileId: "test",
 	routingMode: "direct",
 	sameSystemFlatCost: 0,
+};
+
+/** Account defaults; every fixture fills its hull well inside them */
+const caps: IRaukkCadenceCaps = {
+	production: 14,
+	workforce: 30,
+	repair: 90,
 };
 
 /** One sourcing pair importing 500 t of cargo per day over 5 parsecs */
@@ -90,7 +98,7 @@ describe("raukk shipping display helpers", () => {
 
 	describe("buildLmComparison", () => {
 		it("prices the own fleet per trip and per unit", () => {
-			const [row] = buildLmComparison([sourcingPair()], config, 0);
+			const [row] = buildLmComparison([sourcingPair()], config, 0, caps);
 
 			// 2 * 5 pc * 10 + 2 * 50 block cost
 			expect(row.ownCostPerTrip).toBe(200);
@@ -108,7 +116,7 @@ describe("raukk shipping display helpers", () => {
 			pair.profile = { ...profile, damagePerParsec: 0.01 };
 
 			// 2 * 5 * 0.01 = 10% damage on an 80% budget, bill 800
-			const [row] = buildLmComparison([pair], config, 800);
+			const [row] = buildLmComparison([pair], config, 800, caps);
 
 			expect(row.ownCostPerTrip).toBe(200 + 100);
 		});
@@ -119,7 +127,8 @@ describe("raukk shipping display helpers", () => {
 			const [row] = buildLmComparison(
 				[sourcingPair()],
 				{ ...config, lmRates: { [pairKey]: 100 } },
-				0
+				0,
+				caps
 			);
 
 			expect(row.lmRatePerTrip).toBe(100);
@@ -134,7 +143,8 @@ describe("raukk shipping display helpers", () => {
 			const [row] = buildLmComparison(
 				[sourcingPair()],
 				{ ...config, lmRates: { [pairKey]: 1000 } },
-				0
+				0,
+				caps
 			);
 
 			expect(row.savingPerUnit).toBeLessThan(0);
@@ -144,7 +154,7 @@ describe("raukk shipping display helpers", () => {
 			const pair: IRaukkShippingPair = sourcingPair();
 			pair.back = [];
 
-			const [row] = buildLmComparison([pair], config, 0);
+			const [row] = buildLmComparison([pair], config, 0, caps);
 
 			expect(row.tripsPerDay).toBe(0);
 			expect(row.unitsPerDay).toBe(0);
@@ -174,7 +184,7 @@ describe("raukk shipping display helpers", () => {
 				],
 			};
 
-			const [row] = buildLmComparison([pair], config, 0);
+			const [row] = buildLmComparison([pair], config, 0, caps);
 
 			expect(row.identity.kind).toBe("cx");
 			expect(row.unitsPerDay).toBe(500);

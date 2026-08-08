@@ -1,0 +1,197 @@
+# Shipping cadence redesign — implementation plan
+
+User decisions 2026-08-08 (see shipping-decisions.md round 10). Flips
+lane trips from demand-driven (loads/day) to cadence-driven (visit
+every N days, N capped per cargo category), adds automatic hull
+selection and automatic chains, and reworks the displays around
+days-per-visit. All client-side; no backend changes.
+
+Phases must land in order — 0 is a prerequisite for 1, 1 for 2.
+Each phase lands with: passing `pnpm vitest run
+src/tests/features/raukk_sourcing`, clean `pnpm tsc`, en_US i18n keys
+for new strings, tests mirroring the src tree, and code following the
+existing feature conventions (tabs, 80 col, JSDoc with `@author
+raukk` on exported fns, zod-defaulted schema fields so old payloads
+parse).
+
+## Phase 0a — absolute tolerances
+
+Everything Raukk-side displays at 2 decimals already (`formatNumber`
+default). Comparisons move from relative to absolute epsilons:
+
+- New constants (single home, e.g. a `raukkEpsilon.ts` or an existing
+  shared calculations file):
+  - `RAUKK_EPSILON_EQUAL = 0.01` — two values within 0.01 (ȼ or
+    units) are the same.
+  - `RAUKK_EPSILON_SETTLE = 0.05` — good enough for loop/propagation
+    convergence.
+- Replace `RAUKK_SNAPSHOT_EQUAL_EPSILON` (1e-6 relative,
+  raukkSourcingPricing.ts) → absolute 0.01 in
+  `snapshotMateriallyChanged`; a change under a cent no longer stales
+  downstream plans.
+- Replace `RAUKK_CHAIN_EPSILON` (useRaukkChainRecompute.ts) →
+  absolute 0.05 for the settle test.
+- Replace `RAUKK_SELF_LOOP_EPSILON` (1e-9 relative,
+  useRaukkSnapshot.ts) → absolute 0.05.
+- Bare comparisons gain the EQUAL deadband where a hair-width
+  difference flips a verdict: `recommendDrop`
+  (shippingChains.ts), mutual-lane verdict (shippingPairs.ts),
+  fleet `over` (utilization > 1 → > 1 + EQUAL), LM saving sign.
+
+## Phase 0b — per-ticker, per-bucket flow identity
+
+Prerequisite for everything below. Today `shippingPairs.ts`
+aggregates lane cargo to weight/volume totals and
+`shippingFlows.ts` flows carry no category; the three input buckets
+(production / workforce / repair) exist only in
+`raukkSourcingPricing.ts` `buildInputRows`.
+
+- Shipped cargo keeps per-ticker rows end to end:
+  `{ ticker, bucket, unitsPerDay, weightPerUnit, volumePerUnit }`
+  where `bucket: "production" | "workforce" | "repair"`.
+- Bucket attribution reuses the buildInputRows logic
+  (`workforceMaterialIO`, `repairUnitsPerDay`); outputs and CX-sold
+  cargo are `production` (the in/out class).
+- Aggregation to totals happens at the last moment (cost math,
+  display), so any consumer can attribute cargo to ALO/RAT/DW etc.
+  individually rather than "from base X".
+
+## Phase 1 — cadence model on direct lanes
+
+- Category cadence caps, days per visit the shipping may not exceed:
+  - account defaults on `shippingConfig` (zod-defaulted):
+    in/out `14`, workforce `30`; repair uses the consuming plan's
+    `repairDay` (typically 90).
+  - per-consuming-plan overrides in the per-plan sourcing config:
+    any positive day count (365 is legal). Overrides replace the
+    account default outright.
+  - The cap binds the SHIPPING, not the user: if the hold would take
+    28 days to fill under a 14-day cap, the ship runs half full
+    every 14 days. Partial trips pay a full trip.
+- Each lane splits into up to three legs, one per bucket present.
+  Per leg: `fillDays = hull binding capacity / daily cargo` (binding
+  = max of weight/volume loads), `visitDays = min(capDays,
+  fillDays)`, `tripsPerDay = 1 / visitDays`.
+- Auto hull selection per leg, from fleet-owned types only
+  (count > 0 in the fleet store):
+  - Pick the largest owned hull whose load still fits the cadence;
+    smaller only if it suffices (larger shipment less often is the
+    efficient default).
+  - Density rule on the leg's aggregate cargo, r = tonnes per m³:
+    r ≥ 2.5 → prefer WCB (3000t/1000m³); r ≤ 0.4 → prefer VCB
+    (1000t/3000m³); only in the balanced band 0.4 < r < 2.5 is the
+    HCB economical (it costs ~2× a WCB; bigger hulls are slower FTL
+    even empty). MCB/LCB follow the same balanced-band logic and
+    mostly serve low-throughput bases.
+  - If a leg needs more than one trip per day, promote to an owned
+    HCB when that cuts trip frequency by ≥1.5×.
+  - NEVER assign an unowned hull. When an unowned hull would be
+    better (HCB promotion, ideal size), keep the best owned pick and
+    emit a fleet advisory: "adding an <hull> would improve shipping".
+  - Manual assignment (`assignments` store) always wins; "Auto" now
+    means this heuristic, no longer `defaultProfileId` fallback.
+- Utilization keeps its formula (claimed ship-minutes / (1440 ×
+  count)), computed over the new legs.
+
+### Phase 1 as implemented
+
+Two points the phase left open, decided while building it:
+
+- "Largest owned hull whose load still fits the cadence" is
+  implemented as the SMALLEST owned hull that covers a whole cadence
+  period in one trip (`fillDays ≥ capDays`); when none does, the
+  largest owned hull, which is the one flying least often. Never
+  downsize below sufficiency, never upsize past it.
+- Repair materials are minted as cargo from the plans own repair
+  demand (`calculateRepairMaterialsPerDay`), with weight and volume
+  read from the material database — the plans material I/O carries
+  neither. Their freight is charged into `calculateRepairCostPerDay`,
+  so a repair costs the material plus getting it there. Chain drop
+  comparisons (`shippingChains.ts`) cost their standalone lanes at the
+  ACCOUNT default caps: a chain is account level and knows no
+  consuming plan.
+
+## Phase 2 — auto chains + exchange hub/spoke
+
+- CX anchor per base: `shippingConfig.cxAnchorMode: "nearest" |
+  <fixed CX id>` (account-wide), plus a per-plan override. Regions =
+  bases sharing an anchor CX.
+- Per cadence class per region, build default chains
+  CX→A→…→CX:
+  - A base qualifies for a stop when its cargo is ≥5% (configurable
+    threshold like the existing chain knobs) of the shipment's total
+    weight OR volume, AND within the class's detour budget
+    (configurable; tight for in/out, loose for workforce/repair — a
+    single short extra jump is fine on 30/90-day runs, not on the
+    frequent ones).
+  - Max 5 bases per chain, hard cap. Loop order solved exactly by
+    brute force (≤ 12 permutations at 5 stops), scored by round-trip
+    parsecs. More than 5 qualifying → proximity-cluster into
+    multiple chains, then order each exactly.
+- Everything below the cutoff is hub/spoke via the exchange: the
+  consumer buys at the CX (freight on its own CX lane), the
+  producer's excess already ships out on its CX lane. Chain-claimed
+  cargo is never also charged on a lane (existing invariant — keep
+  it).
+- User-authored chains claim their flows first; auto chains cover
+  what remains.
+- Hub/spoke display is resource-first: ticker + share of cargo,
+  optionally grouped by source base — never base-only rows.
+
+### Phase 2 as implemented
+
+Points the phase left open, decided while building it:
+
+- **Detour budget = marginal insertion cost.** A stop's detour is what
+  it adds to the exactly ordered round trip of the loop it joins, not
+  its distance from the exchange. The first stop of a loop therefore
+  pays no detour; it is the seed, chosen as the qualifying base nearest
+  the anchor exchange, and the loop then grows by whichever remaining
+  base adds the fewest parsecs while staying inside the class budget and
+  below five stops. What is left seeds the next loop, which is the
+  proximity clustering the plan asks for.
+- **A derived chain needs at least TWO base stops.** `CX → A → CX` is
+  the exchange lane plan A already flies; deriving it would only move
+  that lane to the account level. Regions of one base keep their lane.
+- **Hub/spoke is universal, not conditional.** Since no lane is direct
+  unless a chain claims it, `viaCxSourceOf` is true for every source and
+  the round 7 mutual verdict is subsumed: both directions of an A⇄B pair
+  now route through the exchanges. `resolveMutualLanes` stays in
+  `shippingPairs.ts` with its unit tests, unused by the snapshot
+  pipeline. The producer side adds back exactly what `subscribedOf`
+  subtracted, minus what a chain really carries, so a drawn output ships
+  like an undrawn one and nothing is charged twice.
+- **The CX anchor moves real freight**, not only the region grouping:
+  the plan's exchange lane is routed to its anchor (falling back to the
+  nearest exchange when the anchor is unroutable) and its market flows
+  name the anchor's code. A plan may state `"nearest"` explicitly, which
+  overrides a fixed account mode.
+- **Derived results are replaced wholesale** by `setAutoChainResults`
+  on every pass: a loop the new flows no longer justify must lose its
+  result, or its stored claims would keep taking cargo off lanes that
+  are flown again.
+- **No CX split on a derived chain.** It already opens and closes at its
+  region's exchange, which is what the split rule exists to arrange.
+- Chain cadence enters `calculateChainShipping` through an optional
+  `capDays` on the input — absent on every authored chain, so their
+  numbers are unchanged.
+
+## Phase 3 — display
+
+- Days per visit everywhere trips show, format: `2 days/visit
+  (0.5/day)` — Hired Transport table (incl. the Exchange row), chain
+  legs, chain detail. Chain legs show their class defaults.
+- Fleet overcapacity: per-type utilization percentage, red past
+  100% (e.g. "WCB 534%"), same styling as the sourcing
+  over-percentage — replaces the raw ship-days figure that reads
+  like a ship count. Advisories (Phase 1/2) render here.
+- Chain leg detail surfaces the already-computed leg duration
+  (calibrated minutes-per-parsec, reactor charge, STL blocks) and
+  fuel estimate (burn × current FF/SF price).
+
+## Deferred — NOT in this round of work
+
+- Self-sustained-cycle zero cost (the "ours −8,955.29" rule) and the
+  base-fraction denominator change (output minus CX-shipped).
+  Waiting on a worked multi-base example from the user. Do not
+  implement; leave `baseFraction.ts` semantics untouched.

@@ -40,6 +40,11 @@ export interface IRaukkChainListRow {
 	shippingFraction: number | null;
 	/** Ship days per day this chain claims of its assigned type */
 	shipDaysPerDay: number | null;
+	/** True for a DERIVED chain: nobody authored it, so nothing about it
+	 * can be edited or deleted */
+	auto: boolean;
+	/** Days per visit the loop is capped at, only derived chains have one */
+	capDays: number | null;
 }
 
 /** One leg of a chain as the detail table renders it */
@@ -197,9 +202,54 @@ export function raukkChainListRows(
 					result === undefined
 						? null
 						: result.shipMinutesPerDay / MINUTES_PER_DAY,
+				auto: false,
+				capDays: null,
 			};
 		})
 		.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/**
+ * One list row per DERIVED chain.
+ *
+ * An automatic chain exists only as its result — it is rebuilt from the
+ * flows on every pass and never authored — so its row is read only: the
+ * loop, its cadence and its numbers, with nothing to edit or delete. The
+ * ship type assignment is the one exception and belongs to the caller,
+ * a derived chain can be pinned to a hull like any other.
+ *
+ * @author raukk
+ *
+ * @param {Record<string, IRaukkChainResult>} results Stored results
+ * @param {Record<string, string>} stopNames Planet natural id to name
+ * @returns {IRaukkChainListRow[]} List rows, ordered by chain id
+ */
+export function raukkAutoChainListRows(
+	results: Record<string, IRaukkChainResult>,
+	stopNames: Record<string, string>
+): IRaukkChainListRow[] {
+	return Object.values(results)
+		.filter((result) => result.auto === true)
+		.map((result) => ({
+			chainId: result.chainId,
+			name: result.chainId,
+			stopsSummary: raukkChainStopsSummary(
+				result.unsplit.stops,
+				stopNames
+			),
+			stopCount: result.unsplit.stops.length,
+			computed: true,
+			stale: result.stale,
+			splitApplied: result.splitApplied,
+			hired: result.hired,
+			tripsPerDay: result.tripsPerDay,
+			dailyCost: result.dailyCost,
+			shippingFraction: result.shippingFraction,
+			shipDaysPerDay: result.shipMinutesPerDay / MINUTES_PER_DAY,
+			auto: true,
+			capDays: result.capDays ?? null,
+		}))
+		.sort((left, right) => left.chainId.localeCompare(right.chainId));
 }
 
 /**

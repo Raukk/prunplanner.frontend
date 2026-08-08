@@ -17,9 +17,15 @@
 	// Calculations
 	import { buildLmComparison } from "@/features/raukk_sourcing/calculations/shippingDisplay";
 	import { raukkBayCode } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
+	import {
+		RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
+		RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
+	} from "@/features/raukk_sourcing/calculations/shippingCadence";
+	import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
+	import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
 
 	// UI
-	import { PButton, PCheckbox, PInputNumber, PSelect } from "@/ui";
+	import { PButton, PCheckbox, PInputNumber, PSelect, PTooltip } from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -28,12 +34,20 @@
 		IRaukkShippingConfig,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
 	import {
+		IRaukkCadenceCaps,
 		IRaukkShippingPair,
 		RAUKK_ROUTING_MODE,
 	} from "@/features/raukk_sourcing/calculations/shipping.types";
 	import { IRaukkLmComparisonRow } from "@/features/raukk_sourcing/calculations/shippingDisplay";
 
 	const props = defineProps({
+		/** Open plan, undefined on an unsaved one: the anchor override is
+		 * per plan and needs a plan to belong to */
+		planUuid: {
+			type: String,
+			required: false,
+			default: undefined,
+		},
 		/** Route pairs the open plan owns, empty while shipping is off */
 		pairs: {
 			type: Array as PropType<IRaukkShippingPair[]>,
@@ -41,6 +55,11 @@
 		},
 		repairBillCost: {
 			type: Number,
+			required: true,
+		},
+		/** Cadence caps of the open plan, days per visit and cargo bucket */
+		caps: {
+			type: Object as PropType<IRaukkCadenceCaps>,
 			required: true,
 		},
 		/** Plan name per plan uuid, for the lane labels */
@@ -112,11 +131,54 @@
 		}))
 	);
 
+	/** "Nearest" plus the four exchanges, the anchor choices */
+	const anchorOptions: ComputedRef<PSelectOption[]> = computed(() => [
+		{
+			label: t("raukk_sourcing.cx_anchor.nearest"),
+			value: RAUKK_CX_ANCHOR_NEAREST,
+		},
+		...Object.keys(RAUKK_CX_SYSTEM_ID_BY_CODE).map((code) => ({
+			label: code,
+			value: code,
+		})),
+	]);
+
+	/** Anchor override of the open plan, null while it follows the account */
+	const planAnchor: ComputedRef<string | null> = computed(() =>
+		props.planUuid === undefined
+			? null
+			: (sourcingStore.configs[props.planUuid]?.cxAnchor ?? null)
+	);
+
+	function changeAnchorMode(mode: string): void {
+		sourcingStore.setShippingConfig({ cxAnchorMode: mode });
+	}
+
+	/**
+	 * Stores or clears the anchor of the open plan. Clearing puts the
+	 * plan back onto the account wide mode, which is what the placeholder
+	 * of the picker shows.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string | null} cxCode Exchange code, null clears
+	 */
+	function changePlanAnchor(cxCode: string | null): void {
+		if (props.disabled || props.planUuid === undefined) return;
+
+		sourcingStore.setPlanCxAnchor(props.planUuid, cxCode ?? undefined);
+	}
+
 	/** Calibration table is long, it starts folded away */
 	const refShowCalibration: Ref<boolean> = ref(false);
 
 	const lmRows: ComputedRef<IRaukkLmComparisonRow[]> = computed(() =>
-		buildLmComparison(props.pairs, config.value, props.repairBillCost)
+		buildLmComparison(
+			props.pairs,
+			config.value,
+			props.repairBillCost,
+			props.caps
+		)
 	);
 
 	function toggleEnabled(enabled: boolean): void {
@@ -133,6 +195,40 @@
 
 	function changeSameSystemFlatCost(value: number | null | undefined): void {
 		sourcingStore.setShippingConfig({ sameSystemFlatCost: value ?? 0 });
+	}
+
+	/**
+	 * Stores an account cadence default, days per visit. An empty or non
+	 * positive input goes back to the shipped default rather than storing
+	 * a cap of zero, which would mean "visit infinitely often".
+	 *
+	 * @author raukk
+	 *
+	 * @param {number | null | undefined} value Days per visit
+	 */
+	function changeCadenceInOut(value: number | null | undefined): void {
+		sourcingStore.setShippingConfig({
+			cadenceInOutDays:
+				value !== null && value !== undefined && value > 0
+					? value
+					: RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
+		});
+	}
+
+	/**
+	 * Stores the account workforce cadence default, days per visit.
+	 *
+	 * @author raukk
+	 *
+	 * @param {number | null | undefined} value Days per visit
+	 */
+	function changeCadenceWorkforce(value: number | null | undefined): void {
+		sourcingStore.setShippingConfig({
+			cadenceWorkforceDays:
+				value !== null && value !== undefined && value > 0
+					? value
+					: RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
+		});
 	}
 
 	function changeProfile(
@@ -229,6 +325,68 @@
 				:min="0"
 				:value="config.sameSystemFlatCost"
 				@update:value="changeSameSystemFlatCost" />
+
+			<PTooltip>
+				<template #trigger>
+					<div class="font-bold pl-3 hover:cursor-help">
+						{{ $t("raukk_sourcing.shipping.cadence_in_out") }}
+					</div>
+				</template>
+				{{ $t("raukk_sourcing.shipping.cadence_tooltip") }}
+			</PTooltip>
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:value="
+					config.cadenceInOutDays ?? RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS
+				"
+				@update:value="changeCadenceInOut" />
+
+			<PTooltip>
+				<template #trigger>
+					<div class="font-bold pl-3 hover:cursor-help">
+						{{ $t("raukk_sourcing.shipping.cadence_workforce") }}
+					</div>
+				</template>
+				{{ $t("raukk_sourcing.shipping.cadence_tooltip") }}
+			</PTooltip>
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:value="
+					config.cadenceWorkforceDays ??
+					RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS
+				"
+				@update:value="changeCadenceWorkforce" />
+
+			<PTooltip>
+				<template #trigger>
+					<div class="font-bold pl-3 hover:cursor-help">
+						{{ $t("raukk_sourcing.cx_anchor.label") }}
+					</div>
+				</template>
+				{{ $t("raukk_sourcing.cx_anchor.tooltip") }}
+			</PTooltip>
+			<PSelect
+				class="w-40!"
+				:value="config.cxAnchorMode ?? RAUKK_CX_ANCHOR_NEAREST"
+				:options="anchorOptions"
+				@update:value="(v) => changeAnchorMode(String(v))" />
+
+			<div v-if="planUuid !== undefined" class="font-bold pl-3">
+				{{ $t("raukk_sourcing.cx_anchor.plan_label") }}
+			</div>
+			<PSelect
+				v-if="planUuid !== undefined"
+				class="w-40!"
+				clearable
+				:disabled="disabled"
+				:value="planAnchor"
+				:options="anchorOptions"
+				:placeholder="config.cxAnchorMode ?? RAUKK_CX_ANCHOR_NEAREST"
+				@update:value="
+					(v) => changePlanAnchor((v as string) ?? null)
+				" />
 
 			<PButton
 				type="secondary"

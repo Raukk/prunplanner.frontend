@@ -83,6 +83,7 @@ function makeChainResult(
 		perUnit: { ORE: 5 },
 		memberPlanUuids,
 		config: raukkDefaultChainConfig(),
+		advisories: [],
 	};
 }
 
@@ -265,6 +266,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		});
 
 		it("leaves the chains fresh while shipping stays off", () => {
+			store.setShippingConfig({ enabled: false });
 			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
 			store.setChainResult("c1", makeChainResult("c1", ["source"]));
 
@@ -429,6 +431,64 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		});
 	});
 
+	describe("automatic chain results", () => {
+		it("replaces every derived result and keeps the authored ones", () => {
+			store.setChainResult("c1", makeChainResult("c1", ["source"]));
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+				makeChainResult("auto:workforce:AI1:1", ["source"]),
+			]);
+
+			expect(Object.keys(store.chainResults).sort()).toStrictEqual([
+				"auto:production:AI1:1",
+				"auto:workforce:AI1:1",
+				"c1",
+			]);
+			expect(store.chainResults["auto:production:AI1:1"].auto).toBe(true);
+			expect(store.chainResults.c1.auto).toBeUndefined();
+
+			// the next pass derives only one loop: the other one is gone
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+			]);
+
+			expect(Object.keys(store.chainResults).sort()).toStrictEqual([
+				"auto:production:AI1:1",
+				"c1",
+			]);
+		});
+
+		it("stores nothing when nothing was derived", () => {
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+			]);
+			store.setAutoChainResults([]);
+
+			expect(store.chainResults).toStrictEqual({});
+		});
+	});
+
+	describe("cx anchor", () => {
+		it("stores the per plan anchor and stales the plan", () => {
+			withMembers();
+
+			store.setPlanCxAnchor("source", "NC1");
+
+			expect(store.configs.source.cxAnchor).toBe("NC1");
+			expect(store.snapshots.source.stale).toBe(true);
+
+			store.setSnapshot("source", makeSnapshot("Source", "ZV-194a"));
+			store.setPlanCxAnchor("source", undefined);
+
+			expect(store.configs.source.cxAnchor).toBeUndefined();
+			expect(store.snapshots.source.stale).toBe(true);
+		});
+
+		it("defaults the account mode to the nearest exchange", () => {
+			expect(store.shippingConfig.cxAnchorMode).toBe("nearest");
+		});
+	});
+
 	describe("export and import", () => {
 		it("round trips the chain and fleet slices", () => {
 			store.setChain({
@@ -499,6 +559,48 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.fleet).toStrictEqual({});
 			expect(store.assignments).toStrictEqual({});
 			expect(store.chainConfig).toStrictEqual(raukkDefaultChainConfig());
+		});
+
+		it("defaults the phase 2 fields of an older payload", () => {
+			const result = makeChainResult("c1", ["source"]) as Record<
+				string,
+				unknown
+			>;
+
+			// a result written before the derived chains existed
+			delete result.auto;
+			delete result.advisories;
+
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: { a: { repairDay: 30, sources: {} } },
+					snapshots: {},
+					shippingConfig: {
+						enabled: true,
+						defaultProfileId: RAUKK_DEFAULT_SHIP_PROFILE_ID,
+						routingMode: "direct",
+						sameSystemFlatCost: 0,
+					},
+					chainConfig: {
+						cxSplitDetourParsecs: 6,
+						legUtilizationSplitThreshold: 0.25,
+						densityRef: 3.28,
+						stlCostPerMegameter: 0,
+						autoCxSplit: true,
+						sameSystemPricing: "average",
+					},
+					chainResults: { c1: result },
+				})
+			);
+
+			expect(store.shippingConfig.cxAnchorMode).toBe("nearest");
+			expect(store.chainConfig.autoChainMinShare).toBe(0.05);
+			expect(store.chainConfig.autoChainDetourInOutParsecs).toBe(2);
+			expect(store.chainConfig.autoChainDetourLooseParsecs).toBe(6);
+			expect(store.chainResults.c1.auto).toBeUndefined();
+			expect(store.chainResults.c1.advisories).toStrictEqual([]);
+			expect(store.configs.a.cxAnchor).toBeUndefined();
 		});
 
 		it("imports a snapshot without the v2 flow and lane arrays", () => {

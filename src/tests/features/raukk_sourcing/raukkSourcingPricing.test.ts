@@ -8,11 +8,12 @@ import {
 	createRaukkPriceResolver,
 	formatSourceOptionLabel,
 	isAggregateSource,
-	maxRelativeOutputDelta,
+	maxAbsoluteOutputDelta,
 	resolveCxExchangeCode,
 	snapshotMateriallyChanged,
 	splitAggregateDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
+import { RAUKK_EPSILON_SETTLE } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
 // Types & Interfaces
 import { ICXData } from "@/stores/planningStore.types";
@@ -550,19 +551,20 @@ describe("Raukk Sourcing Pricing", () => {
 			expect(h2o?.effectivePrice).toBe(2);
 		});
 
-		it("charges freight on the shipped units only", () => {
-			// RAT: 10 net input units ride a pair, 4 repair units do not
+		it("charges freight on the repair units as well", () => {
+			// RAT: 10 net input units and 4 repair units, all of them
+			// cargo since the cadence model
 			const rows = buildInputRows(planResult, { RAT: 4 }, {}, resolve, {
 				RAT: 5,
 			});
 			const rat = rows.find((r) => r.ticker === "RAT");
 
 			expect(rat?.unitsPerDay).toBe(14);
-			expect(rat?.shippedUnitsPerDay).toBe(10);
-			expect(rat?.costPerDay).toBe(14 * 100 + 10 * 5);
+			expect(rat?.shippedUnitsPerDay).toBe(14);
+			expect(rat?.costPerDay).toBe(14 * 100 + 14 * 5);
 		});
 
-		it("leaves a repair only ticker unshipped", () => {
+		it("ships a repair only ticker on its own repair leg", () => {
 			const rows = buildInputRows(
 				planResult,
 				{ BSE: 4 },
@@ -573,12 +575,12 @@ describe("Raukk Sourcing Pricing", () => {
 			);
 			const bse = rows.find((r) => r.ticker === "BSE");
 
-			expect(bse?.shippedUnitsPerDay).toBe(0);
-			expect(bse?.costPerDay).toBe(2000);
+			expect(bse?.shippedUnitsPerDay).toBe(4);
+			expect(bse?.costPerDay).toBe(4 * 500 + 4 * 99);
 		});
 	});
 
-	describe("maxRelativeOutputDelta", () => {
+	describe("maxAbsoluteOutputDelta", () => {
 		const outputs = (costs: Record<string, number>) =>
 			Object.fromEntries(
 				Object.entries(costs).map(([ticker, costPerUnit]) => [
@@ -599,32 +601,41 @@ describe("Raukk Sourcing Pricing", () => {
 
 		it("is 0 for identical outputs", () => {
 			expect(
-				maxRelativeOutputDelta(
+				maxAbsoluteOutputDelta(
 					outputs({ RAT: 10, DW: 5 }),
 					outputs({ RAT: 10, DW: 5 })
 				)
 			).toBe(0);
 		});
 
-		it("measures the largest relative cost shift", () => {
+		it("measures the largest absolute cost shift", () => {
 			expect(
-				maxRelativeOutputDelta(
+				maxAbsoluteOutputDelta(
 					outputs({ RAT: 10, DW: 5 }),
-					outputs({ RAT: 11, DW: 5 })
+					outputs({ RAT: 11, DW: 5.5 })
 				)
-			).toBeCloseTo(1 / 11, 10);
+			).toBeCloseTo(1, 10);
 		});
 
-		it("counts appearing or vanishing tickers as full shift", () => {
+		it("never settles an appearing or vanishing ticker", () => {
 			expect(
-				maxRelativeOutputDelta(outputs({ RAT: 10 }), outputs({ DW: 5 }))
-			).toBe(1);
+				maxAbsoluteOutputDelta(outputs({ RAT: 10 }), outputs({ DW: 5 }))
+			).toBe(Number.POSITIVE_INFINITY);
 		});
 
 		it("treats zero on both sides as no shift", () => {
 			expect(
-				maxRelativeOutputDelta(outputs({ RAT: 0 }), outputs({ RAT: 0 }))
+				maxAbsoluteOutputDelta(outputs({ RAT: 0 }), outputs({ RAT: 0 }))
 			).toBe(0);
+		});
+
+		it("stays below the settle epsilon for a sub cent shift", () => {
+			expect(
+				maxAbsoluteOutputDelta(
+					outputs({ RAT: 1000 }),
+					outputs({ RAT: 1000.004 })
+				)
+			).toBeLessThan(RAUKK_EPSILON_SETTLE);
 		});
 	});
 
@@ -693,6 +704,17 @@ describe("Raukk Sourcing Pricing", () => {
 					fullSnapshot(10, 100, {})
 				)
 			).toBe(true);
+		});
+
+		it("ignores a change under the equality deadband", () => {
+			// half a hundredth of a cent on a 1000 ȼ output: invisible in
+			// the two decimal display, so downstream plans stay current
+			expect(
+				snapshotMateriallyChanged(
+					fullSnapshot(1000, 100, { a: { ORE: 5 } }),
+					fullSnapshot(1000.005, 100, { a: { ORE: 5.005 } })
+				)
+			).toBe(false);
 		});
 
 		it("ignores metadata only differences", () => {

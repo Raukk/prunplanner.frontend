@@ -29,7 +29,14 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PButton, PSelect, PTag, PTooltip, PInput } from "@/ui";
+	import {
+		PButton,
+		PInputNumber,
+		PSelect,
+		PTag,
+		PTooltip,
+		PInput,
+	} from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -38,6 +45,7 @@
 		IRaukkTickerSource,
 		RAUKK_REPAIR_DAY,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
+	import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
 
 	const props = defineProps({
 		planUuid: {
@@ -73,6 +81,7 @@
 	const {
 		config,
 		shippingConfig,
+		caps,
 		shippingPairs,
 		repairBillCost,
 		fuelPrices,
@@ -136,6 +145,25 @@
 		if (readOnly.value || !props.planUuid) return;
 
 		sourcingStore.setRepairDay(props.planUuid, day);
+	}
+
+	/**
+	 * Stores or clears one cadence override of the open plan, days per
+	 * visit. An empty field clears the override and the account default
+	 * applies again — which is exactly what the placeholder shows.
+	 *
+	 * @author raukk
+	 *
+	 * @param {RAUKK_CARGO_BUCKET} bucket Cargo Bucket
+	 * @param {number | null} days Days per visit, null clears
+	 */
+	function changeCadence(
+		bucket: RAUKK_CARGO_BUCKET,
+		days: number | null
+	): void {
+		if (readOnly.value || !props.planUuid) return;
+
+		sourcingStore.setPlanCadence(props.planUuid, bucket, days ?? undefined);
 	}
 
 	function changeSource(
@@ -280,6 +308,36 @@
 				@update:value="
 					(v) => changeRepairDay(Number(v) as RAUKK_REPAIR_DAY)
 				" />
+
+			<PTooltip>
+				<template #trigger>
+					<div class="font-bold pl-3 hover:cursor-help">
+						{{ $t("raukk_sourcing.controls.cadence") }}
+					</div>
+				</template>
+				{{ $t("raukk_sourcing.controls.cadence_tooltip") }}
+			</PTooltip>
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:disabled="readOnly"
+				:placeholder="String(caps.production)"
+				:value="config.cadence?.production ?? null"
+				@update:value="(v) => changeCadence('production', v ?? null)" />
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:disabled="readOnly"
+				:placeholder="String(caps.workforce)"
+				:value="config.cadence?.workforce ?? null"
+				@update:value="(v) => changeCadence('workforce', v ?? null)" />
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:disabled="readOnly"
+				:placeholder="String(caps.repair)"
+				:value="config.cadence?.repair ?? null"
+				@update:value="(v) => changeCadence('repair', v ?? null)" />
 
 			<PButton
 				type="primary"
@@ -444,8 +502,10 @@
 	</div>
 
 	<RaukkShippingSection
+		:plan-uuid="planUuid"
 		:pairs="shippingPairs"
 		:repair-bill-cost="repairBillCost"
+		:caps="caps"
 		:fuel-prices="fuelPrices"
 		:plan-names="planNames"
 		:storage-days="storageDays"
