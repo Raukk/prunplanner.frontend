@@ -188,6 +188,55 @@ export function collectDependencies(
 }
 
 /**
+ * Orders a fixed set of plans upstream first.
+ *
+ * Unlike {@link buildRecomputeOrder} the scope is given, not derived:
+ * every plan of the set is emitted exactly once, after every in set
+ * plan it depends on. Plans outside the set are ignored entirely —
+ * their stored snapshots are frozen values, recomputation order cannot
+ * change what a consumer reads from them. Supply loops within the set
+ * are broken at an arbitrary point, a first computation does not need
+ * settled loop values. The result is deterministic, ties resolve in
+ * uuid sort order.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkDependencyGraph} graph Dependency Graph
+ * @param {string[]} planUuids Plans to order
+ * @returns {string[]} The given plans, upstream first
+ */
+export function orderUpstreamFirst(
+	graph: IRaukkDependencyGraph,
+	planUuids: string[]
+): string[] {
+	const scope: Set<string> = new Set(planUuids);
+	const order: string[] = [];
+	const visited: Set<string> = new Set();
+	const onStack: Set<string> = new Set();
+
+	function visit(current: string): void {
+		// onStack: back edge of a supply loop, break it here
+		if (onStack.has(current) || visited.has(current)) return;
+
+		onStack.add(current);
+
+		(graph[current] ?? []).forEach((sourceUuid) => {
+			if (scope.has(sourceUuid)) visit(sourceUuid);
+		});
+
+		onStack.delete(current);
+		visited.add(current);
+		order.push(current);
+	}
+
+	Array.from(scope)
+		.sort()
+		.forEach((current) => visit(current));
+
+	return order;
+}
+
+/**
  * Orders the sourcing subgraph of one plan for a chain recomputation.
  *
  * Scope is the plans connected component along the recomputation

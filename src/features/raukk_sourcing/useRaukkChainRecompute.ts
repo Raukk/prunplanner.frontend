@@ -34,6 +34,77 @@ export interface IRaukkChainError {
 	message: string;
 }
 
+/**
+ * Recomputes and stores the snapshot of a single plan in its own
+ * empire and CX context.
+ *
+ * Plan and planet data come from the query cache, the CX is resolved
+ * from the plans first empire exactly like PlanView does. After the
+ * plan calculation the shared snapshot pipeline stores the frozen
+ * values, so every caller — chain recompute, empire wide upkeep —
+ * produces snapshots identical to a manual per plan computation.
+ *
+ * @author raukk
+ *
+ * @param {string} planUuid Plan Uuid
+ * @param {IPlanEmpireElement[]} empireList Available Empires
+ * @returns {Promise<void>}
+ */
+export async function recomputePlanSnapshot(
+	planUuid: string,
+	empireList: IPlanEmpireElement[]
+): Promise<void> {
+	const queryStore = useQueryStore();
+	const { findEmpireCXUuid } = useCXData();
+
+	const plan: IPlan = await queryStore.execute("GetPlan", { planUuid });
+
+	// the calculation resolves planet data from the local database,
+	// a plan of another view is not guaranteed to be loaded yet
+	await queryStore.execute("GetPlanet", {
+		planetNaturalId: plan.planet_natural_id,
+	});
+
+	const empireUuid: string | undefined = plan.empires?.[0]?.uuid;
+	const cxUuid: string | undefined = findEmpireCXUuid(empireUuid);
+
+	const { calculate } = await usePlanCalculation(
+		toRef(plan),
+		ref(empireUuid),
+		ref(empireList),
+		ref(cxUuid)
+	);
+
+	const planResult: IPlanResult = await calculate();
+
+	await computePlanSnapshot({
+		planUuid,
+		planName: plan.plan_name ?? "",
+		planetNaturalId: plan.planet_natural_id,
+		cxUuid,
+		planResult,
+	});
+}
+
+/**
+ * Empire list of the user, cached by the query store. Plans of other
+ * views carry their empire uuids only, the calculation needs the
+ * empire elements to apply empire wide settings.
+ *
+ * @author raukk
+ *
+ * @returns {Promise<IPlanEmpireElement[]>} Empires
+ */
+export async function loadEmpireList(): Promise<IPlanEmpireElement[]> {
+	const queryStore = useQueryStore();
+
+	try {
+		return await queryStore.execute("GetAllEmpires", undefined);
+	} catch {
+		return [];
+	}
+}
+
 /** Total pass cap of a cyclic chain run, first pass included */
 const RAUKK_CHAIN_MAX_PASSES: number = 5;
 
@@ -70,9 +141,7 @@ const RAUKK_CHAIN_EPSILON: number = RAUKK_SNAPSHOT_EQUAL_EPSILON;
  * @returns Chain recomputation progress and action
  */
 export function useRaukkChainRecompute() {
-	const queryStore = useQueryStore();
 	const sourcingStore = useRaukkSourcingStore();
-	const { findEmpireCXUuid } = useCXData();
 
 	const running: Ref<boolean> = ref(false);
 	/** Name of the plan currently being recomputed */
@@ -80,49 +149,6 @@ export function useRaukkChainRecompute() {
 	const done: Ref<number> = ref(0);
 	const total: Ref<number> = ref(0);
 	const errors: Ref<IRaukkChainError[]> = ref([]);
-
-	/**
-	 * Recomputes and stores the snapshot of a single plan in its own
-	 * empire and CX context.
-	 *
-	 * @author raukk
-	 *
-	 * @param {string} planUuid Plan Uuid
-	 * @param {IPlanEmpireElement[]} empireList Available Empires
-	 * @returns {Promise<void>}
-	 */
-	async function recomputePlan(
-		planUuid: string,
-		empireList: IPlanEmpireElement[]
-	): Promise<void> {
-		const plan: IPlan = await queryStore.execute("GetPlan", { planUuid });
-
-		// the calculation resolves planet data from the local database,
-		// a plan of another view is not guaranteed to be loaded yet
-		await queryStore.execute("GetPlanet", {
-			planetNaturalId: plan.planet_natural_id,
-		});
-
-		const empireUuid: string | undefined = plan.empires?.[0]?.uuid;
-		const cxUuid: string | undefined = findEmpireCXUuid(empireUuid);
-
-		const { calculate } = await usePlanCalculation(
-			toRef(plan),
-			ref(empireUuid),
-			ref(empireList),
-			ref(cxUuid)
-		);
-
-		const planResult: IPlanResult = await calculate();
-
-		await computePlanSnapshot({
-			planUuid,
-			planName: plan.plan_name ?? "",
-			planetNaturalId: plan.planet_natural_id,
-			cxUuid,
-			planResult,
-		});
-	}
 
 	/**
 	 * Snapshot output costs of the given plans, the comparison base of
@@ -194,7 +220,7 @@ export function useRaukkChainRecompute() {
 				current.value = planName;
 
 				try {
-					await recomputePlan(uuid, empireList);
+					await recomputePlanSnapshot(uuid, empireList);
 				} catch (error) {
 					errors.value.push({
 						planUuid: uuid,
@@ -214,7 +240,7 @@ export function useRaukkChainRecompute() {
 		}
 
 		try {
-			const empireList: IPlanEmpireElement[] = await empires();
+			const empireList: IPlanEmpireElement[] = await loadEmpireList();
 
 			await runPass(empireList);
 
@@ -245,23 +271,6 @@ export function useRaukkChainRecompute() {
 		} finally {
 			running.value = false;
 			current.value = undefined;
-		}
-	}
-
-	/**
-	 * Empire list of the user, cached by the query store. Plans of other
-	 * views carry their empire uuids only, the calculation needs the
-	 * empire elements to apply empire wide settings.
-	 *
-	 * @author raukk
-	 *
-	 * @returns {Promise<IPlanEmpireElement[]>} Empires
-	 */
-	async function empires(): Promise<IPlanEmpireElement[]> {
-		try {
-			return await queryStore.execute("GetAllEmpires", undefined);
-		} catch {
-			return [];
 		}
 	}
 

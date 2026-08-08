@@ -203,6 +203,20 @@ describe("useRaukkAutoSnapshot", () => {
 		expect(mockComputePlanSnapshot).toHaveBeenCalledTimes(2);
 	});
 
+	it("flushes a pending run when the view closes", async () => {
+		mount();
+
+		// scheduled on mount, the view closes before the debounce ends
+		await vi.advanceTimersByTimeAsync(500);
+		scope.stop();
+
+		expect(mockComputePlanSnapshot).toHaveBeenCalledTimes(1);
+
+		// nothing further fires afterwards
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(mockComputePlanSnapshot).toHaveBeenCalledTimes(1);
+	});
+
 	it("swallows pipeline failures", async () => {
 		const warn = vi
 			.spyOn(console, "warn")

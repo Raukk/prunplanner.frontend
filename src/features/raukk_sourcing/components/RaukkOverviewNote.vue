@@ -100,6 +100,29 @@
 		);
 	});
 
+	/**
+	 * Daily profit normalized to one base: the sourced profit divided by
+	 * the snapshots base fraction, the number of base permits the plans
+	 * product chain really occupies. A downstream plan may show a large
+	 * profit that is actually earned by itself plus the shares of its
+	 * source bases — this is the per base comparison number. Undefined
+	 * while the snapshot predates the stored base fraction.
+	 * @author raukk
+	 */
+	const localProfitPerBase: ComputedRef<number | undefined> = computed(() => {
+		const baseFraction: number | undefined =
+			localSnapshot.value?.baseFraction;
+
+		if (
+			localProfitPerDay.value === undefined ||
+			baseFraction === undefined ||
+			baseFraction <= 0
+		)
+			return undefined;
+
+		return localProfitPerDay.value / baseFraction;
+	});
+
 	const localIsStale: ComputedRef<boolean> = computed(
 		() => localSnapshot.value?.stale === true
 	);
@@ -137,6 +160,16 @@
 					<span v-if="localIsStale">
 						{{ $t("raukk_overview.stale") }}
 					</span>
+				</div>
+				<div v-if="localProfitPerBase !== undefined">
+					{{
+						$t("raukk_overview.line_profit_per_base", {
+							perBase: formatNumber(localProfitPerBase),
+							baseFraction: formatNumber(
+								localSnapshot!.baseFraction!
+							),
+						})
+					}}
 				</div>
 			</div>
 		</template>

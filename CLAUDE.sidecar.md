@@ -62,6 +62,30 @@ anywhere in the repo. Not retroactive.
   one source config. Within groups rows sort by daily cost at the CX
   preference price, not the effective price (user decision) — checking
   a source must not reorder rows under the cursor.
+- 2026-08-07: Empire-wide first snapshots (user request): EmpireView
+  auto-computes sourcing snapshots of empire plans that never had one,
+  after its calculation pass, background, upstream-first — so a fresh
+  browser/computer needs one Empire load, not a per-plan click-through
+  (`useRaukkEmpireAutoSnapshot`). Missing-only by design: existing
+  stale snapshots stay untouched (PlanView upkeep / manual chain
+  recompute own those; an empire-wide auto-recompute would fight
+  both). Per-plan recompute extracted from `useRaukkChainRecompute`
+  as shared `recomputePlanSnapshot`.
+- 2026-08-08: Per-base profit line (user request): the plan-overview
+  sourced note additionally shows sourced profit ÷ `baseFraction`
+  ("Per base: X ȼ/d (BF 1.85)") — normalizes chain profit to one base
+  permit so a downstream plan's big margin is comparable when it
+  occupies upstream base capacity (ALO→AL: 200k at BF≈2 → ~100k/base).
+- 2026-08-08: Empire upkeep widened to stale (user report: recipe
+  change didn't refresh dependents until each page visit) — REVISES
+  the 2026-08-07 missing-only decision. Empire load now recomputes
+  missing AND stale empire plans, follows the staleness cascade in
+  passes (cap 5), never retries a failed plan within a run. PlanView
+  upkeep additionally flushes a pending debounced run on unmount so a
+  quick navigation away cannot drop the recompute. "Never
+  auto-recompute the tree on save" still stands — edits only flag
+  staleness; batch refresh happens on empire load or the manual chain
+  button.
 - 2026-08-07: Staleness epsilon aligned (bug: in an A↔B supply loop
   "the other plan" stayed stale forever): the chain settling epsilon
   (1e-6) and setSnapshot's materially-changed epsilon (was 1e-9) are

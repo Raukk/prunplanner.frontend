@@ -32,9 +32,11 @@ const RAUKK_AUTO_SNAPSHOT_DEBOUNCE_MS: number = 1000;
  *
  * Computations are debounced so a burst of edits results in one run,
  * and reruns requested while one is in flight are folded into a single
- * follow up. Failures are logged and swallowed, background upkeep must
- * never take the plan view down; the sourcing tab's manual compute
- * button stays the surface that displays errors.
+ * follow up. A run still pending when the view closes is flushed
+ * immediately — an edit followed by a quick navigation away must not
+ * lose its recompute. Failures are logged and swallowed, background
+ * upkeep must never take the plan view down; the sourcing tab's manual
+ * compute button stays the surface that displays errors.
  *
  * @author raukk
  *
@@ -125,7 +127,13 @@ export function useRaukkAutoSnapshot(context: IRaukkAutoSnapshotContext): void {
 		if (snapshot === undefined || snapshot.stale) schedule();
 	}
 
+	// flush a pending run instead of dropping it: the context refs
+	// outlive the scope and the pipeline is detached from the component
 	onScopeDispose(() => {
-		if (timer !== undefined) clearTimeout(timer);
+		if (timer !== undefined) {
+			clearTimeout(timer);
+			timer = undefined;
+			void run();
+		}
 	});
 }
