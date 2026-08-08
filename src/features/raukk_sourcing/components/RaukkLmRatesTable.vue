@@ -4,12 +4,26 @@
 	// Util
 	import { formatNumber } from "@/util/numbers";
 
+	// Calculations
+	import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+
+	// Components
+	import RaukkVisitCadence from "@/features/raukk_sourcing/components/RaukkVisitCadence.vue";
+
 	// UI
-	import { PInputNumber, PSelect, PTable, PTag } from "@/ui";
-	import { PSelectOption } from "@/ui/ui.types";
+	import { PInputNumber, PSelect, PTable, PTag, PTooltip } from "@/ui";
+	import { ColorKey, PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
+	import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
 	import { IRaukkLmComparisonRow } from "@/features/raukk_sourcing/calculations/shippingDisplay";
+
+	/** Tag colour of a cargo bucket, the same three the inputs table uses */
+	const BUCKET_COLORS: Record<RAUKK_CARGO_BUCKET, ColorKey> = {
+		production: "primary",
+		workforce: "secondary",
+		repair: "warning",
+	};
 
 	const props = defineProps({
 		rows: {
@@ -100,7 +114,7 @@
 				<th>{{ $t("raukk_sourcing.shipping.lm.lane") }}</th>
 				<th>{{ $t("raukk_sourcing.shipping.lm.ship_type") }}</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.shipping.lm.trips_per_day") }}
+					{{ $t("raukk_sourcing.shipping.lm.visits") }}
 				</th>
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.shipping.lm.units_per_day") }}
@@ -146,10 +160,42 @@
 								)
 						" />
 				</td>
-				<td class="text-right">{{ formatNumber(row.tripsPerDay) }}</td>
+				<td class="text-right">
+					<div
+						v-for="leg in row.legs"
+						:key="`RAUKKLMLEG#${row.pairKey}#${leg.bucket}`"
+						class="flex flex-row gap-x-1 justify-end child:my-auto">
+						<PTag size="sm" :type="BUCKET_COLORS[leg.bucket]">
+							{{ $t(`raukk_sourcing.buckets.${leg.bucket}`) }}
+						</PTag>
+						<RaukkVisitCadence :trips-per-day="leg.tripsPerDay" />
+					</div>
+					<span v-if="row.legs.length === 0">—</span>
+				</td>
 				<td class="text-right">{{ formatNumber(row.unitsPerDay) }}</td>
 				<td class="text-right text-white/60">
-					{{ formatNumber(row.ownCostPerTrip) }}
+					<PTooltip v-if="row.legs.length > 0">
+						<template #trigger>
+							<span class="hover:cursor-help">
+								{{ formatNumber(row.ownCostPerTrip) }}
+							</span>
+						</template>
+						{{
+							$t(
+								"raukk_sourcing.shipping.lm.own_per_trip_tooltip",
+								{
+									legs: row.legs.length,
+									trips: formatNumber(row.tripsPerDay),
+									daily: formatNumber(
+										row.tripsPerDay * row.ownCostPerTrip
+									),
+								}
+							)
+						}}
+					</PTooltip>
+					<template v-else>
+						{{ formatNumber(row.ownCostPerTrip) }}
+					</template>
 				</td>
 				<td class="text-right">
 					<PInputNumber
@@ -177,7 +223,7 @@
 				<td
 					class="text-right font-bold"
 					:class="
-						(row.savingPerUnit ?? 0) >= 0
+						(row.savingPerUnit ?? 0) > -RAUKK_EPSILON_EQUAL
 							? 'text-positive'
 							: 'text-negative'
 					">

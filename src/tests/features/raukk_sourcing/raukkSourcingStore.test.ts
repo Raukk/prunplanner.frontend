@@ -116,6 +116,57 @@ describe("Raukk Sourcing Store", () => {
 			expect(store.getConfig("a").repairDay).toBe(30);
 		});
 
+		it("setPlanCadence stores and clears one bucket override", () => {
+			store.setPlanCadence("a", "production", 365);
+			store.setPlanCadence("a", "repair", 7);
+
+			expect(store.getConfig("a").cadence).toStrictEqual({
+				production: 365,
+				repair: 7,
+			});
+
+			store.setPlanCadence("a", "production", undefined);
+
+			expect(store.getConfig("a").cadence).toStrictEqual({ repair: 7 });
+		});
+
+		it("setPlanCadence refuses a non positive day count", () => {
+			store.setPlanCadence("a", "workforce", 30);
+			store.setPlanCadence("a", "workforce", 0);
+
+			expect(store.getConfig("a").cadence).toStrictEqual({});
+		});
+
+		/*
+		 * A numeric input emits NaN for a lone "-" or ".", and NaN passes
+		 * every `<= 0` guard. Stored, it exports as null and the users own
+		 * backup no longer re-imports.
+		 */
+		it("setPlanCadence refuses a day count that is not a number", () => {
+			store.setPlanCadence("a", "workforce", 30);
+			store.setPlanCadence("a", "workforce", Number.NaN);
+
+			expect(store.getConfig("a").cadence).toStrictEqual({});
+
+			store.setPlanCadence("a", "repair", 30);
+			store.setPlanCadence("a", "repair", Number.POSITIVE_INFINITY);
+
+			expect(store.getConfig("a").cadence).toStrictEqual({});
+		});
+
+		it("cadence changes mark the plan and dependents stale", () => {
+			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot(
+				"b",
+				makeSnapshot("B", { MET: 10 }, { a: { ORE: 50 } })
+			);
+
+			store.setPlanCadence("a", "production", 21);
+
+			expect(store.snapshots.a.stale).toBe(true);
+			expect(store.snapshots.b.stale).toBe(true);
+		});
+
 		it("config changes mark the plan and dependents stale", () => {
 			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
 			store.setSnapshot(
@@ -407,6 +458,62 @@ describe("Raukk Sourcing Store", () => {
 			);
 		});
 
+		it("defaults the cadence fields of a pre cadence payload", () => {
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: { a: { repairDay: 90, sources: {} } },
+					snapshots: {},
+					shippingConfig: {
+						enabled: true,
+						defaultProfileId: "1000x1000-standard",
+						routingMode: "direct",
+						sameSystemFlatCost: 0,
+					},
+				})
+			);
+
+			expect(store.shippingConfig.cadenceInOutDays).toBe(14);
+			expect(store.shippingConfig.cadenceWorkforceDays).toBe(30);
+			expect(store.configs.a.cadence).toBeUndefined();
+		});
+
+		it("keeps the per plan cadence overrides of a payload", () => {
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: {
+						a: {
+							repairDay: 90,
+							sources: {},
+							cadence: { production: 365 },
+						},
+					},
+					snapshots: {},
+				})
+			);
+
+			expect(store.configs.a.cadence).toStrictEqual({ production: 365 });
+		});
+
+		it("refuses a non positive cadence override", () => {
+			expect(() =>
+				store.importJSON(
+					JSON.stringify({
+						version: 1,
+						configs: {
+							a: {
+								repairDay: 90,
+								sources: {},
+								cadence: { production: 0 },
+							},
+						},
+						snapshots: {},
+					})
+				)
+			).toThrowError();
+		});
+
 		it("throws on non-JSON input", () => {
 			expect(() => store.importJSON("{ nope")).toThrowError();
 		});
@@ -470,7 +577,7 @@ describe("Raukk Sourcing Store", () => {
 
 			expect(store.getConfig("a").repairDay).toBe(30);
 			expect(store.snapshots.a.outputs.ORE.unitsPerDay).toBe(100);
-			// the shipped-off defaults, not the previous state
+			// the defaults, not the previous state
 			expect(store.shippingConfig).toStrictEqual(
 				raukkDefaultShippingConfig()
 			);
@@ -710,6 +817,10 @@ describe("Raukk Sourcing Store", () => {
 		});
 
 		it("stays quiet while shipping is off and stays off", () => {
+			store.setShippingConfig({ enabled: false });
+			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot("b", makeSnapshot("B", { MET: 50 }));
+
 			store.setShippingConfig({ sameSystemFlatCost: 100 });
 
 			expect(store.snapshots.a.stale).toBe(false);
@@ -717,6 +828,10 @@ describe("Raukk Sourcing Store", () => {
 		});
 
 		it("marks all stale when shipping is switched on", () => {
+			store.setShippingConfig({ enabled: false });
+			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot("b", makeSnapshot("B", { MET: 50 }));
+
 			store.setShippingConfig({ enabled: true });
 
 			expect(store.snapshots.a.stale).toBe(true);
@@ -753,6 +868,9 @@ describe("Raukk Sourcing Store", () => {
 		});
 
 		it("leaves snapshots alone on a profile change while off", () => {
+			store.setShippingConfig({ enabled: false });
+			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+
 			store.setShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
 				costPerParsec: 5,
 			});

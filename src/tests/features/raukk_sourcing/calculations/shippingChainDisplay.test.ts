@@ -4,16 +4,21 @@ import { describe, it, expect } from "vitest";
 import {
 	raukkChainDropSuggestions,
 	raukkChainLegRows,
+	raukkAutoChainLabel,
+	raukkAutoChainListRows,
 	raukkChainListRows,
 	raukkChainReversedComparison,
 	raukkChainSplitComparison,
 	raukkChainStopsSummary,
 	raukkChainStorageWarnings,
 	raukkIsCxStop,
+	raukkShipTimeOver,
+	raukkShipTimePercent,
 	raukkStopLabel,
 	raukkStorageFilledDays,
 } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 import { raukkDefaultChainConfig } from "@/features/raukk_sourcing/calculations/shippingChains";
+import { raukkShipProfilePreset } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
 // Types & Interfaces
 import { IMaterialIO } from "@/features/planning/usePlanCalculation.types";
@@ -31,6 +36,7 @@ import {
 	IRaukkChainListRow,
 	IRaukkChainStorageWarning,
 } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+import { IRaukkShipProfile } from "@/features/raukk_sourcing/calculations/shipping.types";
 
 const STOP_NAMES: Record<string, string> = {
 	"ZV-759c": "Extractor",
@@ -69,6 +75,18 @@ function leg(
 		dailyCost: 50,
 		roundTripMinutes: 120,
 		...overrides,
+	};
+}
+
+/** A hull with round fuel burn rates, so the fuel math stays readable */
+function fuelProfile(): IRaukkShipProfile {
+	return {
+		...raukkShipProfilePreset(
+			{ cargoWeight: 3000, cargoVolume: 1000 },
+			"standard"
+		),
+		ftlFuelPerParsec: 5,
+		stlFuelPerBlock: 72,
 	};
 }
 
@@ -127,6 +145,7 @@ function chainResult(
 		perUnit: {},
 		memberPlanUuids: ["p1"],
 		config: raukkDefaultChainConfig(),
+		advisories: [],
 		...overrides,
 	};
 }
@@ -217,6 +236,104 @@ describe("Raukk Shipping: Chain Display", () => {
 			expect(row.stale).toBe(false);
 			expect(row.shipDaysPerDay).toBeCloseTo(0.5);
 			expect(row.stopsSummary).toBe("Extractor → Smelter → Extractor");
+			expect(row.auto).toBe(false);
+			expect(row.shippingFractionPercent).toBeCloseTo(8);
+			expect(row.over).toBe(false);
+		});
+
+		it("flags a loop booking more ship time than its type has", () => {
+			const rows: IRaukkChainListRow[] = raukkChainListRows(
+				chains,
+				{ c1: chainResult({ shippingFraction: 5.34 }) },
+				STOP_NAMES
+			);
+
+			const row: IRaukkChainListRow = rows.find(
+				(entry) => entry.chainId === "c1"
+			)!;
+
+			expect(row.shippingFractionPercent).toBeCloseTo(534);
+			expect(row.over).toBe(true);
+		});
+
+		it("does not flag a hair over one as over-booked", () => {
+			const rows: IRaukkChainListRow[] = raukkChainListRows(
+				chains,
+				{ c1: chainResult({ shippingFraction: 1.005 }) },
+				STOP_NAMES
+			);
+
+			expect(rows.find((entry) => entry.chainId === "c1")!.over).toBe(
+				false
+			);
+		});
+
+		it("has no percentage for an uncomputed chain", () => {
+			const rows: IRaukkChainListRow[] = raukkChainListRows(
+				chains,
+				{},
+				STOP_NAMES
+			);
+
+			expect(rows[0].shippingFractionPercent).toBeNull();
+			expect(rows[0].over).toBe(false);
+		});
+	});
+
+	describe("raukkAutoChainListRows", () => {
+		it("lists the derived chains and nothing else", () => {
+			const rows: IRaukkChainListRow[] = raukkAutoChainListRows(
+				{
+					c1: chainResult(),
+					"auto:production:NC1:1": chainResult({
+						chainId: "auto:production:NC1:1",
+						auto: true,
+						capDays: 14,
+						shipMinutesPerDay: 720,
+					}),
+				},
+				STOP_NAMES
+			);
+
+			expect(rows.map((row) => row.chainId)).toStrictEqual([
+				"auto:production:NC1:1",
+			]);
+			expect(rows[0].auto).toBe(true);
+			expect(rows[0].capDays).toBe(14);
+			expect(rows[0].computed).toBe(true);
+			expect(rows[0].shipDaysPerDay).toBeCloseTo(0.5);
+			expect(rows[0].stopsSummary).toBe(
+				"Extractor → Smelter → Extractor"
+			);
+			expect(rows[0].shippingFractionPercent).toBeCloseTo(8);
+			expect(rows[0].over).toBe(false);
+		});
+
+		it("names a content keyed loop readably", () => {
+			const chainId: string = "auto:production:NC1:OT-580b+UV-351a";
+
+			const rows: IRaukkChainListRow[] = raukkAutoChainListRows(
+				{ [chainId]: chainResult({ chainId, auto: true }) },
+				STOP_NAMES
+			);
+
+			expect(rows[0].name).toBe("production · NC1 · OT-580b + UV-351a");
+			// the id itself stays the key everything else is pinned by
+			expect(rows[0].chainId).toBe(chainId);
+		});
+	});
+
+	describe("raukkAutoChainLabel", () => {
+		it("reads class, region and stops out of the id", () => {
+			expect(
+				raukkAutoChainLabel("auto:workforce:AI1:ZV-194a+ZV-759b")
+			).toBe("workforce · AI1 · ZV-194a + ZV-759b");
+		});
+
+		it("reads an id of the older positional scheme as well", () => {
+			expect(raukkAutoChainLabel("auto:production:NC1:2")).toBe(
+				"production · NC1 · 2"
+			);
 		});
 	});
 
@@ -240,6 +357,133 @@ describe("Raukk Shipping: Chain Display", () => {
 
 			expect(rows[0].weightPerTrip).toBe(0);
 			expect(rows[0].volumePerTrip).toBe(0);
+		});
+
+		it("reads the leg duration off the calibrated flight minutes", () => {
+			const rows = raukkChainLegRows(
+				shipping({ legs: [leg(0, { roundTripMinutes: 150 })] }),
+				STOP_NAMES
+			);
+
+			expect(rows[0].durationHours).toBeCloseTo(2.5);
+		});
+
+		it("prices the fuel burn of a leg at the current FF and SF price", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES, {
+				profile: fuelProfile(),
+				prices: { FF: 100, SF: 10 },
+			});
+
+			// 4 pc * 5 FF * 100 + 72 SF * 10
+			expect(rows[0].fuelCost).toBeCloseTo(2720);
+		});
+
+		it("states no fuel estimate without a profile to burn it", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES);
+
+			expect(rows[0].fuelCost).toBeNull();
+		});
+
+		it("states no fuel estimate while a fuel price is unknown", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES, {
+				profile: fuelProfile(),
+				prices: { FF: 100 },
+			});
+
+			expect(rows[0].fuelCost).toBeNull();
+		});
+
+		it("marks a burn priced estimate as not overridden", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES, {
+				profile: fuelProfile(),
+				prices: { FF: 100, SF: 10 },
+			});
+
+			expect(rows[0].fuelOverridden).toBe(false);
+		});
+
+		it("charges a manual ȼ per parsec instead of the FTL burn", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES, {
+				profile: { ...fuelProfile(), costPerParsec: 50 },
+				prices: { FF: 100, SF: 10 },
+			});
+
+			// 4 pc * 50 ȼ + 72 SF * 10
+			expect(rows[0].fuelCost).toBeCloseTo(920);
+			expect(rows[0].fuelOverridden).toBe(true);
+		});
+
+		it("charges a manual sublight block cost instead of the STL burn", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES, {
+				profile: { ...fuelProfile(), stlBlockCost: 20 },
+				prices: { FF: 100, SF: 10 },
+			});
+
+			// 4 pc * 5 FF * 100 + 20 ȼ
+			expect(rows[0].fuelCost).toBeCloseTo(2020);
+			expect(rows[0].fuelOverridden).toBe(true);
+		});
+
+		it("honours a manual zero, which is free freight and not a burn", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES, {
+				profile: {
+					...fuelProfile(),
+					costPerParsec: 0,
+					stlBlockCost: 0,
+				},
+				prices: { FF: 100, SF: 10 },
+			});
+
+			expect(rows[0].fuelCost).toBe(0);
+			expect(rows[0].fuelOverridden).toBe(true);
+		});
+
+		it("needs no price for a term a manual override already states", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES, {
+				profile: {
+					...fuelProfile(),
+					costPerParsec: 50,
+					stlBlockCost: 20,
+				},
+				prices: {},
+			});
+
+			expect(rows[0].fuelCost).toBeCloseTo(220);
+		});
+
+		it("still needs the price of the term left derived", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES, {
+				profile: { ...fuelProfile(), costPerParsec: 50 },
+				prices: { FF: 100 },
+			});
+
+			expect(rows[0].fuelCost).toBeNull();
+			expect(rows[0].fuelOverridden).toBe(true);
+		});
+	});
+
+	describe("raukkShipTimePercent", () => {
+		it("states a share as the percentage every surface reads", () => {
+			expect(raukkShipTimePercent(0.42)).toBeCloseTo(42);
+			expect(raukkShipTimePercent(1)).toBeCloseTo(100);
+		});
+
+		it("carries an unknown share through untouched", () => {
+			expect(raukkShipTimePercent(null)).toBeNull();
+			expect(raukkShipTimePercent(undefined)).toBeNull();
+		});
+	});
+
+	describe("raukkShipTimeOver", () => {
+		it("is over only past a full day plus the equality deadband", () => {
+			expect(raukkShipTimeOver(1)).toBe(false);
+			expect(raukkShipTimeOver(1.005)).toBe(false);
+			expect(raukkShipTimeOver(1.5)).toBe(true);
+		});
+
+		it("is never over on an unknown share", () => {
+			expect(raukkShipTimeOver(null)).toBe(false);
+			expect(raukkShipTimeOver(undefined)).toBe(false);
 		});
 	});
 

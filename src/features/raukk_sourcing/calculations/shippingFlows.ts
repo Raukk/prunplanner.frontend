@@ -72,6 +72,53 @@ export function raukkPlanetCxCode(
 }
 
 /**
+ * Account wide anchor mode meaning "whatever exchange is closest".
+ *
+ * @author raukk
+ */
+export const RAUKK_CX_ANCHOR_NEAREST: string = "nearest";
+
+/**
+ * Exchange one base is ANCHORED at, the base of its region.
+ *
+ * Three sources, in this order: the plans own override, the account wide
+ * mode and — for both the shipped `"nearest"` setting and an unknown code
+ * — the nearest exchange by parsecs. A plan may state `"nearest"`
+ * explicitly, which is an answer of its own and overrides a fixed account
+ * mode. A region is nothing more than the set of bases sharing an anchor,
+ * which is what the automatic chains are built per
+ * (shipping-cadence-plan.md, Phase 2).
+ *
+ * @author raukk
+ *
+ * @param {string} planetNaturalId Planet Natural Id
+ * @param {string} [mode] Account wide anchor mode, a code or "nearest"
+ * @param {string} [override] Per plan anchor override
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @returns {(string | undefined)} Exchange code, undefined if unreachable
+ */
+export function raukkCxAnchorCode(
+	planetNaturalId: string,
+	mode?: string,
+	override?: string,
+	routes: IRaukkRouteDistance = RAUKK_DEFAULT_ROUTES,
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE
+): string | undefined {
+	if (override !== undefined) {
+		if (override in cxSystems) return override;
+		// an explicit "nearest" is an answer of its own: it overrides a
+		// fixed account mode rather than falling through to it
+		if (override === RAUKK_CX_ANCHOR_NEAREST)
+			return raukkPlanetCxCode(planetNaturalId, routes);
+	}
+
+	if (mode !== undefined && mode in cxSystems) return mode;
+
+	return raukkPlanetCxCode(planetNaturalId, routes);
+}
+
+/**
  * Stable id of one plan flow.
  *
  * Ticker and endpoints alone do NOT identify a flow: two plans sitting
@@ -142,7 +189,10 @@ export function buildPlanChainFlows(
 
 	const routes: IRaukkRouteDistance = lookups.routes ?? RAUKK_DEFAULT_ROUTES;
 	const own: string = flows.planetNaturalId;
-	const cxCode: string | undefined = raukkPlanetCxCode(own, routes);
+	// the anchor of the plan when the caller resolved one, the nearest
+	// exchange otherwise — which is what the anchor defaults to anyway
+	const cxCode: string | undefined =
+		lookups.anchorCxCode ?? raukkPlanetCxCode(own, routes);
 
 	const result: IRaukkChainFlow[] = [];
 	/** Occurrences of one ticker and endpoint triple within this plan */
@@ -152,7 +202,8 @@ export function buildPlanChainFlows(
 		entry: IRaukkShippedTicker,
 		fromStop: string,
 		toStop: string,
-		unitsPerDay: number
+		unitsPerDay: number,
+		sourcePlanUuid?: string
 	): void {
 		if (unitsPerDay <= 0 || fromStop === toStop) return;
 
@@ -169,7 +220,10 @@ export function buildPlanChainFlows(
 				occurrence
 			),
 			ownerPlanUuid: flows.planUuid,
+			// only a plan to plan lane has one; the market has no plan
+			...(sourcePlanUuid !== undefined ? { sourcePlanUuid } : {}),
 			ticker: entry.ticker,
+			bucket: entry.bucket,
 			fromStop,
 			toStop,
 			unitsPerDay,
@@ -197,7 +251,13 @@ export function buildPlanChainFlows(
 			);
 			if (planet === undefined) return;
 
-			push(entry, planet, own, entry.unitsPerDay * origin.share);
+			push(
+				entry,
+				planet,
+				own,
+				entry.unitsPerDay * origin.share,
+				origin.planUuid
+			);
 		});
 	});
 
@@ -219,6 +279,9 @@ export function buildPlanChainFlows(
 export interface IRaukkClaimedFlowCost {
 	/** Plan that authored the flow, absent on pre ownership results */
 	ownerPlanUuid?: string;
+	/** Plan the cargo is drawn FROM, absent on a market lane and on pre
+	 * ownership results, see {@link IRaukkChainFlow} */
+	sourcePlanUuid?: string;
 	ticker: string;
 	fromStop: string;
 	toStop: string;
@@ -232,6 +295,24 @@ export interface IRaukkClaimedFlowCost {
  * `counterpart` is the other end of the lane: the source plans planet on
  * a sourcing lane, the exchange code on the plans own market lane.
  *
+ * The PRODUCING plan is part of the key as well, mirroring
+ * `chainClaimedUnits` on the producer side: two plans on one planet are
+ * two lanes with the same counterpart, and a claim keyed by the planet
+ * alone would be subtracted from BOTH of them — under-shipping the
+ * sibling lane whenever the claim is partial, and clamping it away
+ * entirely when the claim covers a whole lane.
+ *
+ * BACK COMPATIBILITY, the load bearing rule: a claim carrying no
+ * `sourcePlanUuid` — every result frozen before the field existed —
+ * keeps the old PLANET level behaviour and counts for every producing
+ * plan on its origin planet. Legacy data must never fail to match and
+ * claim nothing; over-claiming the way it always did is the safe half of
+ * the trade, it can only take cargo off a lane a chain really flies.
+ *
+ * A caller naming no producing plan (the plans own market lane, or any
+ * caller predating the field) gets the WHOLE claim at that counterpart,
+ * per plan claims included — which is again the old behaviour.
+ *
  * `claimed` must already be OWNERSHIP filtered — only the flows the plan
  * itself authored. Subtracting a foreign plans flow would empty a lane
  * this plan still flies.
@@ -240,24 +321,57 @@ export interface IRaukkClaimedFlowCost {
  *
  * @param {IRaukkClaimedFlowCost[]} claimed Own claimed flows of the plan
  * @param {string} own Own planet natural id
- * @returns Lookup of claimed units per ticker, counterpart and direction
+ * @returns Lookup of claimed units per ticker, lane and producing plan
  */
 export function raukkClaimedUnitsLookup(
 	claimed: IRaukkClaimedFlowCost[],
 	own: string
-): (ticker: string, counterpart: string, inbound: boolean) => number {
-	const index: Map<string, number> = new Map();
+): (
+	ticker: string,
+	counterpart: string,
+	inbound: boolean,
+	sourcePlanUuid?: string
+) => number {
+	/** Claims naming no producing plan, keyed by lane alone */
+	const planetLevel: Map<string, number> = new Map();
+	/** Claims naming one, keyed by lane AND producing plan */
+	const planLevel: Map<string, number> = new Map();
+	/** Sum of the per plan claims of one lane, the unnamed callers total */
+	const laneTotal: Map<string, number> = new Map();
+
+	function add(index: Map<string, number>, key: string, units: number): void {
+		index.set(key, (index.get(key) ?? 0) + units);
+	}
 
 	claimed.forEach((flow) => {
 		const inbound: boolean = flow.toStop === own;
 		const counterpart: string = inbound ? flow.fromStop : flow.toStop;
-		const key: string = `${inbound ? "in" : "out"}|${flow.ticker}|${counterpart}`;
+		const lane: string = `${inbound ? "in" : "out"}|${flow.ticker}|${counterpart}`;
+		const units: number = Math.max(flow.unitsPerDay, 0);
 
-		index.set(key, (index.get(key) ?? 0) + Math.max(flow.unitsPerDay, 0));
+		if (flow.sourcePlanUuid === undefined) {
+			add(planetLevel, lane, units);
+			return;
+		}
+
+		add(planLevel, `${lane}|${flow.sourcePlanUuid}`, units);
+		add(laneTotal, lane, units);
 	});
 
-	return (ticker: string, counterpart: string, inbound: boolean): number =>
-		index.get(`${inbound ? "in" : "out"}|${ticker}|${counterpart}`) ?? 0;
+	return (
+		ticker: string,
+		counterpart: string,
+		inbound: boolean,
+		sourcePlanUuid?: string
+	): number => {
+		const lane: string = `${inbound ? "in" : "out"}|${ticker}|${counterpart}`;
+		const legacy: number = planetLevel.get(lane) ?? 0;
+
+		if (sourcePlanUuid === undefined)
+			return legacy + (laneTotal.get(lane) ?? 0);
+
+		return legacy + (planLevel.get(`${lane}|${sourcePlanUuid}`) ?? 0);
+	};
 }
 
 /** Daily units per ticker of one direction over all pairs */

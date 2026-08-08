@@ -266,6 +266,67 @@ Round 8 addenda (USER):
   and expensive, so operators upgrade sparingly — treat transcribed
   volume limits as fairly static rather than transient.
 
+## Round 9 (shipping on by default)
+
+User decision (2026-08-08): the `shippingConfig.enabled` master
+switch defaults to ON. Changed in both places the default lives:
+`raukkDefaultShippingConfig()` (fresh store, `$reset`, pre-shipping
+localStorage blobs) and the zod schema default (v1 JSON imports).
+Supersedes the original "enabled: false (default)" wording in
+shipping-plan.md. Consequence: a payload or blob that predates
+shipping now comes up charging freight, while its snapshots keep
+their freight-free numbers until something marks them stale (config
+edit, plan save, upstream recompute) — imports do NOT mark all
+stale. A stored `enabled` value always wins over the default, so
+existing users who toggled shipping keep their choice.
+
+## Round 10 (cadence redesign)
+
+User decisions (2026-08-08), full spec in shipping-cadence-plan.md:
+
+1. **Absolute tolerances**: 0.01 = equal, 0.05 = settle; replaces
+   the relative 1e-6/1e-9 epsilons. Sub-cent snapshot changes no
+   longer cascade staleness.
+2. **Cadence-driven trips**: lanes split per cargo bucket
+   (production in/out, workforce, repair) with max days/visit caps —
+   in/out 14, workforce 30, repair = the plan's repairDay. Account
+   defaults, per-consuming-base overrides (any value, even 365).
+   Caps bind the shipping: run partial loads rather than stretch.
+   Partial trips pay a full trip.
+3. **Auto hull pick** from owned ship types only: largest that fits
+   the cadence; WCB when cargo ≥2.5 t/m³, VCB when ≤0.4, HCB only in
+   the balanced band (~2× WCB cost, slower FTL even empty); >1
+   trip/day promotes to an owned HCB when it cuts trips ≥1.5×.
+   Unowned better hulls become fleet advisories, never assignments.
+   Manual assignment still wins.
+4. **Auto chains**: per cadence class per CX region,
+   CX→A→…→CX, max 5 stops, exact brute-forced loop order.
+   Stop qualifies at ≥5% of shipment weight OR volume within a
+   per-class detour budget (tight for in/out, loose for 30/90-day
+   runs). Below cutoff → hub/spoke via the exchange as plain market
+   buy/sell. CX anchor: account mode "nearest" or fixed home CX,
+   per-base override. User-authored chains claim first.
+5. **Display**: days/visit primary — "2 days/visit (0.5/day)";
+   fleet overcapacity as per-type utilization % in red (like the
+   sourcing over-percentage), not ship-days; leg duration + fuel
+   surfaced in chain detail; hub/spoke rows resource-first, never
+   base-only.
+6. **Deferred by user**: self-sustained-cycle zero cost and the
+   base-fraction denominator change (output minus CX-shipped) —
+   awaiting a worked example, explicitly dropped from this round.
+
+Round 10 implemented 2026-08-08 (commits 549e64a phases 0-2, fe165e6
+phase 3). Implementer resolutions per phase are recorded in
+shipping-cadence-plan.md under the "as implemented" sections; the
+notable behaviour changes: repair materials now ship and pay freight
+into the repair cost; ANY base-to-base flow no chain claims routes
+hub/spoke via the exchange (subsumes round 7's mutual-lane verdict —
+`resolveMutualLanes` is no longer in the snapshot pipeline); single-base
+auto loops (CX→A→CX) are refused; the Hired Transport table stays one
+row per lane with its legs listed inside the cadence cell, because the
+LM rate and ship assignment are pair-keyed.
+
 See shipping-plan.md for the implementation plan,
-shipping-chains-v2.md for the chains follow-up, and
-shipping-fleet.md for fleet & calibration.
+shipping-chains-v2.md for the chains follow-up,
+shipping-fleet.md for fleet & calibration, and
+shipping-cadence-plan.md for the cadence redesign phases.

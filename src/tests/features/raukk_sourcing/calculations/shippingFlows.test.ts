@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 
 // Calculations
 import {
+	RAUKK_CX_ANCHOR_NEAREST,
 	buildPlanChainFlows,
 	mergeClaimedShipping,
 	raukkClaimedUnitsLookup,
+	raukkCxAnchorCode,
 	raukkFlowId,
 	raukkPlanetCxCode,
 } from "@/features/raukk_sourcing/calculations/shippingFlows";
@@ -61,12 +63,14 @@ function cargo(): IRaukkPairPlanFlows {
 		inputs: [
 			{
 				ticker: "ORE",
+				bucket: "production",
 				unitsPerDay: 100,
 				weightPerUnit: 1,
 				volumePerUnit: 0,
 			},
 			{
 				ticker: "DW",
+				bucket: "workforce",
 				unitsPerDay: 20,
 				weightPerUnit: 1,
 				volumePerUnit: 0,
@@ -75,6 +79,7 @@ function cargo(): IRaukkPairPlanFlows {
 		outputs: [
 			{
 				ticker: "ALO",
+				bucket: "production",
 				unitsPerDay: 60,
 				weightPerUnit: 1,
 				volumePerUnit: 0,
@@ -109,6 +114,36 @@ describe("Raukk Shipping: Plan flows", () => {
 		});
 	});
 
+	describe("raukkCxAnchorCode", () => {
+		it("anchors at the nearest exchange by default", () => {
+			expect(raukkCxAnchorCode(OWN_PLANET)).toBe("AI1");
+			expect(raukkCxAnchorCode(OWN_PLANET, RAUKK_CX_ANCHOR_NEAREST)).toBe(
+				"AI1"
+			);
+		});
+
+		it("takes the account wide fixed exchange", () => {
+			expect(raukkCxAnchorCode(OWN_PLANET, "NC1")).toBe("NC1");
+		});
+
+		it("lets the per plan override win over the account mode", () => {
+			expect(raukkCxAnchorCode(OWN_PLANET, "NC1", "CI1")).toBe("CI1");
+			expect(
+				raukkCxAnchorCode(OWN_PLANET, RAUKK_CX_ANCHOR_NEAREST, "CI1")
+			).toBe("CI1");
+		});
+
+		it("degrades an unknown code to the nearest exchange", () => {
+			expect(raukkCxAnchorCode(OWN_PLANET, "XX9", "YY9")).toBe("AI1");
+		});
+
+		it("lets a plan opt back into the nearest exchange", () => {
+			expect(
+				raukkCxAnchorCode(OWN_PLANET, "NC1", RAUKK_CX_ANCHOR_NEAREST)
+			).toBe("AI1");
+		});
+	});
+
 	describe("buildPlanChainFlows", () => {
 		it("states the plans cargo as directed flows", () => {
 			const flows = buildPlanChainFlows(
@@ -126,7 +161,11 @@ describe("Raukk Shipping: Plan flows", () => {
 						"own"
 					),
 					ownerPlanUuid: "own",
+					// a plan to plan lane names its producing plan, the
+					// planet alone cannot tell two of them apart
+					sourcePlanUuid: "source",
 					ticker: "ORE",
+					bucket: "production",
 					fromStop: SOURCE_PLANET,
 					toStop: OWN_PLANET,
 					unitsPerDay: 100,
@@ -137,6 +176,7 @@ describe("Raukk Shipping: Plan flows", () => {
 					flowId: raukkFlowId("DW", "AI1", OWN_PLANET, "own"),
 					ownerPlanUuid: "own",
 					ticker: "DW",
+					bucket: "workforce",
 					fromStop: "AI1",
 					toStop: OWN_PLANET,
 					unitsPerDay: 20,
@@ -148,6 +188,7 @@ describe("Raukk Shipping: Plan flows", () => {
 					flowId: raukkFlowId("ALO", OWN_PLANET, "AI1", "own"),
 					ownerPlanUuid: "own",
 					ticker: "ALO",
+					bucket: "production",
 					fromStop: OWN_PLANET,
 					toStop: "AI1",
 					unitsPerDay: 50,
@@ -225,12 +266,33 @@ describe("Raukk Shipping: Plan flows", () => {
 
 		it("is empty while shipping is disabled", () => {
 			expect(
-				buildPlanChainFlows(
-					cargo(),
-					lookups() as IRaukkFlowLookups,
-					raukkDefaultShippingConfig()
-				)
+				buildPlanChainFlows(cargo(), lookups() as IRaukkFlowLookups, {
+					...raukkDefaultShippingConfig(),
+					enabled: false,
+				})
 			).toStrictEqual([]);
+		});
+	});
+
+	describe("anchored exchange", () => {
+		it("names the anchored exchange on the market flows", () => {
+			const flows = buildPlanChainFlows(
+				cargo(),
+				{
+					...lookups(),
+					anchorCxCode: "NC1",
+				} as IRaukkFlowLookups,
+				config
+			);
+
+			expect(
+				flows
+					.filter((flow) => flow.ticker !== "ORE")
+					.map((flow) => [flow.fromStop, flow.toStop])
+			).toStrictEqual([
+				["NC1", OWN_PLANET],
+				[OWN_PLANET, "NC1"],
+			]);
 		});
 	});
 
@@ -283,6 +345,7 @@ describe("Raukk Shipping: Plan flows", () => {
 			expect(pairs[0].out).toStrictEqual([
 				{
 					ticker: "ALO",
+					bucket: "production",
 					unitsPerDay: 30,
 					weightPerUnit: 1,
 					volumePerUnit: 0,
@@ -300,6 +363,134 @@ describe("Raukk Shipping: Plan flows", () => {
 			]);
 			expect(pairs[0].back[0].unitsPerDay).toBe(100);
 			expect(pairs[1].out[0].unitsPerDay).toBe(50);
+		});
+	});
+
+	describe("claims of two producers on one planet", () => {
+		/** The 100 ORE are drawn half from each of two same planet plans */
+		function twoProducers(
+			claimedUnitsOf?: IRaukkPairLookups["claimedUnitsOf"]
+		): IRaukkPairLookups {
+			return {
+				...lookups(claimedUnitsOf),
+				originOf: (ticker: string) =>
+					ticker === "ORE"
+						? [
+								{ planUuid: "sourceA", share: 0.5 },
+								{ planUuid: "sourceB", share: 0.5 },
+							]
+						: [],
+				planetOf: (planUuid: string) =>
+					planUuid === "sourceA" || planUuid === "sourceB"
+						? SOURCE_PLANET
+						: undefined,
+			};
+		}
+
+		/** A claim of `units` ORE, optionally naming its producing plan */
+		function oreClaim(
+			units: number,
+			sourcePlanUuid?: string
+		): IRaukkClaimedFlowCost[] {
+			return [
+				{
+					...(sourcePlanUuid !== undefined ? { sourcePlanUuid } : {}),
+					ticker: "ORE",
+					fromStop: SOURCE_PLANET,
+					toStop: OWN_PLANET,
+					unitsPerDay: units,
+					costPerUnit: 3,
+				},
+			];
+		}
+
+		/** `claimedUnitsOf` over one claim list, the exchange named */
+		function lookupOf(
+			claimed: IRaukkClaimedFlowCost[]
+		): IRaukkPairLookups["claimedUnitsOf"] {
+			const lookup = raukkClaimedUnitsLookup(claimed, OWN_PLANET);
+
+			return (
+				ticker: string,
+				counterpart: string | undefined,
+				inbound: boolean,
+				sourcePlanUuid?: string
+			) => lookup(ticker, counterpart ?? "AI1", inbound, sourcePlanUuid);
+		}
+
+		/** Daily ORE units of one sourcing lane */
+		function laneUnits(
+			pairs: ReturnType<typeof buildShippingPairs>,
+			pairKey: string
+		): number {
+			const pair = pairs.find((entry) => entry.pairKey === pairKey);
+
+			return pair?.back[0]?.unitsPerDay ?? 0;
+		}
+
+		it("takes a partial claim off its own lane only", () => {
+			const pairs = buildShippingPairs(
+				cargo(),
+				twoProducers(lookupOf(oreClaim(20, "sourceA"))),
+				config
+			);
+
+			// 50 units per lane, 20 of A's ride the chain
+			expect(laneUnits(pairs, "own>sourceA")).toBeCloseTo(30, 10);
+			// the sibling keeps its whole freight, it was never claimed
+			expect(laneUnits(pairs, "own>sourceB")).toBeCloseTo(50, 10);
+		});
+
+		it("empties the claimed lane and leaves the sibling whole", () => {
+			const pairs = buildShippingPairs(
+				cargo(),
+				twoProducers(lookupOf(oreClaim(50, "sourceA"))),
+				config
+			);
+
+			expect(
+				pairs.map((pair) => pair.pairKey).includes("own>sourceA")
+			).toBe(false);
+			expect(laneUnits(pairs, "own>sourceB")).toBeCloseTo(50, 10);
+		});
+
+		it("keeps the planet level behaviour for a legacy claim", () => {
+			// a result frozen before `sourcePlanUuid` existed names no
+			// producer: it must still match, and it matches every plan on
+			// its origin planet exactly as it always did
+			const pairs = buildShippingPairs(
+				cargo(),
+				twoProducers(lookupOf(oreClaim(20))),
+				config
+			);
+
+			expect(laneUnits(pairs, "own>sourceA")).toBeCloseTo(30, 10);
+			expect(laneUnits(pairs, "own>sourceB")).toBeCloseTo(30, 10);
+		});
+
+		it("adds a legacy claim to a named one on the same lane", () => {
+			const pairs = buildShippingPairs(
+				cargo(),
+				twoProducers(
+					lookupOf([...oreClaim(20, "sourceA"), ...oreClaim(10)])
+				),
+				config
+			);
+
+			expect(laneUnits(pairs, "own>sourceA")).toBeCloseTo(20, 10);
+			expect(laneUnits(pairs, "own>sourceB")).toBeCloseTo(40, 10);
+		});
+
+		it("answers the whole lane claim to a caller naming no plan", () => {
+			const lookup = raukkClaimedUnitsLookup(
+				[...oreClaim(20, "sourceA"), ...oreClaim(30, "sourceB")],
+				OWN_PLANET
+			);
+
+			expect(lookup("ORE", SOURCE_PLANET, true)).toBe(50);
+			expect(lookup("ORE", SOURCE_PLANET, true, "sourceA")).toBe(20);
+			expect(lookup("ORE", SOURCE_PLANET, true, "sourceB")).toBe(30);
+			expect(lookup("ORE", SOURCE_PLANET, true, "sourceC")).toBe(0);
 		});
 	});
 

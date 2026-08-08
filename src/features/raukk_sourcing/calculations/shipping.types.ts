@@ -103,15 +103,89 @@ export interface IRaukkShippingConfig {
 	routingMode: RAUKK_ROUTING_MODE;
 	/** ȼ per trip that stays inside one system, free by default */
 	sameSystemFlatCost: number;
+	/**
+	 * Account default of the production in/out cadence cap, days per
+	 * visit. Optional for the one reason every shipping field is: a local
+	 * storage blob written before the cadence model has none, and the
+	 * resolver defaults it rather than shipping on an undefined cadence.
+	 */
+	cadenceInOutDays?: number;
+	/** Account default of the workforce cadence cap, days per visit */
+	cadenceWorkforceDays?: number;
+	/**
+	 * Exchange every base is anchored at: `"nearest"` — the default — or
+	 * the code of one fixed exchange the whole account ships through. A
+	 * single plan overrides it with `IRaukkPlanConfig.cxAnchor`.
+	 *
+	 * The anchor is what makes a REGION: bases sharing one are the bases an
+	 * automatic chain may serve in a single loop.
+	 */
+	cxAnchorMode?: string;
 	/** Key: edge key, value: profile id overriding the default */
 	perEdgeProfile?: Record<string, string>;
 	/** Key: pair key, value: hired ȼ per trip replacing own fleet cost */
 	lmRates?: Record<string, number>;
 }
 
-/** Daily cargo of one ticker on one direction of a route pair */
+/**
+ * Cadence caps of one CONSUMING plan, days per visit per cargo bucket.
+ *
+ * The cap binds the SHIPPING, not the user: a hold that takes 28 days to
+ * fill under a 14 day cap flies half full every 14 days, and that partial
+ * trip pays a full trip.
+ */
+export interface IRaukkCadenceCaps {
+	production: number;
+	workforce: number;
+	repair: number;
+}
+
+/**
+ * Per consuming plan cadence overrides. Any positive day count is legal
+ * — 365 included — and REPLACES the account default outright.
+ */
+export interface IRaukkCadenceOverrides {
+	production?: number;
+	workforce?: number;
+	repair?: number;
+}
+
+/**
+ * Cargo class one shipped ticker belongs to.
+ *
+ * The three buckets of the input table (`IRaukkInputBuckets`) as a
+ * single valued CARGO identity: production covers the in/out class —
+ * production inputs, own outputs and everything sold at an exchange —
+ * workforce the consumable demand of the workforce, repair the building
+ * repair materials. Cadence caps are set per bucket, so every shipped
+ * unit has to name exactly one.
+ */
+export type RAUKK_CARGO_BUCKET = "production" | "workforce" | "repair";
+
+/** Daily units of one ticker attributed to a single cargo bucket */
+export interface IRaukkBucketUnits {
+	bucket: RAUKK_CARGO_BUCKET;
+	unitsPerDay: number;
+}
+
+/** Minimal plan result shape the cargo bucket split reads */
+export interface IRaukkBucketSource {
+	workforceMaterialIO: { ticker: string; input: number }[];
+	productionMaterialIO: { ticker: string; input: number }[];
+}
+
+/**
+ * Daily cargo of one ticker on one direction of a route pair.
+ *
+ * Identity is the ticker AND its bucket: a ticker consumed by both
+ * production and workforce rides as two rows, so a consumer can
+ * attribute cargo per ticker and per class instead of "from base X".
+ * Aggregation to weight and volume totals happens at the last moment,
+ * in the cost math and the display.
+ */
 export interface IRaukkShippedTicker {
 	ticker: string;
+	bucket: RAUKK_CARGO_BUCKET;
 	unitsPerDay: number;
 	/** Tonnes per unit */
 	weightPerUnit: number;
@@ -137,6 +211,12 @@ export interface IRaukkShippingPair {
 	route: IRaukkRoute;
 	out: IRaukkShippedTicker[];
 	back: IRaukkShippedTicker[];
+	/**
+	 * Hulls the automatic per leg selection may choose from. Absent — the
+	 * state of every caller that knows no fleet — puts `profile` on every
+	 * leg, which is exactly what "auto" meant before the cadence model.
+	 */
+	hulls?: IRaukkHullSelection;
 }
 
 /** Cargo of one direction reduced to ship loads */
@@ -150,13 +230,121 @@ export interface IRaukkDirectionLoad {
 	bindingPerDay: number;
 }
 
+/** One hull the automatic selection may put on a leg */
+export interface IRaukkHullCandidate {
+	/** Ship type id, which is a ship profile id */
+	shipTypeId: string;
+	profile: IRaukkResolvedShipProfile;
+}
+
+/**
+ * The hulls one lane may be flown with.
+ *
+ * `owned` are the types the fleet holds at least one hull of — the ONLY
+ * ones the automatic selection ever assigns. `all` is every known type
+ * and exists purely to answer "what would be better", the fleet advisory.
+ * A manual assignment wins over both.
+ */
+export interface IRaukkHullSelection {
+	owned: IRaukkHullCandidate[];
+	all: IRaukkHullCandidate[];
+	/** Ship type the user pinned to this lane, if any */
+	manual?: IRaukkHullCandidate;
+}
+
+/** Daily cargo of one leg, both directions, reduced to totals */
+export interface IRaukkLegDemand {
+	weightOutPerDay: number;
+	volumeOutPerDay: number;
+	weightBackPerDay: number;
+	volumeBackPerDay: number;
+}
+
+/** One hull measured against the cadence of one leg */
+export interface IRaukkHullPick {
+	candidate: IRaukkHullCandidate;
+	/** Days one hull load takes to accumulate, `Infinity` without cargo */
+	fillDays: number;
+	/** Days between two visits, `min(capDays, fillDays)` */
+	visitDays: number;
+	tripsPerDay: number;
+}
+
+/**
+ * A hull the fleet does NOT own that would serve one leg better.
+ *
+ * The automatic selection never assigns an unowned hull; it keeps the
+ * best owned pick and states the better one here instead, so the fleet
+ * page can advise buying it.
+ */
+export interface IRaukkFleetAdvisory {
+	pairKey: string;
+	bucket: RAUKK_CARGO_BUCKET;
+	/** Ship type the leg flies today */
+	shipTypeId: string;
+	tripsPerDay: number;
+	/** Ship type that would serve it better */
+	suggestedShipTypeId: string;
+	suggestedTripsPerDay: number;
+}
+
+/**
+ * One cargo bucket of a lane, flown on its own cadence.
+ *
+ * A lane splits into up to three legs, one per bucket present on it, and
+ * each leg picks its own hull and visits on its own rhythm — the workforce
+ * consumables of a base are not worth the trips its production inputs
+ * need. Chains are deliberately NOT split this way, they stay one loop.
+ */
+export interface IRaukkLaneLeg {
+	bucket: RAUKK_CARGO_BUCKET;
+	shipTypeId: string;
+	profile: IRaukkResolvedShipProfile;
+	/** Days per visit this bucket may not exceed */
+	capDays: number;
+	/** Days one hull load takes to accumulate */
+	fillDays: number;
+	/** Days between two visits, `min(capDays, fillDays)` */
+	visitDays: number;
+	/** `1 / visitDays`, a partial trip counting as a full one */
+	tripsPerDay: number;
+	out: IRaukkShippedTicker[];
+	back: IRaukkShippedTicker[];
+	loadOut: IRaukkDirectionLoad;
+	loadBack: IRaukkDirectionLoad;
+	/** Unowned hull that would serve this leg better, null when none */
+	advisory: IRaukkFleetAdvisory | null;
+}
+
+/** Costed leg of a route pair, see {@link IRaukkLaneLeg} */
+export interface IRaukkLegShipping {
+	bucket: RAUKK_CARGO_BUCKET;
+	shipTypeId: string;
+	capDays: number;
+	fillDays: number;
+	visitDays: number;
+	tripsPerDay: number;
+	costPerTrip: number;
+	repairCostPerTrip: number;
+	dailyCost: number;
+	roundTripMinutes: number;
+	/** Ship time share of this leg, `null` without a ship count */
+	shippingFraction: number | null;
+	advisory: IRaukkFleetAdvisory | null;
+}
+
 /** Shipping result of one route pair */
 export interface IRaukkPairShipping {
 	pairKey: string;
 	/** True when a manual LM rate replaced the own fleet cost */
 	hired: boolean;
+	/** The legs of the pair, one per cargo bucket riding it */
+	legs: IRaukkLegShipping[];
+	/** Trips of ALL legs summed, each leg on its own cadence */
 	tripsPerDay: number;
+	/** Trip weighted mean over the legs: `dailyCost / tripsPerDay` */
 	costPerTrip: number;
+	/** Trip weighted mean over the legs */
 	repairCostPerTrip: number;
 	/** ȼ per day of the whole round trip */
 	dailyCost: number;
@@ -192,6 +380,8 @@ export interface IRaukkShippingResult {
 	inbound: Record<string, number>;
 	/** ȼ per unit leaving the plan, keyed by ticker */
 	outbound: Record<string, number>;
+	/** Unowned hulls that would serve one of the legs better */
+	advisories: IRaukkFleetAdvisory[];
 }
 
 /** Unit price lookup for the repair bill tickers */

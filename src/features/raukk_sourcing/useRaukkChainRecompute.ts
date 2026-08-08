@@ -21,10 +21,7 @@ import {
 } from "@/features/raukk_sourcing/raukkSourcingGraph";
 
 // Pricing
-import {
-	maxRelativeOutputDelta,
-	RAUKK_SNAPSHOT_EQUAL_EPSILON,
-} from "@/features/raukk_sourcing/raukkSourcingPricing";
+import { outputsSettled } from "@/features/raukk_sourcing/raukkSourcingPricing";
 
 // Types & Interfaces
 import { IPlan, IPlanEmpireElement } from "@/stores/planningStore.types";
@@ -112,11 +109,11 @@ export async function loadEmpireList(): Promise<IPlanEmpireElement[]> {
 /** Total pass cap of a cyclic chain run, first pass included */
 const RAUKK_CHAIN_MAX_PASSES: number = 5;
 
-/** Relative cost change below which a supply loop counts as settled.
- * The same epsilon the staleness cascade of `setSnapshot` uses — a
- * settled pass must also count as materially unchanged, otherwise it
- * would re-flag the rest of the loop stale. */
-const RAUKK_CHAIN_EPSILON: number = RAUKK_SNAPSHOT_EQUAL_EPSILON;
+// The supply loop passes settle within the hybrid tolerance of
+// {@link outputsSettled}, over the `RAUKK_EPSILON_SETTLE` floor. It is
+// deliberately looser than the staleness cascade of `setSnapshot` — a
+// settled pass must also count as materially unchanged, otherwise it
+// would re-flag the rest of the loop stale.
 
 /**
  * Recomputes a whole sourcing chain instead of a single plan.
@@ -182,8 +179,8 @@ export function useRaukkChainRecompute() {
 	 * A chain whose scope contains a supply loop is recomputed in
 	 * multiple passes: every pass consumes the frozen values of the
 	 * previous one, the loops numbers shrink towards their fixed point
-	 * each time. Passes stop once the largest relative output cost
-	 * change drops below {@link RAUKK_CHAIN_EPSILON} or
+	 * each time. Passes stop once every output cost settled within the
+	 * tolerance of {@link outputsSettled} or
 	 * {@link RAUKK_CHAIN_MAX_PASSES} is reached. Acyclic chains keep
 	 * their single upstream first pass.
 	 *
@@ -265,12 +262,11 @@ export function useRaukkChainRecompute() {
 				await runPass(empireList);
 				chainErrors = await recomputeShippingChains();
 
-				const settled: boolean = order.every(
-					(uuid) =>
-						maxRelativeOutputDelta(
-							before[uuid],
-							sourcingStore.snapshots[uuid]?.outputs ?? {}
-						) < RAUKK_CHAIN_EPSILON
+				const settled: boolean = order.every((uuid) =>
+					outputsSettled(
+						before[uuid],
+						sourcingStore.snapshots[uuid]?.outputs ?? {}
+					)
 				);
 
 				if (settled) break;

@@ -5,6 +5,8 @@
 	"read_only": "This plan is read-only, sourcing configuration can't be changed.",
 	"controls": {
 		"repair_day": "Repair Day",
+		"cadence": "Days/Visit In-Out · Workforce · Repair",
+		"cadence_tooltip": "Days between two deliveries this plan accepts, per cargo class: production in and out, workforce consumables, repair materials. Empty follows the account default — the placeholder shows what applies. Any positive day count is allowed; 365 means once a year. The cap binds the shipping: a hold needing longer to fill flies partly loaded, and a partial trip pays a full trip.",
 		"compute": "Compute Snapshot",
 		"compute_error": "Snapshot computation failed: {message}",
 		"recompute_chain": "Recompute Chain",
@@ -28,8 +30,8 @@
 		"stale_sources": "{count} upstream snapshot(s) used here are stale",
 		"base_fraction": "Base fraction: {value}",
 		"base_fraction_tooltip": "Base permits this product chain occupies: the plan's own base plus, per source plan, the cost-weighted share of that source's output drawn here, times the source's own base fraction. Fully using this base and half of another one gives 1.50. High values mean the chain ties up several bases — often cheaper to buy than to build.",
-		"shipping_fraction": "Shipping fraction: {value}",
-		"shipping_fraction_tooltip": "Ship time this plan's own route pairs occupy: trips per day times round-trip time, divided by a full day of the ships available on the profile. 1.00 means one ship flies for this plan around the clock; lanes flown by a hired LM carrier count as 0."
+		"shipping_fraction": "Ship time: {value}",
+		"shipping_fraction_tooltip": "Ship time this plan's own route pairs occupy: trips per day times round-trip time, divided by a full day of the ships available on the profile. 100 % means one ship flies for this plan around the clock, and a figure past it — shown in red — means the lanes need more ships. Lanes flown by a hired LM carrier count as 0 %."
 	},
 	"inputs_title": "Inputs",
 	"inputs": {
@@ -59,6 +61,10 @@
 		"workforce": "Workforce",
 		"repair": "Repair"
 	},
+	"cadence": {
+		"visit": "{days} days/visit ({trips}/day)",
+		"visit_days": "{days} days/visit"
+	},
 	"price_modes": {
 		"BID": "Bid",
 		"ASK": "Ask",
@@ -80,12 +86,10 @@
 		"enabled": "Charge Shipping",
 		"disabled_info": "Shipping is off: freight costs nothing and no snapshot changes. Turning it on marks every stored snapshot stale — the fleet is account-global, so it moves the numbers of every plan.",
 		"default_profile": "Default Profile",
-		"routing_mode": "Routing",
-		"routing_modes": {
-			"direct": "Direct",
-			"cx-hub": "Via nearest CX"
-		},
 		"same_system_cost": "Same-System ȼ/Trip",
+		"cadence_in_out": "Days/Visit In-Out",
+		"cadence_workforce": "Days/Visit Workforce",
+		"cadence_tooltip": "Account default for the maximum days between two deliveries of that cargo class. Repair materials follow each plan's own repair day. Every plan may override all three. The cap binds the shipping, not the storage: a hold needing longer to fill flies partly loaded, and a partial trip pays a full trip.",
 		"show_calibration": "Show Calibration",
 		"hide_calibration": "Hide Calibration",
 		"calibration_info": "Calibration constants per hull and FTL reactor, pre-filled from recorded test flights. Cost per parsec and per sublight block are left empty on purpose: an empty field follows the profile's fuel burn at the current FF and SF price. Type a number to override one, empty it again to go back to the derived value. Edited profiles override the preset until reset.",
@@ -108,12 +112,13 @@
 		},
 		"lm": {
 			"title": "Hired Transport",
-			"info": "Enter the ȼ per trip an LM transport ad asks for a lane and compare it against flying it yourself. A hired lane pays the entered rate instead of the own fleet cost and drops out of the shipping fraction. ȼ/u figures are lane averages over everything moving on it, in both directions.",
+			"info": "Enter the ȼ per trip an LM transport ad asks for a lane and compare it against flying it yourself. A hired lane pays the entered rate instead of the own fleet cost and drops out of the shipping fraction — the rate covers the whole lane, all of its legs. A lane is flown as one leg per cargo class riding it, each on its own cadence, so days per visit is listed per class. ȼ/u figures are lane averages over everything moving on it, in both directions.",
 			"lane": "Lane",
 			"cx_lane": "Exchange",
-			"trips_per_day": "Trips / Day",
+			"visits": "Days / Visit",
 			"units_per_day": "Units / Day",
 			"own_per_trip": "Own ȼ/Trip",
+			"own_per_trip_tooltip": "Trip-weighted mean over this lane's {legs} leg(s), which may fly different hulls: the lane costs {daily} ȼ/day in total at {trips} trips/day, ȼ/day being the sum of each leg's trips times that leg's ȼ/trip. Days per visit of each leg are in the Days / Visit column.",
 			"rate_per_trip": "LM ȼ/Trip",
 			"rate_placeholder": "not hired",
 			"own_per_unit": "Own ȼ/u",
@@ -139,7 +144,7 @@
 	},
 	"fleet": {
 		"title": "Fleet",
-		"info": "Ships you own, per type. A ship type is a cargo bay times an FTL reactor — the bay codes are in-game part designations and can't be renamed; the editable label is the blueprint design name. Utilization is the share of a type's daily flight time the lanes and chains assigned to it claim: over 100% means more ships or a bigger hull, it never blocks anything. Counts are account-global and stay editable on a read-only plan.",
+		"info": "Ships you own, per type. A ship type is a cargo bay times an FTL reactor — the bay codes are in-game part designations and can't be renamed; the editable label is the blueprint design name. Shipping capacity is the percentage of a type's daily flight time the lanes and chains assigned to it claim: 100% is one hull flying around the clock, and a figure past it — shown in red — means more ships or a bigger hull, it never blocks anything. A type without a single hull shows no percentage at all. Counts are account-global and stay editable on a read-only plan.",
 		"bay": "Bay",
 		"hull": "Hull",
 		"hull_label": "{weight} t / {volume} m³ · {reactor}",
@@ -154,6 +159,10 @@
 		"add": "Add Type",
 		"add_placeholder": "Add a ship type",
 		"empty": "No ships in the fleet yet — add a type below, then assign lanes and chains to it.",
+		"advisories": {
+			"title": "Fleet Advice",
+			"row": "Adding a {suggested} would improve shipping: {assignments} assignment(s) fly a {current} as often as every {visit} days, a {suggested} would serve the same work every {suggestedVisit} days."
+		},
 		"reactors": {
 			"standard": "Standard Reactor",
 			"quick-charge": "Quick-Charge Reactor"
@@ -232,7 +241,7 @@
 		},
 		"ship_type": "Ship Type",
 		"auto": "Auto",
-		"trips_per_day": "Trips / Day",
+		"visits": "Days / Visit",
 		"daily_cost": "ȼ / Day",
 		"shipping_fraction": "Ship Time",
 		"not_computed": "Not computed",
@@ -262,13 +271,16 @@
 		"detail": {
 			"loop": "Loop",
 			"sub_chain": "Sub-chain {index}",
-			"summary": "{trips} trips/day · {minutes} min round trip · {cost} ȼ/day",
+			"summary": "· {minutes} min round trip · {cost} ȼ/day",
 			"hired": "Hired",
 			"leg": "Leg",
 			"parsecs": "Parsecs",
 			"weight": "t / Trip",
 			"volume": "m³ / Trip",
 			"utilization": "Load",
+			"duration": "Hours",
+			"fuel": "Fuel ȼ / Trip",
+			"fuel_overridden": "This ship profile carries a manual ȼ/parsec or ȼ/STL block, which wins over its fuel burn — so this is the cost basis the ȼ/trip next to it is charged from, not a measured burn.",
 			"cost_trip": "ȼ / Trip",
 			"binding": "Weakest link",
 			"same_system": "Same system",
@@ -282,5 +294,40 @@
 			"drop_chip": "{stop} at {utilization}% — dropping it onto its own run saves {saving} ȼ/day",
 			"storage_warning": "{stop}: the chain visits every {visit} d but its storage fills in {fill} d."
 		}
+	},
+	"auto_chains": {
+		"title": "Automatic Chains",
+		"info": "Loops nobody authored: one per cargo class per exchange region, CX → base → … → CX, at most five stops in the cheapest order. They are rebuilt on every chain recomputation from the flows the authored chains left, so they cannot be edited — widen a detour budget, pin a ship type, or author a chain of your own instead.",
+		"tag": "Auto",
+		"cap_days": "Days / Visit Cap",
+		"cap_days_tooltip": "Longest gap between two visits this loop accepts, the tightest cadence of the bases it serves. A loop reaching the cap flies before its hold is full, and that partial trip pays a full trip.",
+		"empty": "No automatic chains. Bases carrying less than the stop share, sitting outside the detour budget or anchored at another exchange trade through the exchange instead.",
+		"config": {
+			"min_share": "Stop Share",
+			"min_share_tooltip": "Share of a shipments weight OR volume a base has to carry before a loop stops there. Below it the cargo goes through the exchange.",
+			"detour_in_out": "In/Out Detour (pc)",
+			"detour_loose": "Workforce & Repair Detour (pc)",
+			"detour_tooltip": "Parsecs a stop may add to the round trip. The in/out class flies every two weeks and pays every parsec often, the 30 and 90 day classes can afford a short extra jump."
+		}
+	},
+	"hub_spoke": {
+		"title": "Exchange Hub/Spoke",
+		"info": "Cargo no chain hauls: the consumer buys it at its exchange and the producer sells its excess at its own. One row per resource, never per base — what matters is what is traded, not who trades it.",
+		"ticker": "Material",
+		"bucket": "Class",
+		"from": "From",
+		"to": "To",
+		"units": "Units / Day",
+		"weight": "t / Day",
+		"volume": "m³ / Day",
+		"share": "Share",
+		"grouped": "Group by base",
+		"empty": "Nothing goes through the exchange: every plan to plan flow rides a chain."
+	},
+	"cx_anchor": {
+		"label": "CX Anchor",
+		"plan_label": "Plan CX Anchor",
+		"nearest": "Nearest",
+		"tooltip": "Exchange a base ships through. Bases sharing an anchor form the region an automatic chain is built over; a plan may override the account wide setting."
 	}
 }

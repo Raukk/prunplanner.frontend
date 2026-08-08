@@ -273,7 +273,9 @@ describe("Raukk Sourcing: account level chain compute", () => {
 				{
 					flowId: `ORE@${SOURCE_PLANET}>${CONSUMER_PLANET}@consumer`,
 					ownerPlanUuid: "consumer",
+					sourcePlanUuid: "source",
 					ticker: "ORE",
+					bucket: "production",
 					fromStop: SOURCE_PLANET,
 					toStop: CONSUMER_PLANET,
 					unitsPerDay: 100,
@@ -284,6 +286,7 @@ describe("Raukk Sourcing: account level chain compute", () => {
 					flowId: `ALO@${CONSUMER_PLANET}>AI1@consumer`,
 					ownerPlanUuid: "consumer",
 					ticker: "ALO",
+					bucket: "production",
 					fromStop: CONSUMER_PLANET,
 					toStop: "AI1",
 					unitsPerDay: 100,
@@ -291,8 +294,10 @@ describe("Raukk Sourcing: account level chain compute", () => {
 					volumePerUnit: 0,
 				},
 			]);
+			// phase 2: no chain claims the ORE, so it does NOT get a direct
+			// lane — it is bought at the consumers exchange instead and
+			// rides its market lane
 			expect(snapshot.lanes?.map((lane) => lane.pairKey)).toStrictEqual([
-				"consumer>source",
 				"consumer>CX",
 			]);
 			expect(snapshot.lanes?.[0].shipTypeId).toBe(
@@ -303,6 +308,7 @@ describe("Raukk Sourcing: account level chain compute", () => {
 
 	describe("disabled shipping", () => {
 		it("keeps chains inert and the snapshot byte identical", async () => {
+			store.setShippingConfig({ enabled: false });
 			withSource();
 			withChain();
 
@@ -346,7 +352,9 @@ describe("Raukk Sourcing: account level chain compute", () => {
 				first.snapshot.outputs.ALO.breakdown.shipping;
 
 			expect(pairShipping).toBeGreaterThan(0);
-			expect(first.snapshot.lanes?.length).toBe(2);
+			// one lane, the exchange one: the ORE import has no direct lane
+			// of its own since phase 2
+			expect(first.snapshot.lanes?.length).toBe(1);
 
 			await computeChainResults(loadPrices);
 
@@ -648,6 +656,187 @@ describe("Raukk Sourcing: account level chain compute", () => {
 		});
 	});
 
+	describe("automatic chains", () => {
+		/** Id of the in/out loop of the Antares region, content keyed */
+		const AUTO_ID: string = `auto:production:AI1:${[
+			SOURCE_PLANET,
+			CONSUMER_PLANET,
+		]
+			.sort()
+			.join("+")}`;
+
+		beforeEach(() => {
+			store.setShippingConfig({ enabled: true });
+			withSource();
+			// the two bases are 6.25 pc of detour apart, well outside the
+			// shipped in/out budget of 2 — widened so the fixture builds a
+			// loop at all
+			store.setChainConfig({ autoChainDetourInOutParsecs: 10 });
+		});
+
+		it("derives a loop over the flows nobody authored a chain for", async () => {
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			const result: IRaukkChainResult = store.chainResults[AUTO_ID];
+
+			expect(result).toBeDefined();
+			expect(result.auto).toBe(true);
+			expect(result.stale).toBe(false);
+			// the loop opens and closes at the region's exchange
+			expect(result.unsplit.stops[0]).toBe("AI1");
+			expect(result.unsplit.stops.slice(1).sort()).toStrictEqual(
+				[CONSUMER_PLANET, SOURCE_PLANET].sort()
+			);
+			expect(
+				result.flows.map((flow) => flow.ticker).sort()
+			).toStrictEqual(["ALO", "ORE"]);
+			expect(result.memberPlanUuids).toStrictEqual(["consumer"]);
+			expect(result.tripsPerDay).toBeGreaterThan(0);
+		});
+
+		it("visits at the tightest cap of its member plans", async () => {
+			store.setPlanCadence("consumer", "production", 4);
+
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			const result: IRaukkChainResult = store.chainResults[AUTO_ID];
+
+			// 400 t a day on a 1000 t hull fills in 2.5 days, so the cap
+			// does not bind — but it is what the loop was capped at
+			expect(result.capDays).toBe(4);
+			expect(result.tripsPerDay).toBeGreaterThanOrEqual(1 / 4);
+		});
+
+		it("caps a slow loop at the tightest members visit interval", async () => {
+			store.setPlanCadence("consumer", "production", 4);
+
+			// a trickle: 1 t a day would take 1000 days to fill the hull
+			await computePlanSnapshot(context(planResult(0.001, 0.001)));
+			await computeChainResults(loadPrices);
+
+			expect(store.chainResults[AUTO_ID].tripsPerDay).toBeCloseTo(
+				1 / 4,
+				10
+			);
+		});
+
+		it("runs only on what the authored chains left", async () => {
+			// the authored loop takes the ORE, the ALO sell is all that
+			// is left — and one base alone is no chain
+			store.setChain({
+				chainId: "c1",
+				stops: [SOURCE_PLANET, CONSUMER_PLANET],
+			});
+
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			expect(
+				store.chainResults.c1.flows.map((flow) => flow.ticker)
+			).toStrictEqual(["ORE"]);
+			expect(
+				Object.keys(store.chainResults).filter((chainId) =>
+					chainId.startsWith("auto:")
+				)
+			).toStrictEqual([]);
+		});
+
+		it("charges a claimed flow to the chain and to no lane", async () => {
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			const result: IRaukkChainResult = store.chainResults[AUTO_ID];
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// every flow rides the derived loop: no lane is left and the
+			// freight is exactly what the chain charged, never twice
+			expect(snapshot.lanes).toStrictEqual([]);
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				result.perUnit.ORE + result.perUnit.ALO,
+				10
+			);
+		});
+
+		it("replaces the derived results of the previous pass", async () => {
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			expect(store.chainResults[AUTO_ID]).toBeDefined();
+
+			// the region loses its second base, the loop with it
+			delete store.snapshots.consumer;
+			await computeChainResults(loadPrices);
+
+			expect(store.chainResults[AUTO_ID]).toBeUndefined();
+		});
+
+		it("lets a manual assignment win over the automatic hull", async () => {
+			store.setShipProfile("5000x5000-standard", {
+				...flatProfile,
+				cargoWeight: 5000,
+				cargoVolume: 5000,
+			});
+			store.setAssignment(
+				raukkChainAssignmentKey(AUTO_ID),
+				"5000x5000-standard"
+			);
+
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			const result: IRaukkChainResult = store.chainResults[AUTO_ID];
+
+			expect(result.profileId).toBe("5000x5000-standard");
+			expect(result.advisories).toStrictEqual([]);
+		});
+
+		it("picks an owned hull and advises the better unowned one", async () => {
+			store.setShipProfile("5000x5000-standard", {
+				...flatProfile,
+				cargoWeight: 5000,
+				cargoVolume: 5000,
+			});
+			// the fleet owns one small hull, nothing else
+			store.setFleetShip("500x500-standard", { count: 1 });
+
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			const result: IRaukkChainResult = store.chainResults[AUTO_ID];
+
+			expect(result.profileId).toBe("500x500-standard");
+			expect(result.advisories).toHaveLength(1);
+			expect(result.advisories[0].pairKey).toBe(
+				raukkChainAssignmentKey(AUTO_ID)
+			);
+			expect(result.advisories[0].bucket).toBe("production");
+			expect(result.advisories[0].shipTypeId).toBe("500x500-standard");
+			expect(result.advisories[0].suggestedTripsPerDay).toBeLessThan(
+				result.advisories[0].tripsPerDay
+			);
+		});
+
+		it("keeps the regions apart by their exchange anchor", async () => {
+			// the consumer is pinned to another exchange: the two bases no
+			// longer share a region and no loop connects them
+			store.setPlanCxAnchor("consumer", "NC1");
+
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			expect(
+				Object.keys(store.chainResults).filter((chainId) =>
+					chainId.startsWith("auto:")
+				)
+			).toStrictEqual([]);
+		});
+	});
+
 	describe("fleet rollup", () => {
 		it("claims capacity for the lanes and chains of the account", async () => {
 			store.setShippingConfig({ enabled: true });
@@ -659,7 +848,8 @@ describe("Raukk Sourcing: account level chain compute", () => {
 
 			const { entries, utilization } = useRaukkFleet();
 
-			expect(entries.value.length).toBe(2);
+			// only the exchange lane is left, the ORE import goes hub/spoke
+			expect(entries.value.length).toBe(1);
 			expect(
 				utilization.value.find(
 					(row) => row.shipTypeId === RAUKK_DEFAULT_SHIP_PROFILE_ID
@@ -748,6 +938,227 @@ describe("Raukk Sourcing: account level chain compute", () => {
 		it("anchors at the first authored planet stop, whatever the record order", async () => {
 			expect(await anchorOf(false)).toBe(CONSUMER_PLANET);
 			expect(await anchorOf(true)).toBe(CONSUMER_PLANET);
+		});
+	});
+
+	/*
+	 * Reviewed defects of the cadence redesign: a result nothing computed
+	 * this pass must never keep claiming freight, and a claim must offset
+	 * the ONE plan it belongs to.
+	 */
+	describe("claim hygiene", () => {
+		/** Id of the in/out loop the two Antares bases derive */
+		const AUTO_ID: string = `auto:production:AI1:${[
+			SOURCE_PLANET,
+			CONSUMER_PLANET,
+		]
+			.sort()
+			.join("+")}`;
+
+		/** A loader that fails the n-th call, everything else priced */
+		function failingLoader(failCall: number) {
+			let calls: number = 0;
+
+			return async (planetNaturalId: string | undefined) => {
+				calls += 1;
+
+				if (calls === failCall) throw new Error("no prices");
+
+				void planetNaturalId;
+
+				return (ticker: string) => PRICES[ticker] ?? 0;
+			};
+		}
+
+		beforeEach(() => {
+			store.setShippingConfig({ enabled: true });
+			withSource();
+			// the two bases are 6.25 pc apart, outside the shipped in/out
+			// budget: widened so a derived loop exists at all
+			store.setChainConfig({ autoChainDetourInOutParsecs: 10 });
+		});
+
+		it("purges the derived results when shipping goes off", async () => {
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			// the same numbers stored as an AUTHORED result next to it
+			store.setChainResult("c1", {
+				...store.getChainResult(AUTO_ID)!,
+				auto: false,
+			});
+			store.setAssignment(
+				raukkChainAssignmentKey(AUTO_ID),
+				RAUKK_DEFAULT_SHIP_PROFILE_ID
+			);
+
+			expect(store.chainResults[AUTO_ID]).toBeDefined();
+
+			store.setShippingConfig({ enabled: false });
+			const errors = await computeChainResults(loadPrices);
+
+			// a derived claim may not survive the toggle: nothing rebuilds
+			// it, and switching shipping back on would revive it
+			expect(errors).toStrictEqual([]);
+			expect(store.chainResults[AUTO_ID]).toBeUndefined();
+			// the authored result is the users own data and stays, inert
+			expect(store.chainResults.c1).toBeDefined();
+			// so does the hull pin, the set it names is rebuilt
+			expect(store.assignments[raukkChainAssignmentKey(AUTO_ID)]).toBe(
+				RAUKK_DEFAULT_SHIP_PROFILE_ID
+			);
+		});
+
+		it("keeps a failed chains flows off the automatic pass", async () => {
+			withChain();
+
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			const claimed = store.chainResults.c1.flows.map(
+				(flow) => flow.ticker
+			);
+			expect(claimed.sort()).toStrictEqual(["ALO", "ORE"]);
+
+			// the authored chain is priced first and fails
+			const errors = await computeChainResults(failingLoader(1));
+
+			expect(errors).toStrictEqual([
+				{ chainId: "c1", message: "no prices" },
+			]);
+			// its result still claims — the members price their freight
+			// from it — so it is flagged instead of dropped
+			expect(store.chainResults.c1.stale).toBe(true);
+			expect(
+				store.chainResults.c1.flows.map((flow) => flow.ticker).sort()
+			).toStrictEqual(["ALO", "ORE"]);
+			// and no derived loop takes the very same cargo a second time
+			expect(
+				Object.keys(store.chainResults).filter((chainId) =>
+					chainId.startsWith("auto:")
+				)
+			).toStrictEqual([]);
+		});
+
+		it("purges the derived set when the automatic pass fails", async () => {
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			expect(store.chainResults[AUTO_ID].stale).toBe(false);
+
+			store.setAssignment(
+				raukkChainAssignmentKey(AUTO_ID),
+				RAUKK_DEFAULT_SHIP_PROFILE_ID
+			);
+
+			// no authored chain exists, so the first load is the auto pass
+			const errors = await computeChainResults(failingLoader(1));
+
+			expect(errors).toStrictEqual([
+				{ chainId: "", message: "no prices" },
+			]);
+			// wholesale replacement holds on failure too: nothing this pass
+			// could not compute is left live and fresh
+			expect(store.chainResults[AUTO_ID]).toBeUndefined();
+			expect(store.assignments[raukkChainAssignmentKey(AUTO_ID)]).toBe(
+				RAUKK_DEFAULT_SHIP_PROFILE_ID
+			);
+		});
+	});
+
+	/*
+	 * Two producing plans on ONE planet author flows that are identical
+	 * in every endpoint. Keyed by the planet alone, both of them see the
+	 * whole claim of both taken off their exchange sells, and one ships
+	 * its cargo for free.
+	 */
+	describe("same planet producers", () => {
+		/** A plan on the source planet, its whole output drawn away */
+		function producerContext(planUuid: string) {
+			return {
+				planUuid,
+				planName: planUuid,
+				planetNaturalId: SOURCE_PLANET,
+				cxUuid: undefined,
+				planResult: extractorResult(50),
+			};
+		}
+
+		beforeEach(() => {
+			store.setShippingConfig({ enabled: true });
+
+			// one consumer drawing 50 ORE off each of the two producers
+			store.setSnapshot("consumer", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Consumer",
+				planetNaturalId: CONSUMER_PLANET,
+				outputs: {},
+				draws: {
+					source: { ORE: 50 },
+					source2: { ORE: 50 },
+				},
+			});
+
+			// a chain carrying the lane of ONE of them, the other still
+			// ships through the exchange
+			store.setChainResult("c1", {
+				chainId: "c1",
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				profileId: RAUKK_DEFAULT_SHIP_PROFILE_ID,
+				hired: false,
+				splitApplied: false,
+				unsplit: {
+					stops: [SOURCE_PLANET, CONSUMER_PLANET],
+					tripsPerDay: 1,
+					roundTripMinutes: 100,
+					bindingLegIndex: 0,
+					dailyCost: 100,
+					shippingFraction: 0.1,
+				},
+				split: [],
+				splitTrigger: null,
+				tripsPerDay: 1,
+				roundTripMinutes: 100,
+				bindingLegIndex: 0,
+				dailyCost: 100,
+				shippingFraction: 0.1,
+				shipMinutesPerDay: 100,
+				flows: [
+					{
+						ownerPlanUuid: "consumer",
+						sourcePlanUuid: "source",
+						ticker: "ORE",
+						fromStop: SOURCE_PLANET,
+						toStop: CONSUMER_PLANET,
+						unitsPerDay: 50,
+						costPerUnit: 1,
+					},
+				],
+				perUnit: { ORE: 1 },
+				memberPlanUuids: ["consumer", "source"],
+				config: { ...store.chainConfig },
+				advisories: [],
+			});
+		});
+
+		it("offsets the claim against the producing plan only", async () => {
+			const claimedProducer = await computePlanSnapshot(
+				producerContext("source")
+			);
+			const otherProducer = await computePlanSnapshot(
+				producerContext("source2")
+			);
+
+			// the chain hauls everything the first producer sells, so it
+			// keeps no lane of its own
+			expect(claimedProducer.snapshot.lanes).toStrictEqual([]);
+			// the second one is on the same planet and is claimed by
+			// nothing: its 50 units still travel through the exchange
+			expect(
+				otherProducer.snapshot.lanes?.map((lane) => lane.pairKey)
+			).toStrictEqual(["source2>CX"]);
 		});
 	});
 

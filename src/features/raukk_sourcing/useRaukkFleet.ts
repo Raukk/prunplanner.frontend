@@ -19,6 +19,7 @@ import {
 	IRaukkSnapshot,
 	IRaukkSnapshotLane,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
+import { IRaukkFleetAdvisory } from "@/features/raukk_sourcing/calculations/shipping.types";
 
 /**
  * The account wide fleet view: what flies where, and how much of each
@@ -84,5 +85,22 @@ export function useRaukkFleet() {
 		raukkFleetUtilization(sourcingStore.fleet, entries.value)
 	);
 
-	return { entries, utilization };
+	/**
+	 * Every hull the fleet does not own that would fly something better.
+	 *
+	 * Lane advice is frozen onto the snapshot that computed the lane, chain
+	 * advice onto the chain result, and both are account level answers —
+	 * one fleet serves every plan — so they are read from the same stored
+	 * state the utilization is and rolled up together.
+	 */
+	const advisories: ComputedRef<IRaukkFleetAdvisory[]> = computed(() => [
+		...Object.values(sourcingStore.snapshots).flatMap(
+			(snapshot: IRaukkSnapshot) => snapshot.advisories ?? []
+		),
+		...Object.values(sourcingStore.chainResults).flatMap(
+			(chain: IRaukkChainResult) => chain.advisories ?? []
+		),
+	]);
+
+	return { entries, utilization, advisories };
 }

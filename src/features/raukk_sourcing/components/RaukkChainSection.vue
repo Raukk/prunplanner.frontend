@@ -11,10 +11,23 @@
 	// Components
 	import RaukkChainDetail from "@/features/raukk_sourcing/components/RaukkChainDetail.vue";
 	import RaukkChainEditor from "@/features/raukk_sourcing/components/RaukkChainEditor.vue";
+	import RaukkVisitCadence from "@/features/raukk_sourcing/components/RaukkVisitCadence.vue";
 
 	// Calculations
-	import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
-	import { raukkChainListRows } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+	import {
+		RAUKK_CX_SYSTEM_ID_BY_CODE,
+		RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS,
+		RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS,
+		RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE,
+	} from "@/features/raukk_sourcing/calculations/shippingChains";
+	import {
+		raukkAutoChainListRows,
+		raukkChainListRows,
+	} from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+	import {
+		raukkHubSpokeRows,
+		raukkUnclaimedFlows,
+	} from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 	import { raukkChainAssignmentKey } from "@/features/raukk_sourcing/calculations/shippingFleet";
 
 	// Util
@@ -28,6 +41,7 @@
 		PSelect,
 		PTable,
 		PTag,
+		PTooltip,
 	} from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
@@ -35,8 +49,12 @@
 	import { IRaukkChainListRow } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 	import {
 		IRaukkChainConfig,
+		IRaukkChainFlow,
+		IRaukkChainFlowCost,
+		IRaukkChainResult,
 		IRaukkSnapshot,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
+	import { IRaukkHubSpokeRow } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
 	import { RAUKK_SAME_SYSTEM_PRICING } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 
 	defineProps({
@@ -101,6 +119,41 @@
 			sourcingStore.chains,
 			sourcingStore.chainResults,
 			stopNames.value
+		)
+	);
+
+	/** Plan name of a stop, the bare id when no plan sits there */
+	function stopLabel(stopRef: string | undefined): string {
+		if (stopRef === undefined) return "—";
+
+		return stopNames.value[stopRef] ?? stopRef;
+	}
+
+	/** The loops the chain pass derived, read only by construction */
+	const autoRows: ComputedRef<IRaukkChainListRow[]> = computed(() =>
+		raukkAutoChainListRows(sourcingStore.chainResults, stopNames.value)
+	);
+
+	/** Every frozen flow of the account, the hub/spoke input */
+	const accountFlows: ComputedRef<IRaukkChainFlow[]> = computed(() =>
+		Object.values(sourcingStore.snapshots).flatMap(
+			(snapshot: IRaukkSnapshot) => snapshot.flows ?? []
+		)
+	);
+
+	/** Everything every chain — authored and derived — already carries */
+	const claimedFlows: ComputedRef<IRaukkChainFlowCost[]> = computed(() =>
+		Object.values(sourcingStore.chainResults).flatMap(
+			(result: IRaukkChainResult) => result.flows
+		)
+	);
+
+	const refGroupHubSpoke: Ref<boolean> = ref(false);
+
+	const hubSpokeRows: ComputedRef<IRaukkHubSpokeRow[]> = computed(() =>
+		raukkHubSpokeRows(
+			raukkUnclaimedFlows(accountFlows.value, claimedFlows.value),
+			refGroupHubSpoke.value
 		)
 	);
 
@@ -220,6 +273,67 @@
 				(v) => changeConfig({ stlCostPerMegameter: v ?? 0 })
 			" />
 
+		<PTooltip>
+			<template #trigger>
+				<div class="font-bold pl-3 hover:cursor-help">
+					{{ $t("raukk_sourcing.auto_chains.config.min_share") }}
+				</div>
+			</template>
+			{{ $t("raukk_sourcing.auto_chains.config.min_share_tooltip") }}
+		</PTooltip>
+		<PInputNumber
+			class="min-w-25"
+			decimals
+			:min="0"
+			:max="1"
+			:value="
+				chainConfig.autoChainMinShare ??
+				RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE
+			"
+			@update:value="
+				(v) => changeConfig({ autoChainMinShare: v ?? 0 })
+			" />
+
+		<PTooltip>
+			<template #trigger>
+				<div class="font-bold pl-3 hover:cursor-help">
+					{{ $t("raukk_sourcing.auto_chains.config.detour_in_out") }}
+				</div>
+			</template>
+			{{ $t("raukk_sourcing.auto_chains.config.detour_tooltip") }}
+		</PTooltip>
+		<PInputNumber
+			class="min-w-25"
+			decimals
+			:min="0"
+			:value="
+				chainConfig.autoChainDetourInOutParsecs ??
+				RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS
+			"
+			@update:value="
+				(v) => changeConfig({ autoChainDetourInOutParsecs: v ?? 0 })
+			" />
+
+		<PTooltip>
+			<template #trigger>
+				<div class="font-bold pl-3 hover:cursor-help">
+					{{ $t("raukk_sourcing.auto_chains.config.detour_loose") }}
+				</div>
+			</template>
+			{{ $t("raukk_sourcing.auto_chains.config.detour_tooltip") }}
+		</PTooltip>
+		<PInputNumber
+			class="min-w-25"
+			decimals
+			:min="0"
+			:value="
+				chainConfig.autoChainDetourLooseParsecs ??
+				RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS
+			"
+			@update:value="
+				(v) => changeConfig({ autoChainDetourLooseParsecs: v ?? 0 })
+			" />
+
 		<div class="font-bold pl-3">
 			{{ $t("raukk_sourcing.chains.config.same_system_pricing") }}
 		</div>
@@ -244,7 +358,7 @@
 				<th>{{ $t("raukk_sourcing.chains.stops") }}</th>
 				<th>{{ $t("raukk_sourcing.chains.ship_type") }}</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.chains.trips_per_day") }}
+					{{ $t("raukk_sourcing.chains.visits") }}
 				</th>
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.chains.daily_cost") }}
@@ -298,11 +412,7 @@
 							" />
 					</td>
 					<td class="text-right">
-						{{
-							row.tripsPerDay === null
-								? "—"
-								: formatNumber(row.tripsPerDay)
-						}}
+						<RaukkVisitCadence :trips-per-day="row.tripsPerDay" />
 					</td>
 					<td class="text-right">
 						{{
@@ -311,11 +421,13 @@
 								: formatNumber(row.dailyCost)
 						}}
 					</td>
-					<td class="text-right">
+					<td
+						class="text-right"
+						:class="row.over ? 'text-negative font-bold' : ''">
 						{{
-							row.shippingFraction === null
+							row.shippingFractionPercent === null
 								? "—"
-								: formatNumber(row.shippingFraction)
+								: `${formatNumber(row.shippingFractionPercent)} %`
 						}}
 					</td>
 					<td>
@@ -390,6 +502,171 @@
 			{{ $t("raukk_sourcing.chains.new") }}
 		</PButton>
 	</div>
+
+	<h4 class="font-bold py-3">
+		{{ $t("raukk_sourcing.auto_chains.title") }}
+	</h4>
+	<div class="text-white/50 pb-3">
+		{{ $t("raukk_sourcing.auto_chains.info") }}
+	</div>
+
+	<PTable striped>
+		<thead>
+			<tr>
+				<th>{{ $t("raukk_sourcing.chains.name") }}</th>
+				<th>{{ $t("raukk_sourcing.chains.stops") }}</th>
+				<th>{{ $t("raukk_sourcing.chains.ship_type") }}</th>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.auto_chains.cap_days") }}
+				</th>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.chains.visits") }}
+				</th>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.chains.daily_cost") }}
+				</th>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.chains.shipping_fraction") }}
+				</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr v-for="row in autoRows" :key="`RAUKKAUTOCHAIN#${row.chainId}`">
+				<td>
+					<div class="flex flex-row gap-x-1 child:my-auto">
+						<span class="font-bold">{{ row.name }}</span>
+						<PTag size="sm" type="secondary">
+							{{ $t("raukk_sourcing.auto_chains.tag") }}
+						</PTag>
+						<PTag v-if="row.stale" size="sm" type="error">
+							{{ $t("raukk_sourcing.chains.stale") }}
+						</PTag>
+					</div>
+				</td>
+				<td class="text-white/60">{{ row.stopsSummary }}</td>
+				<td>
+					<PSelect
+						class="w-50!"
+						clearable
+						:value="assignedShipType(row.chainId)"
+						:options="shipTypeOptions"
+						:placeholder="$t('raukk_sourcing.chains.auto')"
+						@update:value="
+							(v) =>
+								changeAssignment(
+									row.chainId,
+									v as string | null
+								)
+						" />
+				</td>
+				<td class="text-right">
+					<PTooltip v-if="row.capDays !== null">
+						<template #trigger>
+							<span class="hover:cursor-help">
+								{{ formatNumber(row.capDays) }}
+							</span>
+						</template>
+						{{ $t("raukk_sourcing.auto_chains.cap_days_tooltip") }}
+					</PTooltip>
+					<span v-else>—</span>
+				</td>
+				<td class="text-right">
+					<RaukkVisitCadence :trips-per-day="row.tripsPerDay" />
+				</td>
+				<td class="text-right">
+					{{
+						row.dailyCost === null
+							? "—"
+							: formatNumber(row.dailyCost)
+					}}
+				</td>
+				<td
+					class="text-right"
+					:class="row.over ? 'text-negative font-bold' : ''">
+					{{
+						row.shippingFractionPercent === null
+							? "—"
+							: `${formatNumber(row.shippingFractionPercent)} %`
+					}}
+				</td>
+			</tr>
+			<tr v-if="autoRows.length === 0">
+				<td colspan="7" class="text-center text-white/50">
+					{{ $t("raukk_sourcing.auto_chains.empty") }}
+				</td>
+			</tr>
+		</tbody>
+	</PTable>
+
+	<h4 class="font-bold py-3">
+		{{ $t("raukk_sourcing.hub_spoke.title") }}
+	</h4>
+	<div class="text-white/50 pb-3">
+		{{ $t("raukk_sourcing.hub_spoke.info") }}
+	</div>
+
+	<div class="flex flex-row gap-3 pb-3 child:my-auto">
+		<PCheckbox
+			:checked="refGroupHubSpoke"
+			@update:checked="(v) => (refGroupHubSpoke = v === true)" />
+		<div class="font-bold">
+			{{ $t("raukk_sourcing.hub_spoke.grouped") }}
+		</div>
+	</div>
+
+	<PTable striped>
+		<thead>
+			<tr>
+				<th>{{ $t("raukk_sourcing.hub_spoke.ticker") }}</th>
+				<th>{{ $t("raukk_sourcing.hub_spoke.bucket") }}</th>
+				<template v-if="refGroupHubSpoke">
+					<th>{{ $t("raukk_sourcing.hub_spoke.from") }}</th>
+					<th>{{ $t("raukk_sourcing.hub_spoke.to") }}</th>
+				</template>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.hub_spoke.units") }}
+				</th>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.hub_spoke.weight") }}
+				</th>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.hub_spoke.volume") }}
+				</th>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.hub_spoke.share") }}
+				</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr
+				v-for="row in hubSpokeRows"
+				:key="`RAUKKHUB#${row.ticker}#${row.bucket}#${row.fromStop ?? ''}#${row.toStop ?? ''}`">
+				<td class="font-bold">{{ row.ticker }}</td>
+				<td class="text-white/60">
+					{{ $t(`raukk_sourcing.buckets.${row.bucket}`) }}
+				</td>
+				<template v-if="refGroupHubSpoke">
+					<td class="text-white/60">
+						{{ stopLabel(row.fromStop) }}
+					</td>
+					<td class="text-white/60">
+						{{ stopLabel(row.toStop) }}
+					</td>
+				</template>
+				<td class="text-right">{{ formatNumber(row.unitsPerDay) }}</td>
+				<td class="text-right">{{ formatNumber(row.weightPerDay) }}</td>
+				<td class="text-right">{{ formatNumber(row.volumePerDay) }}</td>
+				<td class="text-right">{{ formatNumber(row.share * 100) }}%</td>
+			</tr>
+			<tr v-if="hubSpokeRows.length === 0">
+				<td
+					:colspan="refGroupHubSpoke ? 8 : 6"
+					class="text-center text-white/50">
+					{{ $t("raukk_sourcing.hub_spoke.empty") }}
+				</td>
+			</tr>
+		</tbody>
+	</PTable>
 
 	<div v-if="refShowEditor" class="pt-3">
 		<RaukkChainEditor

@@ -271,9 +271,9 @@ describe("raukkSourcingGraph", () => {
 		});
 
 		it("includes the started plan without any edges", () => {
-			expect(buildRecomputeOrder({ a: [] }, "a", all).order).toStrictEqual(
-				["a"]
-			);
+			expect(
+				buildRecomputeOrder({ a: [] }, "a", all).order
+			).toStrictEqual(["a"]);
 			expect(buildRecomputeOrder({}, "a", all).order).toStrictEqual([
 				"a",
 			]);

@@ -12,6 +12,7 @@ import {
 
 // Types & Interfaces
 import {
+	IRaukkCadenceCaps,
 	IRaukkResolvedShipProfile,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
@@ -39,6 +40,13 @@ const config: IRaukkShippingConfig = {
 	defaultProfileId: "test",
 	routingMode: "direct",
 	sameSystemFlatCost: 0,
+};
+
+/** Account defaults; every fixture fills its hull well inside them */
+const caps: IRaukkCadenceCaps = {
+	production: 14,
+	workforce: 30,
+	repair: 90,
 };
 
 /** One sourcing pair importing 500 t of cargo per day over 5 parsecs */
@@ -90,7 +98,7 @@ describe("raukk shipping display helpers", () => {
 
 	describe("buildLmComparison", () => {
 		it("prices the own fleet per trip and per unit", () => {
-			const [row] = buildLmComparison([sourcingPair()], config, 0);
+			const [row] = buildLmComparison([sourcingPair()], config, 0, caps);
 
 			// 2 * 5 pc * 10 + 2 * 50 block cost
 			expect(row.ownCostPerTrip).toBe(200);
@@ -108,7 +116,7 @@ describe("raukk shipping display helpers", () => {
 			pair.profile = { ...profile, damagePerParsec: 0.01 };
 
 			// 2 * 5 * 0.01 = 10% damage on an 80% budget, bill 800
-			const [row] = buildLmComparison([pair], config, 800);
+			const [row] = buildLmComparison([pair], config, 800, caps);
 
 			expect(row.ownCostPerTrip).toBe(200 + 100);
 		});
@@ -119,7 +127,8 @@ describe("raukk shipping display helpers", () => {
 			const [row] = buildLmComparison(
 				[sourcingPair()],
 				{ ...config, lmRates: { [pairKey]: 100 } },
-				0
+				0,
+				caps
 			);
 
 			expect(row.lmRatePerTrip).toBe(100);
@@ -134,7 +143,8 @@ describe("raukk shipping display helpers", () => {
 			const [row] = buildLmComparison(
 				[sourcingPair()],
 				{ ...config, lmRates: { [pairKey]: 1000 } },
-				0
+				0,
+				caps
 			);
 
 			expect(row.savingPerUnit).toBeLessThan(0);
@@ -144,11 +154,70 @@ describe("raukk shipping display helpers", () => {
 			const pair: IRaukkShippingPair = sourcingPair();
 			pair.back = [];
 
-			const [row] = buildLmComparison([pair], config, 0);
+			const [row] = buildLmComparison([pair], config, 0, caps);
 
 			expect(row.tripsPerDay).toBe(0);
 			expect(row.unitsPerDay).toBe(0);
 			expect(row.ownCostPerUnit).toBe(0);
+			expect(row.legs).toStrictEqual([]);
+		});
+
+		it("states every cargo bucket riding the lane on its own cadence", () => {
+			const pair: IRaukkShippingPair = sourcingPair();
+			pair.back = [
+				{
+					ticker: "RAT",
+					bucket: "workforce",
+					unitsPerDay: 500,
+					weightPerUnit: 1,
+					volumePerUnit: 1,
+				},
+				{
+					ticker: "FEO",
+					bucket: "production",
+					unitsPerDay: 100,
+					weightPerUnit: 1,
+					volumePerUnit: 1,
+				},
+			];
+
+			const [row] = buildLmComparison([pair], config, 0, caps);
+
+			expect(row.legs.map((leg) => leg.bucket)).toStrictEqual([
+				"production",
+				"workforce",
+			]);
+
+			// 100 t a day into a 1000 t hull fill in 10 days, inside the cap
+			expect(row.legs[0].visitDays).toBeCloseTo(10);
+			expect(row.legs[0].capDays).toBe(14);
+			expect(row.legs[0].tripsPerDay).toBeCloseTo(0.1);
+
+			// 500 t a day fill the same hull in two, far inside the 30 day cap
+			expect(row.legs[1].visitDays).toBeCloseTo(2);
+			expect(row.legs[1].capDays).toBe(30);
+
+			// the lane's trips are the legs summed, each on its own rhythm
+			expect(row.tripsPerDay).toBeCloseTo(0.6);
+		});
+
+		it("holds a leg at its cap when the hold fills slower", () => {
+			const pair: IRaukkShippingPair = sourcingPair();
+			pair.back = [
+				{
+					ticker: "FEO",
+					bucket: "production",
+					unitsPerDay: 20,
+					weightPerUnit: 1,
+					volumePerUnit: 1,
+				},
+			];
+
+			const [row] = buildLmComparison([pair], config, 0, caps);
+
+			// 50 days to fill, but the cap flies it half empty every 14
+			expect(row.legs[0].visitDays).toBe(14);
+			expect(row.legs[0].tripsPerDay).toBeCloseTo(1 / 14);
 		});
 
 		it("sums both directions of the exchange pair", () => {
@@ -174,7 +243,7 @@ describe("raukk shipping display helpers", () => {
 				],
 			};
 
-			const [row] = buildLmComparison([pair], config, 0);
+			const [row] = buildLmComparison([pair], config, 0, caps);
 
 			expect(row.identity.kind).toBe("cx");
 			expect(row.unitsPerDay).toBe(500);

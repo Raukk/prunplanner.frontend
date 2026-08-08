@@ -1,12 +1,30 @@
 // Shipping cost model: pure math over the route pairs a plan owns.
 // See docs/raukk_sourcing/shipping-plan.md, sections "Ownership rule"
-// and "Model math". No store, no Vue, no price fetching — repair bill
-// prices arrive through the callers resolver.
+// and "Model math", and docs/raukk_sourcing/shipping-cadence-plan.md
+// "Phase 1" for the LEGS a lane is flown as. No store, no Vue, no price
+// fetching — repair bill prices arrive through the callers resolver.
+
+// Calculations
+import {
+	IRaukkCadence,
+	raukkCadenceOf,
+} from "@/features/raukk_sourcing/calculations/shippingCadence";
+import {
+	raukkHullLoads,
+	raukkPickHull,
+} from "@/features/raukk_sourcing/calculations/shippingHull";
 
 // Types & Interfaces
 import { IRaukkRoute } from "@/features/raukk_sourcing/calculations/routeDistance";
 import {
+	IRaukkCadenceCaps,
 	IRaukkDirectionLoad,
+	IRaukkFleetAdvisory,
+	IRaukkHullCandidate,
+	IRaukkHullPick,
+	IRaukkLaneLeg,
+	IRaukkLegDemand,
+	IRaukkLegShipping,
 	IRaukkPairShipping,
 	IRaukkResolvedShipProfile,
 	IRaukkShippedTicker,
@@ -14,8 +32,16 @@ import {
 	IRaukkShippingPair,
 	IRaukkShippingPriceResolver,
 	IRaukkShippingResult,
+	RAUKK_CARGO_BUCKET,
 	RAUKK_LOAD_DIMENSION,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
+
+/** The cargo buckets, in the order the legs of a lane are reported */
+const CARGO_BUCKETS: RAUKK_CARGO_BUCKET[] = [
+	"production",
+	"workforce",
+	"repair",
+];
 
 /** Minutes of a day, denominator of the shipping fraction */
 const MINUTES_PER_DAY: number = 24 * 60;
@@ -241,8 +267,13 @@ export function calculateRoundTripMinutes(
  * the consumer.
  *
  * Pure distance substitution, the pair stays a single consumer owned
- * pair on the consumers profile. Known v1 approximation: the same lane
- * is not pooled with the plans own CX pair and can be charged twice.
+ * pair on the consumers profile.
+ *
+ * UNREACHED by the snapshot pipeline since the hub/spoke rewrite: every
+ * source now routes through the exchanges (`viaCxSourceOf` is true for
+ * all of them), so no sourcing pair is ever built from a combined route
+ * and the `routingMode` switch that selected this never fires. Kept with
+ * its unit tests for the pairing layer alone.
  *
  * @author raukk
  *
@@ -263,11 +294,200 @@ export function combineHubRoute(
 	};
 }
 
+/** Daily weight and volume of one leg, per direction */
+function legDemand(
+	out: IRaukkShippedTicker[],
+	back: IRaukkShippedTicker[]
+): IRaukkLegDemand {
+	function sum(
+		tickers: IRaukkShippedTicker[],
+		dimension: "weightPerUnit" | "volumePerUnit"
+	): number {
+		return tickers.reduce(
+			(total, entry) =>
+				total +
+				Math.max(entry.unitsPerDay, 0) * Math.max(entry[dimension], 0),
+			0
+		);
+	}
+
+	return {
+		weightOutPerDay: sum(out, "weightPerUnit"),
+		volumeOutPerDay: sum(out, "volumePerUnit"),
+		weightBackPerDay: sum(back, "weightPerUnit"),
+		volumeBackPerDay: sum(back, "volumePerUnit"),
+	};
+}
+
+/** Trips per day one candidate would fly on one leg */
+function tripsOf(
+	candidate: IRaukkHullCandidate,
+	demand: IRaukkLegDemand,
+	capDays: number
+): number {
+	return raukkCadenceOf(raukkHullLoads(candidate, demand), capDays)
+		.tripsPerDay;
+}
+
+/** Hull of one leg and, when a better unowned one exists, the advice */
+interface IRaukkLegHull {
+	candidate: IRaukkHullCandidate;
+	advisory: IRaukkFleetAdvisory | null;
+}
+
+/**
+ * Picks the hull of one leg.
+ *
+ * A MANUAL assignment wins outright and is never argued with — "Auto" is
+ * what the heuristic answers, an assignment is what the user answered.
+ * Auto chooses from the OWNED hulls only ({@link raukkPickHull}); a
+ * better unowned one never becomes an assignment, it becomes a fleet
+ * advisory. Without any fleet data at all the pairs own profile flies the
+ * leg, which is the behaviour of every caller that knows no fleet.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingPair} pair Route pair the leg belongs to
+ * @param {RAUKK_CARGO_BUCKET} bucket Cargo bucket of the leg
+ * @param {IRaukkLegDemand} demand Daily cargo of the leg
+ * @param {number} capDays Days per visit the bucket may not exceed
+ * @returns {IRaukkLegHull} Hull and fleet advisory
+ */
+function legHull(
+	pair: IRaukkShippingPair,
+	bucket: RAUKK_CARGO_BUCKET,
+	demand: IRaukkLegDemand,
+	capDays: number
+): IRaukkLegHull {
+	const fallback: IRaukkHullCandidate = {
+		shipTypeId: pair.profile.id,
+		profile: pair.profile,
+	};
+
+	if (pair.hulls === undefined)
+		return { candidate: fallback, advisory: null };
+	if (pair.hulls.manual !== undefined)
+		return { candidate: pair.hulls.manual, advisory: null };
+
+	const owned: IRaukkHullPick | null = raukkPickHull(
+		pair.hulls.owned,
+		demand,
+		capDays
+	);
+	const candidate: IRaukkHullCandidate = owned?.candidate ?? fallback;
+
+	const ideal: IRaukkHullPick | null = raukkPickHull(
+		pair.hulls.all,
+		demand,
+		capDays
+	);
+
+	if (ideal === null || ideal.candidate.shipTypeId === candidate.shipTypeId)
+		return { candidate, advisory: null };
+
+	return {
+		candidate,
+		advisory: {
+			pairKey: pair.pairKey,
+			bucket,
+			shipTypeId: candidate.shipTypeId,
+			tripsPerDay: tripsOf(candidate, demand, capDays),
+			suggestedShipTypeId: ideal.candidate.shipTypeId,
+			suggestedTripsPerDay: ideal.tripsPerDay,
+		},
+	};
+}
+
+/**
+ * Splits one lane into its legs, one per cargo bucket riding it.
+ *
+ * The three buckets travel on three different rhythms — production in
+ * and out every two weeks, workforce consumables monthly, repair
+ * materials once per repair cycle — so charging them one shared trip
+ * count would either fly the consumables far too often or starve the
+ * production line. Each leg therefore picks its own hull, fills it at
+ * its own pace and visits at `min(capDays, fillDays)`.
+ *
+ * A leg carrying nothing is not a leg: buckets without positive cargo
+ * are absent from the result, and so is a lane that ships nothing at all.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingPair} pair Route pair the plan owns
+ * @param {IRaukkCadenceCaps} caps Cadence caps of the consuming plan
+ * @returns {IRaukkLaneLeg[]} Legs of the lane, in bucket order
+ */
+export function raukkLaneLegs(
+	pair: IRaukkShippingPair,
+	caps: IRaukkCadenceCaps
+): IRaukkLaneLeg[] {
+	const legs: IRaukkLaneLeg[] = [];
+
+	function cargoOf(
+		tickers: IRaukkShippedTicker[],
+		bucket: RAUKK_CARGO_BUCKET
+	): IRaukkShippedTicker[] {
+		// an entry frozen before the cargo classes existed reads as
+		// `production`, the in/out class it carried
+		return tickers.filter(
+			(entry) =>
+				(entry.bucket ?? "production") === bucket &&
+				entry.unitsPerDay > 0
+		);
+	}
+
+	CARGO_BUCKETS.forEach((bucket) => {
+		const out: IRaukkShippedTicker[] = cargoOf(pair.out, bucket);
+		const back: IRaukkShippedTicker[] = cargoOf(pair.back, bucket);
+
+		if (out.length === 0 && back.length === 0) return;
+
+		const capDays: number = caps[bucket];
+		const demand: IRaukkLegDemand = legDemand(out, back);
+		const hull: IRaukkLegHull = legHull(pair, bucket, demand, capDays);
+
+		const loadOut: IRaukkDirectionLoad = calculateDirectionLoad(
+			out,
+			hull.candidate.profile
+		);
+		const loadBack: IRaukkDirectionLoad = calculateDirectionLoad(
+			back,
+			hull.candidate.profile
+		);
+
+		const cadence: IRaukkCadence = raukkCadenceOf(
+			Math.max(loadOut.loads, loadBack.loads),
+			capDays
+		);
+
+		// weightless and volumeless cargo fills no hull and flies no trip
+		if (cadence.tripsPerDay <= 0) return;
+
+		legs.push({
+			bucket,
+			shipTypeId: hull.candidate.shipTypeId,
+			profile: hull.candidate.profile,
+			capDays,
+			fillDays: cadence.fillDays,
+			visitDays: cadence.visitDays,
+			tripsPerDay: cadence.tripsPerDay,
+			out,
+			back,
+			loadOut,
+			loadBack,
+			advisory: hull.advisory,
+		});
+	});
+
+	return legs;
+}
+
 /** Zero result of a pair that ships nothing */
 function emptyPairShipping(pairKey: string): IRaukkPairShipping {
 	return {
 		pairKey,
 		hired: false,
+		legs: [],
 		tripsPerDay: 0,
 		costPerTrip: 0,
 		repairCostPerTrip: 0,
@@ -290,6 +510,11 @@ function emptyPairShipping(pairKey: string): IRaukkPairShipping {
  * daily units turns the share into ȼ per unit. A ticker without any
  * weight or volume rides along for free.
  *
+ * The result is keyed by TICKER alone, so the rows of a ticker riding
+ * in several cargo buckets are pooled first: the ȼ per unit of a ticker
+ * is the same wherever on the lane it sits, and dividing each row by
+ * its own units would charge that ticker once per bucket.
+ *
  * @author raukk
  *
  * @param {IRaukkShippedTicker[]} tickers Daily cargo of the direction
@@ -306,9 +531,13 @@ function allocateDirection(
 
 	if (directionCost === 0 || load.bindingPerDay <= 0) return perUnit;
 
+	/** Daily units and binding dimension contribution, per ticker */
+	const units: Record<string, number> = {};
+	const contribution: Record<string, number> = {};
+
 	tickers.forEach((entry) => {
-		const units: number = Math.max(entry.unitsPerDay, 0);
-		if (units <= 0) return;
+		const daily: number = Math.max(entry.unitsPerDay, 0);
+		if (daily <= 0) return;
 
 		const perUnitBinding: number = Math.max(
 			load.binding === "weight"
@@ -316,121 +545,235 @@ function allocateDirection(
 				: entry.volumePerUnit,
 			0
 		);
-		const contribution: number = units * perUnitBinding;
-		if (contribution <= 0) return;
+		if (perUnitBinding <= 0) return;
 
-		perUnit[entry.ticker] =
-			(perUnit[entry.ticker] ?? 0) +
-			(directionCost * (contribution / load.bindingPerDay)) / units;
+		units[entry.ticker] = (units[entry.ticker] ?? 0) + daily;
+		contribution[entry.ticker] =
+			(contribution[entry.ticker] ?? 0) + daily * perUnitBinding;
+	});
+
+	Object.entries(units).forEach(([ticker, daily]) => {
+		perUnit[ticker] =
+			(directionCost * (contribution[ticker] / load.bindingPerDay)) /
+			daily;
 	});
 
 	return perUnit;
 }
 
+/** Daily units of one ticker over a set of cargo rows */
+function unitsPerTicker(
+	tickers: IRaukkShippedTicker[]
+): Record<string, number> {
+	const units: Record<string, number> = {};
+
+	tickers.forEach((entry) => {
+		const daily: number = Math.max(entry.unitsPerDay, 0);
+		if (daily <= 0) return;
+
+		units[entry.ticker] = (units[entry.ticker] ?? 0) + daily;
+	});
+
+	return units;
+}
+
+/**
+ * Merges the ȼ per unit of several legs into one figure per ticker.
+ *
+ * A ticker riding two legs — the same food feeding production and the
+ * workforce — pays two different freight rates, on two different
+ * cadences. What it really costs the plan is the units weighted mean of
+ * both, exactly as {@link calculateShipping} merges a ticker riding
+ * several pairs.
+ */
+function mergeLegPerUnit(
+	entries: {
+		perUnit: Record<string, number>;
+		units: Record<string, number>;
+	}[]
+): Record<string, number> {
+	const cost: Record<string, number> = {};
+	const total: Record<string, number> = {};
+
+	entries.forEach((entry) => {
+		Object.entries(entry.units).forEach(([ticker, daily]) => {
+			cost[ticker] =
+				(cost[ticker] ?? 0) + (entry.perUnit[ticker] ?? 0) * daily;
+			total[ticker] = (total[ticker] ?? 0) + daily;
+		});
+	});
+
+	const merged: Record<string, number> = {};
+
+	Object.entries(total).forEach(([ticker, daily]) => {
+		if (daily <= 0) return;
+		merged[ticker] = (cost[ticker] ?? 0) / daily;
+	});
+
+	return merged;
+}
+
 /**
  * Shipping of a single route pair.
  *
- * Trips per day are driven by the busier direction, the round trip cost
- * is amortized between both directions by their load share, and an empty
- * backhaul therefore leaves the loaded direction paying the full round
- * trip — exactly the sourcing pair case, where a reverse flow either
- * lost the mutual verdict and routes via the exchanges, or won it and
- * owns the only lane (shipping-decisions.md round 7).
+ * The lane is flown as up to three LEGS, one per cargo bucket riding it
+ * ({@link raukkLaneLegs}). Each leg has its own hull, its own cadence cap
+ * and therefore its own trip count: `1 / min(capDays, fillDays)`. A trip
+ * flown before the hold is full is still a whole trip and pays a whole
+ * trip — the ship makes the same round trip half loaded.
  *
- * A hired LM rate replaces the own fleet cost per trip and takes the
- * pair out of the shipping fraction: someone elses ship is doing the
- * flying.
+ * Within a leg the round trip cost is amortized between both directions
+ * by their load share, and an empty backhaul therefore leaves the loaded
+ * direction paying the full round trip — exactly the sourcing pair case,
+ * where a reverse flow either lost the mutual verdict and routes via the
+ * exchanges, or won it and owns the only lane (shipping-decisions.md
+ * round 7).
+ *
+ * A hired LM rate replaces the own fleet cost per trip of EVERY leg and
+ * takes the pair out of the shipping fraction: someone elses ship is
+ * doing the flying.
  *
  * @author raukk
  *
  * @param {IRaukkShippingPair} pair Route pair the plan owns
  * @param {IRaukkShippingConfig} config Shipping configuration
  * @param {number} repairBillCost ȼ of a full repair bill
+ * @param {IRaukkCadenceCaps} caps Cadence caps of the consuming plan
  * @returns {IRaukkPairShipping} Pair shipping result
  */
 export function calculatePairShipping(
 	pair: IRaukkShippingPair,
 	config: IRaukkShippingConfig,
-	repairBillCost: number
+	repairBillCost: number,
+	caps: IRaukkCadenceCaps
 ): IRaukkPairShipping {
 	if (!config.enabled) return emptyPairShipping(pair.pairKey);
 
-	const loadOut: IRaukkDirectionLoad = calculateDirectionLoad(
-		pair.out,
-		pair.profile
-	);
-	const loadBack: IRaukkDirectionLoad = calculateDirectionLoad(
-		pair.back,
-		pair.profile
-	);
+	const legs: IRaukkLaneLeg[] = raukkLaneLegs(pair, caps);
 
-	const loadTotal: number = loadOut.loads + loadBack.loads;
-
-	// nothing moves in either direction, no trip is ever flown
-	if (loadTotal <= 0) return emptyPairShipping(pair.pairKey);
-
-	const tripsPerDay: number = Math.max(loadOut.loads, loadBack.loads);
+	// nothing moves in any bucket, no trip is ever flown
+	if (legs.length === 0) return emptyPairShipping(pair.pairKey);
 
 	const lmRatePerTrip: number | undefined = config.lmRates?.[pair.pairKey];
 	const hired: boolean = lmRatePerTrip !== undefined;
 
-	const repairCostPerTrip: number = hired
-		? 0
-		: calculateRepairCostPerTrip(pair.route, pair.profile, repairBillCost);
-	const costPerTrip: number =
-		lmRatePerTrip !== undefined
-			? lmRatePerTrip
-			: calculateCostPerTrip(
+	const costed: IRaukkLegShipping[] = [];
+	const outPerUnit: {
+		perUnit: Record<string, number>;
+		units: Record<string, number>;
+	}[] = [];
+	const backPerUnit: typeof outPerUnit = [];
+
+	let tripsPerDay: number = 0;
+	let dailyCost: number = 0;
+	let repairCost: number = 0;
+	let shipMinutes: number = 0;
+	let shippingFraction: number | null = 0;
+
+	legs.forEach((leg) => {
+		const repairCostPerTrip: number = hired
+			? 0
+			: calculateRepairCostPerTrip(
 					pair.route,
-					pair.profile,
-					config,
+					leg.profile,
 					repairBillCost
 				);
+		const costPerTrip: number =
+			lmRatePerTrip !== undefined
+				? lmRatePerTrip
+				: calculateCostPerTrip(
+						pair.route,
+						leg.profile,
+						config,
+						repairBillCost
+					);
 
-	const dailyCost: number = tripsPerDay * costPerTrip;
+		const legDailyCost: number = leg.tripsPerDay * costPerTrip;
 
-	const roundTripMinutes: number = calculateRoundTripMinutes(
-		pair.route,
-		pair.profile,
-		loadOut.loads / tripsPerDay,
-		loadBack.loads / tripsPerDay
-	);
+		const roundTripMinutes: number = calculateRoundTripMinutes(
+			pair.route,
+			leg.profile,
+			leg.loadOut.loads / leg.tripsPerDay,
+			leg.loadBack.loads / leg.tripsPerDay
+		);
 
-	/*
-	 * A hired lane occupies none of the own fleets time, that is a hard
-	 * zero. A profile without a single ship is a different thing: its
-	 * denominator does not exist, so the fraction is UNDEFINED and says
-	 * so. Reporting zero there would read as infinite capacity — the
-	 * exact opposite of what an empty ship count means.
-	 */
-	const shippingFraction: number | null = hired
-		? 0
-		: pair.profile.shipsAvailable > 0
-			? (tripsPerDay * roundTripMinutes) /
-				(MINUTES_PER_DAY * pair.profile.shipsAvailable)
-			: null;
+		/*
+		 * A hired lane occupies none of the own fleets time, that is a
+		 * hard zero. A profile without a single ship is a different
+		 * thing: its denominator does not exist, so the fraction is
+		 * UNDEFINED and says so. Reporting zero there would read as
+		 * infinite capacity — the exact opposite of what an empty ship
+		 * count means.
+		 */
+		const legFraction: number | null = hired
+			? 0
+			: leg.profile.shipsAvailable > 0
+				? (leg.tripsPerDay * roundTripMinutes) /
+					(MINUTES_PER_DAY * leg.profile.shipsAvailable)
+				: null;
+
+		const legLoads: number = leg.loadOut.loads + leg.loadBack.loads;
+
+		if (legLoads > 0) {
+			outPerUnit.push({
+				perUnit: allocateDirection(
+					leg.out,
+					leg.loadOut,
+					legDailyCost * (leg.loadOut.loads / legLoads)
+				),
+				units: unitsPerTicker(leg.out),
+			});
+			backPerUnit.push({
+				perUnit: allocateDirection(
+					leg.back,
+					leg.loadBack,
+					legDailyCost * (leg.loadBack.loads / legLoads)
+				),
+				units: unitsPerTicker(leg.back),
+			});
+		}
+
+		tripsPerDay += leg.tripsPerDay;
+		dailyCost += legDailyCost;
+		repairCost += leg.tripsPerDay * repairCostPerTrip;
+		shipMinutes += leg.tripsPerDay * roundTripMinutes;
+		shippingFraction =
+			shippingFraction === null || legFraction === null
+				? null
+				: shippingFraction + legFraction;
+
+		costed.push({
+			bucket: leg.bucket,
+			shipTypeId: leg.shipTypeId,
+			capDays: leg.capDays,
+			fillDays: leg.fillDays,
+			visitDays: leg.visitDays,
+			tripsPerDay: leg.tripsPerDay,
+			costPerTrip,
+			repairCostPerTrip,
+			dailyCost: legDailyCost,
+			roundTripMinutes,
+			shippingFraction: legFraction,
+			advisory: leg.advisory,
+		});
+	});
 
 	return {
 		pairKey: pair.pairKey,
 		hired,
+		legs: costed,
 		tripsPerDay,
-		costPerTrip,
-		repairCostPerTrip,
+		costPerTrip: tripsPerDay > 0 ? dailyCost / tripsPerDay : 0,
+		repairCostPerTrip: tripsPerDay > 0 ? repairCost / tripsPerDay : 0,
 		dailyCost,
-		roundTripMinutes,
+		// trip weighted, so `trips × minutes` stays the ship time of the
+		// whole lane however many hulls its legs put on it
+		roundTripMinutes: tripsPerDay > 0 ? shipMinutes / tripsPerDay : 0,
 		shippingFraction,
-		loadOut,
-		loadBack,
-		perUnitOut: allocateDirection(
-			pair.out,
-			loadOut,
-			dailyCost * (loadOut.loads / loadTotal)
-		),
-		perUnitBack: allocateDirection(
-			pair.back,
-			loadBack,
-			dailyCost * (loadBack.loads / loadTotal)
-		),
+		loadOut: calculateDirectionLoad(pair.out, pair.profile),
+		loadBack: calculateDirectionLoad(pair.back, pair.profile),
+		perUnitOut: mergeLegPerUnit(outPerUnit),
+		perUnitBack: mergeLegPerUnit(backPerUnit),
 	};
 }
 
@@ -450,21 +793,29 @@ export function calculatePairShipping(
  * @param {IRaukkShippingPair[]} pairs Route pairs the plan owns
  * @param {IRaukkShippingConfig} config Shipping configuration
  * @param {IRaukkShippingPriceResolver} resolvePrice Unit price lookup
+ * @param {IRaukkCadenceCaps} caps Cadence caps of the consuming plan
  * @returns {IRaukkShippingResult} Per pair and per ticker shipping
  */
 export function calculateShipping(
 	pairs: IRaukkShippingPair[],
 	config: IRaukkShippingConfig,
-	resolvePrice: IRaukkShippingPriceResolver
+	resolvePrice: IRaukkShippingPriceResolver,
+	caps: IRaukkCadenceCaps
 ): IRaukkShippingResult {
 	if (!config.enabled) {
-		return { pairs: [], shippingFraction: 0, inbound: {}, outbound: {} };
+		return {
+			pairs: [],
+			shippingFraction: 0,
+			inbound: {},
+			outbound: {},
+			advisories: [],
+		};
 	}
 
 	const repairBillCost: number = calculateRepairBillCost(resolvePrice);
 
 	const results: IRaukkPairShipping[] = pairs.map((pair) =>
-		calculatePairShipping(pair, config, repairBillCost)
+		calculatePairShipping(pair, config, repairBillCost, caps)
 	);
 
 	/** Daily ȼ and daily units per ticker, per direction */
@@ -533,5 +884,13 @@ export function calculateShipping(
 		shippingFraction,
 		inbound: perUnitOf(inboundCost, inboundUnits),
 		outbound: perUnitOf(outboundCost, outboundUnits),
+		advisories: results.flatMap((result) =>
+			result.legs
+				.map((leg) => leg.advisory)
+				.filter(
+					(advisory): advisory is IRaukkFleetAdvisory =>
+						advisory !== null
+				)
+		),
 	};
 }

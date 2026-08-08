@@ -22,6 +22,7 @@ import {
 	calculateDirectionLoad,
 	combineHubRoute,
 } from "@/features/raukk_sourcing/calculations/shipping";
+import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
 // Types & Interfaces
 import {
@@ -30,10 +31,12 @@ import {
 	IRaukkRouteDistance,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import {
+	IRaukkHullSelection,
 	IRaukkResolvedShipProfile,
 	IRaukkShippedTicker,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
+	RAUKK_CARGO_BUCKET,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 
 /**
@@ -74,19 +77,29 @@ export interface IRaukkPairLookups {
 	/** Ship profile of one pair, by its pair key */
 	profileOf(pairKey: string): IRaukkResolvedShipProfile;
 	/**
+	 * Hulls the automatic per leg selection may choose from, by pair key.
+	 * Absent lookup: no fleet is known and every leg flies `profileOf`,
+	 * which is what "auto" meant before the cadence model.
+	 */
+	hullsOf?(pairKey: string): IRaukkHullSelection | undefined;
+	/**
 	 * Units per day a CHAIN already claimed off one lane, and which the
 	 * pair therefore must not carry a second time (v2, see
 	 * shipping-chains-v2.md "Flow claiming"). `counterpart` is the source
 	 * plans planet on a sourcing lane and `undefined` on the plans own
 	 * exchange lane — the exchange has no plan uuid, and naming it by
 	 * code here would drag the chain models stop vocabulary into the v1
-	 * pair math. Absent lookup: nothing is claimed, which is the state
-	 * before any chain exists.
+	 * pair math. `sourcePlanUuid` names the PRODUCING plan of a sourcing
+	 * lane and is `undefined` on the market lane: two plans on one planet
+	 * share a counterpart but not their claims, and keying by the planet
+	 * alone would subtract one claim from both lanes. Absent lookup:
+	 * nothing is claimed, which is the state before any chain exists.
 	 */
 	claimedUnitsOf?(
 		ticker: string,
 		counterpart: string | undefined,
-		inbound: boolean
+		inbound: boolean,
+		sourcePlanUuid?: string
 	): number;
 	/**
 	 * True when the lane FROM that source plan lost the mutual verdict of
@@ -103,6 +116,19 @@ export interface IRaukkPairLookups {
 	 * nothing does, so they are sold at the exchange after all.
 	 */
 	viaCxSoldOf?(ticker: string): number;
+	/**
+	 * Exchange CODE the plan is anchored at, see `raukkCxAnchorCode`. Only
+	 * the flow list needs the code — a pair is priced by distance, not by
+	 * name — so the pair construction reads `anchorCxSystemId` instead.
+	 */
+	anchorCxCode?: string;
+	/**
+	 * System id of that same exchange. Absent, or unroutable from the
+	 * plans own system, the plan ships through the NEAREST exchange, which
+	 * is both the shipped default and the behaviour of every caller
+	 * predating the anchor.
+	 */
+	anchorCxSystemId?: string;
 	routes?: IRaukkRouteDistance;
 }
 
@@ -143,15 +169,21 @@ export interface IRaukkMutualVerdict {
  * the very same numbers in the very same order — the verdict must not
  * depend on floating point summation order.
  *
+ * The cargo bucket is a plain lookup with a `production` default: this
+ * shape only ever feeds {@link resolveMutualLanes}, which weighs whole
+ * lane TOTALS and never a single class.
+ *
  * @author raukk
  *
  * @param {Record<string, number>} unitsPerDay Daily units per ticker
  * @param {Function} dimensionOf Cargo dimensions of a ticker
+ * @param {Function} [bucketOf] Cargo bucket of a ticker
  * @returns {IRaukkShippedTicker[]} Daily cargo of the lane
  */
 export function raukkLaneCargo(
 	unitsPerDay: Record<string, number>,
-	dimensionOf: (ticker: string) => IRaukkCargoDimension | undefined
+	dimensionOf: (ticker: string) => IRaukkCargoDimension | undefined,
+	bucketOf?: (ticker: string) => RAUKK_CARGO_BUCKET
 ): IRaukkShippedTicker[] {
 	return Object.keys(unitsPerDay)
 		.sort()
@@ -162,6 +194,7 @@ export function raukkLaneCargo(
 
 			return {
 				ticker,
+				bucket: bucketOf?.(ticker) ?? "production",
 				unitsPerDay: unitsPerDay[ticker],
 				weightPerUnit: dimension?.weightPerUnit ?? 0,
 				volumePerUnit: dimension?.volumePerUnit ?? 0,
@@ -185,8 +218,10 @@ export function raukkLaneCargo(
  * independently over the same frozen data and must reach the same
  * verdict, or one of them would haul cargo the other one sells. The
  * comparison is therefore free of argument order — the directions are
- * ordered by consumer uuid first — and an exact tie goes to the
- * direction whose CONSUMER holds the lower plan uuid.
+ * ordered by consumer uuid first — and a tie goes to the direction
+ * whose CONSUMER holds the lower plan uuid. Two load counts within
+ * {@link RAUKK_EPSILON_EQUAL} count as tied (round 10): at that width
+ * the heavier direction is not meaningfully heavier.
  *
  * @author raukk
  *
@@ -211,8 +246,10 @@ export function resolveMutualLanes(
 			).loads
 	);
 
-	// tie: the lower uuid keeps its lane, which is `ordered[0]`
-	const keeper: number = loads[0] >= loads[1] ? 0 : 1;
+	// tie: the lower uuid keeps its lane, which is `ordered[0]`. A
+	// difference under the equality deadband IS a tie, both plans read
+	// the same numbers and therefore reach the same verdict
+	const keeper: number = loads[0] >= loads[1] - RAUKK_EPSILON_EQUAL ? 0 : 1;
 
 	return {
 		directConsumerPlanUuid: ordered[keeper].consumerPlanUuid,
@@ -235,6 +272,40 @@ export interface IRaukkPairPlanFlows {
 	inputs: IRaukkShippedTicker[];
 	/** Net output cargo per day, before subscriber draws */
 	outputs: IRaukkShippedTicker[];
+}
+
+/**
+ * Exchange one plan ships through: its anchor when it has a routable
+ * one, the nearest exchange otherwise.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {string} systemId Own system id
+ * @param {string} [anchorSystemId] Anchored exchange system id
+ * @returns {(IRaukkNearestCx | null)} Exchange and the route to it
+ */
+function anchorCx(
+	routes: IRaukkRouteDistance,
+	systemId: string,
+	anchorSystemId?: string
+): IRaukkNearestCx | null {
+	if (anchorSystemId !== undefined) {
+		const route: IRaukkRoute | null = routes.route(
+			systemId,
+			anchorSystemId
+		);
+
+		if (route !== null) return { systemId: anchorSystemId, route };
+	}
+
+	return routes.nearestCx(systemId);
+}
+
+/** One input row of one lane, its share of a chain claim taken off */
+interface IRaukkLaneRow {
+	entry: IRaukkShippedTicker;
+	unitsPerDay: number;
 }
 
 /** Pair key suffix of the plans own exchange pair */
@@ -299,8 +370,10 @@ export function raukkCxPairKey(planUuid: string): string {
  * Cargo a chain already claimed is subtracted per lane through
  * `claimedUnitsOf` before anything is loaded: those units ride the chain
  * and take their ȼ per unit from its stored result, so charging them here
- * as well would bill the same freight twice. A lane left with nothing
- * simply disappears.
+ * as well would bill the same freight twice. A lane is the counterpart
+ * AND the producing plan, so drawing one ticker from two plans on one
+ * planet gives each lane its own claim. A lane left with nothing simply
+ * disappears.
  *
  * @author raukk
  *
@@ -323,23 +396,31 @@ export function buildShippingPairs(
 	);
 	if (consumerSystemId === null) return [];
 
-	const cx: IRaukkNearestCx | null = routes.nearestCx(consumerSystemId);
+	const cx: IRaukkNearestCx | null = anchorCx(
+		routes,
+		consumerSystemId,
+		lookups.anchorCxSystemId
+	);
 
 	/** Market buys, and per source plan the tickers drawn there */
 	const marketBack: IRaukkShippedTicker[] = [];
 	const sourcedBack: Map<string, IRaukkShippedTicker[]> = new Map();
 
 	/**
-	 * Adds cargo to the exchange lane, merging a ticker already riding
-	 * it. Two entries of one ticker in a single direction would each be
-	 * charged over their own units and overstate the ȼ per unit.
+	 * Adds cargo to the exchange lane, merging a row already riding it.
+	 * Identity is ticker AND bucket: two entries of one ticker in a
+	 * single bucket would each be charged over their own units and
+	 * overstate the ȼ per unit, while two BUCKETS of one ticker are
+	 * distinct cargo and stay apart.
 	 */
 	function pushMarketBack(
 		entry: IRaukkShippedTicker,
 		unitsPerDay: number
 	): void {
 		const known: IRaukkShippedTicker | undefined = marketBack.find(
-			(element) => element.ticker === entry.ticker
+			(element) =>
+				element.ticker === entry.ticker &&
+				element.bucket === entry.bucket
 		);
 
 		if (known !== undefined) {
@@ -350,47 +431,94 @@ export function buildShippingPairs(
 		marketBack.push({ ...entry, unitsPerDay });
 	}
 
-	/** Units of one lane a chain took over, zero without any chain */
+	/**
+	 * Units of one lane a chain did NOT take over, of a whole tickers
+	 * daily amount on that lane. Claims are per ticker, lane and
+	 * PRODUCING plan; the bucket rows of a ticker therefore share one
+	 * claim and give it up proportionally — a single row keeps the plain
+	 * subtraction — while a sibling plan on the same planet is a lane of
+	 * its own and keeps its own freight.
+	 */
 	function unclaimed(
 		ticker: string,
 		counterpart: string | undefined,
 		inbound: boolean,
-		unitsPerDay: number
+		unitsPerDay: number,
+		sourcePlanUuid?: string
 	): number {
 		return Math.max(
 			unitsPerDay -
-				(lookups.claimedUnitsOf?.(ticker, counterpart, inbound) ?? 0),
+				(lookups.claimedUnitsOf?.(
+					ticker,
+					counterpart,
+					inbound,
+					sourcePlanUuid
+				) ?? 0),
 			0
 		);
 	}
 
+	/** Input rows of one ticker, one per bucket it is consumed in */
+	const inputsByTicker: Map<string, IRaukkShippedTicker[]> = new Map();
+
 	flows.inputs.forEach((entry) => {
 		if (entry.unitsPerDay <= 0) return;
 
-		const origins: IRaukkTickerOrigin[] = lookups.originOf(entry.ticker);
+		inputsByTicker.set(entry.ticker, [
+			...(inputsByTicker.get(entry.ticker) ?? []),
+			entry,
+		]);
+	});
+
+	inputsByTicker.forEach((rows, ticker) => {
+		const origins: IRaukkTickerOrigin[] = lookups.originOf(ticker);
+
+		/** The rows of one lane, their shared claim already taken off */
+		function laneRows(
+			counterpart: string | undefined,
+			share: number,
+			sourcePlanUuid?: string
+		): IRaukkLaneRow[] {
+			const total: number = rows.reduce(
+				(sum, entry) => sum + entry.unitsPerDay * share,
+				0
+			);
+			if (total <= 0) return [];
+
+			const remaining: number = unclaimed(
+				ticker,
+				counterpart,
+				true,
+				total,
+				sourcePlanUuid
+			);
+			if (remaining <= 0) return [];
+
+			return rows
+				.map((entry) => ({
+					entry,
+					unitsPerDay:
+						remaining * ((entry.unitsPerDay * share) / total),
+				}))
+				.filter((row) => row.unitsPerDay > 0);
+		}
 
 		if (origins.length === 0) {
-			const units: number = unclaimed(
-				entry.ticker,
-				undefined,
-				true,
-				entry.unitsPerDay
+			laneRows(undefined, 1).forEach((row) =>
+				pushMarketBack(row.entry, row.unitsPerDay)
 			);
-
-			if (units > 0) pushMarketBack(entry, units);
 			return;
 		}
 
 		origins.forEach((origin) => {
 			if (origin.share <= 0) return;
 
-			const units: number = unclaimed(
-				entry.ticker,
+			const shipped: IRaukkLaneRow[] = laneRows(
 				lookups.planetOf(origin.planUuid),
-				true,
-				entry.unitsPerDay * origin.share
+				origin.share,
+				origin.planUuid
 			);
-			if (units <= 0) return;
+			if (shipped.length === 0) return;
 
 			/*
 			 * The lighter direction of a mutual relationship keeps no
@@ -399,14 +527,18 @@ export function buildShippingPairs(
 			 * chain hauls directly.
 			 */
 			if (lookups.viaCxSourceOf?.(origin.planUuid) === true) {
-				pushMarketBack(entry, units);
+				shipped.forEach((row) =>
+					pushMarketBack(row.entry, row.unitsPerDay)
+				);
 				return;
 			}
 
 			const cargo: IRaukkShippedTicker[] =
 				sourcedBack.get(origin.planUuid) ?? [];
 
-			cargo.push({ ...entry, unitsPerDay: units });
+			shipped.forEach((row) =>
+				cargo.push({ ...row.entry, unitsPerDay: row.unitsPerDay })
+			);
 			sourcedBack.set(origin.planUuid, cargo);
 		});
 	});
@@ -452,6 +584,7 @@ export function buildShippingPairs(
 		pairs.push({
 			pairKey,
 			profile: lookups.profileOf(pairKey),
+			hulls: lookups.hullsOf?.(pairKey),
 			route,
 			out: [],
 			back: cargo,
@@ -484,6 +617,7 @@ export function buildShippingPairs(
 	pairs.push({
 		pairKey: cxPairKey,
 		profile: lookups.profileOf(cxPairKey),
+		hulls: lookups.hullsOf?.(cxPairKey),
 		route: cx.route,
 		out: cxOut,
 		back: marketBack,

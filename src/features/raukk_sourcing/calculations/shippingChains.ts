@@ -21,6 +21,12 @@ import {
 	stlBlockMinutes,
 } from "@/features/raukk_sourcing/calculations/shipping";
 import { RAUKK_DEFAULT_CHAIN_DATA } from "@/features/raukk_sourcing/calculations/shippingChainData";
+import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+import {
+	RAUKK_DEFAULT_CADENCE_REPAIR_DAYS,
+	raukkCadenceCaps,
+	raukkCadenceOf,
+} from "@/features/raukk_sourcing/calculations/shippingCadence";
 
 // Types & Interfaces
 import {
@@ -98,6 +104,38 @@ export const RAUKK_CX_SYSTEM_ID_BY_CODE: Record<string, string> = {
 };
 
 /**
+ * Share of a shipments weight or volume a base carries before an
+ * automatic loop stops there.
+ *
+ * The three `RAUKK_DEFAULT_AUTO_CHAIN_*` constants are the ONE home of
+ * the automatic chain knob defaults: {@link raukkDefaultChainConfig}, the
+ * `?? fallback` of every reader and the picker defaults of the chain
+ * section all take them from here. The zod defaults in
+ * `raukkSourcingStore.schemas.ts` must MIRROR these three literals — a
+ * schema cannot import from the calculations layer without a cycle — so a
+ * change here is a change there.
+ *
+ * @author raukk
+ */
+export const RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE: number = 0.05;
+
+/**
+ * Parsecs a stop may add to the round trip of an in/out loop, the
+ * fortnightly class that pays every parsec often.
+ *
+ * @author raukk
+ */
+export const RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS: number = 2;
+
+/**
+ * Parsecs a stop may add to the round trip of a workforce or repair
+ * loop, the 30 and 90 day classes that can afford a short extra jump.
+ *
+ * @author raukk
+ */
+export const RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS: number = 6;
+
+/**
  * Defaults of the chain knobs, every one of them from
  * shipping-chains-v2.md.
  *
@@ -105,6 +143,11 @@ export const RAUKK_CX_SYSTEM_ID_BY_CODE: Record<string, string> = {
  * implementation: nothing in the v1 profile calibration prices sublight
  * DISTANCE, so it starts at 0 exactly like `costPerParsec` does and the
  * same system leg then costs whatever the two jump alternative costs.
+ *
+ * The three `autoChain*` knobs come from shipping-cadence-plan.md phase 2
+ * instead and are documented gut numbers: a stop is worth 5% of a
+ * shipment, and a stop may add 2 parsecs of detour on the fortnightly
+ * in/out class and 6 on the monthly and quarterly ones.
  *
  * @author raukk
  *
@@ -118,6 +161,11 @@ export function raukkDefaultChainConfig(): IRaukkChainConfig {
 		stlCostPerMegameter: 0,
 		autoCxSplit: true,
 		sameSystemPricing: "average",
+		autoChainMinShare: RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE,
+		autoChainDetourInOutParsecs:
+			RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS,
+		autoChainDetourLooseParsecs:
+			RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS,
 	};
 }
 
@@ -597,16 +645,28 @@ export function calculateChainShipping(
 		return Math.max(weightLoads, volumeLoads);
 	});
 
-	const tripsPerDay: number = loads.reduce(
+	const bindingLoads: number = loads.reduce(
 		(best, value) => Math.max(best, value),
 		0
 	);
 
-	if (tripsPerDay <= 0) {
+	if (bindingLoads <= 0) {
 		return emptyChainShipping(chain.chainId, claim.unclaimed);
 	}
 
-	const bindingLegIndex: number = loads.indexOf(tripsPerDay);
+	const bindingLegIndex: number = loads.indexOf(bindingLoads);
+
+	/*
+	 * The cadence cap only ever SHORTENS the interval: a loop whose
+	 * binding leg needs 28 days to fill under a 14 day cap flies half full
+	 * every 14 days, and that partial trip pays a full trip. Without a cap
+	 * — every user authored chain — the loop flies exactly as often as its
+	 * binding leg fills, which is the pre cadence behaviour.
+	 */
+	const tripsPerDay: number = raukkCadenceOf(
+		bindingLoads,
+		input.capDays ?? 0
+	).tripsPerDay;
 
 	const hired: boolean = chain.lmRatePerTrip !== undefined;
 
@@ -1167,10 +1227,11 @@ function flowsTouching(
 	);
 }
 
-/** One flow as the v1 shipped ticker shape */
+/** One flow as the v1 shipped ticker shape, `production` by default */
 function shippedTicker(flow: IRaukkChainFlow): IRaukkShippedTicker {
 	return {
 		ticker: flow.ticker,
+		bucket: flow.bucket ?? "production",
 		unitsPerDay: flow.unitsPerDay,
 		weightPerUnit: flow.weightPerUnit,
 		volumePerUnit: flow.volumePerUnit,
@@ -1246,8 +1307,24 @@ function standalonePairs(
 				.map(shippedTicker),
 		};
 
+		/*
+		 * The dropped flows are costed as the standalone lanes they
+		 * would become. A chain is account level and knows no consuming
+		 * plan, so the cadence caps are the ACCOUNT defaults with the
+		 * shipped repair cadence — the same answer a plan without any
+		 * override gets. Chains themselves stay one loop and are never
+		 * split per bucket (shipping-decisions.md round 10).
+		 */
 		results.push(
-			calculatePairShipping(pair, input.config, input.repairBillCost)
+			calculatePairShipping(
+				pair,
+				input.config,
+				input.repairBillCost,
+				raukkCadenceCaps(
+					input.config,
+					RAUKK_DEFAULT_CADENCE_REPAIR_DAYS
+				)
+			)
 		);
 	});
 
@@ -1339,7 +1416,9 @@ export function evaluateChainDrops(
 			dailyCostStandalone: standaloneDaily,
 			standalonePairs: pairs,
 			savingPerDay: asIs.dailyCost - droppedDaily,
-			recommendDrop: droppedDaily < asIs.dailyCost,
+			// a saving of less than a cent is not a saving: the deadband
+			// keeps a hair-width difference from recommending an edit
+			recommendDrop: asIs.dailyCost - droppedDaily > RAUKK_EPSILON_EQUAL,
 		});
 	});
 

@@ -18,7 +18,11 @@
 	import RaukkShippingSection from "@/features/raukk_sourcing/components/RaukkShippingSection.vue";
 
 	// Calculations
-	import { raukkStorageFilledDays } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+	import {
+		raukkShipTimeOver,
+		raukkShipTimePercent,
+		raukkStorageFilledDays,
+	} from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 	import {
 		getVolumeOfAllStorages,
 		getWeightOfAllStorages,
@@ -29,7 +33,14 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PButton, PSelect, PTag, PTooltip, PInput } from "@/ui";
+	import {
+		PButton,
+		PInputNumber,
+		PSelect,
+		PTag,
+		PTooltip,
+		PInput,
+	} from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -38,6 +49,7 @@
 		IRaukkTickerSource,
 		RAUKK_REPAIR_DAY,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
+	import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
 
 	const props = defineProps({
 		planUuid: {
@@ -73,6 +85,7 @@
 	const {
 		config,
 		shippingConfig,
+		caps,
 		shippingPairs,
 		repairBillCost,
 		fuelPrices,
@@ -128,6 +141,22 @@
 		},
 	]);
 
+	/**
+	 * Ship time of this plan as the percentage every other shipping
+	 * surface reads it in — the chain tables and the fleet table both show
+	 * this share as a percentage, and one quantity gets one unit.
+	 *
+	 * @author raukk
+	 *
+	 * @param {number | null} shippingFraction Ship time share
+	 * @returns {string} Percentage label, an em-dash where unknown
+	 */
+	function shipTimeLabel(shippingFraction: number | null): string {
+		const percent: number | null = raukkShipTimePercent(shippingFraction);
+
+		return percent === null ? "—" : `${formatNumber(percent)} %`;
+	}
+
 	const repairDayOptions: ComputedRef<PSelectOption[]> = computed(() =>
 		[30, 60, 90, 120].map((day) => ({ label: `${day}`, value: day }))
 	);
@@ -136,6 +165,25 @@
 		if (readOnly.value || !props.planUuid) return;
 
 		sourcingStore.setRepairDay(props.planUuid, day);
+	}
+
+	/**
+	 * Stores or clears one cadence override of the open plan, days per
+	 * visit. An empty field clears the override and the account default
+	 * applies again — which is exactly what the placeholder shows.
+	 *
+	 * @author raukk
+	 *
+	 * @param {RAUKK_CARGO_BUCKET} bucket Cargo Bucket
+	 * @param {number | null} days Days per visit, null clears
+	 */
+	function changeCadence(
+		bucket: RAUKK_CARGO_BUCKET,
+		days: number | null
+	): void {
+		if (readOnly.value || !props.planUuid) return;
+
+		sourcingStore.setPlanCadence(props.planUuid, bucket, days ?? undefined);
 	}
 
 	function changeSource(
@@ -281,6 +329,36 @@
 					(v) => changeRepairDay(Number(v) as RAUKK_REPAIR_DAY)
 				" />
 
+			<PTooltip>
+				<template #trigger>
+					<div class="font-bold pl-3 hover:cursor-help">
+						{{ $t("raukk_sourcing.controls.cadence") }}
+					</div>
+				</template>
+				{{ $t("raukk_sourcing.controls.cadence_tooltip") }}
+			</PTooltip>
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:disabled="readOnly"
+				:placeholder="String(caps.production)"
+				:value="config.cadence?.production ?? null"
+				@update:value="(v) => changeCadence('production', v ?? null)" />
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:disabled="readOnly"
+				:placeholder="String(caps.workforce)"
+				:value="config.cadence?.workforce ?? null"
+				@update:value="(v) => changeCadence('workforce', v ?? null)" />
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:disabled="readOnly"
+				:placeholder="String(caps.repair)"
+				:value="config.cadence?.repair ?? null"
+				@update:value="(v) => changeCadence('repair', v ?? null)" />
+
 			<PButton
 				type="primary"
 				:loading="refIsComputing"
@@ -407,15 +485,16 @@
 			</PTooltip>
 			<PTooltip v-if="snapshot.shippingFraction !== undefined">
 				<template #trigger>
-					<span class="text-white/60 hover:cursor-help">
+					<span
+						class="hover:cursor-help"
+						:class="
+							raukkShipTimeOver(snapshot.shippingFraction)
+								? 'text-negative font-bold'
+								: 'text-white/60'
+						">
 						{{
 							$t("raukk_sourcing.snapshot.shipping_fraction", {
-								value:
-									snapshot.shippingFraction === null
-										? "—"
-										: formatNumber(
-												snapshot.shippingFraction
-											),
+								value: shipTimeLabel(snapshot.shippingFraction),
 							})
 						}}
 					</span>
@@ -444,8 +523,10 @@
 	</div>
 
 	<RaukkShippingSection
+		:plan-uuid="planUuid"
 		:pairs="shippingPairs"
 		:repair-bill-cost="repairBillCost"
+		:caps="caps"
 		:fuel-prices="fuelPrices"
 		:plan-names="planNames"
 		:storage-days="storageDays"

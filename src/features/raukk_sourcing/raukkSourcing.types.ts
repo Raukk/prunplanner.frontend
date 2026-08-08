@@ -2,7 +2,12 @@
 // See docs/raukk_sourcing/spec.md for the full model.
 
 // Types & Interfaces
-import { IRaukkShippingConfig } from "@/features/raukk_sourcing/calculations/shipping.types";
+import {
+	IRaukkCadenceOverrides,
+	IRaukkFleetAdvisory,
+	IRaukkShippingConfig,
+	RAUKK_CARGO_BUCKET,
+} from "@/features/raukk_sourcing/calculations/shipping.types";
 import {
 	IRaukkChainConfig,
 	IRaukkChainFlow,
@@ -18,6 +23,9 @@ import {
  * @author raukk
  */
 export type {
+	IRaukkCadenceCaps,
+	IRaukkCadenceOverrides,
+	IRaukkFleetAdvisory,
 	IRaukkShipProfile,
 	IRaukkShippingConfig,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
@@ -53,6 +61,15 @@ export interface IRaukkPlanConfig {
 	 * consumables and repair materials alike. Tickers without an
 	 * entry default to market at the plan's CX preference price. */
 	sources: Record<string, IRaukkTickerSource>;
+	/** Cadence caps of THIS plan as a consumer, days per visit and cargo
+	 * bucket. Absent buckets follow the account default; a set value
+	 * replaces it outright and may be any positive day count. */
+	cadence?: IRaukkCadenceOverrides;
+	/** Exchange THIS plan is anchored at, overriding the account wide
+	 * `shippingConfig.cxAnchorMode`. Bases sharing an anchor form the
+	 * region an automatic chain is built over. Absent: the account mode,
+	 * which itself defaults to the nearest exchange. */
+	cxAnchor?: string;
 	/** Copy of the account-global shipping configuration, embedded into
 	 * the config a snapshot froze itself with. Only written while
 	 * shipping is enabled, so snapshots computed with shipping off stay
@@ -120,6 +137,11 @@ export interface IRaukkSnapshot {
 	 * lane, not only their summed fraction. Only written while shipping
 	 * is enabled. */
 	lanes?: IRaukkSnapshotLane[];
+	/** Hulls the fleet does not own that would serve one of this plans
+	 * legs better. Frozen with the lanes because the automatic hull pick
+	 * runs on the same numbers; the fleet page renders them account wide.
+	 * Only written while shipping is enabled. */
+	advisories?: IRaukkFleetAdvisory[];
 	/** Ship time utilization of the route pairs this plan owns, summed.
 	 * 1.0 = one ship of the profile flies for it around the clock. Only
 	 * stored while shipping is enabled. `null` when a pairs profile
@@ -128,11 +150,22 @@ export interface IRaukkSnapshot {
 	shippingFraction?: number | null;
 }
 
-/** One route pair of a plan, as the fleet rollup needs it */
+/**
+ * One LEG of a route pair, as the fleet rollup needs it.
+ *
+ * A lane is flown as up to three legs, one per cargo bucket riding it,
+ * each with its own hull and its own cadence, so the rollup gets one row
+ * per leg. `bucket` and `visitDays` are optional for the usual reason: a
+ * snapshot frozen before the cadence model carried one row per LANE.
+ */
 export interface IRaukkSnapshotLane {
 	pairKey: string;
+	/** Cargo bucket of the leg, absent on pre cadence snapshots */
+	bucket?: RAUKK_CARGO_BUCKET;
 	/** Ship type serving it when the snapshot was frozen */
 	shipTypeId: string;
+	/** Days between two visits, absent on pre cadence snapshots */
+	visitDays?: number;
 	tripsPerDay: number;
 	roundTripMinutes: number;
 	/** A hired lane claims none of the own fleets time */
@@ -145,6 +178,10 @@ export interface IRaukkChainFlowCost {
 	 * Absent on results computed before ownership was carried; those fall
 	 * back to the old endpoint heuristic, INBOUND only. */
 	ownerPlanUuid?: string;
+	/** Plan the cargo is drawn from, see {@link IRaukkChainFlow}. Absent
+	 * on a market lane and on results computed before the field existed;
+	 * those degrade to the old per PLANET behaviour. */
+	sourcePlanUuid?: string;
 	ticker: string;
 	fromStop: RAUKK_STOP_REF;
 	toStop: RAUKK_STOP_REF;
@@ -219,4 +256,15 @@ export interface IRaukkChainResult {
 	memberPlanUuids: string[];
 	/** Chain configuration the numbers were computed with */
 	config: IRaukkChainConfig;
+	/** True for a DERIVED chain: built by the automatic builder of the
+	 * chain pass, never authored and never stored as a chain. Absent on
+	 * every result written before the automatic chains existed. */
+	auto?: boolean;
+	/** Days per visit the loop was capped at, the tightest cap of its
+	 * member consuming plans. Only automatic chains carry one. */
+	capDays?: number;
+	/** Hulls the fleet does not own that would fly this chain better. The
+	 * automatic hull pick runs on the chains binding leg, so its advice
+	 * belongs to the chain rather than to any single plan. */
+	advisories: IRaukkFleetAdvisory[];
 }

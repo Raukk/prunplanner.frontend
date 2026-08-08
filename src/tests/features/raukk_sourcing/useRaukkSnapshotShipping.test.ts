@@ -21,6 +21,10 @@ import { computePlanSnapshot } from "@/features/raukk_sourcing/useRaukkSnapshot"
 
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+import { materialsStore } from "@/database/stores";
+
+// test data
+import materials from "@/tests/test_data/api_data_materials.json";
 
 // Calculations
 import { TOTALMSDAY } from "@/features/planning/calculations/buildingCalculations";
@@ -100,7 +104,12 @@ function mio(
 function makePlanResult(
 	recipeInputs: [string, number][],
 	recipeOutputs: [string, number][],
-	materialio: IMaterialIO[]
+	materialio: IMaterialIO[],
+	constructionMaterials: {
+		ticker: string;
+		input: number;
+		output: number;
+	}[] = []
 ): IPlanResult {
 	const buildings: IProductionBuilding[] = [
 		{
@@ -108,7 +117,7 @@ function makePlanResult(
 			amount: 1,
 			totalBatchTime: TOTALMSDAY,
 			workforceDailyCost: 0,
-			constructionMaterials: [],
+			constructionMaterials,
 			activeRecipes: [
 				{
 					recipeId: "EXT#0",
@@ -251,6 +260,10 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 	}
 
 	describe("disabled flag parity", () => {
+		beforeEach(() => {
+			store.setShippingConfig({ enabled: false });
+		});
+
 		it("writes exactly the pre-shipping snapshot", async () => {
 			const { snapshot } = await computePlanSnapshot(
 				context(planResult(1, 3))
@@ -310,27 +323,26 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 		});
 	});
 
-	describe("sourcing pair", () => {
+	describe("sourcing hub/spoke", () => {
 		beforeEach(() => {
 			store.setShippingConfig({ enabled: true });
 			withSource();
 		});
 
-		it("charges the imports the full round trip", async () => {
+		it("charges the imports on the exchange lane", async () => {
 			// ALO is weightless, only the ORE import moves a ship
 			const { snapshot } = await computePlanSnapshot(
 				context(planResult(1, 0))
 			);
 
 			/*
-			 * 100 t a day on a 1000 t hull = 0.1 trips, each trip pays
-			 * both legs of the distance. No backhaul exists on this pair,
-			 * so the imports carry all of it. Supply loops ARE allowed
-			 * since the loop change, and a mutual A⇄B pair is still
-			 * charged as two independent round trips — conservative, and
-			 * amortizing it is deliberately left to a follow up.
+			 * Phase 2: no chain claims this haul, so it gets NO direct
+			 * lane — the consumer buys the ORE at its own exchange and it
+			 * rides the market lane it already flies. 100 t a day on a
+			 * 1000 t hull = 0.1 trips, each trip paying both legs of the
+			 * exchange distance.
 			 */
-			const dailyCost: number = 0.1 * (2 * DIRECT_PARSECS * 10);
+			const dailyCost: number = 0.1 * (2 * CX_TO_CONSUMER * 10);
 
 			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
 				dailyCost / 100,
@@ -435,9 +447,9 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			// 11 * 100 + 11 * 100 + 12 * 10 + 8 * 10
 			const repairBill: number = 2400;
 			const repairPerTrip: number =
-				((2 * DIRECT_PARSECS * 0.001) / 0.8) * repairBill;
+				((2 * CX_TO_CONSUMER * 0.001) / 0.8) * repairBill;
 			const dailyCost: number =
-				0.1 * (2 * DIRECT_PARSECS * 10 + repairPerTrip);
+				0.1 * (2 * CX_TO_CONSUMER * 10 + repairPerTrip);
 
 			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
 				dailyCost / 100,
@@ -447,24 +459,30 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			expect(snapshot.draws).toStrictEqual({ source: { ORE: 100 } });
 		});
 
-		it("substitutes the hub distance in cx-hub mode", async () => {
+		it("changes nothing in cx-hub mode, the haul is via the CX anyway", async () => {
+			// hub routing substituted the distance of a DIRECT sourcing
+			// lane; no such lane exists any more, the cargo rides the
+			// consumers exchange lane in both modes
+			const direct = await computePlanSnapshot(context(planResult(1, 0)));
+
 			store.setShippingConfig({ routingMode: "cx-hub" });
 
-			const { snapshot } = await computePlanSnapshot(
-				context(planResult(1, 0))
+			const hub = await computePlanSnapshot(context(planResult(1, 0)));
+
+			expect(SOURCE_TO_CX + CX_TO_CONSUMER).toBeGreaterThan(
+				DIRECT_PARSECS
 			);
-
-			const hubParsecs: number = SOURCE_TO_CX + CX_TO_CONSUMER;
-			const dailyCost: number = 0.1 * (2 * hubParsecs * 10);
-
-			expect(hubParsecs).toBeGreaterThan(DIRECT_PARSECS);
-			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
-				dailyCost / 100,
+			expect(hub.snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				direct.snapshot.outputs.ALO.breakdown.shipping,
+				10
+			);
+			expect(hub.snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				(0.1 * (2 * CX_TO_CONSUMER * 10)) / 100,
 				10
 			);
 		});
 
-		it("charges nothing for a source without a snapshot planet", async () => {
+		it("still charges the exchange lane for a source without a planet", async () => {
 			const source: IRaukkSnapshot = store.getSnapshot("source")!;
 			store.setSnapshot("source", {
 				...source,
@@ -475,7 +493,13 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				context(planResult(1, 0))
 			);
 
-			expect(snapshot.outputs.ALO.breakdown.shipping).toBe(0);
+			// an unresolvable source used to drop the whole lane; the
+			// hub/spoke purchase does not depend on the sources planet at
+			// all, the cargo is bought at the consumers own exchange
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				(0.1 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				10
+			);
 		});
 	});
 
@@ -565,7 +589,7 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			);
 		});
 
-		it("drops the sells other plans already draw", async () => {
+		it("keeps the sells another plan draws without a chain", async () => {
 			// a consumer plan drawing all of the ALO output
 			store.setSnapshot("other", {
 				computedAt: "2026-01-01T00:00:00.000Z",
@@ -580,9 +604,14 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				context(planResult(1, 3))
 			);
 
-			// only the 100 t of ORE remain, at 0.1 trips a day
+			/*
+			 * Phase 2: the drawing plan has no chain hauling those units,
+			 * so it buys them at ITS exchange — which means this plan
+			 * really does sell them at its own. The 300 t of ALO stay on
+			 * the lane and it flies its 0.3 trips a day.
+			 */
 			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
-				(0.1 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100,
 				10
 			);
 		});
@@ -603,32 +632,165 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			expect(snapshot.shippingFraction).toBe(0);
 		});
 
-		it("uses the per pair profile override", async () => {
+		/*
+		 * Since the starter fleet, the owned list is never empty, so the
+		 * v1 per edge profile override no longer reaches a leg — a hull
+		 * is pinned with a MANUAL assignment instead.
+		 */
+		it("uses the manually assigned hull", async () => {
 			store.setShipProfile("5000x5000-standard", {
 				...flatProfile,
 				cargoWeight: 5000,
 				cargoVolume: 5000,
 			});
-			store.setShippingConfig({
-				perEdgeProfile: { "consumer>CX": "5000x5000-standard" },
-			});
+			store.setAssignment("consumer>CX", "5000x5000-standard");
 
 			const { snapshot } = await computePlanSnapshot(
 				context(planResult(1, 3))
 			);
 
-			// five times the hull, a fifth of the trips and of the cost
+			/*
+			 * Five times the hull would be a fifth of the trips — 0.06 a
+			 * day, one load every 16.7 days — but the in/out cadence caps
+			 * the interval at 14 days. The lane flies a partial trip every
+			 * two weeks and pays a full one.
+			 */
 			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
-				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100 / 5,
+				(2 * CX_TO_CONSUMER * 10) / 14 / 100,
 				10
 			);
 		});
 	});
 
-	describe("mutual lanes", () => {
+	describe("repair cargo", () => {
+		/**
+		 * The same extractor, built from 1800 BSE. Repaired at day 90
+		 * that is 900 units per cycle, ten a day — cargo of the repair
+		 * bucket, riding the plans exchange lane.
+		 */
+		function withRepairMaterials(): IPlanResult {
+			return makePlanResult(
+				[["ORE", 100]],
+				[["ALO", 100]],
+				[mio("ALO", 0, 100, 1, 0), mio("ORE", 100, 0, 1, 0)],
+				[{ ticker: "BSE", input: 1800, output: 0 }]
+			);
+		}
+
+		beforeEach(async () => {
+			store.setShippingConfig({ enabled: true });
+
+			// BSE weighs 0.3 t and takes 0.5 m³, straight from the game
+			// data: repair cargo needs dimensions the material I/O of a
+			// plan never carries
+			// @ts-expect-error test data is plain JSON
+			await materialsStore.setMany(materials);
+		});
+
+		it("mints the repair demand as a leg of its own", async () => {
+			const { snapshot } = await computePlanSnapshot(
+				context(withRepairMaterials())
+			);
+
+			const legs = (snapshot.lanes ?? []).filter(
+				(lane) => lane.pairKey === "consumer>CX"
+			);
+
+			expect(legs.map((lane) => lane.bucket)).toStrictEqual([
+				"production",
+				"repair",
+			]);
+
+			/*
+			 * Ten BSE a day are 3 t and 5 m³: the volume binds, and 5 m³
+			 * a day fill the 1000 m³ hull in 200 days. The repair cadence
+			 * is the plans repair day, so it visits every 90.
+			 */
+			const repair = legs[1];
+
+			expect(repair.visitDays).toBe(90);
+			expect(repair.tripsPerDay).toBeCloseTo(1 / 90, 10);
+		});
+
+		it("follows the plans repair day", async () => {
+			store.setRepairDay("consumer", 30);
+
+			const { snapshot } = await computePlanSnapshot(
+				context(withRepairMaterials())
+			);
+
+			const repair = (snapshot.lanes ?? []).find(
+				(lane) => lane.bucket === "repair"
+			)!;
+
+			// a shorter cycle needs more material per day AND visits more
+			// often; 30 days is the cap either way
+			expect(repair.visitDays).toBe(30);
+		});
+
+		it("takes a per plan override over the repair day", async () => {
+			store.setPlanCadence("consumer", "repair", 365);
+
+			const { snapshot } = await computePlanSnapshot(
+				context(withRepairMaterials())
+			);
+
+			const repair = (snapshot.lanes ?? []).find(
+				(lane) => lane.bucket === "repair"
+			)!;
+
+			expect(repair.visitDays).toBe(200);
+		});
+	});
+
+	describe("exchange hub/spoke", () => {
 		/** Lane keys of a snapshot, in the order the pairs were built */
 		function laneKeys(snapshot: IRaukkSnapshot): string[] {
 			return (snapshot.lanes ?? []).map((lane) => lane.pairKey);
+		}
+
+		/** A stored chain result hauling `units` ORE at 7 ȼ per unit */
+		function chainResultClaiming(units: number): IRaukkChainResult {
+			const costing = {
+				stops: [SOURCE_PLANET, CONSUMER_PLANET],
+				tripsPerDay: 1,
+				roundTripMinutes: 100,
+				bindingLegIndex: 0,
+				dailyCost: 500,
+				shippingFraction: 0.1,
+			};
+
+			return {
+				chainId: "c1",
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				profileId: RAUKK_DEFAULT_SHIP_PROFILE_ID,
+				hired: false,
+				splitApplied: false,
+				unsplit: costing,
+				split: [],
+				splitTrigger: null,
+				tripsPerDay: 1,
+				roundTripMinutes: 100,
+				bindingLegIndex: 0,
+				dailyCost: 500,
+				shippingFraction: 0.1,
+				shipMinutesPerDay: 100,
+				flows: [
+					{
+						ownerPlanUuid: "consumer",
+						ticker: "ORE",
+						fromStop: SOURCE_PLANET,
+						toStop: CONSUMER_PLANET,
+						unitsPerDay: units,
+						costPerUnit: 7,
+					},
+				],
+				perUnit: { ORE: 7 },
+				memberPlanUuids: ["consumer", "source"],
+				config: raukkDefaultChainConfig(),
+				advisories: [],
+			};
 		}
 
 		/**
@@ -695,7 +857,7 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			withMutualPair();
 		});
 
-		it("routes the lighter direction via the exchanges", async () => {
+		it("routes both directions via the exchanges", async () => {
 			const { snapshot } = await computePlanSnapshot(
 				context(planResult(1, 3))
 			);
@@ -703,10 +865,14 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			// no direct lane at all, the ORE is bought at the exchange
 			expect(laneKeys(snapshot)).toStrictEqual(["consumer>CX"]);
 
-			// 100 t of ORE on a 1000 t hull, over the exchange distance;
-			// the ALO sells are all drawn by the source and ride its lane
+			/*
+			 * 300 t of ALO out and 100 t of ORE back on a 1000 t hull —
+			 * exactly the cargo of a plan sourcing nothing from anybody,
+			 * because a haul nobody chains is a plain sale and a plain
+			 * purchase at the exchange.
+			 */
 			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
-				(0.1 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100,
 				10
 			);
 			// and that is NOT the direct lane charge of v1
@@ -718,10 +884,10 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			expect(snapshot.draws).toStrictEqual({ source: { ORE: 100 } });
 		});
 
-		it("charges the heavier direction exactly as before", async () => {
+		it("leaves the producer exactly what a draw nobody hauls costs", async () => {
 			const { snapshot } = await computePlanSnapshot(sourceContext());
 
-			// control: the consumer stops drawing, nothing is mutual
+			// control: the consumer stops drawing at all
 			store.clearTickerSource("consumer", "ORE");
 			store.setSnapshot("consumer", {
 				...store.getSnapshot("consumer")!,
@@ -731,7 +897,10 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			const { snapshot: control } =
 				await computePlanSnapshot(sourceContext());
 
-			expect(laneKeys(snapshot)).toContain("source>consumer");
+			// the units the subscription took off the exchange sells come
+			// straight back on, so a drawn output ships exactly as an
+			// undrawn one does
+			expect(laneKeys(snapshot)).toStrictEqual(["source>CX"]);
 			expect(snapshot.lanes).toStrictEqual(control.lanes);
 			expect(snapshot.outputs.ORE.breakdown.shipping).toBeCloseTo(
 				control.outputs.ORE.breakdown.shipping,
@@ -742,30 +911,15 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 		it("lets the rerouted units share the trips of the CX pair", async () => {
 			const { snapshot } = await computePlanSnapshot(sourceContext());
 
-			// 100 t of ORE out, 50 t of H2O back: the sells set the trips
+			// 100 t of ORE out; 300 t of ALO and 50 t of H2O back, both
+			// bought at the exchange — the buys set the trips
 			expect(
 				snapshot.lanes?.find((lane) => lane.pairKey === "source>CX")
 					?.tripsPerDay
-			).toBeCloseTo(0.1, 10);
-
-			// control: the frozen draws no longer show the reverse edge,
-			// so the consumer collects the ORE itself and only the market
-			// buys are left on the CX pair
-			store.setSnapshot("source", {
-				...store.getSnapshot("source")!,
-				draws: {},
-			});
-
-			const { snapshot: control } =
-				await computePlanSnapshot(sourceContext());
-
-			expect(
-				control.lanes?.find((lane) => lane.pairKey === "source>CX")
-					?.tripsPerDay
-			).toBeCloseTo(0.05, 10);
+			).toBeCloseTo(0.35, 10);
 		});
 
-		it("reaches the same verdict from both perspectives", async () => {
+		it("reroutes no matter which plan is computed first", async () => {
 			const { snapshot: consumerFirst } = await computePlanSnapshot(
 				context(planResult(1, 3))
 			);
@@ -773,7 +927,7 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				await computePlanSnapshot(sourceContext());
 
 			expect(laneKeys(consumerFirst)).toStrictEqual(["consumer>CX"]);
-			expect(laneKeys(sourceSecond)).toContain("source>consumer");
+			expect(laneKeys(sourceSecond)).toStrictEqual(["source>CX"]);
 
 			// the very same stored data, computed the other way round
 			withMutualPair();
@@ -790,102 +944,85 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			);
 		});
 
-		it("stays direct until a stored snapshot of its own exists", async () => {
-			// the verdict is read from FROZEN data on both sides, so a
-			// plan without a snapshot of its own has nothing to compare —
-			// the usual one round convergence lag
+		it("reroutes without a stored snapshot of its own", async () => {
+			// unlike the round 7 verdict it replaces, the hub/spoke rule
+			// needs no frozen counterpart data at all: a lane nobody
+			// chains never existed, whatever the previous round knew
 			delete store.snapshots.consumer;
-
-			const { snapshot: first } = await computePlanSnapshot(
-				context(planResult(1, 3))
-			);
-
-			expect(laneKeys(first)).toContain("consumer>source");
-			expect(first.outputs.ALO.breakdown.shipping).toBeCloseTo(
-				(0.1 * (2 * DIRECT_PARSECS * 10)) / 100,
-				10
-			);
-
-			const { snapshot: second } = await computePlanSnapshot(
-				context(planResult(1, 3))
-			);
-
-			expect(laneKeys(second)).toStrictEqual(["consumer>CX"]);
-		});
-
-		it("ignores a frozen draw the configuration dropped", async () => {
-			// the sources snapshot still holds the draw, its configuration
-			// no longer asks for it: not mutual, the lane stays direct
-			store.clearTickerSource("source", "ALO");
 
 			const { snapshot } = await computePlanSnapshot(
 				context(planResult(1, 3))
 			);
 
-			expect(laneKeys(snapshot)).toStrictEqual(["consumer>source"]);
-			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+			expect(laneKeys(snapshot)).toStrictEqual(["consumer>CX"]);
+			expect(snapshot.outputs.ALO.breakdown.shipping).not.toBeCloseTo(
 				(0.1 * (2 * DIRECT_PARSECS * 10)) / 100,
 				10
+			);
+		});
+
+		it("leaves only the unclaimed rest of a draw to the exchange", async () => {
+			const { snapshot: none } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// half of the ORE rides a chain, the other half is bought at
+			// the exchange: the freight has to land between both extremes
+			store.setChainResult("c1", chainResultClaiming(50));
+
+			const { snapshot: half } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			store.setChainResult("c1", chainResultClaiming(100));
+
+			const { snapshot: all } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			expect(half.outputs.ALO.breakdown.shipping).toBeGreaterThan(
+				Math.min(
+					none.outputs.ALO.breakdown.shipping,
+					all.outputs.ALO.breakdown.shipping
+				)
+			);
+			expect(half.outputs.ALO.breakdown.shipping).toBeLessThan(
+				Math.max(
+					none.outputs.ALO.breakdown.shipping,
+					all.outputs.ALO.breakdown.shipping
+				)
 			);
 		});
 
 		it("leaves a chain claimed flow to the chain", async () => {
-			store.setChainResult("c1", {
-				chainId: "c1",
-				computedAt: "2026-01-01T00:00:00.000Z",
-				stale: false,
-				profileId: RAUKK_DEFAULT_SHIP_PROFILE_ID,
-				hired: false,
-				splitApplied: false,
-				unsplit: {
-					stops: [SOURCE_PLANET, CONSUMER_PLANET],
-					tripsPerDay: 1,
-					roundTripMinutes: 100,
-					bindingLegIndex: 0,
-					dailyCost: 500,
-					shippingFraction: 0.1,
-				},
-				split: [],
-				splitTrigger: null,
-				tripsPerDay: 1,
-				roundTripMinutes: 100,
-				bindingLegIndex: 0,
-				dailyCost: 500,
-				shippingFraction: 0.1,
-				shipMinutesPerDay: 100,
-				flows: [
-					{
-						ownerPlanUuid: "consumer",
-						ticker: "ORE",
-						fromStop: SOURCE_PLANET,
-						toStop: CONSUMER_PLANET,
-						unitsPerDay: 100,
-						costPerUnit: 7,
-					},
-				],
-				perUnit: { ORE: 7 },
-				memberPlanUuids: ["consumer", "source"],
-				config: raukkDefaultChainConfig(),
-			});
+			store.setChainResult("c1", chainResultClaiming(100));
 
 			const { snapshot } = await computePlanSnapshot(
 				context(planResult(1, 3))
 			);
 
-			// the chain hauls every ORE unit: no lane of any kind carries
-			// it, and its ȼ per unit comes from the chain result
-			expect(laneKeys(snapshot)).toStrictEqual([]);
-			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(7, 10);
+			/*
+			 * The chain hauls every ORE unit, so no lane carries it and
+			 * its ȼ per unit comes from the chain result. The plans own
+			 * ALO sells are untouched by that and keep their exchange
+			 * lane, which the 300 t of ALO fill at 0.3 trips a day.
+			 */
+			expect(laneKeys(snapshot)).toStrictEqual(["consumer>CX"]);
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				7 + (0.3 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				10
+			);
 
 			// and the source does not sell those units at its exchange
-			// either, only its own market buys are left on the CX pair
+			// either: 100 t of ORE claimed leaves nothing outbound
 			const { snapshot: source } =
 				await computePlanSnapshot(sourceContext());
 
+			// 300 t of ALO and 50 t of H2O bought back, nothing out
 			expect(
 				source.lanes?.find((lane) => lane.pairKey === "source>CX")
 					?.tripsPerDay
-			).toBeCloseTo(0.05, 10);
+			).toBeCloseTo(0.35, 10);
 		});
 
 		it("keeps the disabled parity", async () => {

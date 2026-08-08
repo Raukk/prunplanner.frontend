@@ -6,6 +6,7 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 
 // Calculations
 import { raukkDefaultChainConfig } from "@/features/raukk_sourcing/calculations/shippingChains";
+import { raukkAutoChainId } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 import { raukkChainAssignmentKey } from "@/features/raukk_sourcing/calculations/shippingFleet";
 import { RAUKK_DEFAULT_SHIP_PROFILE_ID } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
@@ -83,6 +84,7 @@ function makeChainResult(
 		perUnit: { ORE: 5 },
 		memberPlanUuids,
 		config: raukkDefaultChainConfig(),
+		advisories: [],
 	};
 }
 
@@ -265,6 +267,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		});
 
 		it("leaves the chains fresh while shipping stays off", () => {
+			store.setShippingConfig({ enabled: false });
 			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
 			store.setChainResult("c1", makeChainResult("c1", ["source"]));
 
@@ -429,6 +432,241 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		});
 	});
 
+	describe("automatic chain results", () => {
+		it("replaces every derived result and keeps the authored ones", () => {
+			store.setChainResult("c1", makeChainResult("c1", ["source"]));
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+				makeChainResult("auto:workforce:AI1:1", ["source"]),
+			]);
+
+			expect(Object.keys(store.chainResults).sort()).toStrictEqual([
+				"auto:production:AI1:1",
+				"auto:workforce:AI1:1",
+				"c1",
+			]);
+			expect(store.chainResults["auto:production:AI1:1"].auto).toBe(true);
+			expect(store.chainResults.c1.auto).toBeUndefined();
+
+			// the next pass derives only one loop: the other one is gone
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+			]);
+
+			expect(Object.keys(store.chainResults).sort()).toStrictEqual([
+				"auto:production:AI1:1",
+				"c1",
+			]);
+		});
+
+		it("stores nothing when nothing was derived", () => {
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+			]);
+			store.setAutoChainResults([]);
+
+			expect(store.chainResults).toStrictEqual({});
+		});
+
+		/*
+		 * A pin left behind by a loop that no longer exists would sit in
+		 * the store forever and re-apply to whatever loop takes that id
+		 * on a later pass.
+		 */
+		it("drops the hull pins of derived chains that vanished", () => {
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+				makeChainResult("auto:production:AI1:2", ["source"]),
+			]);
+			store.setAssignment(
+				raukkChainAssignmentKey("auto:production:AI1:1"),
+				"WCB"
+			);
+			store.setAssignment(
+				raukkChainAssignmentKey("auto:production:AI1:2"),
+				"WCB"
+			);
+			store.setAssignment(raukkChainAssignmentKey("c1"), "WCB");
+			store.setAssignment("source>CX", "WCB");
+
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+			]);
+
+			expect(Object.keys(store.assignments).sort()).toStrictEqual([
+				raukkChainAssignmentKey("auto:production:AI1:1"),
+				raukkChainAssignmentKey("c1"),
+				"source>CX",
+			]);
+		});
+
+		/*
+		 * Content stable ids: the same loop keeps its pin across passes,
+		 * a loop that changed becomes a DIFFERENT id and its pin is
+		 * pruned as an orphan rather than transferring to a loop the user
+		 * never pinned.
+		 */
+		it("keeps the pin of a loop whose stops did not change", () => {
+			const chainId: string = raukkAutoChainId("production", "AI1", [
+				"AI1",
+				"ZV-194a",
+				"ZV-759b",
+			]);
+
+			store.setAutoChainResults([makeChainResult(chainId, ["source"])]);
+			store.setAssignment(raukkChainAssignmentKey(chainId), "WCB");
+
+			// the next pass discovered the very same loop, other order
+			store.setAutoChainResults([
+				makeChainResult(
+					raukkAutoChainId("production", "AI1", [
+						"AI1",
+						"ZV-759b",
+						"ZV-194a",
+					]),
+					["source"]
+				),
+			]);
+
+			expect(store.assignments[raukkChainAssignmentKey(chainId)]).toBe(
+				"WCB"
+			);
+		});
+
+		it("prunes the pin of a loop that gained a stop", () => {
+			const before: string = raukkAutoChainId("production", "AI1", [
+				"AI1",
+				"ZV-194a",
+				"ZV-759b",
+			]);
+			const after: string = raukkAutoChainId("production", "AI1", [
+				"AI1",
+				"ZV-194a",
+				"ZV-759b",
+				"ZV-307c",
+			]);
+
+			expect(after).not.toBe(before);
+
+			store.setAutoChainResults([makeChainResult(before, ["source"])]);
+			store.setAssignment(raukkChainAssignmentKey(before), "WCB");
+
+			store.setAutoChainResults([makeChainResult(after, ["source"])]);
+
+			expect(
+				store.assignments[raukkChainAssignmentKey(before)]
+			).toBeUndefined();
+			expect(
+				store.assignments[raukkChainAssignmentKey(after)]
+			).toBeUndefined();
+		});
+
+		it("replaces a stored positional result and prunes its pin", () => {
+			// a blob frozen under the old `auto:<class>:<cx>:<n>` scheme
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+			]);
+			store.setAssignment(
+				raukkChainAssignmentKey("auto:production:AI1:1"),
+				"WCB"
+			);
+
+			const contentId: string = raukkAutoChainId("production", "AI1", [
+				"AI1",
+				"ZV-194a",
+				"ZV-759b",
+			]);
+
+			store.setAutoChainResults([makeChainResult(contentId, ["source"])]);
+
+			expect(Object.keys(store.chainResults)).toStrictEqual([contentId]);
+			expect(
+				store.assignments[
+					raukkChainAssignmentKey("auto:production:AI1:1")
+				]
+			).toBeUndefined();
+		});
+
+		it("keeps the pins of a purge it cannot vouch for", () => {
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+			]);
+			store.setAssignment(
+				raukkChainAssignmentKey("auto:production:AI1:1"),
+				"WCB"
+			);
+
+			// shipping off, or a failed pass: the derived set is unknown
+			store.setAutoChainResults([], false);
+
+			expect(store.chainResults).toStrictEqual({});
+			expect(
+				store.assignments[
+					raukkChainAssignmentKey("auto:production:AI1:1")
+				]
+			).toBe("WCB");
+		});
+
+		it("flags one result stale without staling its member plans", () => {
+			withMembers();
+			store.setChainResult("c1", makeChainResult("c1", ["source"]));
+
+			store.markChainResultStale("c1");
+			store.markChainResultStale("nope");
+
+			expect(store.chainResults.c1.stale).toBe(true);
+			expect(store.snapshots.source.stale).toBe(false);
+		});
+	});
+
+	describe("chain configuration", () => {
+		/*
+		 * A numeric input emits NaN for a lone "-" or ".". Stored, it
+		 * exports as null and the users own backup no longer re-imports —
+		 * and a NaN minimum share disables every automatic chain, since
+		 * NaN compares false against any threshold.
+		 */
+		it("refuses a non finite chain knob and keeps the rest", () => {
+			const detour: number = store.chainConfig.cxSplitDetourParsecs;
+
+			store.setChainConfig({
+				cxSplitDetourParsecs: Number.NaN,
+				autoChainMinShare: Number.POSITIVE_INFINITY,
+				densityRef: 4,
+			});
+
+			expect(store.chainConfig.cxSplitDetourParsecs).toBe(detour);
+			expect(store.chainConfig.autoChainMinShare).toBe(
+				raukkDefaultChainConfig().autoChainMinShare
+			);
+			expect(store.chainConfig.densityRef).toBe(4);
+			expect(store.chainConfig.autoCxSplit).toBe(
+				raukkDefaultChainConfig().autoCxSplit
+			);
+		});
+	});
+
+	describe("cx anchor", () => {
+		it("stores the per plan anchor and stales the plan", () => {
+			withMembers();
+
+			store.setPlanCxAnchor("source", "NC1");
+
+			expect(store.configs.source.cxAnchor).toBe("NC1");
+			expect(store.snapshots.source.stale).toBe(true);
+
+			store.setSnapshot("source", makeSnapshot("Source", "ZV-194a"));
+			store.setPlanCxAnchor("source", undefined);
+
+			expect(store.configs.source.cxAnchor).toBeUndefined();
+			expect(store.snapshots.source.stale).toBe(true);
+		});
+
+		it("defaults the account mode to the nearest exchange", () => {
+			expect(store.shippingConfig.cxAnchorMode).toBe("nearest");
+		});
+	});
+
 	describe("export and import", () => {
 		it("round trips the chain and fleet slices", () => {
 			store.setChain({
@@ -499,6 +737,48 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.fleet).toStrictEqual({});
 			expect(store.assignments).toStrictEqual({});
 			expect(store.chainConfig).toStrictEqual(raukkDefaultChainConfig());
+		});
+
+		it("defaults the phase 2 fields of an older payload", () => {
+			const result = makeChainResult("c1", ["source"]) as Record<
+				string,
+				unknown
+			>;
+
+			// a result written before the derived chains existed
+			delete result.auto;
+			delete result.advisories;
+
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: { a: { repairDay: 30, sources: {} } },
+					snapshots: {},
+					shippingConfig: {
+						enabled: true,
+						defaultProfileId: RAUKK_DEFAULT_SHIP_PROFILE_ID,
+						routingMode: "direct",
+						sameSystemFlatCost: 0,
+					},
+					chainConfig: {
+						cxSplitDetourParsecs: 6,
+						legUtilizationSplitThreshold: 0.25,
+						densityRef: 3.28,
+						stlCostPerMegameter: 0,
+						autoCxSplit: true,
+						sameSystemPricing: "average",
+					},
+					chainResults: { c1: result },
+				})
+			);
+
+			expect(store.shippingConfig.cxAnchorMode).toBe("nearest");
+			expect(store.chainConfig.autoChainMinShare).toBe(0.05);
+			expect(store.chainConfig.autoChainDetourInOutParsecs).toBe(2);
+			expect(store.chainConfig.autoChainDetourLooseParsecs).toBe(6);
+			expect(store.chainResults.c1.auto).toBeUndefined();
+			expect(store.chainResults.c1.advisories).toStrictEqual([]);
+			expect(store.configs.a.cxAnchor).toBeUndefined();
 		});
 
 		it("imports a snapshot without the v2 flow and lane arrays", () => {

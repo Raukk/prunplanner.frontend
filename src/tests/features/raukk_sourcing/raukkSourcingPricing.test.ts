@@ -8,11 +8,13 @@ import {
 	createRaukkPriceResolver,
 	formatSourceOptionLabel,
 	isAggregateSource,
-	maxRelativeOutputDelta,
+	maxAbsoluteOutputDelta,
+	outputsSettled,
 	resolveCxExchangeCode,
 	snapshotMateriallyChanged,
 	splitAggregateDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
+import { RAUKK_EPSILON_SETTLE } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
 // Types & Interfaces
 import { ICXData } from "@/stores/planningStore.types";
@@ -550,19 +552,20 @@ describe("Raukk Sourcing Pricing", () => {
 			expect(h2o?.effectivePrice).toBe(2);
 		});
 
-		it("charges freight on the shipped units only", () => {
-			// RAT: 10 net input units ride a pair, 4 repair units do not
+		it("charges freight on the repair units as well", () => {
+			// RAT: 10 net input units and 4 repair units, all of them
+			// cargo since the cadence model
 			const rows = buildInputRows(planResult, { RAT: 4 }, {}, resolve, {
 				RAT: 5,
 			});
 			const rat = rows.find((r) => r.ticker === "RAT");
 
 			expect(rat?.unitsPerDay).toBe(14);
-			expect(rat?.shippedUnitsPerDay).toBe(10);
-			expect(rat?.costPerDay).toBe(14 * 100 + 10 * 5);
+			expect(rat?.shippedUnitsPerDay).toBe(14);
+			expect(rat?.costPerDay).toBe(14 * 100 + 14 * 5);
 		});
 
-		it("leaves a repair only ticker unshipped", () => {
+		it("ships a repair only ticker on its own repair leg", () => {
 			const rows = buildInputRows(
 				planResult,
 				{ BSE: 4 },
@@ -573,12 +576,12 @@ describe("Raukk Sourcing Pricing", () => {
 			);
 			const bse = rows.find((r) => r.ticker === "BSE");
 
-			expect(bse?.shippedUnitsPerDay).toBe(0);
-			expect(bse?.costPerDay).toBe(2000);
+			expect(bse?.shippedUnitsPerDay).toBe(4);
+			expect(bse?.costPerDay).toBe(4 * 500 + 4 * 99);
 		});
 	});
 
-	describe("maxRelativeOutputDelta", () => {
+	describe("maxAbsoluteOutputDelta", () => {
 		const outputs = (costs: Record<string, number>) =>
 			Object.fromEntries(
 				Object.entries(costs).map(([ticker, costPerUnit]) => [
@@ -599,32 +602,85 @@ describe("Raukk Sourcing Pricing", () => {
 
 		it("is 0 for identical outputs", () => {
 			expect(
-				maxRelativeOutputDelta(
+				maxAbsoluteOutputDelta(
 					outputs({ RAT: 10, DW: 5 }),
 					outputs({ RAT: 10, DW: 5 })
 				)
 			).toBe(0);
 		});
 
-		it("measures the largest relative cost shift", () => {
+		it("measures the largest absolute cost shift", () => {
 			expect(
-				maxRelativeOutputDelta(
+				maxAbsoluteOutputDelta(
 					outputs({ RAT: 10, DW: 5 }),
-					outputs({ RAT: 11, DW: 5 })
+					outputs({ RAT: 11, DW: 5.5 })
 				)
-			).toBeCloseTo(1 / 11, 10);
+			).toBeCloseTo(1, 10);
 		});
 
-		it("counts appearing or vanishing tickers as full shift", () => {
+		it("never settles an appearing or vanishing ticker", () => {
 			expect(
-				maxRelativeOutputDelta(outputs({ RAT: 10 }), outputs({ DW: 5 }))
-			).toBe(1);
+				maxAbsoluteOutputDelta(outputs({ RAT: 10 }), outputs({ DW: 5 }))
+			).toBe(Number.POSITIVE_INFINITY);
 		});
 
 		it("treats zero on both sides as no shift", () => {
 			expect(
-				maxRelativeOutputDelta(outputs({ RAT: 0 }), outputs({ RAT: 0 }))
+				maxAbsoluteOutputDelta(outputs({ RAT: 0 }), outputs({ RAT: 0 }))
 			).toBe(0);
+		});
+
+		it("stays below the settle epsilon for a sub cent shift", () => {
+			expect(
+				maxAbsoluteOutputDelta(
+					outputs({ RAT: 1000 }),
+					outputs({ RAT: 1000.004 })
+				)
+			).toBeLessThan(RAUKK_EPSILON_SETTLE);
+		});
+
+		describe("outputsSettled", () => {
+			it("settles identical outputs", () => {
+				expect(
+					outputsSettled(
+						outputs({ RAT: 10, DW: 5 }),
+						outputs({ RAT: 10, DW: 5 })
+					)
+				).toBe(true);
+			});
+
+			it("does not settle a visible shift", () => {
+				expect(
+					outputsSettled(
+						outputs({ RAT: 10, DW: 5 }),
+						outputs({ RAT: 10, DW: 5.5 })
+					)
+				).toBe(false);
+			});
+
+			it("never settles an appearing or vanishing ticker", () => {
+				expect(
+					outputsSettled(outputs({ RAT: 10 }), outputs({ DW: 5 }))
+				).toBe(false);
+			});
+
+			it("judges every ticker at its OWN magnitude", () => {
+				// a hundredth on a ȼ 500,000 output is noise, the same
+				// hundredth on a ȼ 2 output is a fifth of a percent — a
+				// pooled maximum over both cannot state either
+				expect(
+					outputsSettled(
+						outputs({ BIG: 500_000, SMALL: 2 }),
+						outputs({ BIG: 500_000.4, SMALL: 2 })
+					)
+				).toBe(true);
+				expect(
+					outputsSettled(
+						outputs({ BIG: 500_000, SMALL: 2 }),
+						outputs({ BIG: 500_000, SMALL: 2.4 })
+					)
+				).toBe(false);
+			});
 		});
 	});
 
@@ -691,6 +747,47 @@ describe("Raukk Sourcing Pricing", () => {
 				snapshotMateriallyChanged(
 					fullSnapshot(10, 100, { a: { ORE: 5 } }),
 					fullSnapshot(10, 100, {})
+				)
+			).toBe(true);
+		});
+
+		it("ignores a change under the equality deadband", () => {
+			// half a hundredth of a cent on a 1000 ȼ output: invisible in
+			// the two decimal display, so downstream plans stay current
+			expect(
+				snapshotMateriallyChanged(
+					fullSnapshot(1000, 100, { a: { ORE: 5 } }),
+					fullSnapshot(1000.005, 100, { a: { ORE: 5.005 } })
+				)
+			).toBe(false);
+		});
+
+		it("ignores a change under the relative half of the deadband", () => {
+			// a 50,000 units/day draw moving by three hundredths of a unit:
+			// the pure absolute hundredth flagged this and cascaded
+			// staleness through every downstream plan of a large empire
+			expect(
+				snapshotMateriallyChanged(
+					fullSnapshot(10, 50_000, { a: { ORE: 50_000 } }),
+					fullSnapshot(10, 50_000.03, { a: { ORE: 50_000.03 } })
+				)
+			).toBe(false);
+		});
+
+		it("still detects a real change at that magnitude", () => {
+			expect(
+				snapshotMateriallyChanged(
+					fullSnapshot(10, 50_000, { a: { ORE: 50_000 } }),
+					fullSnapshot(10, 50_000, { a: { ORE: 50_001 } })
+				)
+			).toBe(true);
+		});
+
+		it("keeps the absolute deadband on small numbers", () => {
+			expect(
+				snapshotMateriallyChanged(
+					fullSnapshot(10, 100, { a: { ORE: 5 } }),
+					fullSnapshot(10, 100, { a: { ORE: 5.03 } })
 				)
 			).toBe(true);
 		});

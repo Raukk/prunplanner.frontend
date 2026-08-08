@@ -4,6 +4,13 @@
 // docs/raukk_sourcing/shipping-decisions.md, no physics is derived
 // beyond what those logs state.
 
+// Calculations
+import {
+	RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
+	RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
+} from "@/features/raukk_sourcing/calculations/shippingCadence";
+import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
+
 // Types & Interfaces
 import {
 	IRaukkResolvedShipProfile,
@@ -220,7 +227,17 @@ export function raukkShipProfilePreset(
 		chargeMinutes: calibration.chargeMinutes,
 		damagePerParsec: DEFAULT_DAMAGE_PER_PARSEC,
 		damagePerStlBlock: DEFAULT_DAMAGE_PER_STL_BLOCK,
-		shipsAvailable: DEFAULT_SHIPS_AVAILABLE,
+		/*
+		 * A fresh game account starts with TWO SCB standard ships, so
+		 * that preset assumes both; every other hull is bought one at
+		 * a time.
+		 */
+		shipsAvailable:
+			hull.cargoWeight === 500 &&
+			hull.cargoVolume === 500 &&
+			ftlReactor === "standard"
+				? 2
+				: DEFAULT_SHIPS_AVAILABLE,
 	};
 }
 
@@ -348,16 +365,34 @@ export function raukkResolveShipProfile(
 	};
 }
 
-/** Default profile: the plain 1000t / 1000m³ hauler */
+/**
+ * Default profile: the SCB 500t / 500m³ starter hull, standard
+ * reactor — what every account flies before it configures anything,
+ * because it is what the game hands a new player.
+ */
 export const RAUKK_DEFAULT_SHIP_PROFILE_ID: string = raukkShipProfileId(
-	{ cargoWeight: 1000, cargoVolume: 1000 },
+	{ cargoWeight: 500, cargoVolume: 500 },
 	"standard"
 );
 
 /**
- * Shipping off, direct routing, same system trips free — the state in
- * which snapshots produce exactly the numbers they did before shipping
- * existed.
+ * The fleet an unconfigured account is assumed to own: the two SCB
+ * starter ships of a fresh game account. Used wherever the fleet
+ * store is empty — the hull pick and utilization then run against
+ * these instead of a phantom bigger hull.
+ *
+ * @author raukk
+ */
+export const RAUKK_STARTER_FLEET: { shipTypeId: string; count: number } = {
+	shipTypeId: RAUKK_DEFAULT_SHIP_PROFILE_ID,
+	count: 2,
+};
+
+/**
+ * Shipping on, direct routing, same system trips free — freight is
+ * charged out of the box; turning it off restores the numbers snapshots
+ * produced before shipping existed. Cadence starts at the shipped caps:
+ * production in and out every two weeks, workforce consumables monthly.
  *
  * @author raukk
  *
@@ -365,9 +400,12 @@ export const RAUKK_DEFAULT_SHIP_PROFILE_ID: string = raukkShipProfileId(
  */
 export function raukkDefaultShippingConfig(): IRaukkShippingConfig {
 	return {
-		enabled: false,
+		enabled: true,
 		defaultProfileId: RAUKK_DEFAULT_SHIP_PROFILE_ID,
 		routingMode: "direct",
 		sameSystemFlatCost: 0,
+		cadenceInOutDays: RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
+		cadenceWorkforceDays: RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
+		cxAnchorMode: RAUKK_CX_ANCHOR_NEAREST,
 	};
 }

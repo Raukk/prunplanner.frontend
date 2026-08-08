@@ -8,6 +8,9 @@
 	// Composables
 	import { useRaukkChainDetail } from "@/features/raukk_sourcing/useRaukkChainDetail";
 
+	// Components
+	import RaukkVisitCadence from "@/features/raukk_sourcing/components/RaukkVisitCadence.vue";
+
 	// Calculations
 	import {
 		raukkChainDropSuggestions,
@@ -21,13 +24,14 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PTable, PTag } from "@/ui";
+	import { PTable, PTag, PTooltip } from "@/ui";
 
 	// Types & Interfaces
 	import { IRaukkChainResult } from "@/features/raukk_sourcing/raukkSourcing.types";
 	import { IRaukkChainShipping } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 	import {
 		IRaukkChainDropSuggestion,
+		IRaukkChainLegFuel,
 		IRaukkChainReversedComparison,
 		IRaukkChainSplitComparison,
 		IRaukkChainStorageWarning,
@@ -62,7 +66,7 @@
 		},
 	});
 
-	const { applied, splitApplied, forward, reversed, drops } =
+	const { applied, splitApplied, forward, reversed, drops, profileId } =
 		useRaukkChainDetail(
 			toRef(props, "chainId"),
 			toRef(props, "fuelPrices"),
@@ -89,8 +93,22 @@
 		raukkChainDropSuggestions(drops.value, props.stopNames)
 	);
 
+	/**
+	 * Fuel pricing of the flying profile, undefined while no ship type is
+	 * resolved: the burn rates belong to the hull, so without one there is
+	 * nothing to price and the rows state no estimate.
+	 */
+	const legFuel: ComputedRef<IRaukkChainLegFuel | undefined> = computed(() =>
+		profileId.value === undefined
+			? undefined
+			: {
+					profile: sourcingStore.getShipProfile(profileId.value),
+					prices: props.fuelPrices,
+				}
+	);
+
 	function legRows(shipping: IRaukkChainShipping) {
-		return raukkChainLegRows(shipping, props.stopNames);
+		return raukkChainLegRows(shipping, props.stopNames, legFuel.value);
 	}
 
 	function storageWarnings(
@@ -124,10 +142,12 @@
 							: $t("raukk_sourcing.chains.detail.loop")
 					}}
 				</span>
+				<RaukkVisitCadence
+					class="text-white/60"
+					:trips-per-day="costing.tripsPerDay" />
 				<span class="text-white/60">
 					{{
 						$t("raukk_sourcing.chains.detail.summary", {
-							trips: formatNumber(costing.tripsPerDay),
 							minutes: formatNumber(costing.roundTripMinutes),
 							cost: formatNumber(costing.dailyCost),
 						})
@@ -153,6 +173,12 @@
 						</th>
 						<th class="text-right!">
 							{{ $t("raukk_sourcing.chains.detail.utilization") }}
+						</th>
+						<th class="text-right!">
+							{{ $t("raukk_sourcing.chains.detail.duration") }}
+						</th>
+						<th class="text-right!">
+							{{ $t("raukk_sourcing.chains.detail.fuel") }}
 						</th>
 						<th class="text-right!">
 							{{ $t("raukk_sourcing.chains.detail.cost_trip") }}
@@ -224,6 +250,34 @@
 						</td>
 						<td class="text-right">
 							{{ formatNumber(row.utilizationPercent) }} %
+						</td>
+						<td class="text-right text-white/60">
+							{{ formatNumber(row.durationHours) }}
+						</td>
+						<td class="text-right text-white/60">
+							<PTooltip v-if="row.fuelOverridden">
+								<template #trigger>
+									<span class="hover:cursor-help">
+										{{
+											row.fuelCost === null
+												? "—"
+												: formatNumber(row.fuelCost)
+										}}*
+									</span>
+								</template>
+								{{
+									$t(
+										"raukk_sourcing.chains.detail.fuel_overridden"
+									)
+								}}
+							</PTooltip>
+							<template v-else>
+								{{
+									row.fuelCost === null
+										? "—"
+										: formatNumber(row.fuelCost)
+								}}
+							</template>
 						</td>
 						<td class="text-right text-white/60">
 							{{ formatNumber(row.costPerTrip) }}

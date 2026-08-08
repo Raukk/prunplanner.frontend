@@ -335,7 +335,8 @@ describe("useRaukkChainRecompute", () => {
 						? { e: { FUEL: 1 } }
 						: { d: { ORE: 1 } }
 				);
-				const ticker: string = context.planUuid === "d" ? "ORE" : "FUEL";
+				const ticker: string =
+					context.planUuid === "d" ? "ORE" : "FUEL";
 				snapshot.outputs[ticker].costPerUnit = cost;
 
 				sourcingStore.setSnapshot(context.planUuid, snapshot);

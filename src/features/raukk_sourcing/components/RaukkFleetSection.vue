@@ -16,6 +16,8 @@
 
 	// Calculations
 	import {
+		raukkBayCode,
+		raukkFleetAdvisoryRows,
 		raukkFleetRows,
 		raukkShipTypeOptions,
 		raukkUtilizationBarWidth,
@@ -30,17 +32,56 @@
 
 	// Types & Interfaces
 	import {
+		IRaukkFleetAdvisoryRow,
 		IRaukkFleetRow,
 		IRaukkShipTypeOption,
 	} from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
+	import { IRaukkShipProfile } from "@/features/raukk_sourcing/raukkSourcing.types";
 
-	const { utilization } = useRaukkFleet();
+	const { utilization, advisories } = useRaukkFleet();
 
 	const rows: ComputedRef<IRaukkFleetRow[]> = computed(() =>
 		raukkFleetRows(utilization.value, (shipTypeId: string) =>
 			sourcingStore.getShipProfile(shipTypeId)
 		)
 	);
+
+	const advisoryRows: ComputedRef<IRaukkFleetAdvisoryRow[]> = computed(() =>
+		raukkFleetAdvisoryRows(advisories.value)
+	);
+
+	/**
+	 * Name of one ship type as the advice states it: the bay code the user
+	 * shops for, plus the profile name that spells the hull out.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string} shipTypeId Ship Type Id
+	 * @returns {string} Ship type label
+	 */
+	function typeLabel(shipTypeId: string): string {
+		const profile: IRaukkShipProfile =
+			sourcingStore.getShipProfile(shipTypeId);
+
+		return `${
+			raukkBayCode(profile.cargoWeight, profile.cargoVolume) ?? "—"
+		} · ${profile.name}`;
+	}
+
+	/**
+	 * Days per visit as the advice states them. The advisory compares two
+	 * INTERVALS rather than two trip rates: at a 90 day repair cadence both
+	 * rates print as "0.01 trips/day" and the sentence compares a number
+	 * with itself.
+	 *
+	 * @author raukk
+	 *
+	 * @param {number | null} visitDays Days per visit, null where none
+	 * @returns {string} Days per visit label
+	 */
+	function visitLabel(visitDays: number | null): string {
+		return visitDays === null ? "—" : formatNumber(visitDays);
+	}
 
 	const shipTypes: IRaukkShipTypeOption[] = raukkShipTypeOptions();
 
@@ -242,6 +283,26 @@
 			</tr>
 		</tbody>
 	</PTable>
+
+	<div v-if="advisoryRows.length > 0" class="pt-3">
+		<div class="font-bold pb-2">
+			{{ $t("raukk_sourcing.fleet.advisories.title") }}
+		</div>
+		<div
+			v-for="advisory in advisoryRows"
+			:key="`RAUKKADVICE#${advisory.shipTypeId}#${advisory.suggestedShipTypeId}`"
+			class="text-white/60">
+			{{
+				$t("raukk_sourcing.fleet.advisories.row", {
+					suggested: typeLabel(advisory.suggestedShipTypeId),
+					current: typeLabel(advisory.shipTypeId),
+					assignments: advisory.assignmentCount,
+					visit: visitLabel(advisory.visitDays),
+					suggestedVisit: visitLabel(advisory.suggestedVisitDays),
+				})
+			}}
+		</div>
+	</div>
 
 	<RaukkCalibrationModal
 		v-model:show="refShowCalibration"
