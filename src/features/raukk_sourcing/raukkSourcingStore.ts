@@ -46,6 +46,7 @@ import {
 	IRaukkChainConfig,
 	IRaukkChainResult,
 	IRaukkFleetShip,
+	IRaukkLocalPrice,
 	IRaukkPlanConfig,
 	IRaukkShipProfile,
 	IRaukkShippingConfig,
@@ -867,6 +868,52 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Flags one OUTPUT ticker of a plan as sold on the local market of
+		 * its own planet, at the given ad price. The excess of that ticker
+		 * stops travelling to the exchange, which moves the plans own
+		 * numbers and everything downstream of it — the same staleness a
+		 * source change causes.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 * @param {string} ticker Output Material Ticker
+		 * @param {IRaukkLocalPrice} price Local Market Ad Price
+		 */
+		function setLocalSale(
+			planUuid: string,
+			ticker: string,
+			price: IRaukkLocalPrice
+		): void {
+			const config: IRaukkPlanConfig = ensureConfig(planUuid);
+
+			config.localSales = {
+				...config.localSales,
+				[ticker]: inertClone(price),
+			};
+
+			markStale(planUuid);
+		}
+
+		/**
+		 * Removes a local market sale flag, the ticker sells at the
+		 * exchange again. Marks the plan and all downstream plans stale.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 * @param {string} ticker Output Material Ticker
+		 */
+		function clearLocalSale(planUuid: string, ticker: string): void {
+			const findConfig: IRaukkPlanConfig | undefined =
+				configs.value[planUuid];
+
+			if (!findConfig || findConfig.localSales?.[ticker] === undefined)
+				return;
+
+			delete findConfig.localSales[ticker];
+			markStale(planUuid);
+		}
+
+		/**
 		 * Sets or clears one cadence override of a plan, days per visit
 		 * of one cargo bucket. `undefined` drops the override and the
 		 * account default applies again.
@@ -1164,6 +1211,8 @@ export const useRaukkSourcingStore = defineStore(
 			// setters
 			setTickerSource,
 			clearTickerSource,
+			setLocalSale,
+			clearLocalSale,
 			setRepairDay,
 			setPlanCadence,
 			setSnapshot,

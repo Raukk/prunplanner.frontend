@@ -1136,6 +1136,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		return {
 			repairDay: stored.repairDay,
 			sources: { ...stored.sources },
+			localSales: { ...stored.localSales },
 			cadence: { ...stored.cadence },
 			cxAnchor: stored.cxAnchor,
 		};

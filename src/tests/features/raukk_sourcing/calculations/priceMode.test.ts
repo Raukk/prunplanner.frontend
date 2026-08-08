@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 // Calculations
-import { resolveMarketPrice } from "@/features/raukk_sourcing/calculations/priceMode";
+import {
+	resolveLocalPrice,
+	resolveMarketPrice,
+} from "@/features/raukk_sourcing/calculations/priceMode";
 
 // Types & Interfaces
 import { IRaukkExchangePrices } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
@@ -61,6 +64,68 @@ describe("Raukk Sourcing: Price Mode", () => {
 			};
 
 			expect(resolveMarketPrice(apiLike, "MID")).toBe(250);
+		});
+	});
+
+	describe("resolveLocalPrice", () => {
+		it("takes a manual value as the absolute price", () => {
+			expect(
+				resolveLocalPrice({ basis: "MANUAL", value: 175 }, exchange)
+			).toBe(175);
+		});
+
+		it("clamps a negative manual value at 0", () => {
+			expect(
+				resolveLocalPrice({ basis: "MANUAL", value: -20 }, exchange)
+			).toBe(0);
+		});
+
+		it("follows each market basis with a zero offset", () => {
+			expect(
+				resolveLocalPrice({ basis: "BID", value: 0 }, exchange)
+			).toBe(100);
+			expect(
+				resolveLocalPrice({ basis: "ASK", value: 0 }, exchange)
+			).toBe(140);
+			expect(
+				resolveLocalPrice({ basis: "MID", value: 0 }, exchange)
+			).toBe(120);
+			expect(
+				resolveLocalPrice({ basis: "AVG7D", value: 0 }, exchange)
+			).toBe(115);
+			expect(
+				resolveLocalPrice({ basis: "AVG30D", value: 0 }, exchange)
+			).toBe(125);
+		});
+
+		it("undercuts the market by a positive offset", () => {
+			expect(
+				resolveLocalPrice({ basis: "BID", value: 25 }, exchange)
+			).toBe(75);
+		});
+
+		it("asks above the market for a negative offset", () => {
+			expect(
+				resolveLocalPrice({ basis: "ASK", value: -10 }, exchange)
+			).toBe(150);
+		});
+
+		it("clamps an offset larger than the basis price at 0", () => {
+			expect(
+				resolveLocalPrice({ basis: "BID", value: 500 }, exchange)
+			).toBe(0);
+		});
+
+		it("prices an offset basis without exchange data", () => {
+			expect(
+				resolveLocalPrice({ basis: "MID", value: 5 }, undefined)
+			).toBe(0);
+			expect(
+				resolveLocalPrice({ basis: "MID", value: -5 }, undefined)
+			).toBe(5);
+			expect(
+				resolveLocalPrice({ basis: "MANUAL", value: 12 }, undefined)
+			).toBe(12);
 		});
 	});
 });

@@ -1,5 +1,8 @@
 // Types & Interfaces
-import { RAUKK_PRICE_MODE } from "@/features/raukk_sourcing/raukkSourcing.types";
+import {
+	IRaukkLocalPrice,
+	RAUKK_PRICE_MODE,
+} from "@/features/raukk_sourcing/raukkSourcing.types";
 import { IRaukkExchangePrices } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 
 /**
@@ -36,6 +39,32 @@ export function resolveMarketPrice(
 		default:
 			return 0;
 	}
+}
+
+/**
+ * Resolves the ȼ per unit of one local market ad.
+ *
+ * `MANUAL` takes the value as the absolute price, every market basis
+ * takes it as an OFFSET subtracted from that basis price — positive
+ * undercuts the market, negative asks above it. The offset itself is
+ * unrestricted, only the result is clamped at 0: a negative price is no
+ * price. Missing exchange data resolves the basis to 0 through
+ * {@link resolveMarketPrice}, an offset basis without data therefore
+ * yields `max(0, -value)`.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkLocalPrice} spec Local Price Specification
+ * @param {IRaukkExchangePrices | undefined} exchange Exchange data
+ * @returns {number} Unit price, >= 0
+ */
+export function resolveLocalPrice(
+	spec: IRaukkLocalPrice,
+	exchange: IRaukkExchangePrices | undefined
+): number {
+	if (spec.basis === "MANUAL") return Math.max(0, spec.value);
+
+	return Math.max(0, resolveMarketPrice(exchange, spec.basis) - spec.value);
 }
 
 /**

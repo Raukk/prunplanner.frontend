@@ -50,9 +50,28 @@ export type RAUKK_REPAIR_DAY = 30 | 60 | 90 | 120;
 /** Synthetic multi-producer sources */
 export type RAUKK_SOURCE_AGGREGATE = "AGG_AVG" | "AGG_MAX";
 
+/**
+ * Price of one local market ad, shared by the sell and the buy side.
+ *
+ * `MANUAL` states the absolute ȼ per unit in `value`. Any market basis
+ * — the five {@link RAUKK_PRICE_MODE} values — reads that basis price
+ * and subtracts `value` as an OFFSET: positive undercuts the market,
+ * negative asks above it, zero follows it exactly. The offset itself is
+ * unrestricted in sign and magnitude, only the RESULT is clamped at
+ * >= 0, a negative price being no price at all.
+ *
+ * @author raukk
+ */
+export interface IRaukkLocalPrice {
+	basis: "MANUAL" | RAUKK_PRICE_MODE;
+	/** Absolute ȼ per unit for `MANUAL`, the offset for a market basis */
+	value: number;
+}
+
 export type IRaukkTickerSource =
 	| { mode: "market"; priceMode: RAUKK_PRICE_MODE }
-	| { mode: "plan"; sourcePlanUuid: string | RAUKK_SOURCE_AGGREGATE };
+	| { mode: "plan"; sourcePlanUuid: string | RAUKK_SOURCE_AGGREGATE }
+	| { mode: "local"; price: IRaukkLocalPrice };
 
 /** Per-plan sourcing configuration, keyed into store by plan uuid */
 export interface IRaukkPlanConfig {
@@ -61,6 +80,11 @@ export interface IRaukkPlanConfig {
 	 * consumables and repair materials alike. Tickers without an
 	 * entry default to market at the plan's CX preference price. */
 	sources: Record<string, IRaukkTickerSource>;
+	/** Output tickers whose excess is sold on the LOCAL MARKET of the
+	 * producing planet instead of at the exchange, keyed by output
+	 * ticker with the price the ad asks. Absence is the default: the
+	 * ticker sells at the CX as it always did. */
+	localSales?: Record<string, IRaukkLocalPrice>;
 	/** Cadence caps of THIS plan as a consumer, days per visit and cargo
 	 * bucket. Absent buckets follow the account default; a set value
 	 * replaces it outright and may be any positive day count. */

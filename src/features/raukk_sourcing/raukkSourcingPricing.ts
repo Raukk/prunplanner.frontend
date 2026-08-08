@@ -3,7 +3,10 @@
 // logic stays unit testable in isolation.
 
 // Calculation Utils
-import { resolveMarketPrice } from "@/features/raukk_sourcing/calculations/priceMode";
+import {
+	resolveLocalPrice,
+	resolveMarketPrice,
+} from "@/features/raukk_sourcing/calculations/priceMode";
 import {
 	raukkEqualWithin,
 	raukkSettledWithin,
@@ -102,6 +105,8 @@ export function aggregateProducerPrice(
  *  - no configuration entry: the plans existing CX preference price,
  *    matching the behavior of the untouched plan calculation
  *  - `{ mode: "market" }`: exchange data at the configured price mode
+ *  - `{ mode: "local" }`: the local market ad price of the consuming
+ *    planet, bought there and therefore drawn from no plan at all
  *  - `{ mode: "plan" }`: the source snapshots `costPerUnit`, reported
  *    with its plan uuid so the daily units land in `draws`
  *
@@ -130,6 +135,14 @@ export function createRaukkPriceResolver(
 				price: resolveMarketPrice(
 					context.getExchange(ticker),
 					source.priceMode
+				),
+			};
+
+		if (source.mode === "local")
+			return {
+				price: resolveLocalPrice(
+					source.price,
+					context.getExchange(ticker)
 				),
 			};
 

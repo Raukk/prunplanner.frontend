@@ -26,6 +26,17 @@ export const RaukkRepairDaySchema = z.union([
 	z.literal(120),
 ]);
 
+/**
+ * Price of one local market ad. `MANUAL` states the absolute ȼ per unit,
+ * a market basis states an offset subtracted from that basis price; the
+ * offset may carry any sign and any magnitude, only the resolved price is
+ * clamped at >= 0 (see `resolveLocalPrice`).
+ */
+export const RaukkLocalPriceSchema = z.object({
+	basis: z.enum(["MANUAL", "BID", "ASK", "MID", "AVG7D", "AVG30D"]),
+	value: z.number(),
+});
+
 export const RaukkTickerSourceSchema = z.discriminatedUnion("mode", [
 	z.object({
 		mode: z.literal("market"),
@@ -35,6 +46,11 @@ export const RaukkTickerSourceSchema = z.discriminatedUnion("mode", [
 		mode: z.literal("plan"),
 		// concrete plan uuid or one of the synthetic aggregates
 		sourcePlanUuid: z.string().min(1),
+	}),
+	z.object({
+		// bought on the local market of the consuming planet
+		mode: z.literal("local"),
+		price: RaukkLocalPriceSchema,
 	}),
 ]);
 
@@ -293,6 +309,9 @@ export const RaukkSnapshotLaneSchema = z.object({
 export const RaukkPlanConfigSchema = z.object({
 	repairDay: RaukkRepairDaySchema,
 	sources: z.record(z.string(), RaukkTickerSourceSchema),
+	// output tickers sold on the local market, absent in every payload
+	// predating the local market model
+	localSales: z.record(z.string(), RaukkLocalPriceSchema).optional(),
 	// absent in every payload predating the cadence model
 	cadence: RaukkCadenceOverridesSchema.optional(),
 	// exchange this plan is anchored at, absent means the account mode
