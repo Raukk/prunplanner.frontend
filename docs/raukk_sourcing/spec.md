@@ -226,6 +226,10 @@ other stores. Shape (indicative):
   in `src/tests/features/raukk_sourcing/`. Follow CLAUDE.md repo
   conventions throughout. Mind knip: no dead exports.
 
+## Extensions
+
+- Local market sales/purchases (LM sell / LM buy): local-market.md.
+
 ## Out of scope (do not build)
 
 - Shipping costs — see shipping-stretch.md (keep the zero-cost slot).
