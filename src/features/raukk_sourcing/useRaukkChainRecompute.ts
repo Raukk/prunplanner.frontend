@@ -8,6 +8,10 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 import { useCXData } from "@/features/cx/useCXData";
 import { usePlanCalculation } from "@/features/planning/usePlanCalculation";
 import { computePlanSnapshot } from "@/features/raukk_sourcing/useRaukkSnapshot";
+import {
+	computeChainResults,
+	IRaukkChainComputeError,
+} from "@/features/raukk_sourcing/useRaukkChainCompute";
 
 // Graph
 import {
@@ -160,10 +164,59 @@ export function useRaukkChainRecompute() {
 				// yield back to vue and update the progress display
 				await new Promise((resolve) => setTimeout(resolve, 0));
 			}
+
+			await recomputeShippingChains();
 		} finally {
 			running.value = false;
 			current.value = undefined;
 		}
+	}
+
+	/**
+	 * Recomputes every shipping chain after the member snapshots.
+	 *
+	 * A chains trips depend on EVERY member plans flows, so it can only
+	 * be costed once those plans have written their frozen flows — which
+	 * is exactly why this runs at the END of the pass and not inside any
+	 * single plans snapshot (shipping-chains-v2.md, "Architecture").
+	 *
+	 * One round convergence lag, accepted and documented: the plans of
+	 * this run priced their claimed flows from the PREVIOUS chain
+	 * results, and the results written here are what the next run will
+	 * use. The numbers settle on the following pass, exactly like the v1
+	 * subscription data. Errors are recorded per chain, never thrown —
+	 * the plan snapshots of the run stay valid.
+	 *
+	 * @author raukk
+	 *
+	 * @returns {Promise<void>}
+	 */
+	async function recomputeShippingChains(): Promise<void> {
+		let chainErrors: IRaukkChainComputeError[];
+
+		try {
+			chainErrors = await computeChainResults();
+		} catch (error) {
+			chainErrors = [
+				{
+					chainId: "",
+					message:
+						error instanceof Error
+							? error.message
+							: "unknown error",
+				},
+			];
+		}
+
+		chainErrors.forEach((chainError) =>
+			errors.value.push({
+				planUuid: chainError.chainId,
+				planName: chainError.chainId
+					? `chain '${chainError.chainId}'`
+					: "shipping chains",
+				message: chainError.message,
+			})
+		);
 	}
 
 	/**

@@ -4,6 +4,10 @@
 
 // Types & Interfaces
 import {
+	IRaukkChain,
+	IRaukkChainConfig,
+	IRaukkChainResult,
+	IRaukkFleetShip,
 	IRaukkPlanConfig,
 	IRaukkShipProfile,
 	IRaukkShippingConfig,
@@ -52,4 +56,11 @@ export interface IRaukkExportPayload {
 	shipProfiles: Record<string, IRaukkShipProfile>;
 	/** Account global shipping configuration, absent in a v1 payload */
 	shippingConfig: IRaukkShippingConfig;
+	/** Chains, their results and the fleet: absent in a v2.0 payload */
+	chains: Record<string, IRaukkChain>;
+	chainResults: Record<string, IRaukkChainResult>;
+	fleet: Record<string, IRaukkFleetShip>;
+	/** Key: lane pair key or chain key, value: ship type id */
+	assignments: Record<string, string>;
+	chainConfig: IRaukkChainConfig;
 }

@@ -65,6 +65,21 @@ export interface IRaukkPairLookups {
 	subscribedOf(ticker: string): number;
 	/** Ship profile of one pair, by its pair key */
 	profileOf(pairKey: string): IRaukkResolvedShipProfile;
+	/**
+	 * Units per day a CHAIN already claimed off one lane, and which the
+	 * pair therefore must not carry a second time (v2, see
+	 * shipping-chains-v2.md "Flow claiming"). `counterpart` is the source
+	 * plans planet on a sourcing lane and `undefined` on the plans own
+	 * exchange lane — the exchange has no plan uuid, and naming it by
+	 * code here would drag the chain models stop vocabulary into the v1
+	 * pair math. Absent lookup: nothing is claimed, which is the state
+	 * before any chain exists.
+	 */
+	claimedUnitsOf?(
+		ticker: string,
+		counterpart: string | undefined,
+		inbound: boolean
+	): number;
 	routes?: IRaukkRouteDistance;
 }
 
@@ -130,6 +145,12 @@ export function raukkCxPairKey(planUuid: string): string {
  * Pairs whose planet, system or route cannot be resolved are dropped —
  * an unroutable lane charges nothing rather than guessing a distance.
  *
+ * Cargo a chain already claimed is subtracted per lane through
+ * `claimedUnitsOf` before anything is loaded: those units ride the chain
+ * and take their ȼ per unit from its stored result, so charging them here
+ * as well would bill the same freight twice. A lane left with nothing
+ * simply disappears.
+ *
  * @author raukk
  *
  * @param {IRaukkPairPlanFlows} flows Own daily flows of the plan
@@ -157,26 +178,52 @@ export function buildShippingPairs(
 	const marketBack: IRaukkShippedTicker[] = [];
 	const sourcedBack: Map<string, IRaukkShippedTicker[]> = new Map();
 
+	/** Units of one lane a chain took over, zero without any chain */
+	function unclaimed(
+		ticker: string,
+		counterpart: string | undefined,
+		inbound: boolean,
+		unitsPerDay: number
+	): number {
+		return Math.max(
+			unitsPerDay -
+				(lookups.claimedUnitsOf?.(ticker, counterpart, inbound) ?? 0),
+			0
+		);
+	}
+
 	flows.inputs.forEach((entry) => {
 		if (entry.unitsPerDay <= 0) return;
 
 		const origins: IRaukkTickerOrigin[] = lookups.originOf(entry.ticker);
 
 		if (origins.length === 0) {
-			marketBack.push(entry);
+			const units: number = unclaimed(
+				entry.ticker,
+				undefined,
+				true,
+				entry.unitsPerDay
+			);
+
+			if (units > 0) marketBack.push({ ...entry, unitsPerDay: units });
 			return;
 		}
 
 		origins.forEach((origin) => {
 			if (origin.share <= 0) return;
 
+			const units: number = unclaimed(
+				entry.ticker,
+				lookups.planetOf(origin.planUuid),
+				true,
+				entry.unitsPerDay * origin.share
+			);
+			if (units <= 0) return;
+
 			const cargo: IRaukkShippedTicker[] =
 				sourcedBack.get(origin.planUuid) ?? [];
 
-			cargo.push({
-				...entry,
-				unitsPerDay: entry.unitsPerDay * origin.share,
-			});
+			cargo.push({ ...entry, unitsPerDay: units });
 			sourcedBack.set(origin.planUuid, cargo);
 		});
 	});
@@ -233,9 +280,14 @@ export function buildShippingPairs(
 	const cxOut: IRaukkShippedTicker[] = flows.outputs
 		.map((entry) => ({
 			...entry,
-			unitsPerDay: Math.max(
-				entry.unitsPerDay - lookups.subscribedOf(entry.ticker),
-				0
+			unitsPerDay: unclaimed(
+				entry.ticker,
+				undefined,
+				false,
+				Math.max(
+					entry.unitsPerDay - lookups.subscribedOf(entry.ticker),
+					0
+				)
 			),
 		}))
 		.filter((entry) => entry.unitsPerDay > 0);

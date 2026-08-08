@@ -27,6 +27,13 @@ vi.mock("@/features/raukk_sourcing/useRaukkSnapshot", () => ({
 		mockComputePlanSnapshot(...args),
 }));
 
+const mockComputeChainResults = vi.fn();
+
+vi.mock("@/features/raukk_sourcing/useRaukkChainCompute", () => ({
+	computeChainResults: (...args: unknown[]) =>
+		mockComputeChainResults(...args),
+}));
+
 // Composables
 import { useRaukkChainRecompute } from "@/features/raukk_sourcing/useRaukkChainRecompute";
 
@@ -93,6 +100,8 @@ describe("useRaukkChainRecompute", () => {
 
 		mockCalculate.mockResolvedValue({ profit: 1 });
 		mockComputePlanSnapshot.mockResolvedValue({});
+		mockComputeChainResults.mockReset();
+		mockComputeChainResults.mockResolvedValue([]);
 
 		// a <- b <- c
 		sourcingStore.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
@@ -214,6 +223,58 @@ describe("useRaukkChainRecompute", () => {
 
 		expect(mockComputePlanSnapshot).not.toHaveBeenCalled();
 		expect(total.value).toBe(0);
+	});
+
+	it("recomputes the shipping chains after the plans", async () => {
+		const order: string[] = [];
+
+		mockComputePlanSnapshot.mockImplementation(
+			async (context: { planUuid: string }) => {
+				order.push(context.planUuid);
+				return {};
+			}
+		);
+		mockComputeChainResults.mockImplementation(async () => {
+			order.push("chains");
+			return [];
+		});
+
+		const { recomputeChain, errors } = useRaukkChainRecompute();
+		await recomputeChain("b");
+
+		// a chains trips depend on EVERY member plans frozen flows, so it
+		// can only be costed once the whole pass has written them
+		expect(order).toStrictEqual(["a", "b", "c", "chains"]);
+		expect(errors.value).toStrictEqual([]);
+	});
+
+	it("records a failing chain without losing the plan snapshots", async () => {
+		mockComputeChainResults.mockResolvedValue([
+			{ chainId: "c1", message: "no prices" },
+		]);
+
+		const { recomputeChain, errors, done } = useRaukkChainRecompute();
+		await recomputeChain("b");
+
+		expect(done.value).toBe(3);
+		expect(errors.value).toStrictEqual([
+			{
+				planUuid: "c1",
+				planName: "chain 'c1'",
+				message: "no prices",
+			},
+		]);
+	});
+
+	it("records a chain pass that throws outright", async () => {
+		mockComputeChainResults.mockRejectedValue(new Error("boom"));
+
+		const { recomputeChain, errors } = useRaukkChainRecompute();
+		await recomputeChain("b");
+
+		expect(errors.value).toStrictEqual([
+			{ planUuid: "", planName: "shipping chains", message: "boom" },
+		]);
 	});
 
 	it("refuses a second, concurrent run", async () => {

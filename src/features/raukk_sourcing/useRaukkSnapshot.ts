@@ -19,6 +19,13 @@ import {
 } from "@/features/raukk_sourcing/calculations/shipping";
 import { buildShippingPairs } from "@/features/raukk_sourcing/calculations/shippingPairs";
 import {
+	buildPlanChainFlows,
+	mergeClaimedShipping,
+	raukkClaimedUnitsLookup,
+	raukkPlanetCxCode,
+} from "@/features/raukk_sourcing/calculations/shippingFlows";
+import { raukkAssignedShipTypeId } from "@/features/raukk_sourcing/calculations/shippingFleet";
+import {
 	RAUKK_FUEL_TICKERS,
 	raukkResolveShipProfile,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
@@ -38,16 +45,24 @@ import { inertClone } from "@/util/data";
 import { ICXData } from "@/stores/planningStore.types";
 import { IPlanResult } from "@/features/planning/usePlanCalculation.types";
 import {
+	IRaukkChainFlow,
+	IRaukkChainFlowCost,
+	IRaukkChainResult,
 	IRaukkPlanConfig,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
+	IRaukkSnapshotLane,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import {
 	IRaukkShippedTicker,
 	IRaukkShippingPair,
 	IRaukkShippingResult,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
-import { IRaukkTickerOrigin } from "@/features/raukk_sourcing/calculations/shippingPairs";
+import {
+	IRaukkPairLookups,
+	IRaukkPairPlanFlows,
+	IRaukkTickerOrigin,
+} from "@/features/raukk_sourcing/calculations/shippingPairs";
 import {
 	IRaukkExchangePrices,
 	IRaukkMaterialUnits,
@@ -169,8 +184,15 @@ interface IRaukkShippingInput {
 function buildPlanShippingPairs(
 	input: IRaukkShippingInput
 ): IRaukkShippingPair[] {
-	const sourcingStore = useRaukkSourcingStore();
+	return buildShippingPairs(
+		planCargo(input),
+		planLookups(input),
+		input.shippingConfig
+	);
+}
 
+/** The plans netted material I/O, split into arriving and leaving */
+function planCargo(input: IRaukkShippingInput): IRaukkPairPlanFlows {
 	const inputs: IRaukkShippedTicker[] = [];
 	const outputs: IRaukkShippedTicker[] = [];
 
@@ -188,66 +210,177 @@ function buildPlanShippingPairs(
 		else outputs.push(cargo);
 	});
 
-	return buildShippingPairs(
-		{
-			planUuid: input.planUuid,
-			planetNaturalId: input.planetNaturalId,
-			inputs,
-			outputs,
+	return {
+		planUuid: input.planUuid,
+		planetNaturalId: input.planetNaturalId,
+		inputs,
+		outputs,
+	};
+}
+
+/**
+ * Flows a chain already claimed off this plan, from the STORED chain
+ * results.
+ *
+ * Claiming is keyed by the flows endpoints, so two plans sitting on the
+ * SAME planet share their claims — a known and accepted limitation of
+ * addressing stops by planet, which is what the user authors.
+ *
+ * @author raukk
+ *
+ * @param {string} planetNaturalId Own planet
+ * @returns {IRaukkChainFlowCost[]} Claimed flows touching this planet
+ */
+function planClaimedFlows(planetNaturalId: string): IRaukkChainFlowCost[] {
+	const sourcingStore = useRaukkSourcingStore();
+
+	const claimed: IRaukkChainFlowCost[] = [];
+
+	Object.values(sourcingStore.chainResults).forEach(
+		(result: IRaukkChainResult) =>
+			result.flows.forEach((flow: IRaukkChainFlowCost) => {
+				if (
+					flow.fromStop === planetNaturalId ||
+					flow.toStop === planetNaturalId
+				)
+					claimed.push(flow);
+			})
+	);
+
+	return claimed;
+}
+
+/** Everything about other plans, chains and profiles a plan needs */
+function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
+	const sourcingStore = useRaukkSourcingStore();
+
+	const claimedUnits = raukkClaimedUnitsLookup(
+		planClaimedFlows(input.planetNaturalId),
+		input.planetNaturalId
+	);
+	const cxCode: string | undefined = raukkPlanetCxCode(input.planetNaturalId);
+
+	return {
+		originOf: (ticker: string): IRaukkTickerOrigin[] => {
+			const fromPlanUuid: string | undefined =
+				input.resolver(ticker).fromPlanUuid;
+
+			if (fromPlanUuid === undefined) return [];
+
+			if (!isAggregateSource(fromPlanUuid))
+				return [{ planUuid: fromPlanUuid, share: 1 }];
+
+			// an aggregate draws from the whole producer pool, split
+			// exactly as `splitAggregateDraws` splits the draws
+			const producers: IRaukkProducerOption[] =
+				input.getProducers(ticker);
+			const unitsTotal: number = producers.reduce(
+				(sum, producer) => sum + producer.unitsPerDay,
+				0
+			);
+
+			return producers.map((producer) => ({
+				planUuid: producer.planUuid,
+				share:
+					unitsTotal > 0
+						? producer.unitsPerDay / unitsTotal
+						: 1 / producers.length,
+			}));
 		},
-		{
-			originOf: (ticker: string): IRaukkTickerOrigin[] => {
-				const fromPlanUuid: string | undefined =
-					input.resolver(ticker).fromPlanUuid;
+		planetOf: (planUuid: string): string | undefined =>
+			sourcingStore.snapshots[planUuid]?.planetNaturalId,
+		subscribedOf: (ticker: string): number =>
+			sourcingStore.subscription(input.planUuid, ticker).totalDrawnPerDay,
+		/*
+		 * A lane whose cargo a chain carries must not be charged for it
+		 * twice. The counterpart of the plans own market lane is its
+		 * exchange, which a chain addresses by CODE.
+		 */
+		claimedUnitsOf: (
+			ticker: string,
+			counterpart: string | undefined,
+			inbound: boolean
+		): number => {
+			const stop: string | undefined = counterpart ?? cxCode;
+			if (stop === undefined) return 0;
 
-				if (fromPlanUuid === undefined) return [];
-
-				if (!isAggregateSource(fromPlanUuid))
-					return [{ planUuid: fromPlanUuid, share: 1 }];
-
-				// an aggregate draws from the whole producer pool, split
-				// exactly as `splitAggregateDraws` splits the draws
-				const producers: IRaukkProducerOption[] =
-					input.getProducers(ticker);
-				const unitsTotal: number = producers.reduce(
-					(sum, producer) => sum + producer.unitsPerDay,
-					0
-				);
-
-				return producers.map((producer) => ({
-					planUuid: producer.planUuid,
-					share:
-						unitsTotal > 0
-							? producer.unitsPerDay / unitsTotal
-							: 1 / producers.length,
-				}));
-			},
-			planetOf: (planUuid: string): string | undefined =>
-				sourcingStore.snapshots[planUuid]?.planetNaturalId,
-			subscribedOf: (ticker: string): number =>
-				sourcingStore.subscription(input.planUuid, ticker)
-					.totalDrawnPerDay,
-			/*
-			 * The ȼ constants of a profile may be "derive": resolving
-			 * them against the plans own price resolver is the ONLY
-			 * place a price meets a profile, everything downstream is
-			 * pure math over plain numbers.
-			 */
-			profileOf: (pairKey: string) =>
-				raukkResolveShipProfile(
-					sourcingStore.getShipProfile(
-						input.shippingConfig.perEdgeProfile?.[pairKey] ??
-							input.shippingConfig.defaultProfileId
-					),
-					(ticker: string) => input.resolver(ticker).price
+			return claimedUnits(ticker, stop, inbound);
+		},
+		/*
+		 * The ȼ constants of a profile may be "derive": resolving
+		 * them against the plans own price resolver is the ONLY
+		 * place a price meets a profile, everything downstream is
+		 * pure math over plain numbers.
+		 */
+		profileOf: (pairKey: string) =>
+			raukkResolveShipProfile(
+				sourcingStore.getShipProfile(
+					raukkAssignedShipTypeId(
+						pairKey,
+						sourcingStore.assignments,
+						input.shippingConfig
+					)
 				),
-		},
+				(ticker: string) => input.resolver(ticker).price
+			),
+	};
+}
+
+/**
+ * The plans own cargo as directed flows, frozen onto its snapshot for
+ * the account level chain step.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingInput} input Plan flows, resolver and config
+ * @returns {IRaukkChainFlow[]} Directed flows the plan owns
+ */
+function buildPlanFlows(input: IRaukkShippingInput): IRaukkChainFlow[] {
+	return buildPlanChainFlows(
+		planCargo(input),
+		planLookups(input),
 		input.shippingConfig
 	);
 }
 
 /**
- * Shipping cost of every route pair one plan owns.
+ * Per lane summary of a plans shipping, the fleet rollups input.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingResult} shipping Shipping result of the plan
+ * @param {IRaukkShippingConfig} config Shipping configuration
+ * @returns {IRaukkSnapshotLane[]} Lane summaries
+ */
+function buildPlanLanes(
+	shipping: IRaukkShippingResult,
+	config: IRaukkShippingConfig
+): IRaukkSnapshotLane[] {
+	const sourcingStore = useRaukkSourcingStore();
+
+	return shipping.pairs.map((pair) => ({
+		pairKey: pair.pairKey,
+		shipTypeId: raukkAssignedShipTypeId(
+			pair.pairKey,
+			sourcingStore.assignments,
+			config
+		),
+		tripsPerDay: pair.tripsPerDay,
+		roundTripMinutes: pair.roundTripMinutes,
+		hired: pair.hired,
+	}));
+}
+
+/**
+ * Shipping cost of every route pair one plan owns, plus the freight of
+ * the flows a chain took over.
+ *
+ * Claimed flows left the pairs — the pair construction subtracted them —
+ * and take their ȼ per unit from the STORED chain result instead, which
+ * is where the one round convergence lag of the chain model becomes
+ * visible: on the first pass a chain result is still the previous
+ * rounds. The shipping FRACTION stays the plans own lanes only; a chain
+ * is flown for the whole empire and is accounted on the fleet page.
  *
  * @author raukk
  *
@@ -255,10 +388,21 @@ function buildPlanShippingPairs(
  * @returns {IRaukkShippingResult} Per pair and per ticker shipping
  */
 function computePlanShipping(input: IRaukkShippingInput): IRaukkShippingResult {
-	return calculateShipping(
-		buildPlanShippingPairs(input),
+	const pairs: IRaukkShippingPair[] = buildPlanShippingPairs(input);
+
+	const result: IRaukkShippingResult = calculateShipping(
+		pairs,
 		input.shippingConfig,
 		(ticker: string) => input.resolver(ticker).price
+	);
+
+	if (!input.shippingConfig.enabled) return result;
+
+	return mergeClaimedShipping(
+		result,
+		pairs,
+		planClaimedFlows(input.planetNaturalId),
+		input.planetNaturalId
 	);
 }
 
@@ -396,14 +540,16 @@ export async function computePlanSnapshot(
 		(ticker: string) => resolver(ticker).price
 	);
 
-	const shipping: IRaukkShippingResult = computePlanShipping({
+	const shippingInput: IRaukkShippingInput = {
 		planUuid: context.planUuid,
 		planetNaturalId: context.planetNaturalId,
 		planResult: context.planResult,
 		resolver,
 		getProducers,
 		shippingConfig,
-	});
+	};
+
+	const shipping: IRaukkShippingResult = computePlanShipping(shippingInput);
 
 	const result: IRaukkTrueCostResult = calculateTrueCosts({
 		planResult: context.planResult,
@@ -439,7 +585,11 @@ export async function computePlanSnapshot(
 			sourcingStore.getSnapshot(sourcePlanUuid)
 		),
 		...(shippingConfig.enabled
-			? { shippingFraction: shipping.shippingFraction }
+			? {
+					flows: buildPlanFlows(shippingInput),
+					lanes: buildPlanLanes(shipping, shippingConfig),
+					shippingFraction: shipping.shippingFraction,
+				}
 			: {}),
 	};
 

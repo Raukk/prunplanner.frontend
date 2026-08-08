@@ -93,6 +93,113 @@ export const RaukkShippingConfigSchema = z.object({
 	lmRates: z.record(z.string(), z.number()).optional(),
 });
 
+/**
+ * One chain: an ordered LOOP of stops, repeats allowed.
+ *
+ * `stops` is deliberately NOT length checked here — the store action
+ * refuses a loop of fewer than two stops with a message the editor can
+ * show, while an import of a hand edited payload should not lose the
+ * whole store over one broken chain. Everything optional is optional for
+ * the usual reason: a v1 or v2.0 payload knows no chains at all.
+ */
+export const RaukkChainSchema = z.object({
+	chainId: z.string().min(1),
+	name: z.string().optional(),
+	stops: z.array(z.string().min(1)),
+	profileId: z.string().optional(),
+	lmRatePerTrip: z.number().optional(),
+	autoCxSplit: z.boolean().optional(),
+});
+
+/** Account wide chain knobs, every field defaulted like the v1 config */
+export const RaukkChainConfigSchema = z.object({
+	cxSplitDetourParsecs: z.number().default(6),
+	legUtilizationSplitThreshold: z.number().default(0.25),
+	densityRef: z.number().positive().default(3.28),
+	stlCostPerMegameter: z.number().default(0),
+	autoCxSplit: z.boolean().default(true),
+	sameSystemPricing: z.enum(["average", "worst"]).default("average"),
+});
+
+export const RaukkChainFlowSchema = z.object({
+	flowId: z.string().optional(),
+	ticker: z.string(),
+	fromStop: z.string(),
+	toStop: z.string(),
+	unitsPerDay: z.number(),
+	weightPerUnit: z.number(),
+	volumePerUnit: z.number(),
+});
+
+export const RaukkChainFlowCostSchema = z.object({
+	ticker: z.string(),
+	fromStop: z.string(),
+	toStop: z.string(),
+	unitsPerDay: z.number(),
+	costPerUnit: z.number(),
+});
+
+export const RaukkChainCostingSchema = z.object({
+	stops: z.array(z.string()),
+	tripsPerDay: z.number(),
+	roundTripMinutes: z.number(),
+	bindingLegIndex: z.number(),
+	dailyCost: z.number(),
+	shippingFraction: z.number(),
+});
+
+/**
+ * Stored computation output of one chain. Recomputed by the chain pass,
+ * never hand edited, so the shape is validated but nothing is guessed:
+ * an incomplete result is broken data, not an old payload.
+ */
+export const RaukkChainResultSchema = z.object({
+	chainId: z.string().min(1),
+	computedAt: z.string(),
+	stale: z.boolean(),
+	profileId: z.string(),
+	hired: z.boolean(),
+	splitApplied: z.boolean(),
+	unsplit: RaukkChainCostingSchema,
+	split: z.array(RaukkChainCostingSchema).default([]),
+	splitTrigger: z
+		.object({
+			legIndex: z.number(),
+			cxCode: z.string(),
+			detourParsecs: z.number(),
+		})
+		.nullable()
+		.default(null),
+	tripsPerDay: z.number(),
+	roundTripMinutes: z.number(),
+	bindingLegIndex: z.number(),
+	dailyCost: z.number(),
+	shippingFraction: z.number(),
+	shipMinutesPerDay: z.number(),
+	flows: z.array(RaukkChainFlowCostSchema).default([]),
+	perUnit: z.record(z.string(), z.number()).default({}),
+	memberPlanUuids: z.array(z.string()).default([]),
+	config: RaukkChainConfigSchema.prefault({}),
+});
+
+/**
+ * One ship type of the fleet. A count of zero is legal and means "none
+ * of these any more" — the utilization then has no denominator and is
+ * reported as unknown rather than as free capacity.
+ */
+export const RaukkFleetShipSchema = z.object({
+	count: z.number().int().nonnegative(),
+	designName: z.string().optional(),
+});
+
+export const RaukkSnapshotLaneSchema = z.object({
+	pairKey: z.string(),
+	shipTypeId: z.string(),
+	tripsPerDay: z.number(),
+	roundTripMinutes: z.number(),
+	hired: z.boolean(),
+});
+
 export const RaukkPlanConfigSchema = z.object({
 	repairDay: RaukkRepairDaySchema,
 	sources: z.record(z.string(), RaukkTickerSourceSchema),
@@ -124,6 +231,10 @@ export const RaukkSnapshotSchema = z.object({
 	draws: z.record(z.string(), z.record(z.string(), z.number())),
 	config: RaukkPlanConfigSchema.optional(),
 	baseFraction: z.number().optional(),
+	// v2: only written while shipping is enabled, absent in every payload
+	// written before the chain and fleet slices existed
+	flows: z.array(RaukkChainFlowSchema).optional(),
+	lanes: z.array(RaukkSnapshotLaneSchema).optional(),
 	// null: the profile of a pair claims no ship at all, so the fraction
 	// has no denominator and is displayed as an em-dash
 	shippingFraction: z.number().nullable().optional(),
@@ -134,7 +245,10 @@ export const RaukkSnapshotSchema = z.object({
  *
  * `shipProfiles` and `shippingConfig` are defaulted, not required: a v1
  * payload predates shipping entirely and has to import into the
- * shipped-off default state instead of failing validation.
+ * shipped-off default state instead of failing validation. The five v2
+ * slices — chains, their results, the fleet, the assignments and the
+ * chain configuration — follow the very same rule for the very same
+ * reason: a v2.0 export knows none of them.
  */
 export const RaukkSourcingExportSchema = z.object({
 	version: z.number().int().positive().default(1),
@@ -142,6 +256,11 @@ export const RaukkSourcingExportSchema = z.object({
 	snapshots: z.record(z.string(), RaukkSnapshotSchema),
 	shipProfiles: z.record(z.string(), RaukkShipProfileSchema).default({}),
 	shippingConfig: RaukkShippingConfigSchema.prefault({}),
+	chains: z.record(z.string(), RaukkChainSchema).default({}),
+	chainResults: z.record(z.string(), RaukkChainResultSchema).default({}),
+	fleet: z.record(z.string(), RaukkFleetShipSchema).default({}),
+	assignments: z.record(z.string(), z.string()).default({}),
+	chainConfig: RaukkChainConfigSchema.prefault({}),
 });
 
 export type RaukkSourcingExportType = z.infer<typeof RaukkSourcingExportSchema>;
