@@ -79,6 +79,59 @@ storage:
 - Side benefit: flows ending at the CX merge with the plan's normal
   CX buys/sells amortization at that anchor.
 
+## Low-utilization leg drop rule (USER)
+
+Chains force every leg to the binding leg's frequency, so a
+low-volume leg (e.g. 5% of capacity) rides nearly empty on every
+trip. Default behavior: drop such a leg's stop out of the chain onto
+its own standalone loop, which naturally runs LESS OFTEN (pair
+frequency = its own load / capacity) — unless the doubling-back
+distance (e.g. a far CX) makes staying in the chain cheaper.
+
+- Trigger: leg utilization (binding dimension) below
+  `legUtilizationSplitThreshold` (config, DEFAULT 0.25) → evaluate.
+- Criterion is the honest cost comparison, not the threshold:
+  cost(chain with stop) vs cost(chain without stop) + cost(dropped
+  flows as standalone pair at their own frequency). Auto-drop when
+  cheaper, per-chain override toggle, suggestion chip otherwise —
+  same pattern as the CX-split rule.
+- Minimum standalone frequency is bounded by the storage cross-check
+  (a 60t-per-run cadence must fit the stop's storage days).
+- Canonical test case (USER): MFK — bulky metals + plastics in, tiny
+  light MFK out. A dozen 5t MFK runs must lose to one 60t run unless
+  the exchange is much farther than the two producers.
+
+## Same-system legs — real modeling replaces the flat cost (USER)
+
+In-game it is often better to jump to an adjacent system and back
+than to fly sublight across a system, unless the two orbits are
+close. VERIFIED data source (open FIO API — the same one
+orbit.em32.site renders): `rest.fnar.net/planet/{naturalId}` carries
+full orbital elements (`OrbitSemiMajorAxis` in meters,
+`OrbitEccentricity`, `OrbitInclination`, `OrbitRightAscension`,
+`OrbitPeriapsis`); best/worst same-system planet separation ≈
+|a1−a2| and a1+a2 from the semi-major axes.
+
+- v2 same-system leg cost = min(STL estimate over the orbital
+  distance band, 2-jump out-and-back via the nearest connected
+  system) — computed, replacing v1's manual `sameSystemFlatCost`
+  (kept as an override).
+- Ship the orbital data as a slim build-time static asset (precedent:
+  fio_systemstars.json); only naturalId → {a, e} needed.
+- OPEN (user feedback wanted): which point of the best/worst band to
+  price — midpoint, worst-case, or a time-averaged expectation.
+
+## Per-system damage — now data-backed (upgrade path)
+
+VERIFIED: `rest.fnar.net/systemstars/star/{id}` includes
+`MeteoroidDensity` per system (e.g. Hortus 0.0284) — the exact field
+the v1 decisions said was unavailable (our static
+fio_systemstars.json predates it; a refresh adds it). v2 may weight
+`damagePerParsec` by the mean meteoroid density of the systems a
+route passes through, normalized so the calibrated flight-log damage
+stays the anchor. Optional refinement — keep the flat constant as
+fallback.
+
 ## Architecture (unchanged from review learnings)
 
 A chain's tripsPerDay depends on EVERY member plan's flows, so it is
