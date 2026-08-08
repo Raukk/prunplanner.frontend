@@ -45,7 +45,9 @@ import {
 	outputsSettled,
 	resolveCxExchangeCode,
 	splitAggregateDraws,
+	withFuelDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
+import { raukkFuelUnitsPerDay } from "@/features/raukk_sourcing/calculations/shippingFuel";
 
 // Util
 import { inertClone } from "@/util/data";
@@ -755,6 +757,13 @@ function buildPlanLanes(shipping: IRaukkShippingResult): IRaukkSnapshotLane[] {
 	);
 }
 
+/** Shipping of one plan: the costed pairs and what they burn */
+interface IRaukkPlanShipping {
+	shipping: IRaukkShippingResult;
+	/** Ship fuel the plans own lanes burn per day, keyed by ticker */
+	fuelUnitsPerDay: IRaukkMaterialUnits;
+}
+
 /**
  * Shipping cost of every route pair one plan owns, plus the freight of
  * the flows a chain took over.
@@ -766,12 +775,17 @@ function buildPlanLanes(shipping: IRaukkShippingResult): IRaukkSnapshotLane[] {
  * rounds. The shipping FRACTION stays the plans own lanes only; a chain
  * is flown for the whole empire and is accounted on the fleet page.
  *
+ * The FUEL those pairs burn is reported alongside, in units: it is the
+ * pairs — never a chain, which no plan owns — that a plan sources fuel
+ * for. Its ȼ is already inside the pair cost through the resolved ship
+ * profile, the units exist so the burn can be sourced and drawn.
+ *
  * @author raukk
  *
  * @param {IRaukkShippingInput} input Plan flows, resolver and config
- * @returns {IRaukkShippingResult} Per pair and per ticker shipping
+ * @returns {IRaukkPlanShipping} Per pair shipping and fuel burn
  */
-function computePlanShipping(input: IRaukkShippingInput): IRaukkShippingResult {
+function computePlanShipping(input: IRaukkShippingInput): IRaukkPlanShipping {
 	const pairs: IRaukkShippingPair[] = buildPlanShippingPairs(input);
 
 	const result: IRaukkShippingResult = calculateShipping(
@@ -781,15 +795,24 @@ function computePlanShipping(input: IRaukkShippingInput): IRaukkShippingResult {
 		input.caps
 	);
 
-	if (!input.shippingConfig.enabled) return result;
-
-	return mergeClaimedShipping(
-		result,
+	const fuelUnitsPerDay: IRaukkMaterialUnits = raukkFuelUnitsPerDay(
 		pairs,
-		planClaimedFlows(input.planUuid, input.planetNaturalId),
-		input.planetNaturalId,
-		input.planUuid
+		result
 	);
+
+	if (!input.shippingConfig.enabled)
+		return { shipping: result, fuelUnitsPerDay };
+
+	return {
+		shipping: mergeClaimedShipping(
+			result,
+			pairs,
+			planClaimedFlows(input.planUuid, input.planetNaturalId),
+			input.planetNaturalId,
+			input.planUuid
+		),
+		fuelUnitsPerDay,
+	};
 }
 
 /**
@@ -986,7 +1009,7 @@ export async function computePlanSnapshot(
 			cxAnchor: config.cxAnchor,
 		};
 
-		const shipping: IRaukkShippingResult =
+		const { shipping, fuelUnitsPerDay } =
 			computePlanShipping(shippingInput);
 
 		const repairCost: IRaukkRepairCost = calculateRepairCostPerDay(
@@ -1006,7 +1029,7 @@ export async function computePlanSnapshot(
 		});
 
 		const draws: Record<string, IRaukkMaterialUnits> = splitAggregateDraws(
-			result.draws,
+			withFuelDraws(result.draws, fuelUnitsPerDay, resolver),
 			getProducers
 		);
 
@@ -1215,8 +1238,17 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 	}));
 
 	/** Live shipping of the pairs this plan owns, empty while disabled */
-	const shipping: ComputedRef<IRaukkShippingResult> = computed(() =>
+	const planShipping: ComputedRef<IRaukkPlanShipping> = computed(() =>
 		computePlanShipping(shippingInput.value)
+	);
+
+	const shipping: ComputedRef<IRaukkShippingResult> = computed(
+		() => planShipping.value.shipping
+	);
+
+	/** Ship fuel the plans own lanes burn per day, empty while disabled */
+	const fuelUnitsPerDay: ComputedRef<IRaukkMaterialUnits> = computed(
+		() => planShipping.value.fuelUnitsPerDay
 	);
 
 	/**
@@ -1277,7 +1309,8 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 			config.value.sources,
 			resolver.value,
 			shipping.value.inbound,
-			(ticker: string) => defaultPrices.value[ticker] ?? 0
+			(ticker: string) => defaultPrices.value[ticker] ?? 0,
+			fuelUnitsPerDay.value
 		)
 	);
 

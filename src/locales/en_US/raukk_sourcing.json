@@ -53,13 +53,15 @@
 		"groups": {
 			"workforce": "Workforce Consumables",
 			"repair": "Repair Materials",
-			"production": "Production Inputs"
+			"production": "Production Inputs",
+			"shipFuel": "Ship Fuel (already in the shipping cost)"
 		}
 	},
 	"buckets": {
 		"production": "Production",
 		"workforce": "Workforce",
-		"repair": "Repair"
+		"repair": "Repair",
+		"shipFuel": "Ship Fuel"
 	},
 	"cadence": {
 		"visit": "{days} days/visit ({trips}/day)",
