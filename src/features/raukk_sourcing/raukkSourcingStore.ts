@@ -20,9 +20,33 @@ import {
 	RaukkSourcingExportType,
 } from "@/features/raukk_sourcing/raukkSourcingStore.schemas";
 
+// Calculations
+import {
+	raukkCompleteShipProfile,
+	raukkDefaultShippingConfig,
+	raukkShipProfilePresets,
+} from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import { raukkPairIdentity } from "@/features/raukk_sourcing/calculations/shippingDisplay";
+import { raukkDefaultChainConfig } from "@/features/raukk_sourcing/calculations/shippingChains";
+import {
+	IRaukkChainPairConflict,
+	raukkChainPairConflict,
+} from "@/features/raukk_sourcing/calculations/shippingChainValidation";
+import {
+	raukkAssignedShipTypeId,
+	raukkChainAssignmentKey,
+	raukkChainIdOfAssignmentKey,
+} from "@/features/raukk_sourcing/calculations/shippingFleet";
+
 // Types & Interfaces
 import {
+	IRaukkChain,
+	IRaukkChainConfig,
+	IRaukkChainResult,
+	IRaukkFleetShip,
 	IRaukkPlanConfig,
+	IRaukkShipProfile,
+	IRaukkShippingConfig,
 	IRaukkSnapshot,
 	IRaukkTickerSource,
 	RAUKK_REPAIR_DAY,
@@ -37,6 +61,16 @@ import {
 /** Repair day used until a plan configures its own */
 const DEFAULT_REPAIR_DAY: RAUKK_REPAIR_DAY = 90;
 
+/**
+ * Preset ship profiles by id, built once. The store persists user
+ * overrides only, so a preset the user never touched keeps following the
+ * shipped calibration instead of freezing an old copy of it.
+ */
+const SHIP_PROFILE_PRESETS: Record<string, IRaukkShipProfile> =
+	Object.fromEntries(
+		raukkShipProfilePresets().map((profile) => [profile.id, profile])
+	);
+
 export const useRaukkSourcingStore = defineStore(
 	"prunplanner_raukk_sourcing",
 	() => {
@@ -45,6 +79,24 @@ export const useRaukkSourcingStore = defineStore(
 		const configs: Ref<Record<string, IRaukkPlanConfig>> = ref({});
 		/** Key: Plan.uuid */
 		const snapshots: Ref<Record<string, IRaukkSnapshot>> = ref({});
+		/** Key: ship profile id. User overrides of the presets only. */
+		const shipProfiles: Ref<Record<string, IRaukkShipProfile>> = ref({});
+		/** Account global, not per plan: one fleet serves every plan */
+		const shippingConfig: Ref<IRaukkShippingConfig> = ref(
+			raukkDefaultShippingConfig()
+		);
+		/** Key: chain id. User authored multi stop loops. */
+		const chains: Ref<Record<string, IRaukkChain>> = ref({});
+		/** Key: chain id. Output of the account level chain pass. */
+		const chainResults: Ref<Record<string, IRaukkChainResult>> = ref({});
+		/** Key: ship type id, which is a ship profile id */
+		const fleet: Ref<Record<string, IRaukkFleetShip>> = ref({});
+		/** Key: lane pair key or chain key. Absent means auto. */
+		const assignments: Ref<Record<string, string>> = ref({});
+		/** Account global, like the shipping configuration next to it */
+		const chainConfig: Ref<IRaukkChainConfig> = ref(
+			raukkDefaultChainConfig()
+		);
 
 		/**
 		 * Resets all store variables to their initial values
@@ -53,6 +105,13 @@ export const useRaukkSourcingStore = defineStore(
 		function $reset(): void {
 			configs.value = {};
 			snapshots.value = {};
+			shipProfiles.value = {};
+			shippingConfig.value = raukkDefaultShippingConfig();
+			chains.value = {};
+			chainResults.value = {};
+			fleet.value = {};
+			assignments.value = {};
+			chainConfig.value = raukkDefaultChainConfig();
 		}
 
 		// getters
@@ -87,6 +146,49 @@ export const useRaukkSourcingStore = defineStore(
 				snapshots.value[planUuid];
 
 			return findSnapshot ? inertClone(findSnapshot) : undefined;
+		}
+
+		/**
+		 * Gets a ship profile by id: the users override when one exists,
+		 * the shipped preset otherwise. An unknown id degrades to the
+		 * configured default profile and, should even that be gone, to
+		 * the first preset — the shipping math always needs a hull.
+		 * @author raukk
+		 *
+		 * @param {string} profileId Ship Profile Id
+		 * @returns {IRaukkShipProfile} Ship Profile
+		 */
+		function getShipProfile(profileId: string): IRaukkShipProfile {
+			const known: IRaukkShipProfile | undefined =
+				shipProfiles.value[profileId] ??
+				SHIP_PROFILE_PRESETS[profileId];
+
+			// a local storage blob written before the fuel burn rates
+			// existed carries a profile without them
+			if (known) return raukkCompleteShipProfile(inertClone(known));
+
+			const fallbackId: string = shippingConfig.value.defaultProfileId;
+
+			return raukkCompleteShipProfile(
+				inertClone(
+					shipProfiles.value[fallbackId] ??
+						SHIP_PROFILE_PRESETS[fallbackId] ??
+						Object.values(SHIP_PROFILE_PRESETS)[0]
+				)
+			);
+		}
+
+		/**
+		 * Lists every ship profile, presets with the users overrides
+		 * applied on top. Backs the calibration table.
+		 * @author raukk
+		 *
+		 * @returns {IRaukkShipProfile[]} Ship Profiles
+		 */
+		function listShipProfiles(): IRaukkShipProfile[] {
+			return Object.keys(SHIP_PROFILE_PRESETS).map((profileId) =>
+				getShipProfile(profileId)
+			);
 		}
 
 		/**
@@ -195,6 +297,385 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Marks every stored snapshot AND every stored chain result stale.
+		 *
+		 * Shipping configuration and ship profiles are account global:
+		 * changing them changes the numbers of every plan at once, so
+		 * there is nothing to cascade along the dependency graph — the
+		 * whole store is stale.
+		 *
+		 * Chain results are costed from those very inputs — the shipping
+		 * configuration and the profile of the assigned ship type — so a
+		 * change that stales every snapshot stales every chain with them.
+		 * Leaving them fresh would let a plan keep folding freight priced
+		 * with the previous profile.
+		 * @author raukk
+		 */
+		function markAllStale(): void {
+			Object.values(snapshots.value).forEach((snapshot) => {
+				snapshot.stale = true;
+			});
+
+			Object.values(chainResults.value).forEach((result) => {
+				result.stale = true;
+			});
+		}
+
+		/**
+		 * Patches the account global shipping configuration.
+		 *
+		 * Marks all snapshots stale, unless shipping was off before and
+		 * stays off: a change that cannot move a single number must not
+		 * flag the users whole empire.
+		 * @author raukk
+		 *
+		 * @param {Partial<IRaukkShippingConfig>} patch Configuration Patch
+		 */
+		function setShippingConfig(patch: Partial<IRaukkShippingConfig>): void {
+			const wasEnabled: boolean = shippingConfig.value.enabled;
+
+			shippingConfig.value = {
+				...shippingConfig.value,
+				...inertClone(patch),
+			};
+
+			if (wasEnabled || shippingConfig.value.enabled) markAllStale();
+		}
+
+		/**
+		 * Patches one ship profile, storing it as a user override of the
+		 * preset. Marks all snapshots stale while shipping is enabled.
+		 * @author raukk
+		 *
+		 * @param {string} profileId Ship Profile Id
+		 * @param {Partial<IRaukkShipProfile>} patch Profile Patch
+		 */
+		function setShipProfile(
+			profileId: string,
+			patch: Partial<IRaukkShipProfile>
+		): void {
+			shipProfiles.value[profileId] = {
+				...getShipProfile(profileId),
+				...inertClone(patch),
+				id: profileId,
+			};
+
+			if (shippingConfig.value.enabled) markAllStale();
+		}
+
+		/**
+		 * Drops a ship profiles user override, the preset applies again.
+		 * Marks all snapshots stale while shipping is enabled.
+		 * @author raukk
+		 *
+		 * @param {string} profileId Ship Profile Id
+		 */
+		function resetShipProfile(profileId: string): void {
+			if (shipProfiles.value[profileId] === undefined) return;
+
+			delete shipProfiles.value[profileId];
+
+			if (shippingConfig.value.enabled) markAllStale();
+		}
+
+		// chains, fleet and assignments
+
+		/**
+		 * Gets one chain, undefined when it does not exist.
+		 * @author raukk
+		 *
+		 * @param {string} chainId Chain Id
+		 * @returns {IRaukkChain | undefined} Chain
+		 */
+		function getChain(chainId: string): IRaukkChain | undefined {
+			const found: IRaukkChain | undefined = chains.value[chainId];
+
+			return found ? inertClone(found) : undefined;
+		}
+
+		/**
+		 * Gets one stored chain result, undefined until the chain pass
+		 * computed it.
+		 * @author raukk
+		 *
+		 * @param {string} chainId Chain Id
+		 * @returns {IRaukkChainResult | undefined} Chain Result
+		 */
+		function getChainResult(
+			chainId: string
+		): IRaukkChainResult | undefined {
+			const found: IRaukkChainResult | undefined =
+				chainResults.value[chainId];
+
+			return found ? inertClone(found) : undefined;
+		}
+
+		/**
+		 * Plans of a chain: every plan whose snapshot sits on one of the
+		 * chains stops.
+		 *
+		 * Membership is DERIVED, never stored — exactly like the
+		 * dependency edges of the sourcing graph. A plan without a
+		 * snapshot has no planet the store knows of and is therefore no
+		 * member yet.
+		 * @author raukk
+		 *
+		 * @param {string[]} stops Ordered loop
+		 * @returns {string[]} Member Plan Uuids
+		 */
+		function chainMemberPlans(stops: string[]): string[] {
+			const stopSet: Set<string> = new Set(stops);
+
+			return Object.entries(snapshots.value)
+				.filter(([, snapshot]) => stopSet.has(snapshot.planetNaturalId))
+				.map(([planUuid]) => planUuid);
+		}
+
+		/**
+		 * Checks a loop against the stops the other chains already reach —
+		 * two chains may share at most ONE stop, see
+		 * {@link raukkChainPairConflict}. Backs the chain editors refusal
+		 * before {@link setChain} throws.
+		 * @author raukk
+		 *
+		 * @param {string} chainId Chain Id
+		 * @param {string[]} stops Ordered loop
+		 * @returns {IRaukkChainPairConflict | null} Conflict
+		 */
+		function chainConflictOf(
+			chainId: string,
+			stops: string[]
+		): IRaukkChainPairConflict | null {
+			return raukkChainPairConflict(chains.value, chainId, stops);
+		}
+
+		/**
+		 * Marks one chains result stale and, with it, the snapshots of
+		 * the plans that chain serves.
+		 *
+		 * A chain edit is NOT an account wide event: only its member
+		 * plans read their freight from it, so the blunt
+		 * {@link markAllStale} would flag the users whole empire for a
+		 * change that cannot move a single number elsewhere. Members are
+		 * taken from both the stored result and the current stops, so a
+		 * plan that just left the loop is flagged as well.
+		 * @author raukk
+		 *
+		 * @param {string} chainId Chain Id
+		 * @param {string[]} extraMembers Additional member plan uuids
+		 */
+		function markChainStale(
+			chainId: string,
+			extraMembers: string[] = []
+		): void {
+			const result: IRaukkChainResult | undefined =
+				chainResults.value[chainId];
+
+			if (result) result.stale = true;
+
+			const members: Set<string> = new Set([
+				...(result?.memberPlanUuids ?? []),
+				...extraMembers,
+				...chainMemberPlans(chains.value[chainId]?.stops ?? []),
+			]);
+
+			members.forEach((planUuid) => markStale(planUuid));
+		}
+
+		/** Every chains result stale, plus the plans they serve */
+		function markAllChainsStale(): void {
+			Object.keys({ ...chains.value, ...chainResults.value }).forEach(
+				(chainId) => markChainStale(chainId)
+			);
+		}
+
+		/**
+		 * Stores one chain.
+		 *
+		 * Two authoring rules are enforced here rather than in the editor,
+		 * because the store is what everything else reads: a loop needs at
+		 * least two stops, and two chains may share AT MOST ONE
+		 * stop (shipping-chains-v2.md, "Flow claiming") — sharing two
+		 * would let both claim the same flows, which is what replaces
+		 * precedence logic between overlapping chains. Both violations
+		 * throw and leave the store untouched.
+		 * @author raukk
+		 *
+		 * @param {IRaukkChain} chain Chain
+		 */
+		function setChain(chain: IRaukkChain): void {
+			if (chain.stops.length < 2) {
+				throw new Error(
+					"A chain is a loop and needs at least two stops."
+				);
+			}
+
+			const conflict: IRaukkChainPairConflict | null = chainConflictOf(
+				chain.chainId,
+				chain.stops
+			);
+
+			if (conflict !== null) {
+				throw new Error(
+					`Chain '${conflict.chainId}' already reaches both ${conflict.fromStop} and ${conflict.toStop}; two chains may share at most one stop.`
+				);
+			}
+
+			const previousMembers: string[] = chainMemberPlans(
+				chains.value[chain.chainId]?.stops ?? []
+			);
+
+			chains.value[chain.chainId] = inertClone(chain);
+
+			markChainStale(chain.chainId, previousMembers);
+		}
+
+		/**
+		 * Removes a chain together with everything that depended on it:
+		 * its stored result and its ship type assignment. The plans it
+		 * served go stale, their freight is a pair matter again.
+		 * @author raukk
+		 *
+		 * @param {string} chainId Chain Id
+		 */
+		function deleteChain(chainId: string): void {
+			const members: string[] = [
+				...(chainResults.value[chainId]?.memberPlanUuids ?? []),
+				...chainMemberPlans(chains.value[chainId]?.stops ?? []),
+			];
+
+			delete chains.value[chainId];
+			delete chainResults.value[chainId];
+			delete assignments.value[raukkChainAssignmentKey(chainId)];
+
+			members.forEach((planUuid) => markStale(planUuid));
+		}
+
+		/**
+		 * Stores a freshly computed chain result. Member plans are NOT
+		 * flagged here: the chain pass recomputes them itself, and the
+		 * one round convergence lag is documented rather than fought.
+		 * @author raukk
+		 *
+		 * @param {string} chainId Chain Id
+		 * @param {IRaukkChainResult} result Chain Result
+		 */
+		function setChainResult(
+			chainId: string,
+			result: IRaukkChainResult
+		): void {
+			chainResults.value[chainId] = {
+				...inertClone(result),
+				chainId,
+				stale: false,
+			};
+		}
+
+		/**
+		 * Patches the account global chain configuration.
+		 *
+		 * Every chain is priced with these knobs, so every chain result
+		 * and every plan they serve goes stale. Plans no chain touches
+		 * stay untouched — unlike the shipping configuration, the chain
+		 * knobs cannot move a plan that ships nothing on a chain.
+		 * @author raukk
+		 *
+		 * @param {Partial<IRaukkChainConfig>} patch Configuration Patch
+		 */
+		function setChainConfig(patch: Partial<IRaukkChainConfig>): void {
+			chainConfig.value = {
+				...chainConfig.value,
+				...inertClone(patch),
+			};
+
+			markAllChainsStale();
+		}
+
+		/**
+		 * Sets the ship count and, optionally, the design label of one
+		 * ship type.
+		 *
+		 * Deliberately marks NOTHING stale: the fleet count is the
+		 * denominator of the utilization rollup, which is derived at read
+		 * time from the stored lane and chain numbers. No cost, no trip
+		 * and no snapshot value depends on how many hulls the user owns.
+		 * @author raukk
+		 *
+		 * @param {string} shipTypeId Ship Type Id
+		 * @param {Partial<IRaukkFleetShip>} patch Fleet Patch
+		 */
+		function setFleetShip(
+			shipTypeId: string,
+			patch: Partial<IRaukkFleetShip>
+		): void {
+			const known: IRaukkFleetShip | undefined = fleet.value[shipTypeId];
+
+			fleet.value[shipTypeId] = {
+				...(known ?? { count: 0 }),
+				...inertClone(patch),
+			};
+		}
+
+		/**
+		 * Removes one ship type from the fleet. Assignments naming it
+		 * stay: an assigned type without a single hull is exactly the
+		 * over-ration the utilization display exists to show.
+		 * @author raukk
+		 *
+		 * @param {string} shipTypeId Ship Type Id
+		 */
+		function deleteFleetShip(shipTypeId: string): void {
+			delete fleet.value[shipTypeId];
+		}
+
+		/**
+		 * Assigns a ship type to one lane or chain, `undefined` puts it
+		 * back to auto.
+		 *
+		 * An assignment changes the PROFILE a lane or chain is flown
+		 * with, so unlike a fleet count it does move numbers: the owning
+		 * plan of a lane goes stale with its dependents, a chain goes
+		 * stale with the plans it serves.
+		 * @author raukk
+		 *
+		 * @param {string} key Lane pair key or chain key
+		 * @param {string | undefined} shipTypeId Ship Type Id
+		 */
+		function setAssignment(
+			key: string,
+			shipTypeId: string | undefined
+		): void {
+			if (shipTypeId === undefined) delete assignments.value[key];
+			else assignments.value[key] = shipTypeId;
+
+			const chainId: string | undefined =
+				raukkChainIdOfAssignmentKey(key);
+
+			if (chainId !== undefined) {
+				markChainStale(chainId);
+				return;
+			}
+
+			markStale(raukkPairIdentity(key).planUuid);
+		}
+
+		/**
+		 * Ship type serving one lane or chain: the assignment, the v1 per
+		 * edge override, or the account default.
+		 * @author raukk
+		 *
+		 * @param {string} key Lane pair key or chain key
+		 * @returns {string} Ship Type Id
+		 */
+		function assignedShipTypeId(key: string): string {
+			return raukkAssignedShipTypeId(
+				key,
+				assignments.value,
+				shippingConfig.value
+			);
+		}
+
+		/**
 		 * Ensures a plan has a stored configuration and returns the
 		 * reactive, stored instance
 		 * @author raukk
@@ -269,6 +750,14 @@ export const useRaukkSourcingStore = defineStore(
 		 * downstream plans consume actually changed — the automatic
 		 * snapshot upkeep recomputes on every plan view load, an
 		 * unchanged result must not flag the whole chain stale.
+		 *
+		 * A chain is costed from the frozen FLOWS of its member plans, a
+		 * value no downstream plan consumes and `snapshotMateriallyChanged`
+		 * therefore ignores. Changed flows flag the chain results the plan
+		 * feeds instead — the automatic snapshot upkeep writes snapshots
+		 * without ever running the chain pass of `useRaukkChainRecompute`,
+		 * and a silently outdated chain result is exactly what it would
+		 * leave behind otherwise.
 		 * @author raukk
 		 *
 		 * @param {string} planUuid Plan Uuid
@@ -286,12 +775,92 @@ export const useRaukkSourcingStore = defineStore(
 			// dependents derive from the new draws as well
 			if (!previous || snapshotMateriallyChanged(previous, snapshot))
 				cascadeStale(planUuid);
+
+			if (
+				JSON.stringify(previous?.flows ?? null) !==
+				JSON.stringify(snapshot.flows ?? null)
+			)
+				cascadeChainStale(planUuid);
+		}
+
+		/**
+		 * Flags every chain result the given plan feeds as stale.
+		 *
+		 * Deliberately does NOT go through {@link markChainStale}: that one
+		 * stales the member PLANS as well, which the automatic snapshot
+		 * upkeep would answer with another recompute, which would call
+		 * this again — a self feeding loop. The chain result flag alone is
+		 * what the chain page renders and what tells the user a chain
+		 * recompute is due; the plans themselves are already current.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 */
+		function cascadeChainStale(planUuid: string): void {
+			Object.entries(chainResults.value).forEach(([chainId, result]) => {
+				const members: Set<string> = new Set([
+					...result.memberPlanUuids,
+					...chainMemberPlans(chains.value[chainId]?.stops ?? []),
+				]);
+
+				if (members.has(planUuid)) result.stale = true;
+			});
+		}
+
+		/**
+		 * Drops every shipping configuration entry keyed by a pair the
+		 * given plan takes part in.
+		 *
+		 * Pair keys are `owner>counterpart`, so a deleted plan appears in
+		 * BOTH shapes: `<uuid>>CX` as the owner of its exchange pair and
+		 * `<consumer>><uuid>` as the source of somebody elses sourcing
+		 * pair. Leaving either behind would silently re-apply a hired
+		 * rate or a profile override to a future plan whose uuid happens
+		 * to collide, and grows the persisted blob forever.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 */
+		function scrubShippingKeys(planUuid: string): void {
+			function scrub<T>(
+				entries: Record<string, T> | undefined
+			): Record<string, T> | undefined {
+				if (entries === undefined) return undefined;
+
+				const kept: Record<string, T> = {};
+
+				Object.entries(entries).forEach(([pairKey, value]) => {
+					const identity = raukkPairIdentity(pairKey);
+
+					if (
+						identity.planUuid === planUuid ||
+						identity.sourcePlanUuid === planUuid
+					)
+						return;
+
+					kept[pairKey] = value;
+				});
+
+				return kept;
+			}
+
+			shippingConfig.value = {
+				...shippingConfig.value,
+				lmRates: scrub(shippingConfig.value.lmRates),
+				perEdgeProfile: scrub(shippingConfig.value.perEdgeProfile),
+			};
+
+			// chain keys are prefixed, never `owner>counterpart`, so the
+			// same scrub leaves every chain assignment in place
+			assignments.value = scrub(assignments.value) ?? {};
 		}
 
 		/**
 		 * Removes configuration and snapshot of a plan, e.g. after the
 		 * plan itself was deleted, and marks all plans that depended on
-		 * it stale.
+		 * it stale. The account global shipping configuration is scrubbed
+		 * of the pairs that plan was part of, see
+		 * {@link scrubShippingKeys}.
 		 * @author raukk
 		 *
 		 * @param {string} planUuid Plan Uuid
@@ -302,8 +871,18 @@ export const useRaukkSourcingStore = defineStore(
 				planUuid
 			);
 
+			// a chain the plan was a member of loses its flows and has to
+			// be recomputed; the chain itself stays, its stops are
+			// planets and outlive any single plan
+			Object.values(chainResults.value).forEach((result) => {
+				if (result.memberPlanUuids.includes(planUuid))
+					result.stale = true;
+			});
+
 			delete configs.value[planUuid];
 			delete snapshots.value[planUuid];
+
+			scrubShippingKeys(planUuid);
 
 			dependents.forEach((dependentUuid) => {
 				const dependent: IRaukkSnapshot | undefined =
@@ -327,6 +906,13 @@ export const useRaukkSourcingStore = defineStore(
 				version: RAUKK_SOURCING_EXPORT_VERSION,
 				configs: inertClone(configs.value),
 				snapshots: inertClone(snapshots.value),
+				shipProfiles: inertClone(shipProfiles.value),
+				shippingConfig: inertClone(shippingConfig.value),
+				chains: inertClone(chains.value),
+				chainResults: inertClone(chainResults.value),
+				fleet: inertClone(fleet.value),
+				assignments: inertClone(assignments.value),
+				chainConfig: inertClone(chainConfig.value),
 			};
 
 			return JSON.stringify(payload);
@@ -356,26 +942,72 @@ export const useRaukkSourcingStore = defineStore(
 
 			configs.value = validated.configs;
 			snapshots.value = validated.snapshots;
+			// absent in a v1 payload, the schema defaults both; a payload
+			// predating the fuel burn rates has them filled from the
+			// preset of its own hull instead of burning nothing
+			shipProfiles.value = Object.fromEntries(
+				Object.entries(validated.shipProfiles).map(
+					([profileId, profile]) => [
+						profileId,
+						raukkCompleteShipProfile(profile),
+					]
+				)
+			);
+			shippingConfig.value = validated.shippingConfig;
+			// absent in a v1 AND in a v2.0 payload, the schema defaults
+			// all five into the empty, chainless state
+			chains.value = validated.chains;
+			chainResults.value = validated.chainResults;
+			fleet.value = validated.fleet;
+			assignments.value = validated.assignments;
+			chainConfig.value = validated.chainConfig;
 		}
 
 		return {
 			// state
 			configs,
 			snapshots,
+			shipProfiles,
+			shippingConfig,
+			chains,
+			chainResults,
+			fleet,
+			assignments,
+			chainConfig,
 			// reset
 			$reset,
 			// getters
 			getConfig,
 			getSnapshot,
+			getShipProfile,
+			listShipProfiles,
 			producersOf,
 			subscription,
+			getChain,
+			getChainResult,
+			chainMemberPlans,
+			chainConflictOf,
+			assignedShipTypeId,
 			// setters
 			setTickerSource,
 			clearTickerSource,
 			setRepairDay,
 			setSnapshot,
+			setShippingConfig,
+			setShipProfile,
+			resetShipProfile,
 			markStale,
+			markAllStale,
 			deletePlanData,
+			setChain,
+			deleteChain,
+			setChainResult,
+			markChainStale,
+			markAllChainsStale,
+			setChainConfig,
+			setFleetShip,
+			deleteFleetShip,
+			setAssignment,
 			// import & export
 			exportJSON,
 			importJSON,
@@ -383,7 +1015,18 @@ export const useRaukkSourcingStore = defineStore(
 	},
 	{
 		persist: {
-			pick: ["configs", "snapshots"],
+			// refs missing from this list silently never persist
+			pick: [
+				"configs",
+				"snapshots",
+				"shipProfiles",
+				"shippingConfig",
+				"chains",
+				"chainResults",
+				"fleet",
+				"assignments",
+				"chainConfig",
+			],
 		},
 	}
 );

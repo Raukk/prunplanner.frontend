@@ -78,6 +78,14 @@ export interface IRaukkTrueCostInput {
 	/** Repair material demand per day, used for draw bookkeeping only */
 	repairMaterialUnitsPerDay?: IRaukkMaterialUnits;
 	resolveInputPrice: IRaukkPriceResolver;
+	/** ȼ per unit it costs to bring one input ticker to the plan. Kept
+	 * out of the resolver on purpose: folded into the price it would
+	 * land in `breakdown.inputs` and the shipping column would lie.
+	 * Absent or zero everywhere reproduces the pre-shipping result. */
+	shippingPerUnitIn?: IRaukkMaterialUnits;
+	/** ȼ per unit sold it costs to bring one output ticker to the
+	 * exchange, added straight onto that outputs shipping breakdown */
+	shippingPerUnitOut?: IRaukkMaterialUnits;
 }
 
 export interface IRaukkTrueCostResult {

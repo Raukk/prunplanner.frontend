@@ -469,6 +469,7 @@ describe("Raukk Sourcing Pricing", () => {
 				{},
 				(ticker: string) =>
 					ticker === "BSE" ? { price: 500 } : resolve(ticker),
+				{},
 				(ticker: string) => (ticker === "H2O" ? 1000 : 1)
 			);
 
@@ -521,6 +522,59 @@ describe("Raukk Sourcing Pricing", () => {
 
 			expect(rows.map((r) => r.ticker)).not.toContain("FE");
 			expect(rows.map((r) => r.ticker)).not.toContain("BSE");
+		});
+
+		it("ships nothing without a shipping map", () => {
+			const rows = buildInputRows(planResult, {}, {}, resolve);
+			const rat = rows.find((r) => r.ticker === "RAT");
+
+			expect(rat?.shippingPerUnit).toBe(0);
+			expect(rat?.effectivePrice).toBe(100);
+			expect(rat?.costPerDay).toBe(1000);
+		});
+
+		it("folds freight into the effective price and the line cost", () => {
+			const rows = buildInputRows(planResult, {}, {}, resolve, {
+				RAT: 5,
+			});
+			const rat = rows.find((r) => r.ticker === "RAT");
+			const h2o = rows.find((r) => r.ticker === "H2O");
+
+			expect(rat?.shippedUnitsPerDay).toBe(10);
+			expect(rat?.shippingPerUnit).toBe(5);
+			expect(rat?.effectivePrice).toBe(105);
+			expect(rat?.costPerDay).toBe(1050);
+
+			// untouched tickers keep paying their price only
+			expect(h2o?.shippingPerUnit).toBe(0);
+			expect(h2o?.effectivePrice).toBe(2);
+		});
+
+		it("charges freight on the shipped units only", () => {
+			// RAT: 10 net input units ride a pair, 4 repair units do not
+			const rows = buildInputRows(planResult, { RAT: 4 }, {}, resolve, {
+				RAT: 5,
+			});
+			const rat = rows.find((r) => r.ticker === "RAT");
+
+			expect(rat?.unitsPerDay).toBe(14);
+			expect(rat?.shippedUnitsPerDay).toBe(10);
+			expect(rat?.costPerDay).toBe(14 * 100 + 10 * 5);
+		});
+
+		it("leaves a repair only ticker unshipped", () => {
+			const rows = buildInputRows(
+				planResult,
+				{ BSE: 4 },
+				{},
+				(ticker: string) =>
+					ticker === "BSE" ? { price: 500 } : resolve(ticker),
+				{ BSE: 99 }
+			);
+			const bse = rows.find((r) => r.ticker === "BSE");
+
+			expect(bse?.shippedUnitsPerDay).toBe(0);
+			expect(bse?.costPerDay).toBe(2000);
 		});
 	});
 

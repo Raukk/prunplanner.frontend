@@ -556,10 +556,19 @@ export function formatSourceOptionLabel(
  * A ticker can belong to several buckets at once, its daily need is the
  * sum over all of them, matching what the true cost rollup charges.
  *
+ * Freight folds into the row the same way the pipeline charges it: the
+ * per unit shipping of the plans inbound pairs is added on top of the
+ * price, but only on the units that actually ride a pair — the material
+ * I/O ones. Repair material demand pays no freight in v1, so a ticker
+ * that is both an input and a repair material keeps its two unit counts
+ * apart. Without a shipping map every row is priced exactly as before.
+ *
  * With `getDefaultPrice` given, rows sort by their daily cost at that
  * price — the CX preference price — instead of the effective one, so
  * configuring a plan source does not reorder the table under the users
- * cursor. Without it the effective daily cost sorts.
+ * cursor. Freight is deliberately left out of that sort key as well: it
+ * moves with the configured source. Without it the effective daily
+ * cost, freight included, sorts.
  *
  * @author raukk
  *
@@ -567,6 +576,7 @@ export function formatSourceOptionLabel(
  * @param {IRaukkMaterialUnits} repairUnitsPerDay Repair demand per day
  * @param {Record<string, IRaukkTickerSource>} sources Plan sources
  * @param {IRaukkPriceResolver} resolve Price Resolver
+ * @param {Record<string, number>} shippingPerUnitIn Inbound freight ȼ/u
  * @param {(ticker: string) => number} [getDefaultPrice] Stable sort price
  * @returns {IRaukkInputRow[]} Priced input rows
  */
@@ -575,9 +585,12 @@ export function buildInputRows(
 	repairUnitsPerDay: IRaukkMaterialUnits,
 	sources: Record<string, IRaukkTickerSource>,
 	resolve: IRaukkPriceResolver,
+	shippingPerUnitIn: Record<string, number> = {},
 	getDefaultPrice?: (ticker: string) => number
 ): IRaukkInputRow[] {
 	const units: IRaukkMaterialUnits = {};
+	/** Units riding a route pair, the material I/O ones only */
+	const shippedUnits: IRaukkMaterialUnits = {};
 	const buckets: Record<string, IRaukkInputBuckets> = {};
 
 	function bucketOf(ticker: string): IRaukkInputBuckets {
@@ -595,6 +608,8 @@ export function buildInputRows(
 
 		units[element.ticker] =
 			(units[element.ticker] ?? 0) + element.delta * -1;
+		shippedUnits[element.ticker] =
+			(shippedUnits[element.ticker] ?? 0) + element.delta * -1;
 
 		const bucket: IRaukkInputBuckets = bucketOf(element.ticker);
 
@@ -623,13 +638,21 @@ export function buildInputRows(
 		.map(([ticker, unitsPerDay]) => {
 			const resolved: IRaukkResolvedPrice = resolve(ticker);
 
+			const shippedUnitsPerDay: number = shippedUnits[ticker] ?? 0;
+			const shippingPerUnit: number = shippingPerUnitIn[ticker] ?? 0;
+
 			return {
 				ticker,
 				buckets: bucketOf(ticker),
 				unitsPerDay,
 				source: sources[ticker],
 				price: resolved.price,
-				costPerDay: unitsPerDay * resolved.price,
+				shippedUnitsPerDay,
+				shippingPerUnit,
+				effectivePrice: resolved.price + shippingPerUnit,
+				costPerDay:
+					unitsPerDay * resolved.price +
+					shippedUnitsPerDay * shippingPerUnit,
 				fromPlanUuid: resolved.fromPlanUuid,
 			};
 		})

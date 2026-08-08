@@ -15,6 +15,14 @@
 	// Components
 	import RaukkInputsTable from "@/features/raukk_sourcing/components/RaukkInputsTable.vue";
 	import RaukkOutputsTable from "@/features/raukk_sourcing/components/RaukkOutputsTable.vue";
+	import RaukkShippingSection from "@/features/raukk_sourcing/components/RaukkShippingSection.vue";
+
+	// Calculations
+	import { raukkStorageFilledDays } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+	import {
+		getVolumeOfAllStorages,
+		getWeightOfAllStorages,
+	} from "@/features/planning/calculations/infrastructureCalculations";
 
 	// Util
 	import { formatDate } from "@/util/date";
@@ -64,6 +72,10 @@
 
 	const {
 		config,
+		shippingConfig,
+		shippingPairs,
+		repairBillCost,
+		fuelPrices,
 		inputRows,
 		outputRows,
 		repairCost,
@@ -83,6 +95,38 @@
 	const readOnly: ComputedRef<boolean> = computed(
 		() => props.disabled || props.planUuid === undefined
 	);
+
+	/** Plan names of every stored snapshot, labels the shipping lanes */
+	const planNames: ComputedRef<Record<string, string>> = computed(() =>
+		Object.fromEntries(
+			Object.entries(sourcingStore.snapshots).map(([uuid, stored]) => [
+				uuid,
+				stored.planName,
+			])
+		)
+	);
+
+	/**
+	 * Days the OPEN plan's storage bridges, the chain storage
+	 * cross-check's only input.
+	 *
+	 * A chain's other stops belong to plans whose snapshot stores no
+	 * storage capacity, so the cross-check can only speak about the plan
+	 * currently open — visiting each plan's own sourcing tab walks the
+	 * whole loop. Warning only, never a gate.
+	 */
+	const storageDays: ComputedRef<
+		{ stopRef: string; filledDays: number | null }[]
+	> = computed(() => [
+		{
+			stopRef: props.planetNaturalId,
+			filledDays: raukkStorageFilledDays(
+				getWeightOfAllStorages(props.planResult.storage),
+				getVolumeOfAllStorages(props.planResult.storage),
+				props.planResult.materialio
+			),
+		},
+	]);
 
 	const repairDayOptions: ComputedRef<PSelectOption[]> = computed(() =>
 		[30, 60, 90, 120].map((day) => ({ label: `${day}`, value: day }))
@@ -361,6 +405,23 @@
 				</template>
 				{{ $t("raukk_sourcing.snapshot.base_fraction_tooltip") }}
 			</PTooltip>
+			<PTooltip v-if="snapshot.shippingFraction !== undefined">
+				<template #trigger>
+					<span class="text-white/60 hover:cursor-help">
+						{{
+							$t("raukk_sourcing.snapshot.shipping_fraction", {
+								value:
+									snapshot.shippingFraction === null
+										? "—"
+										: formatNumber(
+												snapshot.shippingFraction
+											),
+							})
+						}}
+					</span>
+				</template>
+				{{ $t("raukk_sourcing.snapshot.shipping_fraction_tooltip") }}
+			</PTooltip>
 		</template>
 		<span v-else class="text-white/60">
 			{{ $t("raukk_sourcing.snapshot.never") }}
@@ -382,6 +443,14 @@
 		{{ $t("raukk_sourcing.read_only") }}
 	</div>
 
+	<RaukkShippingSection
+		:pairs="shippingPairs"
+		:repair-bill-cost="repairBillCost"
+		:fuel-prices="fuelPrices"
+		:plan-names="planNames"
+		:storage-days="storageDays"
+		:disabled="readOnly" />
+
 	<h3 class="font-bold py-3">
 		{{ $t("raukk_sourcing.inputs_title") }}
 	</h3>
@@ -389,6 +458,7 @@
 		:rows="inputRows"
 		:source-options="sourceOptions"
 		:repair-cost-per-day="repairCost.total"
+		:shipping-enabled="shippingConfig.enabled"
 		:disabled="readOnly"
 		@update:source="changeSource" />
 

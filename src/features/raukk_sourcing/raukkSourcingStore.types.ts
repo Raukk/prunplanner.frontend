@@ -4,7 +4,13 @@
 
 // Types & Interfaces
 import {
+	IRaukkChain,
+	IRaukkChainConfig,
+	IRaukkChainResult,
+	IRaukkFleetShip,
 	IRaukkPlanConfig,
+	IRaukkShipProfile,
+	IRaukkShippingConfig,
 	IRaukkSnapshot,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 
@@ -40,4 +46,15 @@ export interface IRaukkExportPayload {
 	version: number;
 	configs: Record<string, IRaukkPlanConfig>;
 	snapshots: Record<string, IRaukkSnapshot>;
+	/** User overridden ship profiles only, absent in a v1 payload */
+	shipProfiles: Record<string, IRaukkShipProfile>;
+	/** Account global shipping configuration, absent in a v1 payload */
+	shippingConfig: IRaukkShippingConfig;
+	/** Chains, their results and the fleet: absent in a v2.0 payload */
+	chains: Record<string, IRaukkChain>;
+	chainResults: Record<string, IRaukkChainResult>;
+	fleet: Record<string, IRaukkFleetShip>;
+	/** Key: lane pair key or chain key, value: ship type id */
+	assignments: Record<string, string>;
+	chainConfig: IRaukkChainConfig;
 }

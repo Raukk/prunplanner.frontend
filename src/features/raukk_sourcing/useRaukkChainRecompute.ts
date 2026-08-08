@@ -8,6 +8,10 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 import { useCXData } from "@/features/cx/useCXData";
 import { usePlanCalculation } from "@/features/planning/usePlanCalculation";
 import { computePlanSnapshot } from "@/features/raukk_sourcing/useRaukkSnapshot";
+import {
+	computeChainResults,
+	IRaukkChainComputeError,
+} from "@/features/raukk_sourcing/useRaukkChainCompute";
 
 // Graph
 import {
@@ -243,6 +247,8 @@ export function useRaukkChainRecompute() {
 			const empireList: IPlanEmpireElement[] = await loadEmpireList();
 
 			await runPass(empireList);
+			let chainErrors: IRaukkChainComputeError[] =
+				await recomputeShippingChains();
 
 			// loop settling passes, see the function doc
 			for (
@@ -257,6 +263,7 @@ export function useRaukkChainRecompute() {
 
 				total.value += order.length;
 				await runPass(empireList);
+				chainErrors = await recomputeShippingChains();
 
 				const settled: boolean = order.every(
 					(uuid) =>
@@ -268,9 +275,60 @@ export function useRaukkChainRecompute() {
 
 				if (settled) break;
 			}
+
+			// only the LAST chain pass reports: an earlier pass may well
+			// have failed on numbers a later one fixed
+			chainErrors.forEach((chainError) =>
+				errors.value.push({
+					planUuid: chainError.chainId,
+					planName: chainError.chainId
+						? `chain '${chainError.chainId}'`
+						: "shipping chains",
+					message: chainError.message,
+				})
+			);
 		} finally {
 			running.value = false;
 			current.value = undefined;
+		}
+	}
+
+	/**
+	 * Recomputes every shipping chain after the member snapshots.
+	 *
+	 * A chains trips depend on EVERY member plans flows, so it can only
+	 * be costed once those plans have written their frozen flows — which
+	 * is exactly why this runs at the END of a pass and not inside any
+	 * single plans snapshot (shipping-chains-v2.md, "Architecture").
+	 *
+	 * One round convergence lag, accepted and documented: the plans of a
+	 * pass priced their claimed flows from the PREVIOUS chain results,
+	 * and the results written here are what the next pass will use. The
+	 * numbers settle on the following pass, exactly like the v1
+	 * subscription data — which is why a cyclic scopes settling passes
+	 * run this after EVERY pass, they converge the chain freight along
+	 * with the loops output costs. Errors are returned per chain, never
+	 * thrown — the plan snapshots of the run stay valid.
+	 *
+	 * @author raukk
+	 *
+	 * @returns {Promise<IRaukkChainComputeError[]>} Failed chains
+	 */
+	async function recomputeShippingChains(): Promise<
+		IRaukkChainComputeError[]
+	> {
+		try {
+			return await computeChainResults();
+		} catch (error) {
+			return [
+				{
+					chainId: "",
+					message:
+						error instanceof Error
+							? error.message
+							: "unknown error",
+				},
+			];
 		}
 	}
 
