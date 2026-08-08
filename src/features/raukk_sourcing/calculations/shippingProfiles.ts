@@ -234,6 +234,14 @@ export function raukkShipProfilePreset(
 		cargoWeight: hull.cargoWeight,
 		cargoVolume: hull.cargoVolume,
 		ftlReactor,
+		/*
+		 * Every preset is an FTL ship: the reference flights are FTL
+		 * flights, and no STL-only run is calibrated. Dropping the drive
+		 * is a user decision per profile, not a shipped hull class —
+		 * the hold is what a preset describes, and an STL-only build
+		 * has the very same hold.
+		 */
+		stlOnly: false,
 		costPerParsec: DEFAULT_COST_PER_PARSEC,
 		stlBlockCost: DEFAULT_STL_BLOCK_COST,
 		ftlFuelPerParsec: calibration.ftlFuelPerParsec,
@@ -276,13 +284,18 @@ export function raukkShipProfilePresets(): IRaukkShipProfile[] {
 /**
  * A ship profile as older payloads and local storage blobs carry it:
  * everything of {@link IRaukkShipProfile}, but the two fuel burn rates
- * of round 5 may still be missing.
+ * of round 5 and the STL-only flag may still be missing.
  */
 export type RAUKK_STORED_SHIP_PROFILE = Omit<
 	IRaukkShipProfile,
-	"ftlFuelPerParsec" | "stlFuelPerBlock"
+	"ftlFuelPerParsec" | "stlFuelPerBlock" | "stlOnly"
 > &
-	Partial<Pick<IRaukkShipProfile, "ftlFuelPerParsec" | "stlFuelPerBlock">>;
+	Partial<
+		Pick<
+			IRaukkShipProfile,
+			"ftlFuelPerParsec" | "stlFuelPerBlock" | "stlOnly"
+		>
+	>;
 
 /**
  * Fills the fuel burn rates a pre round 5 profile does not carry.
@@ -291,6 +304,9 @@ export type RAUKK_STORED_SHIP_PROFILE = Omit<
  * profiles own hull and reactor — the same pre-fill a fresh preset gets,
  * so an old override keeps deriving from real numbers instead of burning
  * nothing. Present rates, zero included, are left alone.
+ *
+ * An absent `stlOnly` is an FTL ship, which is what every profile
+ * written before the flag existed was.
  *
  * @author raukk
  *
@@ -310,6 +326,7 @@ export function raukkCompleteShipProfile(
 		ftlFuelPerParsec:
 			profile.ftlFuelPerParsec ?? calibration.ftlFuelPerParsec,
 		stlFuelPerBlock: profile.stlFuelPerBlock ?? calibration.stlFuelPerBlock,
+		stlOnly: profile.stlOnly ?? false,
 	};
 }
 

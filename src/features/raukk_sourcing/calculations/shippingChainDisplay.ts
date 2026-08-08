@@ -28,6 +28,7 @@ import {
 	IRaukkShipProfile,
 	RAUKK_LOAD_DIMENSION,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
+import { RAUKK_LEG_UNROUTABLE } from "@/features/raukk_sourcing/calculations/shippingStl";
 import { IRaukkChainResult } from "@/features/raukk_sourcing/raukkSourcing.types";
 
 /** Minutes of a day, the denominator of every ship time reading */
@@ -71,6 +72,10 @@ export interface IRaukkChainLegRow {
 	parsecs: number;
 	sameSystem: boolean;
 	routable: boolean;
+	/** Why the leg is unroutable, `null` while it is routable */
+	reason: RAUKK_LEG_UNROUTABLE | null;
+	/** True when an STL-only ship flew this leg over gates */
+	gated: boolean;
 	/** Tonnes riding this leg on every trip */
 	weightPerTrip: number;
 	/** m³ riding this leg on every trip */
@@ -450,6 +455,10 @@ export function raukkChainLegRows(
 		parsecs: leg.effectiveParsecs,
 		sameSystem: leg.sameSystem,
 		routable: leg.routable,
+		// raukk: an unroutable leg built before the reason existed can
+		// only ever have been an unresolved one
+		reason: leg.routable ? null : (leg.reason ?? "unresolved"),
+		gated: leg.gate !== null,
 		weightPerTrip: trips > 0 ? leg.weightPerDay / trips : 0,
 		volumePerTrip: trips > 0 ? leg.volumePerDay / trips : 0,
 		binding: leg.binding,

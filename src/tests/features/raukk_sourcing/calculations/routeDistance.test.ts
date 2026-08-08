@@ -719,6 +719,90 @@ describe("Raukk Sourcing: Route Distance", () => {
 				})?.minutes
 			).toBe(ftlOnly?.minutes);
 		});
+
+		describe("gates only, the STL-only routing", () => {
+			it("finds the gate route and takes no FTL hop", () => {
+				const found: IRaukkMultiModalPath | null = index.fastestPath!(
+					"sys-GG-001",
+					"sys-GG-004",
+					{ gatesOnly: true }
+				);
+
+				expect(found).not.toBeNull();
+				expect(found?.gateHops).toBe(1);
+				expect(found?.hops).toHaveLength(1);
+				expect(found?.hops[0].kind).toBe("gate");
+				expect(found?.systemIds).toStrictEqual([
+					"sys-GG-001",
+					"sys-GG-004",
+				]);
+			});
+
+			it("refuses a pair the FTL network alone connects", () => {
+				// GG-001 to GG-002 is one plain jump and no gate spans it
+				expect(
+					index.fastestPath!("sys-GG-001", "sys-GG-002")?.jumps
+				).toBe(1);
+				expect(
+					index.fastestPath!("sys-GG-001", "sys-GG-002", {
+						gatesOnly: true,
+					})
+				).toBeNull();
+			});
+
+			it("never falls back to FTL, whatever the gate cap says", () => {
+				// the one link of this graph admits 3000 m³; a 5000 m³
+				// hull is offered the FTL detour by the DEFAULT search
+				expect(
+					index.fastestPath!("sys-GG-001", "sys-GG-004", {
+						shipVolumeM3: 5000,
+					})?.gateHops
+				).toBe(0);
+
+				expect(
+					index.fastestPath!("sys-GG-001", "sys-GG-004", {
+						gatesOnly: true,
+						shipVolumeM3: 5000,
+					})
+				).toBeNull();
+			});
+
+			it("stays inside its own memoized tree", () => {
+				const fresh: IRaukkRouteDistance = createRouteDistance(
+					gateGraph,
+					RAUKK_CX_SYSTEM_IDS,
+					gateLinks
+				);
+
+				expect(
+					fresh.fastestPath!("sys-GG-001", "sys-GG-002", {
+						gatesOnly: true,
+					})
+				).toBeNull();
+
+				// the unrestricted metric must not inherit that answer
+				expect(
+					fresh.fastestPath!("sys-GG-001", "sys-GG-002")?.jumps
+				).toBe(1);
+			});
+
+			it("finds nothing at all without gates", () => {
+				expect(
+					index.fastestPath!("sys-GG-001", "sys-GG-004", {
+						gatesOnly: true,
+						useGates: false,
+					})
+				).toBeNull();
+			});
+
+			it("leaves a same system query alone", () => {
+				expect(
+					index.fastestPath!("sys-GG-002", "sys-GG-002", {
+						gatesOnly: true,
+					})?.sameSystem
+				).toBe(true);
+			});
+		});
 	});
 
 	describe("gate edges on the static game data", () => {

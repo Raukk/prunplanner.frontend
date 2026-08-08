@@ -172,6 +172,19 @@ export interface IRaukkRouteTimeOptions {
 	gateOverheadMinutes: number;
 	/** Whether gate links may be used at all */
 	useGates: boolean;
+	/**
+	 * Whether FTL edges are BARRED from the search, gate links only.
+	 *
+	 * The routing an STL-only hull needs: such a ship carries neither
+	 * drive nor reactor, so every inter-system hop has to be a gate
+	 * traversal and a route that is faster over an FTL jump is no route
+	 * at all for it. `false` — the default — leaves the multi modal
+	 * search exactly as it was, FTL plus whatever gate beats it.
+	 *
+	 * Ignored while `useGates` is off: no mode is left to fly then, and
+	 * the search finds nothing.
+	 */
+	gatesOnly: boolean;
 	/** Hull volume in m³; links below it are skipped, 0 disables */
 	shipVolumeM3: number;
 }
@@ -187,6 +200,7 @@ export const RAUKK_DEFAULT_ROUTE_TIME: IRaukkRouteTimeOptions = {
 	gateMinutesPerParsec: RAUKK_GATE_TRAVERSAL.minutesPerParsec,
 	gateOverheadMinutes: RAUKK_GATE_TRAVERSAL.overheadMinutes,
 	useGates: true,
+	gatesOnly: false,
 	shipVolumeM3: 0,
 };
 
@@ -300,7 +314,8 @@ export interface IRaukkRouteDistance {
 	 *
 	 * The other lookups stay what they are — pure FTL, minimum parsecs —
 	 * so every existing caller keeps its result unchanged; a caller that
-	 * wants gates asks for them here.
+	 * wants gates asks for them here, and one that may fly NOTHING but
+	 * gates asks with `gatesOnly`.
 	 */
 	fastestPath?(
 		systemIdA: string,
@@ -686,6 +701,7 @@ export function createRouteDistance(
 			options.gateMinutesPerParsec,
 			options.gateOverheadMinutes,
 			options.useGates ? 1 : 0,
+			options.gatesOnly ? 1 : 0,
 			options.shipVolumeM3,
 		].join("|");
 
@@ -709,13 +725,21 @@ export function createRouteDistance(
 		index: number,
 		options: IRaukkRouteTimeOptions
 	): ISystemEdge[] {
-		if (!options.useGates) return graph.adjacent[index];
+		// raukk: an STL-only hull that may not use gates either has no
+		// way out of its system at all, so nothing is offered to it
+		if (!options.useGates) {
+			return options.gatesOnly ? [] : graph.adjacent[index];
+		}
 
 		const usable: ISystemEdge[] = graph.gateAdjacent[index].filter(
 			(edge) =>
 				options.shipVolumeM3 <= 0 ||
 				edge.link!.maxTraversalM3 >= options.shipVolumeM3
 		);
+
+		// raukk: gates only never falls back to the FTL network — an
+		// empty edge list is the honest answer, the ship cannot jump
+		if (options.gatesOnly) return usable;
 
 		if (usable.length === 0) return graph.adjacent[index];
 

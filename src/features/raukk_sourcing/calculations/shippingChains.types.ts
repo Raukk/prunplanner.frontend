@@ -6,9 +6,14 @@
 
 // Types & Interfaces
 import {
+	IRaukkMultiModalPath,
 	IRaukkRoute,
 	IRaukkRouteDistance,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
+import {
+	IRaukkGateLegCost,
+	RAUKK_LEG_UNROUTABLE,
+} from "@/features/raukk_sourcing/calculations/shippingStl";
 import {
 	IRaukkOrbitBand,
 	IRaukkChainStaticData,
@@ -194,6 +199,19 @@ export interface IRaukkChainLeg {
 	sameSystem: boolean;
 	/** False when a stop or the path could not be resolved */
 	routable: boolean;
+	/**
+	 * Why the leg is not routable. Absent while `routable` is true, and
+	 * absent on every leg built before the reason existed — a reader
+	 * treats that as {@link RAUKK_LEG_UNROUTABLE} `"unresolved"`, which
+	 * is the only case there used to be.
+	 */
+	reason?: RAUKK_LEG_UNROUTABLE;
+	/**
+	 * Gate-only path this leg is flown on, set for an STL-only profile
+	 * on an inter-system leg. Absent for every FTL profile, which flies
+	 * `route` as it always did.
+	 */
+	gatePath?: IRaukkMultiModalPath;
 }
 
 /** One leg of a chain loop, priced and loaded */
@@ -218,6 +236,12 @@ export interface IRaukkChainLegResult extends IRaukkChainLeg {
 	pathMeanDensity: number | null;
 	/** `profile.damagePerParsec` scaled by the density ratio */
 	damagePerParsec: number;
+	/**
+	 * Gate terms of the leg, set only when an STL-only profile flew it
+	 * over gates. Its fees, fuel and damage REPLACE the parsec terms:
+	 * such a leg burns no FTL fuel and takes no per parsec damage.
+	 */
+	gate: IRaukkGateLegCost | null;
 	costPerTrip: number;
 	repairCostPerTrip: number;
 	dailyCost: number;

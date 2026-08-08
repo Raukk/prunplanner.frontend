@@ -188,6 +188,18 @@ describe("Raukk Sourcing: Shipping Pairs", () => {
 		expect(pairs[0].route.jumps).toBe(1);
 	});
 
+	it("names the systems a lane connects, for the STL-only check", () => {
+		const pairs: IRaukkShippingPair[] = buildShippingPairs(
+			flows,
+			lookups(),
+			config
+		);
+
+		expect(pairs[0].fromSystemId).toBe("sys-AA-002");
+		expect(pairs[0].toSystemId).toBe("sys-CX-001");
+		expect(pairs[0].routes).toBeDefined();
+	});
+
 	it("ships through the anchored exchange instead of the nearest", () => {
 		const pairs: IRaukkShippingPair[] = buildShippingPairs(
 			flows,

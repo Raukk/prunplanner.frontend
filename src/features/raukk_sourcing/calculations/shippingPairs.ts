@@ -12,6 +12,7 @@
 
 // Calculations
 import {
+	fastestRoutePath,
 	jumpCount,
 	nearestCx,
 	parsecDistance,
@@ -54,6 +55,11 @@ export const RAUKK_DEFAULT_ROUTES: IRaukkRouteDistance = {
 	jumpCount,
 	nearestCx,
 	resolveSystemId,
+	// raukk: the gate aware metric. Additive and optional on the
+	// interface, so the v1 surface above is untouched; a lane flown by an
+	// STL-only hull needs it to establish whether a gate route exists at
+	// all, and without it every such lane would report unservable.
+	fastestPath: fastestRoutePath,
 };
 
 /** Share of one tickers daily need that comes from one source plan */
@@ -586,6 +592,20 @@ export function buildShippingPairs(
 			profile: lookups.profileOf(pairKey),
 			hulls: lookups.hullsOf?.(pairKey),
 			route,
+			/*
+			 * raukk: only a DIRECT lane names its two systems. A hub
+			 * substituted route is a sum of two legs and no single pair
+			 * of systems describes it, so an STL-only hull on it stays
+			 * unverifiable — and therefore unservable — rather than
+			 * being checked against the wrong pair of endpoints.
+			 */
+			...(sourceToCx === null
+				? {
+						fromSystemId: sourceSystemId,
+						toSystemId: consumerSystemId,
+						routes,
+					}
+				: {}),
 			out: [],
 			back: cargo,
 		});
@@ -619,6 +639,9 @@ export function buildShippingPairs(
 		profile: lookups.profileOf(cxPairKey),
 		hulls: lookups.hullsOf?.(cxPairKey),
 		route: cx.route,
+		fromSystemId: consumerSystemId,
+		toSystemId: cx.systemId,
+		routes,
 		out: cxOut,
 		back: marketBack,
 	});

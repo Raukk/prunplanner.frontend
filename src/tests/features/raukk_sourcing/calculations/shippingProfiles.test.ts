@@ -235,6 +235,21 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			expect(completed.stlFuelPerBlock).toBe(7);
 		});
 
+		it("presets an FTL ship, never an STL-only one", () => {
+			raukkShipProfilePresets().forEach((preset) => {
+				expect(preset.stlOnly).toBe(false);
+			});
+		});
+
+		it("reads an absent STL-only flag as the FTL ship it was", () => {
+			const stored = { ...preset, stlOnly: undefined };
+
+			expect(raukkCompleteShipProfile(stored).stlOnly).toBe(false);
+			expect(
+				raukkCompleteShipProfile({ ...preset, stlOnly: true }).stlOnly
+			).toBe(true);
+		});
+
 		it("splits damage into the calibrated jump and block terms", () => {
 			raukkShipProfilePresets().forEach((preset) => {
 				// calibration §6: a flat 0.0011 % per parsec, reactor blind

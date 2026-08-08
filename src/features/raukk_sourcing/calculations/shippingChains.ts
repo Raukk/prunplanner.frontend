@@ -6,6 +6,7 @@
 
 // Calculations
 import {
+	fastestRoutePath,
 	jumpCount,
 	nearestCx,
 	nearestNeighbor,
@@ -30,11 +31,17 @@ import {
 
 // Types & Interfaces
 import {
+	IRaukkMultiModalPath,
 	IRaukkNearestNeighbor,
 	IRaukkRoute,
 	IRaukkRouteDistance,
 	IRaukkRoutePath,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
+import {
+	IRaukkGateLegCost,
+	raukkGateLegCost,
+	raukkGateOnlyPath,
+} from "@/features/raukk_sourcing/calculations/shippingStl";
 import {
 	IRaukkPairShipping,
 	IRaukkResolvedShipProfile,
@@ -86,6 +93,8 @@ export const RAUKK_DEFAULT_CHAIN_ROUTES: IRaukkRouteDistance = {
 	resolveSystemId,
 	path: routePath,
 	nearestNeighbor,
+	// raukk: the gate aware metric, needed by the STL-only routing
+	fastestPath: fastestRoutePath,
 };
 
 /**
@@ -210,6 +219,32 @@ export function chainStopSystemId(
 }
 
 /**
+ * The ship a loop is flown with, as far as ROUTING cares about it.
+ *
+ * @author raukk
+ */
+export interface IRaukkChainLegShip {
+	/** True for a hull without an FTL drive, see `IRaukkShipProfile` */
+	stlOnly: boolean;
+	/** Hull volume in m³, gate links below it do not admit the ship */
+	shipVolumeM3: number;
+}
+
+/**
+ * The routing relevant half of a resolved ship profile.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkResolvedShipProfile} profile Ship profile
+ * @returns {IRaukkChainLegShip} Routing relevant ship data
+ */
+export function raukkChainLegShip(
+	profile: IRaukkResolvedShipProfile
+): IRaukkChainLegShip {
+	return { stlOnly: profile.stlOnly, shipVolumeM3: profile.cargoVolume };
+}
+
+/**
  * Builds the legs of a chain loop.
  *
  * A leg is identified by its POSITION, never by its stops: repeated
@@ -217,17 +252,26 @@ export function chainStopSystemId(
  * expressed — so nothing here may assume stop uniqueness. A loop of n
  * stops has n legs, the last one closing back to the first stop.
  *
+ * An STL-only `ship` changes what "routable" means, and nothing else: a
+ * same system leg stays fine, an inter-system leg needs a path whose
+ * every hop is a GATE traversal, and a leg without one comes back
+ * `routable: false` with the reason `"stl-only-no-gate"` rather than
+ * quietly priced as an FTL flight the ship cannot make. Absent `ship` —
+ * every caller predating STL-only hulls — is the pure FTL behaviour.
+ *
  * @author raukk
  *
  * @param {RAUKK_STOP_REF[]} stops Ordered loop
  * @param {IRaukkRouteDistance} routes Route lookups
  * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @param {IRaukkChainLegShip} [ship] Ship the loop is flown with
  * @returns {IRaukkChainLeg[]} Legs, in travel order
  */
 export function buildChainLegs(
 	stops: RAUKK_STOP_REF[],
 	routes: IRaukkRouteDistance = RAUKK_DEFAULT_CHAIN_ROUTES,
-	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE,
+	ship?: IRaukkChainLegShip
 ): IRaukkChainLeg[] {
 	if (stops.length < 2) return [];
 
@@ -246,7 +290,7 @@ export function buildChainLegs(
 				? routes.route(fromSystemId, toSystemId)
 				: null;
 
-		return {
+		const leg: IRaukkChainLeg = {
 			index,
 			fromIndex: index,
 			toIndex,
@@ -258,7 +302,54 @@ export function buildChainLegs(
 			sameSystem: route?.sameSystem ?? false,
 			routable: route !== null,
 		};
+
+		if (!leg.routable) return { ...leg, reason: "unresolved" };
+
+		if (ship?.stlOnly !== true || leg.sameSystem) return leg;
+
+		const gatePath: IRaukkMultiModalPath | null = raukkGateOnlyPath(
+			routes,
+			fromSystemId!,
+			toSystemId!,
+			ship.shipVolumeM3
+		);
+
+		if (gatePath === null) {
+			return { ...leg, routable: false, reason: "stl-only-no-gate" };
+		}
+
+		return { ...leg, gatePath };
 	});
+}
+
+/**
+ * Whether an STL-only hull could fly the WHOLE loop.
+ *
+ * Every leg has to be same system or gate served; one leg that is not
+ * makes the loop unservable, because a loop is flown as one trip and a
+ * ship cannot be swapped halfway round it. This is what the automatic
+ * hull pick asks before it is allowed to offer an STL-only hull at all.
+ *
+ * @author raukk
+ *
+ * @param {RAUKK_STOP_REF[]} stops Ordered loop
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @param {number} shipVolumeM3 Hull volume in m³, 0 skips the gate cap
+ * @returns {boolean} Whether an STL-only hull may fly the loop
+ */
+export function raukkChainGateServable(
+	stops: RAUKK_STOP_REF[],
+	routes: IRaukkRouteDistance = RAUKK_DEFAULT_CHAIN_ROUTES,
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE,
+	shipVolumeM3: number = 0
+): boolean {
+	const legs: IRaukkChainLeg[] = buildChainLegs(stops, routes, cxSystems, {
+		stlOnly: true,
+		shipVolumeM3,
+	});
+
+	return legs.length > 0 && legs.every((leg) => leg.routable);
 }
 
 /**
@@ -344,6 +435,12 @@ interface ILegPricing {
 	sameSystemBand: IRaukkOrbitBand | null;
 	pathMeanDensity: number | null;
 	damagePerParsec: number;
+	/**
+	 * Gate terms of an STL-only leg, null on every FTL leg. Present, its
+	 * fees and fuel ARE `distanceCost` and its damage replaces the
+	 * `effectiveParsecs * damagePerParsec` term outright.
+	 */
+	gate: IRaukkGateLegCost | null;
 }
 
 /**
@@ -430,9 +527,33 @@ function priceLeg(
 		sameSystemBand: null,
 		pathMeanDensity: null,
 		damagePerParsec: profile.damagePerParsec,
+		gate: null,
 	};
 
 	if (leg.route === null || leg.fromSystemId === null) return flat;
+
+	/*
+	 * An STL-only ship gate hopping to the next system: the gate terms
+	 * of shipping-calibration.md section 4 REPLACE the parsec terms —
+	 * no FTL fuel is burnt, no jump is charged and no per parsec damage
+	 * is taken. The one sublight block the caller charges per leg stays,
+	 * it is the planet↔gate flying the ship still does.
+	 *
+	 * SEAM: the distance a gate route covers is reported as
+	 * `effectiveParsecs` so the per flow allocation keeps weighting by
+	 * distance ridden, but nothing is priced off it.
+	 */
+	if (leg.gatePath !== undefined) {
+		const gate: IRaukkGateLegCost = raukkGateLegCost(leg.gatePath, profile);
+
+		return {
+			...flat,
+			effectiveParsecs: leg.gatePath.parsecs,
+			effectiveJumps: 0,
+			distanceCost: gate.fees + gate.fuelCost,
+			gate,
+		};
+	}
 
 	if (!leg.sameSystem) {
 		const path: IRaukkRoutePath | null =
@@ -449,6 +570,7 @@ function priceLeg(
 			sameSystemMode: null,
 			sameSystemBand: null,
 			pathMeanDensity: density,
+			gate: null,
 			damagePerParsec:
 				density !== null && chainConfig.densityRef > 0
 					? (profile.damagePerParsec * density) /
@@ -530,6 +652,7 @@ function priceLeg(
 		sameSystemMode: "two-jump",
 		sameSystemBand: band,
 		pathMeanDensity: neighborDensity,
+		gate: null,
 		damagePerParsec:
 			chainConfig.densityRef > 0
 				? (profile.damagePerParsec * neighborDensity) /
@@ -600,7 +723,8 @@ export function calculateChainShipping(
 	const legs: IRaukkChainLeg[] = buildChainLegs(
 		chain.stops,
 		routes,
-		cxSystems
+		cxSystems,
+		raukkChainLegShip(profile)
 	);
 	const claim: IRaukkChainClaim = claimChainFlows(chain.stops, input.flows);
 
@@ -674,9 +798,18 @@ export function calculateChainShipping(
 	const legRepair: number[] = legs.map((leg, index) => {
 		if (hired) return 0;
 
+		const gate: IRaukkGateLegCost | null = pricing[index].gate;
+
+		/*
+		 * A gate served leg takes the flat per traversal damage of
+		 * shipping-calibration.md section 4 and NO per parsec damage:
+		 * the ship never flies those parsecs, the gate does.
+		 */
 		const damage: number =
-			pricing[index].effectiveParsecs * pricing[index].damagePerParsec +
-			profile.damagePerStlBlock;
+			(gate !== null
+				? gate.damage
+				: pricing[index].effectiveParsecs *
+					pricing[index].damagePerParsec) + profile.damagePerStlBlock;
 
 		return (damage / RAUKK_REPAIR_AT_DAMAGE) * repairBillCost;
 	});
@@ -723,12 +856,19 @@ export function calculateChainShipping(
 		binding[index] === "weight" ? weightPerDay[index] : volumePerDay[index]
 	);
 
-	const legMinutes: number[] = legs.map(
-		(leg, index) =>
-			pricing[index].effectiveParsecs * profile.minutesPerParsec +
-			pricing[index].effectiveJumps * profile.chargeMinutes +
-			stlBlockMinutes(profile, loads[index] / tripsPerDay)
-	);
+	const legMinutes: number[] = legs.map((leg, index) => {
+		const gate: IRaukkGateLegCost | null = pricing[index].gate;
+
+		// gate minutes are the measured traversal time and replace the
+		// hulls own FTL speed, which an STL-only ship does not have
+		const flight: number =
+			gate !== null
+				? gate.minutes
+				: pricing[index].effectiveParsecs * profile.minutesPerParsec +
+					pricing[index].effectiveJumps * profile.chargeMinutes;
+
+		return flight + stlBlockMinutes(profile, loads[index] / tripsPerDay);
+	});
 
 	const roundTripMinutes: number = legMinutes.reduce(
 		(sum, value) => sum + value,
@@ -863,6 +1003,7 @@ export function calculateChainShipping(
 		sameSystemBand: pricing[index].sameSystemBand,
 		pathMeanDensity: pricing[index].pathMeanDensity,
 		damagePerParsec: pricing[index].damagePerParsec,
+		gate: pricing[index].gate,
 		costPerTrip: legCostPerTrip[index],
 		repairCostPerTrip: legRepair[index],
 		dailyCost: tripsPerDay * legCostPerTrip[index],

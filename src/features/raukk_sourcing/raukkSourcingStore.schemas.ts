@@ -63,6 +63,10 @@ export const RaukkRoutingModeSchema = z.enum(["direct", "cx-hub"]);
  * included, because a stored zero is indistinguishable from a user who
  * really wants free freight. The two fuel burn rates are optional and
  * fall back to the preset of the same profile id at read time.
+ *
+ * `stlOnly` defaults to false: everything persisted before STL-only
+ * hulls existed is an FTL ship, and reading an absent flag as anything
+ * else would silently un-route half a fleet.
  */
 export const RaukkShipProfileSchema = z.object({
 	id: z.string().min(1),
@@ -70,6 +74,10 @@ export const RaukkShipProfileSchema = z.object({
 	cargoWeight: z.number().positive(),
 	cargoVolume: z.number().positive(),
 	ftlReactor: RaukkFtlReactorSchema,
+	// raukk: STL-only hulls carry no FTL drive and route over gates
+	// alone. Defaulted, so every profile persisted before the flag
+	// existed parses as the FTL ship it was.
+	stlOnly: z.boolean().default(false),
 	costPerParsec: z.number().nullable().default(null),
 	stlBlockCost: z.number().nullable().default(null),
 	ftlFuelPerParsec: z.number().nonnegative().optional(),

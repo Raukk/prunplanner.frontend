@@ -2,7 +2,14 @@
 	import { computed, ComputedRef, PropType } from "vue";
 
 	// UI
-	import { PButton, PInputNumber, PTable, PTag, PTooltip } from "@/ui";
+	import {
+		PButton,
+		PCheckbox,
+		PInputNumber,
+		PTable,
+		PTag,
+		PTooltip,
+	} from "@/ui";
 
 	// Calculations
 	import {
@@ -86,12 +93,68 @@
 		"stlBlockCost",
 	];
 
+	/**
+	 * The constants an STL-only hull has no use for.
+	 *
+	 * Such a ship carries neither drive nor reactor, so nothing it does
+	 * is measured per parsec or per charge. The fields are DISABLED
+	 * rather than hidden: the stored value is kept untouched and comes
+	 * back the moment the flag is turned off again, and a column that
+	 * vanishes on one row would break the table.
+	 */
+	const FTL_FIELDS: RAUKK_CALIBRATION_FIELD[] = [
+		"costPerParsec",
+		"ftlFuelPerParsec",
+		"minutesPerParsec",
+		"chargeMinutes",
+		"damagePerParsec",
+	];
+
 	function isOverridden(profileId: string): boolean {
 		return props.overriddenIds.includes(profileId);
 	}
 
 	function isDerivable(field: RAUKK_CALIBRATION_FIELD): boolean {
 		return DERIVED_FIELDS.includes(field);
+	}
+
+	/**
+	 * Whether one field of one profile may be edited.
+	 *
+	 * @author raukk
+	 *
+	 * @param {IRaukkShipProfile} profile Ship Profile
+	 * @param {RAUKK_CALIBRATION_FIELD} field Calibration Field
+	 * @returns {boolean} Whether the input is disabled
+	 */
+	function isDisabled(
+		profile: IRaukkShipProfile,
+		field: RAUKK_CALIBRATION_FIELD
+	): boolean {
+		return (
+			props.disabled || (profile.stlOnly && FTL_FIELDS.includes(field))
+		);
+	}
+
+	/**
+	 * Turns the STL-only flag of one profile on or off.
+	 *
+	 * Nothing else is written: the FTL constants stay exactly as they
+	 * are, so the profile is restored in full by turning the flag back
+	 * off. A ship that cannot jump simply stops READING them.
+	 *
+	 * @author raukk
+	 *
+	 * @param {IRaukkShipProfile} profile Ship Profile
+	 * @param {boolean | undefined} value New Value
+	 */
+	function changeStlOnly(
+		profile: IRaukkShipProfile,
+		value: boolean | undefined
+	): void {
+		if (props.disabled) return;
+
+		emit("update:profile", profile.id, { stlOnly: value === true });
 	}
 
 	/**
@@ -163,6 +226,14 @@
 		<thead>
 			<tr>
 				<th>{{ $t("raukk_sourcing.shipping.profile") }}</th>
+				<th class="text-right!">
+					<PTooltip>
+						<template #trigger>
+							{{ $t("raukk_sourcing.shipping.fields.stlOnly") }}
+						</template>
+						{{ $t("raukk_sourcing.shipping.stl_only_tooltip") }}
+					</PTooltip>
+				</th>
 				<th
 					v-for="field in fields"
 					:key="`RAUKKSHIPFIELD#${field}`"
@@ -193,6 +264,16 @@
 						</PTag>
 					</div>
 				</td>
+				<td class="text-right">
+					<div class="flex flex-row justify-end">
+						<PCheckbox
+							:checked="profile.stlOnly"
+							:disabled="disabled"
+							@update:checked="
+								(v) => changeStlOnly(profile, v)
+							" />
+					</div>
+				</td>
 				<td
 					v-for="field in fields"
 					:key="`RAUKKSHIPVALUE#${profile.id}#${field}`"
@@ -204,7 +285,7 @@
 								size="sm"
 								decimals
 								:value="profile[field]"
-								:disabled="disabled"
+								:disabled="isDisabled(profile, field)"
 								:placeholder="
 									formatNumber(derivedValue(profile, field))
 								"
@@ -221,7 +302,7 @@
 						decimals
 						:value="profile[field]"
 						:min="field === 'shipsAvailable' ? 1 : -Infinity"
-						:disabled="disabled"
+						:disabled="isDisabled(profile, field)"
 						@update:value="(v) => change(profile, field, v)" />
 				</td>
 				<td>
