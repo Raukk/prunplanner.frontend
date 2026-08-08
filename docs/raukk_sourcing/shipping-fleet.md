@@ -49,6 +49,33 @@ Solver (pure module, `calculations/shippingCalibration.ts`):
 - Calibration flow copy points users at the in-game BLUEPRINT TEST
   FLIGHT simulator: it produces {duration, STL fuel, FTL fuel,
   damage} for any path and load without flying it.
+
+## Blueprint-seeded profiles (USER data, 2026-08-08)
+
+The BLUEPRINT panel's Performance block publishes per-design stats
+that seed a profile BEFORE any flight: cargo t/m³, `FTL speed (max)`
+in parsec/h, `Acceleration (max)` m/s², `Operating empty mass` t,
+ship volume m³, and the STL engine's fuel rate (FSE: 0.0075
+units/s). Calibration order: blueprint stats seed → BTF flights
+refine/validate → manual override wins.
+
+Verified against user BTF runs (ZV-759c → ANT, 4 pc, both hulls):
+
+- FTL jump speed scales with reactor % toward the blueprint max
+  (WCB 2.5 pc/h: 4 pc in 1h32m @100%, 1h50m @69%, 2h10m @MIN;
+  HCB 1.8 pc/h: 2h10m at every setting — capped below the scale).
+- MIN-reactor floor ≈ universal: both hulls 4 pc in 2h10m
+  (32.5 min/pc); across jump lengths (4/5/9 pc @MIN: 2h10m / 2h57m
+  / 4h46m) jump time = per-jump overhead + per-parsec term — the
+  solver fits both.
+- STL leg time tracks acceleration & gross mass (HCB 55.3 m/s² vs
+  WCB 98.1 m/s²); STL fuel ≈ engine rate × STL seconds.
+- FTL fuel tracks actual speed achieved (HCB constant 23 units at
+  all reactor settings — capped; WCB 8/16/23 at MIN/69%/100%).
+- Reference blueprints: BP-CNLC-4387 (HCB: FSE, quick-charge, 5000t/
+  5000m³, 1808t empty, 5825m³, 1.8 pc/h, 55.3 m/s²) and BP-TLRI-1286
+  (WCB: FSE, quick-charge, 3000t/1000m³, 936t empty, 1637m³,
+  2.5 pc/h, 98.1 m/s²).
 - Assignment: every lane (v1 pair) and chain gets a supporting ship
   type — auto-assigned (default profile) or user-picked per section.
 - Utilization rollup per ship type:
