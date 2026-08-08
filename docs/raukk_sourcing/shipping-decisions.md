@@ -326,6 +326,34 @@ auto loops (CX→A→CX) are refused; the Hired Transport table stays one
 row per lane with its legs listed inside the cadence cell, because the
 LM rate and ship assignment are pair-keyed.
 
+## Round 11 (depot planets as routing anchors)
+
+1. **Depots** are planets the user marks as handover points, account
+   level like the fleet. A depot anchors ROUTING only: a chain may be
+   cut at one exactly as it is cut at an exchange. Explicitly NO
+   market semantics — never a price source, never a hub/spoke anchor,
+   never part of `cxAnchorMode` — and no storage modelling: keeping
+   the warehouse stocked stays the players problem.
+2. **Split generalized**: the trigger carries an `anchorKind` of
+   `"cx" | "depot"` and depots join the exchanges in the detour scan
+   under the same parsec budget. Ties go to the exchange, so every
+   loop authored before depots existed splits exactly as it did.
+   An exchange anchor is still matched by SYSTEM, a depot by its
+   PLANET — a neighbouring base in the depots system is no warehouse.
+3. **Per-side ships**: each half of a split may fly its own profile
+   (`sideProfiles`, keyed `a`/`b`), falling back to the chains hull
+   and then to the account default. The canonical case is an STL-only
+   gate hopper on the depot side and an FTL hauler on the exchange
+   side (HRT ⇄ Hephaestus over the Promitor gate); the gate-only
+   validation and pricing of round 8/STL-only apply per leg unchanged.
+4. **Warehouse rent**: an optional flat ȼ per week per depot, charged
+   `rent / 7` per day and ONCE per depot however many chains call —
+   it is the warehouse standing there, not a docking fee, and two
+   loops meeting at a depot is the very case a depot exists for. It
+   is aggregated with the chain daily costs in the account rollup
+   (`useRaukkDepotCosts`) and shown as its own line rather than
+   folded into any chain. An unused depot costs nothing.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration, and

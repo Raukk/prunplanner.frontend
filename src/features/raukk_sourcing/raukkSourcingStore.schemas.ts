@@ -149,8 +149,25 @@ export const RaukkChainSchema = z.object({
 	name: z.string().optional(),
 	stops: z.array(z.string().min(1)),
 	profileId: z.string().optional(),
+	// raukk: ship profile per SIDE of a split, keyed by the sub chain
+	// suffix. Optional: every chain authored before sides existed flies
+	// one hull all the way round.
+	sideProfiles: z.record(z.string(), z.string()).optional(),
 	lmRatePerTrip: z.number().optional(),
 	autoCxSplit: z.boolean().optional(),
+});
+
+/**
+ * One planet marked as a DEPOT: a routing anchor with a warehouse rent,
+ * and no market semantics of any kind.
+ *
+ * raukk: `weeklyCostAic` is optional and non negative — an absent or zero
+ * rent is a free handover point, which is a legal depot, while a negative
+ * one would pay the user for shipping.
+ */
+export const RaukkDepotSchema = z.object({
+	planetNaturalId: z.string().min(1),
+	weeklyCostAic: z.number().nonnegative().optional(),
 });
 
 /** Account wide chain knobs, every field defaulted like the v1 config */
@@ -253,6 +270,8 @@ export const RaukkChainResultSchema = z.object({
 			legIndex: z.number(),
 			cxCode: z.string(),
 			detourParsecs: z.number(),
+			// raukk: absent on every result written before depots anchored
+			anchorKind: z.enum(["cx", "depot"]).optional(),
 		})
 		.nullable()
 		.default(null),
@@ -369,6 +388,10 @@ export const RaukkSourcingExportSchema = z.object({
 	fleet: z.record(z.string(), RaukkFleetShipSchema).default({}),
 	assignments: z.record(z.string(), z.string()).default({}),
 	chainConfig: RaukkChainConfigSchema.prefault({}),
+	// raukk: depots, keyed by planet natural id. Defaulted for the very
+	// same reason the five v2 slices are: every payload written before
+	// depots existed knows none.
+	depots: z.record(z.string(), RaukkDepotSchema).default({}),
 });
 
 export type RaukkSourcingExportType = z.infer<typeof RaukkSourcingExportSchema>;

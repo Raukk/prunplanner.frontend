@@ -9,6 +9,7 @@
 	const sourcingStore = useRaukkSourcingStore();
 
 	// Calculations
+	import { RAUKK_CHAIN_SIDE_KEYS } from "@/features/raukk_sourcing/calculations/shippingChains";
 	import { raukkChainPairConflict } from "@/features/raukk_sourcing/calculations/shippingChainValidation";
 	import { raukkStopLabel } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 
@@ -48,6 +49,9 @@
 	const refName: Ref<string | null> = ref(null);
 	const refStops: Ref<string[]> = ref([]);
 	const refProfileId: Ref<string | null> = ref(null);
+	/** Ship profile per split side, null follows the chains own hull */
+	const refSideProfileA: Ref<string | null> = ref(null);
+	const refSideProfileB: Ref<string | null> = ref(null);
 	const refLmRate: Ref<number | null> = ref(null);
 	const refAutoSplit: Ref<string> = ref("default");
 	const refAddStop: Ref<string | null> = ref(null);
@@ -74,6 +78,10 @@
 		refName.value = chain?.name ?? null;
 		refStops.value = [...(chain?.stops ?? [])];
 		refProfileId.value = chain?.profileId ?? null;
+		refSideProfileA.value =
+			chain?.sideProfiles?.[RAUKK_CHAIN_SIDE_KEYS[0]] ?? null;
+		refSideProfileB.value =
+			chain?.sideProfiles?.[RAUKK_CHAIN_SIDE_KEYS[1]] ?? null;
 		refLmRate.value = chain?.lmRatePerTrip ?? null;
 		refAutoSplit.value =
 			chain?.autoCxSplit === undefined
@@ -173,6 +181,26 @@
 		refStops.value = stops;
 	}
 
+	/**
+	 * Side profiles of the loop, `undefined` while both sides fly the
+	 * chains own hull — an empty record would persist a decision the user
+	 * never made.
+	 *
+	 * @author raukk
+	 *
+	 * @returns {(Record<string, string> | undefined)} Side profiles
+	 */
+	function sideProfiles(): Record<string, string> | undefined {
+		const sides: Record<string, string> = {};
+
+		if (refSideProfileA.value !== null)
+			sides[RAUKK_CHAIN_SIDE_KEYS[0]] = refSideProfileA.value;
+		if (refSideProfileB.value !== null)
+			sides[RAUKK_CHAIN_SIDE_KEYS[1]] = refSideProfileB.value;
+
+		return Object.keys(sides).length > 0 ? sides : undefined;
+	}
+
 	function save(): void {
 		if (!canSave.value) return;
 
@@ -182,6 +210,7 @@
 				name: refName.value ?? undefined,
 				stops: [...refStops.value],
 				profileId: refProfileId.value ?? undefined,
+				sideProfiles: sideProfiles(),
 				lmRatePerTrip: refLmRate.value ?? undefined,
 				autoCxSplit:
 					refAutoSplit.value === "default"
@@ -220,6 +249,28 @@
 				:options="profileOptions"
 				:placeholder="$t('raukk_sourcing.chains.profile_default')"
 				@update:value="(v) => (refProfileId = v as string | null)" />
+
+			<div class="font-bold pl-3">
+				{{ $t("raukk_sourcing.chains.side_profile_a") }}
+			</div>
+			<PSelect
+				class="w-60!"
+				clearable
+				:value="refSideProfileA"
+				:options="profileOptions"
+				:placeholder="$t('raukk_sourcing.chains.side_profile_default')"
+				@update:value="(v) => (refSideProfileA = v as string | null)" />
+
+			<div class="font-bold pl-3">
+				{{ $t("raukk_sourcing.chains.side_profile_b") }}
+			</div>
+			<PSelect
+				class="w-60!"
+				clearable
+				:value="refSideProfileB"
+				:options="profileOptions"
+				:placeholder="$t('raukk_sourcing.chains.side_profile_default')"
+				@update:value="(v) => (refSideProfileB = v as string | null)" />
 
 			<div class="font-bold pl-3">
 				{{ $t("raukk_sourcing.chains.lm_rate") }}

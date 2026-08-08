@@ -28,6 +28,8 @@ import {
 	raukkCadenceCaps,
 	raukkCadenceOf,
 } from "@/features/raukk_sourcing/calculations/shippingCadence";
+// raukk: depots anchor a split exactly as an exchange does
+import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippingDepots";
 
 // Types & Interfaces
 import {
@@ -55,6 +57,7 @@ import {
 	IRaukkOrbitBand,
 } from "@/features/raukk_sourcing/calculations/shippingChainData";
 import {
+	IRaukkChainAnchor,
 	IRaukkChainClaim,
 	IRaukkChainConfig,
 	IRaukkChainDropEvaluation,
@@ -68,6 +71,7 @@ import {
 	IRaukkCxSplitResult,
 	IRaukkCxSplitTrigger,
 	IRaukkCxSubChain,
+	RAUKK_CHAIN_ANCHOR_KIND,
 	RAUKK_SAME_SYSTEM_MODE,
 	RAUKK_STOP_REF,
 } from "@/features/raukk_sourcing/calculations/shippingChains.types";
@@ -176,6 +180,35 @@ export function raukkDefaultChainConfig(): IRaukkChainConfig {
 		autoChainDetourLooseParsecs:
 			RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS,
 	};
+}
+
+/**
+ * Side keys of a split, in the order the sub chains are built.
+ *
+ * raukk: the two halves of a split are addressed by these keys — in the
+ * persisted `sideProfiles` of a chain, and as the suffix of the sub chain
+ * ids (`<chainId>#a`).
+ *
+ * @author raukk
+ */
+export const RAUKK_CHAIN_SIDE_KEYS: string[] = ["a", "b"];
+
+/**
+ * Side key of one sub chain id, `undefined` for a whole chain.
+ *
+ * @author raukk
+ *
+ * @param {string} chainId Chain id of a sub chain, `<chainId>#a`
+ * @returns {(string | undefined)} Side key, undefined without one
+ */
+export function raukkChainSideKey(chainId: string): string | undefined {
+	const marker: number = chainId.lastIndexOf("#");
+
+	if (marker < 0) return undefined;
+
+	const side: string = chainId.slice(marker + 1);
+
+	return RAUKK_CHAIN_SIDE_KEYS.includes(side) ? side : undefined;
 }
 
 /**
@@ -1051,10 +1084,10 @@ export function calculateReversedChainShipping(
 	});
 }
 
-/** Detour of one leg over one exchange, `null` when not computable */
-function cxDetour(
+/** Detour of one leg over one anchor system, `null` when not computable */
+function anchorDetour(
 	leg: IRaukkChainLeg,
-	cxSystemId: string,
+	anchorSystemId: string,
 	routes: IRaukkRouteDistance
 ): number | null {
 	if (
@@ -1065,37 +1098,92 @@ function cxDetour(
 		return null;
 	}
 
-	// an exchange the leg already ends at is no detour candidate
-	if (leg.fromSystemId === cxSystemId || leg.toSystemId === cxSystemId) {
+	// an anchor the leg already ends at is no detour candidate
+	if (
+		leg.fromSystemId === anchorSystemId ||
+		leg.toSystemId === anchorSystemId
+	) {
 		return null;
 	}
 
-	const toCx: IRaukkRoute | null = routes.route(leg.fromSystemId, cxSystemId);
-	const fromCx: IRaukkRoute | null = routes.route(cxSystemId, leg.toSystemId);
+	const toAnchor: IRaukkRoute | null = routes.route(
+		leg.fromSystemId,
+		anchorSystemId
+	);
+	const fromAnchor: IRaukkRoute | null = routes.route(
+		anchorSystemId,
+		leg.toSystemId
+	);
 
-	if (toCx === null || fromCx === null) return null;
+	if (toAnchor === null || fromAnchor === null) return null;
 
-	return toCx.parsecs + fromCx.parsecs - leg.route.parsecs;
+	return toAnchor.parsecs + fromAnchor.parsecs - leg.route.parsecs;
 }
 
-/** Cheapest exchange detour of one leg */
-function bestCxDetour(
+/**
+ * Every point a loop may be cut at: the exchanges, plus the planets the
+ * account marked as depots.
+ *
+ * raukk: a depot anchors for ROUTING alone — it is where a gate side ship
+ * and an FTL hauler hand cargo over — and carries no market semantics of
+ * any kind. Exchanges come first, so a tie between the two kinds still
+ * goes to the exchange, which is the behaviour of every chain authored
+ * before depots existed. A depot that resolves to no system is silently
+ * no anchor: an unroutable handover point is not one.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @param {RAUKK_STOP_REF[]} depots Depot planet natural ids
+ * @returns {IRaukkChainAnchor[]} Candidate anchors, exchanges first
+ */
+export function raukkChainAnchors(
+	routes: IRaukkRouteDistance = RAUKK_DEFAULT_CHAIN_ROUTES,
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE,
+	depots: RAUKK_STOP_REF[] = []
+): IRaukkChainAnchor[] {
+	const anchors: IRaukkChainAnchor[] = Object.entries(cxSystems).map(
+		([cxCode, systemId]) => ({
+			kind: "cx" as RAUKK_CHAIN_ANCHOR_KIND,
+			stopRef: cxCode,
+			systemId,
+		})
+	);
+
+	depots.forEach((stopRef) => {
+		const systemId: string | null = routes.resolveSystemId(stopRef);
+		if (systemId === null) return;
+
+		anchors.push({ kind: "depot", stopRef, systemId });
+	});
+
+	return anchors;
+}
+
+/** Cheapest anchor detour of one leg */
+function bestAnchorDetour(
 	leg: IRaukkChainLeg,
 	routes: IRaukkRouteDistance,
-	cxSystems: Record<string, string>
+	anchors: IRaukkChainAnchor[]
 ): IRaukkCxSplitTrigger | null {
 	let best: IRaukkCxSplitTrigger | null = null;
 
-	Object.entries(cxSystems).forEach(([cxCode, cxSystemId]) => {
-		const detour: number | null = cxDetour(leg, cxSystemId, routes);
+	anchors.forEach((anchor) => {
+		const detour: number | null = anchorDetour(
+			leg,
+			anchor.systemId,
+			routes
+		);
 		if (detour === null) return;
 
 		if (best === null || detour < best.detourParsecs) {
 			best = {
 				legIndex: leg.index,
-				cxCode,
-				cxSystemId,
+				cxCode: anchor.stopRef,
+				cxSystemId: anchor.systemId,
 				detourParsecs: detour,
+				anchorKind: anchor.kind,
 			};
 		}
 	});
@@ -1104,11 +1192,42 @@ function bestCxDetour(
 }
 
 /**
- * The leg whose shortest path all but touches an exchange.
+ * Whether one stop of the loop IS the anchor the trigger names.
  *
- * Trigger of the CX split rule: `parsecs(via CX) − parsecs(direct)` at
- * or below `cxSplitDetourParsecs` on any leg. The cheapest detour of
- * the whole loop wins, ties towards the earlier leg.
+ * An exchange is matched by SYSTEM: every stop in the exchanges system
+ * sits where the ship passes it anyway, which is what the rule has always
+ * meant. A depot is matched by the stop reference itself — the warehouse
+ * stands on one planet, and a neighbouring base in the same system is no
+ * handover point at all.
+ *
+ * @author raukk
+ *
+ * @param {RAUKK_STOP_REF} stopRef Stop reference
+ * @param {IRaukkCxSplitTrigger} trigger Triggering leg and anchor
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @returns {boolean} True when the stop is the anchor
+ */
+function isAnchorStop(
+	stopRef: RAUKK_STOP_REF,
+	trigger: IRaukkCxSplitTrigger,
+	routes: IRaukkRouteDistance,
+	cxSystems: Record<string, string>
+): boolean {
+	if (trigger.anchorKind === "depot") {
+		return raukkDepotStopKey(stopRef) === raukkDepotStopKey(trigger.cxCode);
+	}
+
+	return chainStopSystemId(stopRef, routes, cxSystems) === trigger.cxSystemId;
+}
+
+/**
+ * The leg whose shortest path all but touches an anchor.
+ *
+ * Trigger of the split rule: `parsecs(via anchor) − parsecs(direct)` at
+ * or below `cxSplitDetourParsecs` on any leg. The cheapest detour of the
+ * whole loop wins, ties towards the earlier leg — and, at equal detour,
+ * towards the exchange over the depot.
  *
  * @author raukk
  *
@@ -1129,13 +1248,19 @@ export function detectCxSplit(
 		cxSystems
 	);
 
+	const anchors: IRaukkChainAnchor[] = raukkChainAnchors(
+		routes,
+		cxSystems,
+		input.depots ?? []
+	);
+
 	let best: IRaukkCxSplitTrigger | null = null;
 
 	legs.forEach((leg) => {
-		const candidate: IRaukkCxSplitTrigger | null = bestCxDetour(
+		const candidate: IRaukkCxSplitTrigger | null = bestAnchorDetour(
 			leg,
 			routes,
-			cxSystems
+			anchors
 		);
 		if (candidate === null) return;
 
@@ -1153,24 +1278,29 @@ export function detectCxSplit(
 }
 
 /**
- * Cuts a chain into two exchange anchored sub chains.
+ * Cuts a chain into two anchor anchored sub chains.
  *
- * The loop is cut at TWO positions, both of them the exchange: cutting
+ * The loop is cut at TWO positions, both of them the anchor: cutting
  * a cycle at a single vertex would only produce the same cycle again.
- * The first cut is the triggering leg, where the exchange is inserted;
- * the second is an exchange stop the loop already has — the canonical
+ * The first cut is the triggering leg, where the anchor is inserted;
+ * the second is an anchor stop the loop already has — the canonical
  * `CX → extractor → smelter → CX` case — or, when there is none, the
- * next best leg of the same exchange by detour, so both cuts sit where
- * the ship passes the exchange anyway.
+ * next best leg of the same anchor by detour, so both cuts sit where
+ * the ship passes the anchor anyway.
  *
  * Flows staying inside one sub chain are handed over untouched; flows
- * crossing the cut become two flows, origin → CX and CX → destination,
- * trans-shipped through the exchanges infinite storage.
+ * crossing the cut become two flows, origin → anchor and anchor →
+ * destination, trans-shipped through the exchanges infinite storage or,
+ * at a depot, through the warehouse the user keeps there.
+ *
+ * raukk: each half may be flown by its OWN ship — the gate side hopper
+ * and the FTL hauler of the depot case — so a sub chain carries the side
+ * profile the chain named for it, falling back to the chains own hull.
  *
  * @author raukk
  *
  * @param {IRaukkChainInput} input Chain, profile, flows, configuration
- * @param {IRaukkCxSplitTrigger} trigger Triggering leg and exchange
+ * @param {IRaukkCxSplitTrigger} trigger Triggering leg and anchor
  * @returns {IRaukkCxSubChain[]} Two sub chains, empty when not splittable
  */
 export function buildCxSplitChains(
@@ -1187,9 +1317,7 @@ export function buildCxSplitChains(
 
 	const existing: number[] = stops
 		.map((stopRef, index) =>
-			chainStopSystemId(stopRef, routes, cxSystems) === trigger.cxSystemId
-				? index
-				: -1
+			isAnchorStop(stopRef, trigger, routes, cxSystems) ? index : -1
 		)
 		.filter((index) => index >= 0);
 
@@ -1204,7 +1332,7 @@ export function buildCxSplitChains(
 		legs.forEach((leg) => {
 			if (leg.index === trigger.legIndex) return;
 
-			const detour: number | null = cxDetour(
+			const detour: number | null = anchorDetour(
 				leg,
 				trigger.cxSystemId,
 				routes
@@ -1213,9 +1341,8 @@ export function buildCxSplitChains(
 
 			if (second === null || detour < second.detourParsecs) {
 				second = {
+					...trigger,
 					legIndex: leg.index,
-					cxCode: trigger.cxCode,
-					cxSystemId: trigger.cxSystemId,
 					detourParsecs: detour,
 				};
 			}
@@ -1233,9 +1360,7 @@ export function buildCxSplitChains(
 
 	const anchors: number[] = augmented
 		.map((stopRef, index) =>
-			chainStopSystemId(stopRef, routes, cxSystems) === trigger.cxSystemId
-				? index
-				: -1
+			isAnchorStop(stopRef, trigger, routes, cxSystems) ? index : -1
 		)
 		.filter((index) => index >= 0);
 
@@ -1250,23 +1375,26 @@ export function buildCxSplitChains(
 		...augmented.slice(0, first),
 	];
 
+	/** One half, carrying the side profile the chain named for it */
+	function subChainOf(
+		side: string,
+		sideStops: RAUKK_STOP_REF[]
+	): IRaukkCxSubChain {
+		return {
+			chain: {
+				...input.chain,
+				chainId: `${input.chain.chainId}#${side}`,
+				stops: sideStops,
+				profileId:
+					input.chain.sideProfiles?.[side] ?? input.chain.profileId,
+			},
+			flows: [],
+		};
+	}
+
 	const subChains: IRaukkCxSubChain[] = [
-		{
-			chain: {
-				...input.chain,
-				chainId: `${input.chain.chainId}#a`,
-				stops: stopsA,
-			},
-			flows: [],
-		},
-		{
-			chain: {
-				...input.chain,
-				chainId: `${input.chain.chainId}#b`,
-				stops: stopsB,
-			},
-			flows: [],
-		},
+		subChainOf(RAUKK_CHAIN_SIDE_KEYS[0], stopsA),
+		subChainOf(RAUKK_CHAIN_SIDE_KEYS[1], stopsB),
 	];
 
 	function subOf(stopRef: RAUKK_STOP_REF): number {
@@ -1321,6 +1449,10 @@ export function buildCxSplitChains(
  * Both numbers are always produced, whether or not auto splitting is
  * on: the sublight premium of the split has to stay visible.
  *
+ * raukk: each half flies its OWN side profile where the caller resolved
+ * one, so an STL-only gate hopper on the depot side and an FTL hauler on
+ * the exchange side are one chain rather than two.
+ *
  * @author raukk
  *
  * @param {IRaukkChainInput} input Chain, profile, flows, configuration
@@ -1335,13 +1467,20 @@ export function calculateChainCxSplit(
 	const subChainInputs: IRaukkCxSubChain[] =
 		trigger !== null ? buildCxSplitChains(input, trigger) : [];
 
-	const subChains: IRaukkChainShipping[] = subChainInputs.map((sub) =>
-		calculateChainShipping({
+	const subChains: IRaukkChainShipping[] = subChainInputs.map((sub) => {
+		const side: string | undefined = raukkChainSideKey(sub.chain.chainId);
+
+		const profile: IRaukkResolvedShipProfile =
+			(side !== undefined ? input.sideProfiles?.[side] : undefined) ??
+			input.profile;
+
+		return calculateChainShipping({
 			...input,
 			chain: sub.chain,
+			profile,
 			flows: sub.flows,
-		})
-	);
+		});
+	});
 
 	const splitDailyCost: number =
 		subChains.length > 0

@@ -54,6 +54,18 @@ export interface IRaukkChain {
 	stops: RAUKK_STOP_REF[];
 	/** Ship profile, falls back to the account default */
 	profileId?: string;
+	/**
+	 * Ship profile per SIDE of a split, keyed by the sub chain suffix
+	 * (`"a"`, `"b"`, see {@link raukkChainSideKey}).
+	 *
+	 * raukk: a loop cut at an anchor is flown by two ships, and they need
+	 * not be the same one — the canonical case is an STL-only gate hopper
+	 * on the depot side and an FTL hauler on the exchange side. A side
+	 * without an entry falls back to `profileId` and then to the account
+	 * default, which is what every chain authored before sides existed
+	 * does.
+	 */
+	sideProfiles?: Record<string, string>;
 	/** Hired ȼ per trip replacing the own fleet cost of the whole chain */
 	lmRatePerTrip?: number;
 	/** Per chain override of the account wide auto split */
@@ -289,6 +301,19 @@ export interface IRaukkChainInput {
 	data?: IRaukkChainStaticData;
 	/** Exchange code to system id, defaults to the four real exchanges */
 	cxSystems?: Record<string, string>;
+	/**
+	 * raukk: planet natural ids the account marked as DEPOTS. They join
+	 * the exchanges as split anchors and change nothing else — no price,
+	 * no hub, no storage. Absent: exchanges anchor alone, the behaviour of
+	 * every caller predating depots.
+	 */
+	depots?: RAUKK_STOP_REF[];
+	/**
+	 * raukk: resolved ship profile per SIDE of a split, keyed by the sub
+	 * chain suffix (`"a"`, `"b"`). A side without one flies `profile`, the
+	 * chains own hull.
+	 */
+	sideProfiles?: Record<string, IRaukkResolvedShipProfile>;
 }
 
 /** Shipping result of one chain */
@@ -312,13 +337,47 @@ export interface IRaukkChainShipping {
 	perUnit: Record<string, number>;
 }
 
-/** A leg whose shortest path all but touches an exchange */
+/**
+ * What a loop may be cut at: an exchange, or a planet the user marked as
+ * a DEPOT.
+ *
+ * raukk: both are handover points and nothing else is shared between
+ * them — a depot has no market whatsoever, see `shippingDepots.ts`.
+ *
+ * @author raukk
+ */
+export type RAUKK_CHAIN_ANCHOR_KIND = "cx" | "depot";
+
+/**
+ * One anchor a loop may be cut at.
+ *
+ * @author raukk
+ */
+export interface IRaukkChainAnchor {
+	kind: RAUKK_CHAIN_ANCHOR_KIND;
+	/** Exchange code, or the depots planet natural id */
+	stopRef: RAUKK_STOP_REF;
+	systemId: string;
+}
+
+/** A leg whose shortest path all but touches an anchor */
 export interface IRaukkCxSplitTrigger {
 	legIndex: number;
+	/**
+	 * Stop reference of the anchor: an exchange code, or — since depots
+	 * anchor as well — the depots planet natural id. The name is kept
+	 * because every stored result and every reader carries it.
+	 */
 	cxCode: string;
 	cxSystemId: string;
-	/** parsecs(via CX) − parsecs(direct) of that leg */
+	/** parsecs(via anchor) − parsecs(direct) of that leg */
 	detourParsecs: number;
+	/**
+	 * raukk: which kind of anchor this is. Absent on every trigger built
+	 * before depots existed, and a reader treats that as `"cx"` — the only
+	 * kind there used to be.
+	 */
+	anchorKind?: RAUKK_CHAIN_ANCHOR_KIND;
 }
 
 /** One sub chain of a split, with the flows it inherited */

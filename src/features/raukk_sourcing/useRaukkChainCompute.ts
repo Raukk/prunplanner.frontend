@@ -52,6 +52,7 @@ import {
 	IRaukkHullPick,
 	IRaukkLegDemand,
 	IRaukkShippingConfig,
+	IRaukkResolvedShipProfile,
 	IRaukkShippingPriceResolver,
 	RAUKK_CARGO_BUCKET,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
@@ -790,6 +791,24 @@ async function computeOneChain(
 		chain.profileId ??
 		shippingConfig.defaultProfileId;
 
+	/*
+	 * raukk: a loop cut at an anchor is flown by two ships. Each side
+	 * resolves its own hull where the user named one — the gate side
+	 * hopper and the FTL hauler of the depot case — and falls back to the
+	 * chains own profile, which is what a chain without sides has always
+	 * flown.
+	 */
+	const sideProfiles: Record<string, IRaukkResolvedShipProfile> =
+		Object.fromEntries(
+			Object.entries(chain.sideProfiles ?? {}).map(([side, sideId]) => [
+				side,
+				raukkResolveShipProfile(
+					sourcingStore.getShipProfile(sideId),
+					resolvePrice
+				),
+			])
+		);
+
 	const input: IRaukkChainInput = {
 		chain,
 		profile: raukkResolveShipProfile(
@@ -800,6 +819,9 @@ async function computeOneChain(
 		config: shippingConfig,
 		chainConfig,
 		repairBillCost: calculateRepairBillCost(resolvePrice),
+		// raukk: marked depots anchor a split exactly as an exchange does
+		depots: sourcingStore.depotStopRefs(),
+		sideProfiles,
 	};
 
 	const comparison: IRaukkCxSplitResult = calculateChainCxSplit(input);
@@ -850,6 +872,8 @@ async function computeOneChain(
 						legIndex: comparison.trigger.legIndex,
 						cxCode: comparison.trigger.cxCode,
 						detourParsecs: comparison.trigger.detourParsecs,
+						// raukk: which kind of anchor cut here
+						anchorKind: comparison.trigger.anchorKind ?? "cx",
 					}
 				: null,
 		tripsPerDay: busiest.tripsPerDay,

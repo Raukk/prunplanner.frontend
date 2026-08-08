@@ -301,7 +301,11 @@
 			"drops": "Low-use stops:",
 			"drop_chip": "{stop} at {utilization}% — dropping it onto its own run saves {saving} ȼ/day",
 			"storage_warning": "{stop}: the chain visits every {visit} d but its storage fills in {fill} d."
-		}
+		},
+		"depot_stop": "Depot {planet}",
+		"side_profile_a": "Split Side A Ship",
+		"side_profile_b": "Split Side B Ship",
+		"side_profile_default": "Chain ship"
 	},
 	"auto_chains": {
 		"title": "Automatic Chains",
@@ -337,5 +341,24 @@
 		"plan_label": "Plan CX Anchor",
 		"nearest": "Nearest",
 		"tooltip": "Exchange a base ships through. Bases sharing an anchor form the region an automatic chain is built over; a plan may override the account wide setting."
+	},
+	"depots": {
+		"title": "Depots",
+		"info": "Planets you hand cargo over at. A depot anchors ROUTING and nothing else: a chain passing close to one may be cut there exactly as it is cut at an exchange, so a gate-side ship and an FTL hauler meet at the depot instead of both flying to the exchange. Each half of such a split can be flown by its own ship type — set them in the chain editor. A depot is not a market: nothing is priced, sourced or sold there, and keeping the warehouse stocked stays your problem. Depots are account-global and can be added for planets no plan of yours sits on.",
+		"planet": "Planet",
+		"weekly_cost": "Warehouse ȼ / Week",
+		"daily_cost": "ȼ / Day",
+		"chains": "Chains",
+		"unused": "Unused",
+		"remove": "Remove",
+		"add": "Add Depot",
+		"add_placeholder": "Planet id, e.g. ZV-307c",
+		"empty": "No depots yet. Mark a gate hub or a warehouse planet as one when two ships should meet there instead of flying to the exchange.",
+		"rollup": {
+			"chains": "Chains ȼ / Day",
+			"rent": "Depot Rent ȼ / Day",
+			"rent_tooltip": "Warehouse rent of every depot a chain calls at, weekly rent divided by seven. Charged ONCE per depot and day however many chains visit it — it is the warehouse standing there, not a docking fee.",
+			"total": "Shipping ȼ / Day"
+		}
 	}
 }
