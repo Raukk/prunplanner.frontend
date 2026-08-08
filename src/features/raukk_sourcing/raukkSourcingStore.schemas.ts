@@ -238,6 +238,10 @@ export const RaukkSnapshotSchema = z.object({
 	draws: z.record(z.string(), z.record(z.string(), z.number())),
 	config: RaukkPlanConfigSchema.optional(),
 	baseFraction: z.number().optional(),
+	// frozen alongside the numbers they priced, they back the read only
+	// sourced cost notes; absent in payloads predating those notes
+	inputPrices: z.record(z.string(), z.number()).optional(),
+	sellPrices: z.record(z.string(), z.number()).optional(),
 	// v2: only written while shipping is enabled, absent in every payload
 	// written before the chain and fleet slices existed
 	flows: z.array(RaukkChainFlowSchema).optional(),

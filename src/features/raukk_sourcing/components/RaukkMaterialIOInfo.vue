@@ -61,10 +61,13 @@
 			: undefined;
 	});
 
+	// direct reactive store reads, not getSnapshot/getConfig: their inert
+	// clones drop the proxy, in-place store changes (stale flag, nested
+	// sources) would not invalidate these computeds
 	const localSnapshot: ComputedRef<IRaukkSnapshot | undefined> = computed(
 		() =>
 			localPlanUuid.value
-				? raukkSourcingStore.getSnapshot(localPlanUuid.value)
+				? raukkSourcingStore.snapshots[localPlanUuid.value]
 				: undefined
 	);
 
@@ -80,7 +83,7 @@
 
 			return (
 				localSnapshot.value?.config?.sources[props.ticker] ??
-				raukkSourcingStore.getConfig(localPlanUuid.value).sources[
+				raukkSourcingStore.configs[localPlanUuid.value]?.sources[
 					props.ticker
 				]
 			);

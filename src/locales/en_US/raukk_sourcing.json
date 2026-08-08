@@ -47,7 +47,12 @@
 		"repair_cost": "Repair Capital Cost / Day",
 		"no_producers": "No plan produces this ticker",
 		"market": "Market",
-		"empty": "This plan has no net inputs."
+		"empty": "This plan has no net inputs.",
+		"groups": {
+			"workforce": "Workforce Consumables",
+			"repair": "Repair Materials",
+			"production": "Production Inputs"
+		}
 	},
 	"buckets": {
 		"production": "Production",
@@ -67,7 +72,7 @@
 		"others": "other bases",
 		"agg_avg": "All producers (weighted avg)",
 		"agg_max": "Highest-cost producer",
-		"cycle": "would create a supply loop",
+		"self": "Own output",
 		"stale": "stale snapshot"
 	},
 	"shipping": {

@@ -67,10 +67,12 @@
 			: undefined;
 	});
 
+	// direct reactive store read, not getSnapshot: its inert clone drops
+	// the proxy, the in-place stale flag change would not invalidate this
 	const localSnapshot: ComputedRef<IRaukkSnapshot | undefined> = computed(
 		() =>
 			localPlanUuid.value
-				? raukkSourcingStore.getSnapshot(localPlanUuid.value)
+				? raukkSourcingStore.snapshots[localPlanUuid.value]
 				: undefined
 	);
 
@@ -105,6 +107,27 @@
 				cssClass: materialClass(output.ticker),
 			}))
 			.sort((a, b) => a.ticker.localeCompare(b.ticker));
+	});
+
+	/**
+	 * Daily total of the bucket at the snapshots sourced prices, the
+	 * counterpart of the vanilla "ȼ/day" number the strip sits under.
+	 * @author raukk
+	 */
+	const localDailyTotal: ComputedRef<number> = computed(() => {
+		const snapshot: IRaukkSnapshot | undefined = localSnapshot.value;
+
+		if (!snapshot) return 0;
+
+		return Object.values(snapshot.outputs).reduce(
+			(sum, output: IRaukkOutputCost) =>
+				sum +
+				(props.bucket === "total"
+					? output.costPerUnit
+					: output.breakdown[props.bucket]) *
+					output.unitsPerDay,
+			0
+		);
 	});
 
 	const localIsStale: ComputedRef<boolean> = computed(
@@ -143,6 +166,13 @@
 						{{ $t("raukk_strips.per_unit") }}
 					</span>
 				</span>
+			</span>
+			<span :class="localIsStale ? 'text-amber-400' : 'text-white/70'">
+				{{
+					$t("raukk_strips.daily_total", {
+						total: formatNumber(localDailyTotal),
+					})
+				}}
 			</span>
 			<PTooltip v-if="localIsStale">
 				<template #trigger>

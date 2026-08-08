@@ -12,7 +12,6 @@ import {
 	IRaukkShipProfile,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
-	RAUKK_SOURCE_AGGREGATE,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 
 /** A single plan offering `ticker` as an output of its snapshot */
@@ -41,11 +40,6 @@ export interface IRaukkSubscription {
 	 * oversubscribed; 0 when the source produces nothing */
 	pctOfOutput: number;
 }
-
-/** Candidate edge checked by the cycle guard before it is stored */
-export type IRaukkEdgeCandidate =
-	| { sourcePlanUuid: string }
-	| { aggregate: RAUKK_SOURCE_AGGREGATE; ticker: string };
 
 /** Full, versioned payload of the store's JSON export/import */
 export interface IRaukkExportPayload {

@@ -338,6 +338,47 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.getChainResult("c1")?.perUnit.ORE).toBe(5);
 			expect(store.getChainResult("nope")).toBeUndefined();
 		});
+
+		it("stales the chain results when a members flows change", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setSnapshot("source", {
+				...makeSnapshot("Source", "ZV-194a"),
+				flows: [],
+			});
+			store.setChainResult("c1", makeChainResult("c1", ["source"]));
+
+			// what the automatic snapshot upkeep does: one plan, no chain
+			// pass afterwards
+			store.setSnapshot("source", {
+				...makeSnapshot("Source", "ZV-194a"),
+				flows: [
+					{
+						flowId: "ORE@ZV-194a>ZV-759b",
+						ticker: "ORE",
+						fromStop: "ZV-194a",
+						toStop: "ZV-759b",
+						unitsPerDay: 100,
+						weightPerUnit: 1,
+						volumePerUnit: 0.5,
+					},
+				],
+			});
+
+			expect(store.chainResults.c1.stale).toBe(true);
+			// the plan itself stays current, otherwise the upkeep would
+			// answer the flag with another recompute, forever
+			expect(store.snapshots.source.stale).toBe(false);
+		});
+
+		it("leaves the chain results alone when the flows do not move", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setSnapshot("source", makeSnapshot("Source", "ZV-194a"));
+			store.setChainResult("c1", makeChainResult("c1", ["source"]));
+
+			store.setSnapshot("source", makeSnapshot("Source", "ZV-194a"));
+
+			expect(store.chainResults.c1.stale).toBe(false);
+		});
 	});
 
 	describe("deletePlanData", () => {
@@ -507,6 +548,75 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(JSON.parse(JSON.stringify(store.snapshots))).toStrictEqual(
 				before
 			);
+		});
+
+		/*
+		 * The two branches that met in this merge each grew the snapshot
+		 * shape on their own: the sourced cost notes added the frozen
+		 * `inputPrices`/`sellPrices`, the shipping model the `flows` and
+		 * `lanes` arrays with the chain and fleet slices. A user coming
+		 * from either branch must be able to import their export.
+		 */
+		it("accepts an export written without the shipping slices", () => {
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: { a: { repairDay: 30, sources: {} } },
+					snapshots: {
+						a: {
+							...makeSnapshot("A", "ZV-759b"),
+							inputPrices: { ORE: 12.5 },
+							sellPrices: { ORE: 55 },
+						},
+					},
+				})
+			);
+
+			expect(store.snapshots.a.inputPrices).toStrictEqual({ ORE: 12.5 });
+			expect(store.snapshots.a.sellPrices).toStrictEqual({ ORE: 55 });
+			expect(store.snapshots.a.flows).toBeUndefined();
+			expect(store.chains).toStrictEqual({});
+		});
+
+		it("accepts an export written without the frozen prices", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setSnapshot("a", {
+				...makeSnapshot("A", "ZV-759b"),
+				flows: [],
+				lanes: [],
+				shippingFraction: null,
+			});
+
+			const exported: string = store.exportJSON();
+			store.$reset();
+			store.importJSON(exported);
+
+			expect(store.snapshots.a.flows).toStrictEqual([]);
+			expect(store.snapshots.a.shippingFraction).toBeNull();
+			expect(store.snapshots.a.inputPrices).toBeUndefined();
+			expect(store.chains.c1.stops).toStrictEqual(["ZV-194a", "ZV-759b"]);
+		});
+
+		it("accepts both sides shapes in one payload", () => {
+			store.importJSON(
+				JSON.stringify({
+					version: 2,
+					configs: {},
+					snapshots: {
+						a: {
+							...makeSnapshot("A", "ZV-759b"),
+							inputPrices: { ORE: 1 },
+							sellPrices: { ORE: 2 },
+							flows: [],
+							lanes: [],
+							shippingFraction: 0.25,
+						},
+					},
+				})
+			);
+
+			expect(store.snapshots.a.inputPrices).toStrictEqual({ ORE: 1 });
+			expect(store.snapshots.a.shippingFraction).toBe(0.25);
 		});
 
 		it("rejects a broken chain configuration", () => {

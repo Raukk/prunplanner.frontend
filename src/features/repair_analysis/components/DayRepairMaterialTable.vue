@@ -13,8 +13,16 @@
 	// UI
 	import { PTable } from "@/ui";
 
-	const { materials } = defineProps<{
+	const {
+		materials,
+		sourcedPrices = {},
+		sourcedStale = false,
+	} = defineProps<{
 		materials: IMaterialIO[];
+		/** raukk: internal ȼ/u of plan sourced repair materials */
+		sourcedPrices?: Record<string, number>;
+		/** raukk: the sourcing snapshot backing the prices is stale */
+		sourcedStale?: boolean;
 	}>();
 
 	const totalData = computed(() => {
@@ -28,6 +36,26 @@
 			{ cost: 0, weight: 0, volume: 0 }
 		);
 	});
+
+	// raukk: internal cost note, market numbers above stay untouched
+
+	const hasSourced = computed(() =>
+		materials.some((m) => sourcedPrices[m.ticker] !== undefined)
+	);
+
+	/** Total cost with plan sourced tickers at their internal price */
+	const sourcedTotal = computed(() =>
+		materials.reduce((sum, current) => {
+			const sourced: number | undefined = sourcedPrices[current.ticker];
+
+			return (
+				sum +
+				(sourced !== undefined
+					? sourced * current.input
+					: current.price * -1)
+			);
+		}, 0)
+	);
 </script>
 
 <template>
@@ -56,6 +84,20 @@
 				<td class="text-end">
 					{{ formatNumber(-1 * material.price) }}
 					<span class="pl-1 font-light text-white/50"> ȼ </span>
+					<!-- raukk: same amount at the internal sourced price -->
+					<div
+						v-if="sourcedPrices[material.ticker] !== undefined"
+						:class="
+							sourcedStale ? 'text-amber-400' : 'text-white/50'
+						">
+						{{
+							formatNumber(
+								sourcedPrices[material.ticker] * material.input
+							)
+						}}
+						<span class="pl-1 font-light"> ȼ </span>
+						{{ $t("raukk_repair.day_table.sourced") }}
+					</div>
 				</td>
 			</tr>
 		</tbody>
@@ -76,6 +118,27 @@
 							<span class="pl-1 font-light text-white/50">
 								ȼ
 							</span>
+						</div>
+						<!-- raukk: total with sourced tickers at their
+							internal price -->
+						<div
+							v-if="hasSourced"
+							:class="
+								sourcedStale
+									? 'text-amber-400'
+									: 'text-white/50'
+							">
+							{{ $t("raukk_repair.day_table.total_sourced") }}
+						</div>
+						<div
+							v-if="hasSourced"
+							:class="
+								sourcedStale
+									? 'text-amber-400'
+									: 'text-white/50'
+							">
+							{{ formatNumber(sourcedTotal) }}
+							<span class="pl-1 font-light"> ȼ </span>
 						</div>
 						<div>
 							{{

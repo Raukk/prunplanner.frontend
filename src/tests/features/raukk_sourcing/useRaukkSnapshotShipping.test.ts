@@ -235,6 +235,9 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				"draws",
 				"config",
 				"baseFraction",
+				// frozen by the sourced cost notes, not by shipping
+				"inputPrices",
+				"sellPrices",
 			]);
 			expect(snapshot.shippingFraction).toBeUndefined();
 		});
@@ -279,9 +282,11 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 
 			/*
 			 * 100 t a day on a 1000 t hull = 0.1 trips, each trip pays
-			 * both legs of the distance. No backhaul exists — the cycle
-			 * guard forbids the reverse edge — so the imports carry all
-			 * of it.
+			 * both legs of the distance. No backhaul exists on this pair,
+			 * so the imports carry all of it. Supply loops ARE allowed
+			 * since the loop change, and a mutual A⇄B pair is still
+			 * charged as two independent round trips — conservative, and
+			 * amortizing it is deliberately left to a follow up.
 			 */
 			const dailyCost: number = 0.1 * (2 * DIRECT_PARSECS * 10);
 
@@ -295,6 +300,64 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				10
 			);
 			expect(snapshot.draws).toStrictEqual({ source: { ORE: 100 } });
+		});
+
+		it("charges no freight on a ticker sourced from the plan itself", async () => {
+			// a plan may source from itself since the loop change: own
+			// output feeding own demand. Those units never leave the
+			// planet, so they must ride no pair at all
+			store.setSnapshot("consumer", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Consumer",
+				planetNaturalId: CONSUMER_PLANET,
+				outputs: {
+					ORE: {
+						ticker: "ORE",
+						unitsPerDay: 1000,
+						costPerUnit: 5,
+						breakdown: {
+							workforce: 0,
+							repair: 0,
+							inputs: 5,
+							shipping: 0,
+						},
+					},
+				},
+				draws: {},
+			});
+			store.setTickerSource("consumer", "ORE", {
+				mode: "plan",
+				sourcePlanUuid: "consumer",
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			// no consumer>consumer pair and no flow claiming a self hop
+			expect(snapshot.lanes?.map((lane) => lane.pairKey)).not.toContain(
+				"consumer>consumer"
+			);
+			expect(
+				snapshot.flows?.filter((flow) => flow.fromStop === flow.toStop)
+			).toStrictEqual([]);
+
+			// and the freight is exactly the one of the same plan buying
+			// the ticker on the market: the self share added nothing
+			store.setTickerSource("consumer", "ORE", {
+				mode: "market",
+				priceMode: "AVG30D",
+			});
+
+			const { snapshot: market } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				market.outputs.ALO.breakdown.shipping,
+				10
+			);
 		});
 
 		it("embeds the shipping config and the shipping fraction", async () => {
