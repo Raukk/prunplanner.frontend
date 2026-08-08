@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, ComputedRef, PropType, ref, Ref } from "vue";
+	import { computed, ComputedRef, PropType } from "vue";
 
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
@@ -9,24 +9,16 @@
 	const sourcingStore = useRaukkSourcingStore();
 
 	// Components
-	import RaukkShipProfileEditor from "@/features/raukk_sourcing/components/RaukkShipProfileEditor.vue";
 	import RaukkLmRatesTable from "@/features/raukk_sourcing/components/RaukkLmRatesTable.vue";
-	import RaukkFleetSection from "@/features/raukk_sourcing/components/RaukkFleetSection.vue";
-	import RaukkChainSection from "@/features/raukk_sourcing/components/RaukkChainSection.vue";
-	import RaukkDepotSection from "@/features/raukk_sourcing/components/RaukkDepotSection.vue";
 
 	// Calculations
 	import { buildLmComparison } from "@/features/raukk_sourcing/calculations/shippingDisplay";
 	import { raukkBayCode } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
-	import {
-		RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
-		RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
-	} from "@/features/raukk_sourcing/calculations/shippingCadence";
 	import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
 	import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
 
 	// UI
-	import { PButton, PCheckbox, PInputNumber, PSelect, PTooltip } from "@/ui";
+	import { PButton, PSelect, PTooltip } from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -67,20 +59,6 @@
 			type: Object as PropType<Record<string, string>>,
 			required: true,
 		},
-		/** Unit price per fuel ticker, backs the derived ȼ placeholders */
-		fuelPrices: {
-			type: Object as PropType<Record<string, number>>,
-			required: false,
-			default: () => ({}),
-		},
-		/** Days the open plans storage bridges, the chain cross-check input */
-		storageDays: {
-			type: Array as PropType<
-				{ stopRef: string; filledDays: number | null }[]
-			>,
-			required: false,
-			default: () => [],
-		},
 		/** LM rates are keyed by the open plans pairs, so they follow the
 		 * plans read-only state; the configuration itself is account
 		 * global and stays editable */
@@ -97,17 +75,6 @@
 
 	const profiles: ComputedRef<IRaukkShipProfile[]> = computed(() =>
 		sourcingStore.listShipProfiles()
-	);
-
-	const overriddenIds: ComputedRef<string[]> = computed(() =>
-		Object.keys(sourcingStore.shipProfiles)
-	);
-
-	const profileOptions: ComputedRef<PSelectOption[]> = computed(() =>
-		profiles.value.map((profile) => ({
-			label: profile.name,
-			value: profile.id,
-		}))
 	);
 
 	/** Profiles as ship TYPES: the bay code is what the user recognizes */
@@ -157,10 +124,6 @@
 			: (sourcingStore.configs[props.planUuid]?.cxAnchor ?? null)
 	);
 
-	function changeAnchorMode(mode: string): void {
-		sourcingStore.setShippingConfig({ cxAnchorMode: mode });
-	}
-
 	/**
 	 * Stores or clears the anchor of the open plan. Clearing puts the
 	 * plan back onto the account wide mode, which is what the placeholder
@@ -176,9 +139,6 @@
 		sourcingStore.setPlanCxAnchor(props.planUuid, cxCode ?? undefined);
 	}
 
-	/** Calibration table is long, it starts folded away */
-	const refShowCalibration: Ref<boolean> = ref(false);
-
 	const lmRows: ComputedRef<IRaukkLmComparisonRow[]> = computed(() =>
 		buildLmComparison(
 			props.pairs,
@@ -187,63 +147,6 @@
 			props.caps
 		)
 	);
-
-	function toggleEnabled(enabled: boolean): void {
-		sourcingStore.setShippingConfig({ enabled });
-	}
-
-	function changeDefaultProfile(profileId: string): void {
-		sourcingStore.setShippingConfig({ defaultProfileId: profileId });
-	}
-
-	function changeSameSystemFlatCost(value: number | null | undefined): void {
-		sourcingStore.setShippingConfig({ sameSystemFlatCost: value ?? 0 });
-	}
-
-	/**
-	 * Stores an account cadence default, days per visit. An empty or non
-	 * positive input goes back to the shipped default rather than storing
-	 * a cap of zero, which would mean "visit infinitely often".
-	 *
-	 * @author raukk
-	 *
-	 * @param {number | null | undefined} value Days per visit
-	 */
-	function changeCadenceInOut(value: number | null | undefined): void {
-		sourcingStore.setShippingConfig({
-			cadenceInOutDays:
-				value !== null && value !== undefined && value > 0
-					? value
-					: RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
-		});
-	}
-
-	/**
-	 * Stores the account workforce cadence default, days per visit.
-	 *
-	 * @author raukk
-	 *
-	 * @param {number | null | undefined} value Days per visit
-	 */
-	function changeCadenceWorkforce(value: number | null | undefined): void {
-		sourcingStore.setShippingConfig({
-			cadenceWorkforceDays:
-				value !== null && value !== undefined && value > 0
-					? value
-					: RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
-		});
-	}
-
-	function changeProfile(
-		profileId: string,
-		patch: Partial<IRaukkShipProfile>
-	): void {
-		sourcingStore.setShipProfile(profileId, patch);
-	}
-
-	function resetProfile(profileId: string): void {
-		sourcingStore.resetShipProfile(profileId);
-	}
 
 	/**
 	 * Stores or clears the hired rate of one lane. Clearing removes the
@@ -291,104 +194,29 @@
 
 	<div
 		class="border rounded-[3px] border-white/20 p-3 flex flex-row flex-wrap gap-3 child:my-auto">
-		<PCheckbox
-			:checked="config.enabled"
-			@update:checked="(v) => toggleEnabled(v === true)" />
-		<div class="font-bold">
-			{{ $t("raukk_sourcing.shipping.enabled") }}
-		</div>
+		<RouterLink to="/shipping">
+			<PButton type="secondary">
+				{{ $t("raukk_sourcing.shipping_page.manage_link") }}
+			</PButton>
+		</RouterLink>
 
-		<template v-if="config.enabled">
-			<div class="font-bold pl-3">
-				{{ $t("raukk_sourcing.shipping.default_profile") }}
-			</div>
-			<PSelect
-				class="w-60!"
-				:value="config.defaultProfileId"
-				:options="profileOptions"
-				@update:value="(v) => changeDefaultProfile(String(v))" />
-
-			<div class="font-bold pl-3">
-				{{ $t("raukk_sourcing.shipping.same_system_cost") }}
-			</div>
-			<PInputNumber
-				class="min-w-30"
-				decimals
-				:min="0"
-				:value="config.sameSystemFlatCost"
-				@update:value="changeSameSystemFlatCost" />
-
+		<template v-if="config.enabled && planUuid !== undefined">
 			<PTooltip>
 				<template #trigger>
 					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.shipping.cadence_in_out") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.shipping.cadence_tooltip") }}
-			</PTooltip>
-			<PInputNumber
-				class="min-w-25"
-				:min="1"
-				:value="
-					config.cadenceInOutDays ?? RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS
-				"
-				@update:value="changeCadenceInOut" />
-
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.shipping.cadence_workforce") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.shipping.cadence_tooltip") }}
-			</PTooltip>
-			<PInputNumber
-				class="min-w-25"
-				:min="1"
-				:value="
-					config.cadenceWorkforceDays ??
-					RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS
-				"
-				@update:value="changeCadenceWorkforce" />
-
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.cx_anchor.label") }}
+						{{ $t("raukk_sourcing.cx_anchor.plan_label") }}
 					</div>
 				</template>
 				{{ $t("raukk_sourcing.cx_anchor.tooltip") }}
 			</PTooltip>
 			<PSelect
 				class="w-40!"
-				:value="config.cxAnchorMode ?? RAUKK_CX_ANCHOR_NEAREST"
-				:options="anchorOptions"
-				@update:value="(v) => changeAnchorMode(String(v))" />
-
-			<div v-if="planUuid !== undefined" class="font-bold pl-3">
-				{{ $t("raukk_sourcing.cx_anchor.plan_label") }}
-			</div>
-			<PSelect
-				v-if="planUuid !== undefined"
-				class="w-40!"
 				clearable
 				:disabled="disabled"
 				:value="planAnchor"
 				:options="anchorOptions"
 				:placeholder="anchorModeLabel"
-				@update:value="
-					(v) => changePlanAnchor((v as string) ?? null)
-				" />
-
-			<PButton
-				type="secondary"
-				@click="refShowCalibration = !refShowCalibration">
-				{{
-					refShowCalibration
-						? $t("raukk_sourcing.shipping.hide_calibration")
-						: $t("raukk_sourcing.shipping.show_calibration")
-				}}
-			</PButton>
+				@update:value="(v) => changePlanAnchor((v as string) ?? null)" />
 		</template>
 	</div>
 
@@ -397,19 +225,6 @@
 	</div>
 
 	<template v-else>
-		<div v-if="refShowCalibration" class="pt-3">
-			<div class="text-white/50 pb-3">
-				{{ $t("raukk_sourcing.shipping.calibration_info") }}
-			</div>
-			<RaukkShipProfileEditor
-				:profiles="profiles"
-				:overridden-ids="overriddenIds"
-				:default-profile-id="config.defaultProfileId"
-				:fuel-prices="fuelPrices"
-				@update:profile="changeProfile"
-				@reset:profile="resetProfile" />
-		</div>
-
 		<h4 class="font-bold py-3">
 			{{ $t("raukk_sourcing.shipping.lm.title") }}
 		</h4>
@@ -424,15 +239,5 @@
 			:disabled="disabled"
 			@update:rate="changeLmRate"
 			@update:assignment="changeAssignment" />
-
-		<RaukkFleetSection />
-
-		<RaukkChainSection
-			:fuel-prices="fuelPrices"
-			:repair-bill-cost="repairBillCost"
-			:ship-type-options="shipTypeOptions"
-			:storage-days="storageDays" />
-
-		<RaukkDepotSection />
 	</template>
 </template>
