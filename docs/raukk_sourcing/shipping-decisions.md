@@ -95,16 +95,54 @@ These supersede the matching decisions above.
    ȼ cost. User will supply repair-cost data (screenshot at 5%
    damage + recalled 80% figures) before this is modeled.
 
+## Round 3 refinements (repair data + physics)
+
+1. **Ship repair cost model.** Observed repair bill on a 3000t
+   freighter at 95.446% condition (~4.5% damage): LHP 3, SSC 3,
+   MFK 12, FLP 8. MFK is always 12 and FLP always 8 (fixed
+   components); at ~80% damage LHP and SSC were each ~10–12. Model:
+   repair bill = fixed (12 MFK + 8 FLP) + LHP/SSC scaling roughly
+   linearly with damage (≈3 each at 4.5%, ≈11 each at 80%). Users
+   repair at ~80% damage, so per-trip ship-repair cost =
+   (trip damage % ÷ 80%) × priced full bill. Trip damage comes from
+   the per-leg damage numbers (flat per-parsec constant + per-STL-
+   leg constant; no per-system variation, see Round 2 item 6).
+2. **STL legs: constant length.** Assume the sublight legs in and
+   out of a jump (DEP/APP/LND/TO) are always the same length per
+   trip — a fixed time+fuel+damage block, scaled by tonnage, not
+   route-dependent.
+3. **FTL reactor flag per profile.** Some ships carry the slower
+   FTL reactor: profile gets `ftlReactor: "standard" |
+   "quick-charge"`. Sublight engine choice exists (FSE or not) but
+   assume everything is FSE — no config for it.
+4. **Speed physics.** Sublight time/fuel scales with TONNAGE
+   (gross mass); FTL jump speed scales with ship VOLUME (bigger
+   hulls jump slower). FTL is unaffected by cargo load (verified:
+   HCB 5000t loaded vs empty had identical jump times).
+5. **Additional reference flights** (fuel usage MIN unless noted):
+   - 3000t freighter (BP-TLRI-1286, 936t empty, tanks 3500 STL /
+     2000 FTL), 18 pc empty, reactor 69%: total 9h42m, 211 STL +
+     73 FTL. Jumps 5pc/2h30m, 9pc/4h01m, 4pc/1h50m; CHRG 52s;
+     DEP 27m, APP 41m.
+   - Same-class live ships (~931t empty, lightly loaded ~1.3kt):
+     7 pc in 1h47m (392 STL + 50 FTL; jumps 4pc + 3pc/1h01m) and
+     14 pc in 11h32m (79 STL + 31 FTL; jumps 9pc/4h41m, 5pc/2h58m;
+     CHRG 2m21s).
+   - HCB 5000t/5000m³ with quick-charge reactor (FTL tank 800),
+     18 pc, reactor ~60%: loaded 5000t → 16h34m, 285 STL +
+     105 FTL (DEP 2h58m, APP 3h09m); empty → 12h44m, 237 STL +
+     105 FTL (DEP 1h07m, APP 1h21m). Jump times identical in both:
+     4pc/2h10m, 9pc/4h46m, 5pc/2h57m; CHRG 1m14s.
+
 ## Open items (ask before or during implementation)
 
-- Repair cost curve: awaiting the user's repair-cost data points
-  (5% and ~80% damage) to decide whether damage cost is worth
-  modeling in v1 or noted as out of scope.
+- Price sources for repair tickers (LHP/SSC/MFK/FLP) — presumably
+  the same market price-mode mechanism as other inputs; confirm.
 - Ships-available count for the shipping fraction denominator:
   per profile? account-wide?
 - Whether the outputs table keeps the separate shipping breakdown
   column in addition to the folded price.
-- Exact calibration inputs for the time model: which measured
-  numbers the user enters (min-reactor jump time for a known
-  parsec distance; DEP/APP times empty vs loaded) and how tonnage
-  interpolation between them works.
+- Calibration constants to bake in per (hull volume × reactor
+  flag): min-reactor jump minutes-per-parsec and the fixed STL-leg
+  block empty vs loaded — derive from the reference flights above,
+  with a config escape hatch for user-measured overrides.
