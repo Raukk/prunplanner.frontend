@@ -26,7 +26,10 @@ import {
 	RAUKK_FUEL_TICKERS,
 	raukkResolveShipProfile,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
-import { raukkChainAssignmentKey } from "@/features/raukk_sourcing/calculations/shippingFleet";
+import {
+	raukkChainAssignmentKey,
+	raukkOwnedHullCandidates,
+} from "@/features/raukk_sourcing/calculations/shippingFleet";
 import { raukkPickHull } from "@/features/raukk_sourcing/calculations/shippingHull";
 import { raukkCxAnchorCode } from "@/features/raukk_sourcing/calculations/shippingFlows";
 import {
@@ -619,9 +622,10 @@ async function computeOneAutoChain(
 			? null
 			: raukkPickHull(
 					raukkStlOnlyCandidates(
-						Object.entries(sourcingStore.fleet)
-							.filter(([, ship]) => ship.count > 0)
-							.map(([shipTypeId]) => candidateOf(shipTypeId)),
+						raukkOwnedHullCandidates(
+							sourcingStore.fleet,
+							candidateOf
+						),
 						gateServable
 					),
 					demand,

@@ -410,10 +410,13 @@ export const RAUKK_DEFAULT_SHIP_PROFILE_ID: string = raukkShipProfileId(
 );
 
 /**
- * The fleet an unconfigured account is assumed to own: the two SCB
- * starter ships of a fresh game account. Used wherever the fleet
- * store is empty — the hull pick and utilization then run against
- * these instead of a phantom bigger hull.
+ * Calculation-only assumption for an account that never configured a
+ * fleet: the two SCB starter ships of a fresh game account. The hull
+ * pick then runs against this instead of a phantom bigger hull.
+ *
+ * It is never stored and never shown: the fleet slice stays empty and
+ * the fleet table lists only the types the user added, so no row ever
+ * claims the account owns these ships.
  *
  * @author raukk
  */

@@ -157,7 +157,7 @@
 	},
 	"fleet": {
 		"title": "Fleet",
-		"info": "Ships you own, per type. A ship type is a cargo bay times an FTL reactor — the bay codes are in-game part designations and can't be renamed; the editable label is the blueprint design name. Shipping capacity is the percentage of a type's daily flight time the lanes and chains assigned to it claim: 100% is one hull flying around the clock, and a figure past it — shown in red — means more ships or a bigger hull, it never blocks anything. A type without a single hull shows no percentage at all. Counts are account-global and stay editable on a read-only plan.",
+		"info": "Ships you own, per type. A ship type is a cargo bay times an FTL reactor — the bay codes are in-game part designations and can't be renamed; the editable label is the blueprint design name. Shipping capacity is the percentage of a type's daily flight time the lanes and chains assigned to it claim: 100% is one hull flying around the clock, and a figure past it — shown in red — means more ships or a bigger hull, it never blocks anything. The table lists only the types you added here — work assigned to a hull you don't own shows up as an advisory instead — and a type you added but set to zero hulls shows no percentage at all. Counts are account-global and stay editable on a read-only plan.",
 		"bay": "Bay",
 		"hull": "Hull",
 		"hull_label": "{weight} t / {volume} m³ · {reactor}",

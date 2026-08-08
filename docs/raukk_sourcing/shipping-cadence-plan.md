@@ -135,12 +135,15 @@ Two points the phase left open, decided while building it:
   comparisons (`shippingChains.ts`) cost their standalone lanes at the
   ACCOUNT default caps: a chain is account level and knows no
   consuming plan.
-- User decision (review round): an account with NO configured fleet
-  is assumed to own the game's starter fleet — TWO SCB 500t/500m³
-  standard ships (`RAUKK_STARTER_FLEET`); the account default profile
-  is the SCB, not the MCB. The advisories then immediately suggest
-  bigger hulls, mirroring the community's SCB→WCB upgrade guidance.
-  Consequence: the owned list is never empty, so the v1
+- User decision (review round): for HULL-PICK MATH ONLY, an account
+  with NO configured fleet is calculated against the game's starter
+  fleet — TWO SCB 500t/500m³ standard ships (`RAUKK_STARTER_FLEET`);
+  the account default profile is the SCB, not the MCB. This is an
+  assumption of the calculation, never stored in the fleet slice and
+  never shown as a fleet row (see shipping-fleet.md). The advisories
+  then immediately suggest bigger hulls, mirroring the community's
+  SCB→WCB upgrade guidance.
+  Consequence: the owned CANDIDATE list is never empty, so the v1
   `perEdgeProfile` fallback no longer reaches a leg — a hull is
   pinned per lane with a manual assignment.
 

@@ -126,15 +126,15 @@ export function raukkShipTypeOptions(): IRaukkShipTypeOption[] {
 /**
  * One fleet table row per ship type of the utilization rollup.
  *
- * The rollup already reports every type the fleet owns AND every type
- * work is assigned to, so this only dresses those rows: the bay code and
- * the hull figures come from the ship PROFILE of the same id — a ship
- * type is a profile id — and the over-ration flag is `utilization`
- * past 1 by more than {@link RAUKK_EPSILON_EQUAL}, never clamped: a
- * fleet a hundredth of a percent over is not over. A null utilization
- * is carried
- * through untouched: no hull means no denominator, and a zero there
- * would read as infinite capacity.
+ * The rollup already reports exactly the types the fleet holds — work
+ * assigned to a type the account does not own is an advisory, never a
+ * row — so this only dresses those rows: the bay code and the hull
+ * figures come from the ship PROFILE of the same id — a ship type is a
+ * profile id — and the over-ration flag is `utilization` past 1 by more
+ * than {@link RAUKK_EPSILON_EQUAL}, never clamped: a fleet a hundredth
+ * of a percent over is not over. A null utilization is carried through
+ * untouched: a held type at count zero has no denominator, and a zero
+ * there would read as infinite capacity.
  *
  * @author raukk
  *

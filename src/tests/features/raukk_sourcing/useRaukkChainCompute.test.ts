@@ -795,6 +795,22 @@ describe("Raukk Sourcing: account level chain compute", () => {
 			expect(result.advisories).toStrictEqual([]);
 		});
 
+		it("flies the starter hull with an empty fleet, not the account default", async () => {
+			// a legacy account still carries the MCB default the app
+			// shipped before the SCB one; with no fleet the pick must
+			// still fall back to the starter ship, not to that default
+			store.setShippingConfig({
+				defaultProfileId: "1000x1000-standard",
+			});
+
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			expect(store.chainResults[AUTO_ID].profileId).toBe(
+				RAUKK_DEFAULT_SHIP_PROFILE_ID
+			);
+		});
+
 		it("picks an owned hull and advises the better unowned one", async () => {
 			store.setShipProfile("5000x5000-standard", {
 				...flatProfile,
@@ -869,19 +885,18 @@ describe("Raukk Sourcing: account level chain compute", () => {
 			);
 		});
 
-		it("reports an assigned type without a hull as unknown", async () => {
+		it("gives an assigned type the fleet does not hold no row", async () => {
 			store.setShippingConfig({ enabled: true });
 			withSource();
 
 			await computePlanSnapshot(context(planResult(1, 3)));
 
-			const { utilization } = useRaukkFleet();
+			const { entries, utilization } = useRaukkFleet();
 
-			expect(
-				utilization.value.find(
-					(row) => row.shipTypeId === RAUKK_DEFAULT_SHIP_PROFILE_ID
-				)?.utilization
-			).toBeNull();
+			// the work exists, but the fleet is empty: rows come from the
+			// fleet slice alone, an unowned hull is an advisory instead
+			expect(entries.value.length).toBeGreaterThan(0);
+			expect(utilization.value).toStrictEqual([]);
 		});
 	});
 

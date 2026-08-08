@@ -426,8 +426,8 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			store.deleteFleetShip("WCB");
 
 			expect(store.fleet.WCB).toBeUndefined();
-			// an assigned type without a hull is the over-ration the
-			// utilization display exists to show
+			// removing a hull is not un-assigning the work: the lane keeps
+			// naming the type, it just no longer has a fleet row
 			expect(store.assignments["source>CX"]).toBe("WCB");
 		});
 	});

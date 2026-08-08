@@ -5,8 +5,14 @@
 // fleet counts, the assignments and the per lane numbers arrive as plain
 // data from the caller.
 
+// Calculations
+import { RAUKK_STARTER_FLEET } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+
 // Types & Interfaces
-import { IRaukkShippingConfig } from "@/features/raukk_sourcing/calculations/shipping.types";
+import {
+	IRaukkHullCandidate,
+	IRaukkShippingConfig,
+} from "@/features/raukk_sourcing/calculations/shipping.types";
 
 /** Minutes of a day, denominator of every utilization */
 const MINUTES_PER_DAY: number = 24 * 60;
@@ -47,10 +53,11 @@ export interface IRaukkFleetUtilization {
 	/**
 	 * Share of the types daily capacity, 1 = fully booked.
 	 *
-	 * `null` when the type has no ship at all: the denominator does not
-	 * exist then, and reporting zero would read as infinite capacity —
-	 * the same null convention the per plan shipping fraction uses.
-	 * Values above 1 are legal and mean "more ships or a bigger ship".
+	 * `null` when the fleet holds the type but not a single hull of it,
+	 * a count of zero: the denominator does not exist then, and
+	 * reporting zero would read as infinite capacity — the same null
+	 * convention the per plan shipping fraction uses. Values above 1 are
+	 * legal and mean "more ships or a bigger ship".
 	 */
 	utilization: number | null;
 	/** Keys of the work assigned to this type */
@@ -123,11 +130,13 @@ export function raukkAssignedShipTypeId(
  *               / (24 × 60 × count)
  * ```
  *
- * Every type of the fleet is reported, including the idle ones, and so
- * is every type work is assigned to, including the ones the fleet does
- * not own a single hull of — that case is exactly what the null
- * utilization is for. Nothing is clamped: 134% is a valid reading and
- * the whole point of the display.
+ * The fleet is the ONLY row source: exactly the types the user added
+ * are reported, idle ones included, and work assigned to a type the
+ * fleet does not hold contributes nothing — a hull nobody owns is a
+ * fleet advisory, never a fleet row. A held type with a count of zero
+ * still gets its row, with a null utilization: no hull, no denominator.
+ * Nothing is clamped: 134% is a valid reading and the whole point of
+ * the display.
  *
  * @author raukk
  *
@@ -151,9 +160,7 @@ export function raukkFleetUtilization(
 		keys[entry.shipTypeId] = [...(keys[entry.shipTypeId] ?? []), entry.key];
 	});
 
-	const shipTypeIds: string[] = Array.from(
-		new Set([...Object.keys(fleet), ...Object.keys(minutes)])
-	).sort();
+	const shipTypeIds: string[] = Object.keys(fleet).sort();
 
 	return shipTypeIds.map((shipTypeId) => {
 		const count: number = Math.max(fleet[shipTypeId]?.count ?? 0, 0);
@@ -173,4 +180,33 @@ export function raukkFleetUtilization(
 			keys: Array.from(new Set(keys[shipTypeId] ?? [])),
 		};
 	});
+}
+
+/**
+ * Hull candidates the automatic pick may assign: the OWNED types.
+ *
+ * A type the fleet holds no hull of is an advisory at best, so only
+ * counts above zero become candidates. An account that never configured
+ * a fleet falls back to the starter ship every new game account owns —
+ * see {@link RAUKK_STARTER_FLEET} — rather than to a phantom bigger
+ * hull; that fallback is math only and never becomes a fleet entry.
+ *
+ * @author raukk
+ *
+ * @param {Record<string, IRaukkFleetShip>} fleet Ships per type
+ * @param {(shipTypeId: string) => IRaukkHullCandidate} candidateOf
+ *   Resolves one ship type into a priced hull candidate
+ * @returns {IRaukkHullCandidate[]} Assignable hull candidates
+ */
+export function raukkOwnedHullCandidates(
+	fleet: Record<string, IRaukkFleetShip>,
+	candidateOf: (shipTypeId: string) => IRaukkHullCandidate
+): IRaukkHullCandidate[] {
+	const configured: IRaukkHullCandidate[] = Object.entries(fleet)
+		.filter(([, ship]) => ship.count > 0)
+		.map(([shipTypeId]) => candidateOf(shipTypeId));
+
+	return configured.length > 0
+		? configured
+		: [candidateOf(RAUKK_STARTER_FLEET.shipTypeId)];
 }

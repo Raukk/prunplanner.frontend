@@ -354,6 +354,37 @@ LM rate and ship assignment are pair-keyed.
    (`useRaukkDepotCosts`) and shown as its own line rather than
    folded into any chain. An unused depot costs nothing.
 
+## Round 12 (fleet table row source)
+
+1. **USER, authoritative**: the fleet table shows ONLY ship types the
+   user explicitly added to the fleet. A type with work assigned to it
+   but absent from the fleet map gets NO row. This SUPERSEDES the
+   implementer choice encoded in `raukkFleetUtilization`, which built
+   its rows from the union of the fleet map and every assigned ship
+   type (that union is what put a phantom MCB row on the page). It is
+   consistent with round 10 decision 3, "unowned better hulls become
+   fleet advisories, never assignments" — advisories stay the one
+   sanctioned surface for hulls the account does not own.
+2. **Remove means gone**: `deleteFleetShip` must make the row
+   disappear. Assignments naming the removed type are untouched —
+   removing a hull is not un-assigning the work — they simply stop
+   producing a row. A type the user added and set to count 0 keeps its
+   row with a blank utilization: no hull, no denominator.
+3. **The starter fleet is math only**: `RAUKK_STARTER_FLEET`, the two
+   SCB assumption for an unconfigured account, is a hull-pick input
+   and must never surface as a stored or displayed fleet count. The
+   auto-chain hull pick previously lacked that fallback (only the lane
+   pick had it), so an empty fleet fell through to the persisted
+   account default; both now share one helper,
+   `raukkOwnedHullCandidates`.
+4. **No legacy default migration**: the stale `defaultProfileId` of
+   `"1000x1000-standard"` on accounts predating the SCB default is
+   left as stored, because the shipping section has a user-facing
+   default-profile picker — the value is a user choice and rewriting
+   it on load would silently override one. Decision 3 removes the
+   symptom: the pick no longer falls through to the default when the
+   fleet is empty.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration, and

@@ -124,6 +124,8 @@ describe("Raukk Shipping: Fleet Display", () => {
 			expect(row.over).toBe(false);
 		});
 
+		// a type the fleet holds but has no hull of, count 0: no
+		// denominator, so the rollup reports null and the row keeps it
 		it("carries a null utilization through as null", () => {
 			const [row] = raukkFleetRows(
 				[

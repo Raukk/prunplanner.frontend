@@ -31,11 +31,13 @@ import {
 	raukkCxAnchorCode,
 } from "@/features/raukk_sourcing/calculations/shippingFlows";
 import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
-import { raukkAssignedShipTypeId } from "@/features/raukk_sourcing/calculations/shippingFleet";
+import {
+	raukkAssignedShipTypeId,
+	raukkOwnedHullCandidates,
+} from "@/features/raukk_sourcing/calculations/shippingFleet";
 import { raukkCadenceCaps } from "@/features/raukk_sourcing/calculations/shippingCadence";
 import {
 	RAUKK_FUEL_TICKERS,
-	RAUKK_STARTER_FLEET,
 	raukkResolveShipProfile,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 import {
@@ -602,22 +604,13 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 
 	/*
 	 * The automatic hull pick assigns OWNED types only, so the fleet is
-	 * the candidate list: a type without a single hull is an advisory at
-	 * best. `all` is every known type and answers what would be better.
-	 * An account that never configured a fleet is assumed to fly the
-	 * two SCB starter ships every new game account owns — see
-	 * {@link RAUKK_STARTER_FLEET} — rather than a phantom bigger hull.
+	 * the candidate list, starter fallback included. `all` is every
+	 * known type and answers what would be better.
 	 */
-	const configuredCandidates: IRaukkHullCandidate[] = Object.entries(
-		sourcingStore.fleet
-	)
-		.filter(([, ship]) => ship.count > 0)
-		.map(([shipTypeId]) => candidateOf(shipTypeId));
-
-	const ownedCandidates: IRaukkHullCandidate[] =
-		configuredCandidates.length > 0
-			? configuredCandidates
-			: [candidateOf(RAUKK_STARTER_FLEET.shipTypeId)];
+	const ownedCandidates: IRaukkHullCandidate[] = raukkOwnedHullCandidates(
+		sourcingStore.fleet,
+		candidateOf
+	);
 
 	const allCandidates: IRaukkHullCandidate[] = sourcingStore
 		.listShipProfiles()

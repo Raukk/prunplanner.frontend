@@ -85,6 +85,12 @@ Verified against user BTF runs (ZV-759c → ANT, 4 pc, both hulls):
   "more ships or a bigger ship", user decides. Replaces the
   per-profile shipsAvailable scalar as the primary surface
   (shipsAvailable becomes the count in the fleet slice).
+- Row source is the fleet slice ALONE: one row per ship type the
+  user added, idle ones included. Work assigned to a type the fleet
+  does not hold contributes no row — an unowned hull surfaces as a
+  fleet advisory, never as an assignment or a row. A held type at
+  count 0 keeps its row with a null (blank) utilization: no hull,
+  no denominator.
 - Per-plan shipping fraction remains (sum of the plan's own lanes)
   but the fleet page is the account-level truth.
 
@@ -104,5 +110,7 @@ Verified against user BTF runs (ZV-759c → ANT, 4 pc, both hulls):
   shipping section): type rows (name, count, calibrate button,
   utilization bar with %), calibration modal (two-flight form with
   residual feedback), assignment pickers on lanes/chains (default
-  "auto").
+  "auto"). The table shows only types the user explicitly added, so
+  removing a type makes its row disappear; hulls the account does
+  not own appear in the advisory list instead.
 - Existing profile table moves behind an "advanced" toggle.

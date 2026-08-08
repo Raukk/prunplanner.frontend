@@ -842,9 +842,11 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
-		 * Removes one ship type from the fleet. Assignments naming it
-		 * stay: an assigned type without a single hull is exactly the
-		 * over-ration the utilization display exists to show.
+		 * Removes one ship type from the fleet, and with it its fleet
+		 * table row: rows come from the fleet slice alone. Assignments
+		 * naming the type stay — removing a hull is not un-assigning the
+		 * work — the type is simply no longer one the account owns, and
+		 * a hull nobody owns surfaces as an advisory, not as a row.
 		 * @author raukk
 		 *
 		 * @param {string} shipTypeId Ship Type Id

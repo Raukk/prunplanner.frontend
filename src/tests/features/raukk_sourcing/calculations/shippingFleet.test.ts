@@ -6,11 +6,18 @@ import {
 	raukkChainAssignmentKey,
 	raukkChainIdOfAssignmentKey,
 	raukkFleetUtilization,
+	raukkOwnedHullCandidates,
 } from "@/features/raukk_sourcing/calculations/shippingFleet";
-import { raukkDefaultShippingConfig } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import {
+	RAUKK_STARTER_FLEET,
+	raukkDefaultShippingConfig,
+} from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
 // Types & Interfaces
-import { IRaukkShippingConfig } from "@/features/raukk_sourcing/calculations/shipping.types";
+import {
+	IRaukkHullCandidate,
+	IRaukkShippingConfig,
+} from "@/features/raukk_sourcing/calculations/shipping.types";
 
 const MINUTES_PER_DAY: number = 24 * 60;
 
@@ -91,7 +98,7 @@ describe("Raukk Shipping: Fleet", () => {
 			expect(rows[0].keys).toStrictEqual([]);
 		});
 
-		it("reports an unowned ship type as undefined, never as free", () => {
+		it("gives an unowned ship type no row at all", () => {
 			const rows = raukkFleetUtilization({}, [
 				{
 					key: "a>CX",
@@ -101,8 +108,23 @@ describe("Raukk Shipping: Fleet", () => {
 				},
 			]);
 
+			// the table lists what the user added; a hull nobody owns is
+			// an advisory, never a fleet row
+			expect(rows).toStrictEqual([]);
+		});
+
+		it("reports a held type at count zero with a null utilization", () => {
+			const rows = raukkFleetUtilization({ HCB: { count: 0 } }, [
+				{
+					key: "a>CX",
+					shipTypeId: "HCB",
+					tripsPerDay: 1,
+					roundTripMinutes: 100,
+				},
+			]);
+
 			// zero would read as infinite capacity, the opposite of
-			// "there is no such ship"
+			// "there is no hull to fly it"
 			expect(rows[0].count).toBe(0);
 			expect(rows[0].utilization).toBeNull();
 			expect(rows[0].shipMinutesPerDay).toBe(100);
@@ -121,7 +143,7 @@ describe("Raukk Shipping: Fleet", () => {
 			expect(rows[0].utilization).toBe(2);
 		});
 
-		it("lists every type of the fleet and of the work, sorted", () => {
+		it("lists every type of the fleet only, sorted", () => {
 			const rows = raukkFleetUtilization(
 				{ WCB: { count: 1 }, LCB: { count: 0 } },
 				[
@@ -134,8 +156,8 @@ describe("Raukk Shipping: Fleet", () => {
 				]
 			);
 
+			// HCB carries work but is not in the fleet, so it has no row
 			expect(rows.map((row) => row.shipTypeId)).toStrictEqual([
-				"HCB",
 				"LCB",
 				"WCB",
 			]);
@@ -155,6 +177,47 @@ describe("Raukk Shipping: Fleet", () => {
 			]);
 
 			expect(rows[0].shipMinutesPerDay).toBe(0);
+		});
+	});
+
+	describe("raukkOwnedHullCandidates", () => {
+		/** Candidate stub, only the ship type id matters here */
+		const candidateOf = (shipTypeId: string): IRaukkHullCandidate =>
+			({ shipTypeId }) as IRaukkHullCandidate;
+
+		it("falls back to the starter ship for an empty fleet", () => {
+			expect(
+				raukkOwnedHullCandidates({}, candidateOf).map(
+					(candidate) => candidate.shipTypeId
+				)
+			).toStrictEqual([RAUKK_STARTER_FLEET.shipTypeId]);
+		});
+
+		it("offers the owned types of a configured fleet", () => {
+			expect(
+				raukkOwnedHullCandidates(
+					{ WCB: { count: 1 }, LCB: { count: 3 } },
+					candidateOf
+				).map((candidate) => candidate.shipTypeId)
+			).toStrictEqual(["WCB", "LCB"]);
+		});
+
+		it("excludes a held type without a single hull", () => {
+			expect(
+				raukkOwnedHullCandidates(
+					{ WCB: { count: 1 }, LCB: { count: 0 } },
+					candidateOf
+				).map((candidate) => candidate.shipTypeId)
+			).toStrictEqual(["WCB"]);
+		});
+
+		it("falls back when every held type has a count of zero", () => {
+			expect(
+				raukkOwnedHullCandidates(
+					{ WCB: { count: 0 } },
+					candidateOf
+				).map((candidate) => candidate.shipTypeId)
+			).toStrictEqual([RAUKK_STARTER_FLEET.shipTypeId]);
 		});
 	});
 });
