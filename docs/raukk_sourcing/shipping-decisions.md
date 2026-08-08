@@ -315,6 +315,17 @@ User decisions (2026-08-08), full spec in shipping-cadence-plan.md:
    base-fraction denominator change (output minus CX-shipped) —
    awaiting a worked example, explicitly dropped from this round.
 
+Round 10 implemented 2026-08-08 (commits 549e64a phases 0-2, fe165e6
+phase 3). Implementer resolutions per phase are recorded in
+shipping-cadence-plan.md under the "as implemented" sections; the
+notable behaviour changes: repair materials now ship and pay freight
+into the repair cost; ANY base-to-base flow no chain claims routes
+hub/spoke via the exchange (subsumes round 7's mutual-lane verdict —
+`resolveMutualLanes` is no longer in the snapshot pipeline); single-base
+auto loops (CX→A→CX) are refused; the Hired Transport table stays one
+row per lane with its legs listed inside the cadence cell, because the
+LM rate and ship assignment are pair-keyed.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration, and
