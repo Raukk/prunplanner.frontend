@@ -47,14 +47,64 @@ wins. Open items at the bottom still need answers before coding.
     field for the LM ad price the user would pay; the tool shows
     hired vs own-fleet ȼ/unit side by side. No LM data fetching.
 
+## Round 2 refinements (interview continued, same day)
+
+These supersede the matching decisions above.
+
+1. **Ship profiles = the existing hull list.** The Visitation
+   Frequency tool already hardcodes the real-world hull choices
+   (`PlanVisitationFrequency.vue` `shipVariants`): 500/500,
+   1000/1000, 2000/2000, 1000/3000, 3000/1000, 5000/5000 (t/m³).
+   Reuse that list for shipping profiles. A 250/250 hull exists in
+   game but nobody uses it — omit.
+2. **Engines: dropped for v1.** Every ship is assumed to use the
+   fuel-saver engine/reactor (fuel usage MIN, reactor MIN). No
+   engine choice in the config.
+3. **STL-only ships and gates: ignored for v1.** A gate list may
+   surface later; not worth the complication now.
+4. **No round-trip toggle.** There are no truly empty backhauls in
+   practice — just asymmetric input/output tonnage. Always compute
+   round-trip cost and amortize by load share; when a direction
+   can't be full, it simply carries its share. No ride-share math.
+5. **Travel-time model: calibrated from in-game test flights.** The
+   config asks the user for a measured test leg (speed in parsecs,
+   plus take-off/landing time). Reference data captured from
+   screenshots (blueprint BP-EXRX-5540, ANT → ZV-759c, one 4-parsec
+   jump, condition 100%):
+
+   | run | fuel | reactor | cargo | total time | STL fuel | FTL fuel | damage |
+   | --- | ---- | ------- | ----- | ---------- | -------- | -------- | ------ |
+   | A   | MIN  | 100%    | 3000t | 3h 44m     | 414      | 28       | 0.138% |
+   | B   | MIN  | MIN     | 3000t | 15h 18m    | 108      | 8        | 0.099% |
+   | C   | MIN  | MIN     | 0t    | 7h 32m     | 72       | 8        | 0.088% |
+
+   Legs (run B vs C): DEP 4h49m vs 1h27m, JMP (4 pc) 2h10m both,
+   APP 8h09m vs 3h49m, LND 8m14s vs 4m31s. Reading: FTL jump time
+   depends on reactor setting (4 pc = 1h23m at 100% vs 2h10m at
+   MIN) but NOT on tonnage; STL legs (DEP/APP/LND) scale strongly
+   with tonnage and reactor. Live-flight sample (AVI-07ECN, 46
+   parsecs, 4182t gross / 936t empty): 17h31m total, 332 STL + 274
+   FTL fuel, CHRG 1m15s between jumps, per-jump times 6pc/1h07m,
+   11pc/4h15m, 14pc/5h29m, 6pc/2h32m, 9pc/3h23m.
+6. **Damage/repair: deferred pending user data.** Users normally
+   repair at ~80% damage. Damage per parsec varies by system
+   (micro-meteor density), and VERIFIED: no such field exists in
+   our data (planets carry only pressure/surface/temperature/
+   fertility/gravity; systems only positions/connections/type). So
+   at best a flat damage-%-per-parsec constant feeding a repair
+   ȼ cost. User will supply repair-cost data (screenshot at 5%
+   damage + recalled 80% figures) before this is modeled.
+
 ## Open items (ask before or during implementation)
 
-- Concrete profile numbers: cargo t/m³ per hold choice (WCB, HCB,
-  ...), ȼ/parsec and speed per engine choice. No frontend game data
-  for ship parts exists — likely ship as editable presets.
-- Round-trip toggle default (moot when both legs carry cargo, per
-  decision 5; matters for empty-backhaul routes).
+- Repair cost curve: awaiting the user's repair-cost data points
+  (5% and ~80% damage) to decide whether damage cost is worth
+  modeling in v1 or noted as out of scope.
 - Ships-available count for the shipping fraction denominator:
   per profile? account-wide?
 - Whether the outputs table keeps the separate shipping breakdown
   column in addition to the folded price.
+- Exact calibration inputs for the time model: which measured
+  numbers the user enters (min-reactor jump time for a known
+  parsec distance; DEP/APP times empty vs loaded) and how tonnage
+  interpolation between them works.
