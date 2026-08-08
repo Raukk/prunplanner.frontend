@@ -8,24 +8,21 @@
 	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 	const sourcingStore = useRaukkSourcingStore();
 
+	// Composables
+	import { useRaukkShippingOptions } from "@/features/raukk_sourcing/useRaukkShippingOptions";
+
 	// Components
 	import RaukkLmRatesTable from "@/features/raukk_sourcing/components/RaukkLmRatesTable.vue";
 
 	// Calculations
 	import { buildLmComparison } from "@/features/raukk_sourcing/calculations/shippingDisplay";
-	import { raukkBayCode } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 	import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
-	import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
 
 	// UI
 	import { PButton, PSelect, PTooltip } from "@/ui";
-	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
-	import {
-		IRaukkShipProfile,
-		IRaukkShippingConfig,
-	} from "@/features/raukk_sourcing/raukkSourcing.types";
+	import { IRaukkShippingConfig } from "@/features/raukk_sourcing/raukkSourcing.types";
 	import {
 		IRaukkCadenceCaps,
 		IRaukkShippingPair,
@@ -73,35 +70,11 @@
 		() => sourcingStore.shippingConfig
 	);
 
-	const profiles: ComputedRef<IRaukkShipProfile[]> = computed(() =>
-		sourcingStore.listShipProfiles()
-	);
-
-	/** Profiles as ship TYPES: the bay code is what the user recognizes */
-	const shipTypeOptions: ComputedRef<PSelectOption[]> = computed(() =>
-		profiles.value.map((profile) => ({
-			label: `${
-				raukkBayCode(profile.cargoWeight, profile.cargoVolume) ?? "—"
-			} · ${profile.name}`,
-			value: profile.id,
-		}))
-	);
+	const { shipTypeOptions, anchorOptions } = useRaukkShippingOptions();
 
 	const assignments: ComputedRef<Record<string, string>> = computed(
 		() => sourcingStore.assignments
 	);
-
-	/** "Nearest" plus the four exchanges, the anchor choices */
-	const anchorOptions: ComputedRef<PSelectOption[]> = computed(() => [
-		{
-			label: t("raukk_sourcing.cx_anchor.nearest"),
-			value: RAUKK_CX_ANCHOR_NEAREST,
-		},
-		...Object.keys(RAUKK_CX_SYSTEM_ID_BY_CODE).map((code) => ({
-			label: code,
-			value: code,
-		})),
-	]);
 
 	/**
 	 * Account wide anchor as the plan picker's placeholder states it: the

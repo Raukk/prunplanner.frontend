@@ -14,6 +14,7 @@
 		raukkLoadChainPrices,
 		IRaukkChainComputeError,
 	} from "@/features/raukk_sourcing/useRaukkChainCompute";
+	import { useRaukkShippingOptions } from "@/features/raukk_sourcing/useRaukkShippingOptions";
 
 	// Components
 	import RaukkShipProfileEditor from "@/features/raukk_sourcing/components/RaukkShipProfileEditor.vue";
@@ -23,23 +24,21 @@
 
 	// Calculations
 	import { calculateRepairBillCost } from "@/features/raukk_sourcing/calculations/shipping";
-	import { raukkBayCode } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 	import { RAUKK_FUEL_TICKERS } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 	import {
 		RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
 		RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
 	} from "@/features/raukk_sourcing/calculations/shippingCadence";
 	import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
-	import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
 
 	// UI
 	import { PButton, PCheckbox, PInputNumber, PSelect, PTooltip } from "@/ui";
-	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
 	import {
 		IRaukkShipProfile,
 		IRaukkShippingConfig,
+		IRaukkSnapshot,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
 	import { IRaukkShippingPriceResolver } from "@/features/raukk_sourcing/calculations/shipping.types";
 
@@ -79,42 +78,44 @@
 			: calculateRepairBillCost(refResolvePrice.value)
 	);
 
-	const profiles: ComputedRef<IRaukkShipProfile[]> = computed(() =>
-		sourcingStore.listShipProfiles()
-	);
+	const { profiles, profileOptions, shipTypeOptions, anchorOptions } =
+		useRaukkShippingOptions();
 
 	const overriddenIds: ComputedRef<string[]> = computed(() =>
 		Object.keys(sourcingStore.shipProfiles)
 	);
 
-	const profileOptions: ComputedRef<PSelectOption[]> = computed(() =>
-		profiles.value.map((profile) => ({
-			label: profile.name,
-			value: profile.id,
-		}))
-	);
+	/**
+	 * Days each planet's storage bridges, the chain storage cross-check
+	 * input, read from the FROZEN snapshots: several plans may share a
+	 * planet, the fullest one — the smallest bridge — speaks for it.
+	 */
+	const storageDays: ComputedRef<
+		{ stopRef: string; filledDays: number | null }[]
+	> = computed(() => {
+		const worst: Map<string, number | null> = new Map();
 
-	/** Profiles as ship TYPES: the bay code is what the user recognizes */
-	const shipTypeOptions: ComputedRef<PSelectOption[]> = computed(() =>
-		profiles.value.map((profile) => ({
-			label: `${
-				raukkBayCode(profile.cargoWeight, profile.cargoVolume) ?? "—"
-			} · ${profile.name}`,
-			value: profile.id,
-		}))
-	);
+		Object.values(sourcingStore.snapshots).forEach(
+			(snapshot: IRaukkSnapshot) => {
+				const days: number | null = snapshot.storageFilledDays ?? null;
+				const known: number | null | undefined = worst.get(
+					snapshot.planetNaturalId
+				);
 
-	/** "Nearest" plus the four exchanges, the anchor choices */
-	const anchorOptions: ComputedRef<PSelectOption[]> = computed(() => [
-		{
-			label: t("raukk_sourcing.cx_anchor.nearest"),
-			value: RAUKK_CX_ANCHOR_NEAREST,
-		},
-		...Object.keys(RAUKK_CX_SYSTEM_ID_BY_CODE).map((code) => ({
-			label: code,
-			value: code,
-		})),
-	]);
+				if (
+					known === undefined ||
+					known === null ||
+					(days !== null && days < known)
+				)
+					worst.set(snapshot.planetNaturalId, days);
+			}
+		);
+
+		return [...worst.entries()].map(([stopRef, filledDays]) => ({
+			stopRef,
+			filledDays,
+		}));
+	});
 
 	function toggleEnabled(enabled: boolean): void {
 		sourcingStore.setShippingConfig({ enabled });
@@ -211,7 +212,9 @@
 	function chainErrorLabel(chainError: IRaukkChainComputeError): string {
 		return chainError.chainId !== ""
 			? t("raukk_sourcing.shipping_page.chain_error", {
-					name: chainError.chainId,
+					name:
+						sourcingStore.chains[chainError.chainId]?.name ??
+						chainError.chainId,
 					message: chainError.message,
 				})
 			: t("raukk_sourcing.shipping_page.auto_chain_error", {
@@ -361,7 +364,8 @@
 		<RaukkChainSection
 			:fuel-prices="fuelPrices"
 			:repair-bill-cost="repairBillCost"
-			:ship-type-options="shipTypeOptions" />
+			:ship-type-options="shipTypeOptions"
+			:storage-days="storageDays" />
 
 		<RaukkDepotSection />
 	</template>
