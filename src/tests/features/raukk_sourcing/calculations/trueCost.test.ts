@@ -545,4 +545,180 @@ describe("Raukk Sourcing: True Cost", () => {
 			});
 		});
 	});
+
+	describe("shipping bucket", () => {
+		/** One extractor, 100 ALO a day out of 50 RAT and 200 O a day */
+		function shippingPlan(): IRaukkPlanCostSource {
+			return planResult(
+				[
+					building("EXT", -1000, [
+						{
+							inputs: [{ ticker: "O", amount: 200 }],
+							outputs: [{ ticker: "ALO", amount: 100 }],
+						},
+					]),
+				],
+				[mio("ALO", 0, 100), mio("RAT", 50, 0), mio("O", 200, 0)],
+				[mio("RAT", 50, 0)],
+				[mio("O", 200, 0)]
+			);
+		}
+
+		it("is byte identical without any shipping", () => {
+			const withoutFields = calculateTrueCosts({
+				planResult: shippingPlan(),
+				repairCostPerDayByBuilding: { EXT: 500 },
+				resolveInputPrice: marketResolver({ RAT: 100, O: 5 }),
+			});
+
+			const withEmpty = calculateTrueCosts({
+				planResult: shippingPlan(),
+				repairCostPerDayByBuilding: { EXT: 500 },
+				resolveInputPrice: marketResolver({ RAT: 100, O: 5 }),
+				shippingPerUnitIn: {},
+				shippingPerUnitOut: {},
+			});
+
+			const withZeros = calculateTrueCosts({
+				planResult: shippingPlan(),
+				repairCostPerDayByBuilding: { EXT: 500 },
+				resolveInputPrice: marketResolver({ RAT: 100, O: 5 }),
+				shippingPerUnitIn: { RAT: 0, O: 0 },
+				shippingPerUnitOut: { ALO: 0 },
+			});
+
+			expect(withEmpty).toStrictEqual(withoutFields);
+			expect(withZeros).toStrictEqual(withoutFields);
+			expect(withoutFields.outputs.ALO.breakdown.shipping).toBe(0);
+		});
+
+		it("keeps the input freight out of the inputs bucket", () => {
+			const plain = calculateTrueCosts({
+				planResult: shippingPlan(),
+				repairCostPerDayByBuilding: { EXT: 500 },
+				resolveInputPrice: marketResolver({ RAT: 100, O: 5 }),
+			});
+
+			const shipped = calculateTrueCosts({
+				planResult: shippingPlan(),
+				repairCostPerDayByBuilding: { EXT: 500 },
+				resolveInputPrice: marketResolver({ RAT: 100, O: 5 }),
+				// 200 O at 2 ȼ/u, 50 RAT at 4 ȼ/u = 600 ȼ a day
+				shippingPerUnitIn: { O: 2, RAT: 4 },
+			});
+
+			const alo = shipped.outputs.ALO;
+
+			expect(alo.breakdown.inputs).toBe(
+				plain.outputs.ALO.breakdown.inputs
+			);
+			expect(alo.breakdown.workforce).toBe(
+				plain.outputs.ALO.breakdown.workforce
+			);
+			expect(alo.breakdown.shipping).toBeCloseTo(600 / 100, 8);
+			expect(alo.costPerUnit).toBeCloseTo(
+				plain.outputs.ALO.costPerUnit + 6,
+				8
+			);
+		});
+
+		it("adds the exchange freight per unit sold", () => {
+			const shipped = calculateTrueCosts({
+				planResult: shippingPlan(),
+				repairCostPerDayByBuilding: { EXT: 500 },
+				resolveInputPrice: marketResolver({ RAT: 100, O: 5 }),
+				shippingPerUnitOut: { ALO: 3 },
+			});
+
+			expect(shipped.outputs.ALO.breakdown.shipping).toBe(3);
+		});
+
+		it("splits the freight across outputs like the inputs bucket", () => {
+			const result = calculateTrueCosts({
+				planResult: planResult(
+					[
+						building("SME", 0, [
+							{
+								inputs: [{ ticker: "ALO", amount: 100 }],
+								outputs: [
+									{ ticker: "AL", amount: 2 },
+									{ ticker: "SI", amount: 8 },
+								],
+							},
+						]),
+					],
+					[mio("AL", 0, 2), mio("SI", 0, 8), mio("ALO", 100, 0)],
+					[],
+					[mio("AL", 0, 2), mio("SI", 0, 8), mio("ALO", 100, 0)]
+				),
+				repairCostPerDayByBuilding: {},
+				resolveInputPrice: marketResolver({ ALO: 10 }),
+				// 100 ALO at 1 ȼ/u, split 2:8 by output amount
+				shippingPerUnitIn: { ALO: 1 },
+			});
+
+			expect(result.outputs.AL.breakdown.shipping).toBeCloseTo(10, 8);
+			expect(result.outputs.SI.breakdown.shipping).toBeCloseTo(10, 8);
+		});
+
+		it("redistributes the freight of a self consumed recipe", () => {
+			/*
+			 * HYF turns 100 O into 40 H2O, FP consumes all of them: the
+			 * whole HYF row carries no weight and its freight has to land
+			 * on the plans only net output.
+			 */
+			const result = calculateTrueCosts({
+				planResult: planResult(
+					[
+						building("HYF", 0, [
+							{
+								inputs: [{ ticker: "O", amount: 100 }],
+								outputs: [{ ticker: "H2O", amount: 40 }],
+							},
+						]),
+						building("FP", 0, [
+							{
+								inputs: [{ ticker: "H2O", amount: 40 }],
+								outputs: [{ ticker: "DW", amount: 10 }],
+							},
+						]),
+					],
+					[mio("DW", 0, 10), mio("H2O", 40, 40), mio("O", 100, 0)],
+					[],
+					[mio("DW", 0, 10), mio("H2O", 40, 40), mio("O", 100, 0)]
+				),
+				repairCostPerDayByBuilding: {},
+				resolveInputPrice: marketResolver({ O: 1 }),
+				// 100 O at 2 ȼ/u, all of it on the only net output
+				shippingPerUnitIn: { O: 2 },
+			});
+
+			expect(result.outputs.DW.breakdown.shipping).toBeCloseTo(20, 8);
+			expect(result.outputs.H2O).toBeUndefined();
+		});
+
+		it("allocates the freight of workforce consumables", () => {
+			const result = calculateTrueCosts({
+				planResult: planResult(
+					[
+						building("EXT", -1000, [
+							{
+								inputs: [],
+								outputs: [{ ticker: "ALO", amount: 100 }],
+							},
+						]),
+					],
+					[mio("ALO", 0, 100), mio("RAT", 50, 0)],
+					[mio("RAT", 50, 0)],
+					[mio("ALO", 0, 100)]
+				),
+				repairCostPerDayByBuilding: {},
+				resolveInputPrice: marketResolver({ RAT: 100 }),
+				// 50 RAT at 4 ȼ/u = 200 ȼ a day over 100 ALO
+				shippingPerUnitIn: { RAT: 4 },
+			});
+
+			expect(result.outputs.ALO.breakdown.shipping).toBeCloseTo(2, 8);
+		});
+	});
 });

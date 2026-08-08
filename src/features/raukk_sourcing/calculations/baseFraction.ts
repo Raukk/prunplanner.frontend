@@ -12,6 +12,25 @@ import {
 const OWN_BASE: number = 1;
 
 /**
+ * Value of one output unit for the base fraction weights: its cost
+ * without the freight it took to produce and to sell it.
+ *
+ * Shipping ties up ships, not base permits, so it must not pull weight
+ * in a permit metric. The exclusion is FIRST ORDER only and deliberately
+ * so: the shipping a source paid is embedded in its transfer price and
+ * arrives here inside `breakdown.inputs`, where the stored data cannot
+ * separate it out any more.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkOutputCost} output Source Plan Output
+ * @returns {number} ȼ per unit excluding own shipping
+ */
+function costWithoutShipping(output: IRaukkOutputCost): number {
+	return output.costPerUnit - output.breakdown.shipping;
+}
+
+/**
  * Cost weight of one output ticker within its plans output basket.
  *
  * Weights are the share of the sources total daily output value, so a
@@ -27,7 +46,7 @@ const OWN_BASE: number = 1;
  */
 function costWeights(outputs: IRaukkOutputCost[]): Record<string, number> {
 	const total: number = outputs.reduce(
-		(sum, output) => sum + output.costPerUnit * output.unitsPerDay,
+		(sum, output) => sum + costWithoutShipping(output) * output.unitsPerDay,
 		0
 	);
 
@@ -36,7 +55,7 @@ function costWeights(outputs: IRaukkOutputCost[]): Record<string, number> {
 	outputs.forEach((output) => {
 		weights[output.ticker] =
 			total > 0
-				? (output.costPerUnit * output.unitsPerDay) / total
+				? (costWithoutShipping(output) * output.unitsPerDay) / total
 				: 1 / outputs.length;
 	});
 

@@ -5,6 +5,8 @@
 // Types & Interfaces
 import {
 	IRaukkPlanConfig,
+	IRaukkShipProfile,
+	IRaukkShippingConfig,
 	IRaukkSnapshot,
 	RAUKK_SOURCE_AGGREGATE,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -46,4 +48,8 @@ export interface IRaukkExportPayload {
 	version: number;
 	configs: Record<string, IRaukkPlanConfig>;
 	snapshots: Record<string, IRaukkSnapshot>;
+	/** User overridden ship profiles only, absent in a v1 payload */
+	shipProfiles: Record<string, IRaukkShipProfile>;
+	/** Account global shipping configuration, absent in a v1 payload */
+	shippingConfig: IRaukkShippingConfig;
 }

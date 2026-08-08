@@ -13,9 +13,15 @@ import { calculateTrueCosts } from "@/features/raukk_sourcing/calculations/trueC
 import { calculateRepairCostPerDay } from "@/features/raukk_sourcing/calculations/repairCapitalCost";
 import { calculateBaseFraction } from "@/features/raukk_sourcing/calculations/baseFraction";
 import {
+	calculateShipping,
+	RAUKK_REPAIR_BILL,
+} from "@/features/raukk_sourcing/calculations/shipping";
+import { buildShippingPairs } from "@/features/raukk_sourcing/calculations/shippingPairs";
+import {
 	buildInputRows,
 	buildSourceOptions,
 	createRaukkPriceResolver,
+	isAggregateSource,
 	resolveCxExchangeCode,
 	splitAggregateDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
@@ -28,8 +34,15 @@ import { ICXData } from "@/stores/planningStore.types";
 import { IPlanResult } from "@/features/planning/usePlanCalculation.types";
 import {
 	IRaukkPlanConfig,
+	IRaukkShippingConfig,
 	IRaukkSnapshot,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
+import {
+	IRaukkShippedTicker,
+	IRaukkShippingPair,
+	IRaukkShippingResult,
+} from "@/features/raukk_sourcing/calculations/shipping.types";
+import { IRaukkTickerOrigin } from "@/features/raukk_sourcing/calculations/shippingPairs";
 import {
 	IRaukkExchangePrices,
 	IRaukkMaterialUnits,
@@ -84,12 +97,21 @@ export interface IRaukkPlanSnapshotResult {
  * moving through its material I/O plus all construction materials of
  * its buildings, those are the repairable ones.
  *
+ * With shipping enabled the four ship repair bill tickers join them.
+ * They are no cargo of the plan and appear nowhere in its material I/O,
+ * but the repair cost per trip prices them — without loading them the
+ * resolvers `?? 0` fallback would silently zero that whole term.
+ *
  * @author raukk
  *
  * @param {IPlanResult} planResult Plan Calculation Result
+ * @param {boolean} withShipRepair Include the ship repair bill tickers
  * @returns {string[]} Material Tickers
  */
-function collectRelevantTickers(planResult: IPlanResult): string[] {
+function collectRelevantTickers(
+	planResult: IPlanResult,
+	withShipRepair: boolean = false
+): string[] {
 	const tickers: Set<string> = new Set();
 
 	planResult.materialio.forEach((element) => tickers.add(element.ticker));
@@ -99,7 +121,115 @@ function collectRelevantTickers(planResult: IPlanResult): string[] {
 		)
 	);
 
+	if (withShipRepair)
+		Object.keys(RAUKK_REPAIR_BILL).forEach((ticker) => tickers.add(ticker));
+
 	return Array.from(tickers).sort();
+}
+
+/** Everything one shipping computation needs beyond the store */
+interface IRaukkShippingInput {
+	planUuid: string;
+	planetNaturalId: string;
+	planResult: IPlanResult;
+	resolver: IRaukkPriceResolver;
+	getProducers: (ticker: string) => IRaukkProducerOption[];
+	shippingConfig: IRaukkShippingConfig;
+}
+
+/**
+ * Shipping of every route pair one plan owns.
+ *
+ * The plans netted material I/O is the whole cargo manifest: net inputs
+ * arrive, net outputs leave, and both carry their per unit weight and
+ * volume already. Which pair an input rides is the price resolvers
+ * answer — a ticker it prices from another plan travels that plans
+ * sourcing pair, everything else is a market buy on the CX pair.
+ *
+ * v1 limitation, deliberate: building repair materials are priced and
+ * drawn like any other ticker but never appear in the material I/O, so
+ * they ride no pair and pay no freight. The ship repair bill tickers are
+ * priced through the resolver as well, without booking a draw — the
+ * quantities are tiny and stay out of cycle guard and base fraction.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingInput} input Plan flows, resolver and config
+ * @returns {IRaukkShippingResult} Per pair and per ticker shipping
+ */
+function computePlanShipping(input: IRaukkShippingInput): IRaukkShippingResult {
+	const sourcingStore = useRaukkSourcingStore();
+
+	const inputs: IRaukkShippedTicker[] = [];
+	const outputs: IRaukkShippedTicker[] = [];
+
+	input.planResult.materialio.forEach((element) => {
+		if (element.delta === 0) return;
+
+		const cargo: IRaukkShippedTicker = {
+			ticker: element.ticker,
+			unitsPerDay: Math.abs(element.delta),
+			weightPerUnit: element.individualWeight,
+			volumePerUnit: element.individualVolume,
+		};
+
+		if (element.delta < 0) inputs.push(cargo);
+		else outputs.push(cargo);
+	});
+
+	const pairs: IRaukkShippingPair[] = buildShippingPairs(
+		{
+			planUuid: input.planUuid,
+			planetNaturalId: input.planetNaturalId,
+			inputs,
+			outputs,
+		},
+		{
+			originOf: (ticker: string): IRaukkTickerOrigin[] => {
+				const fromPlanUuid: string | undefined =
+					input.resolver(ticker).fromPlanUuid;
+
+				if (fromPlanUuid === undefined) return [];
+
+				if (!isAggregateSource(fromPlanUuid))
+					return [{ planUuid: fromPlanUuid, share: 1 }];
+
+				// an aggregate draws from the whole producer pool, split
+				// exactly as `splitAggregateDraws` splits the draws
+				const producers: IRaukkProducerOption[] =
+					input.getProducers(ticker);
+				const unitsTotal: number = producers.reduce(
+					(sum, producer) => sum + producer.unitsPerDay,
+					0
+				);
+
+				return producers.map((producer) => ({
+					planUuid: producer.planUuid,
+					share:
+						unitsTotal > 0
+							? producer.unitsPerDay / unitsTotal
+							: 1 / producers.length,
+				}));
+			},
+			planetOf: (planUuid: string): string | undefined =>
+				sourcingStore.snapshots[planUuid]?.planetNaturalId,
+			subscribedOf: (ticker: string): number =>
+				sourcingStore.subscription(input.planUuid, ticker)
+					.totalDrawnPerDay,
+			profileOf: (pairKey: string) =>
+				sourcingStore.getShipProfile(
+					input.shippingConfig.perEdgeProfile?.[pairKey] ??
+						input.shippingConfig.defaultProfileId
+				),
+		},
+		input.shippingConfig
+	);
+
+	return calculateShipping(
+		pairs,
+		input.shippingConfig,
+		(ticker: string) => input.resolver(ticker).price
+	);
 }
 
 /**
@@ -198,8 +328,15 @@ export async function computePlanSnapshot(
 		}
 	}
 
+	const shippingConfig: IRaukkShippingConfig = inertClone(
+		sourcingStore.shippingConfig
+	);
+
 	const prices: IRaukkPriceCaches = await loadRaukkPrices({
-		tickers: collectRelevantTickers(context.planResult),
+		tickers: collectRelevantTickers(
+			context.planResult,
+			shippingConfig.enabled
+		),
 		exchangeCode: resolveCxExchangeCode(cxData, context.planetNaturalId),
 		getPrice,
 		getExchangeTicker,
@@ -229,11 +366,22 @@ export async function computePlanSnapshot(
 		(ticker: string) => resolver(ticker).price
 	);
 
+	const shipping: IRaukkShippingResult = computePlanShipping({
+		planUuid: context.planUuid,
+		planetNaturalId: context.planetNaturalId,
+		planResult: context.planResult,
+		resolver,
+		getProducers,
+		shippingConfig,
+	});
+
 	const result: IRaukkTrueCostResult = calculateTrueCosts({
 		planResult: context.planResult,
 		repairCostPerDayByBuilding: repairCost.perBuilding,
 		repairMaterialUnitsPerDay: repairCost.materialUnitsPerDay,
 		resolveInputPrice: resolver,
+		shippingPerUnitIn: shipping.inbound,
+		shippingPerUnitOut: shipping.outbound,
 	});
 
 	const draws: Record<string, IRaukkMaterialUnits> = splitAggregateDraws(
@@ -241,6 +389,12 @@ export async function computePlanSnapshot(
 		getProducers
 	);
 
+	/*
+	 * Shipping is account global: the configuration it was frozen with is
+	 * embedded, and only while it is enabled. A snapshot computed with
+	 * shipping off stays byte identical to the ones written before the
+	 * shipping model existed.
+	 */
 	const snapshot: IRaukkSnapshot = {
 		computedAt: new Date().toISOString(),
 		stale: false,
@@ -248,10 +402,15 @@ export async function computePlanSnapshot(
 		planetNaturalId: context.planetNaturalId,
 		outputs: inertClone(result.outputs),
 		draws,
-		config: inertClone(config),
+		config: shippingConfig.enabled
+			? { ...inertClone(config), shipping: shippingConfig }
+			: inertClone(config),
 		baseFraction: calculateBaseFraction(draws, (sourcePlanUuid) =>
 			sourcingStore.getSnapshot(sourcePlanUuid)
 		),
+		...(shippingConfig.enabled
+			? { shippingFraction: shipping.shippingFraction }
+			: {}),
 	};
 
 	sourcingStore.setSnapshot(context.planUuid, snapshot);
@@ -343,12 +502,30 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		)
 	);
 
+	const shippingConfig: ComputedRef<IRaukkShippingConfig> = computed(
+		() => sourcingStore.shippingConfig
+	);
+
+	/** Live shipping of the pairs this plan owns, empty while disabled */
+	const shipping: ComputedRef<IRaukkShippingResult> = computed(() =>
+		computePlanShipping({
+			planUuid: context.planUuid.value ?? "",
+			planetNaturalId: context.planetNaturalId.value ?? "",
+			planResult: context.planResult.value,
+			resolver: resolver.value,
+			getProducers,
+			shippingConfig: shippingConfig.value,
+		})
+	);
+
 	const trueCost: ComputedRef<IRaukkTrueCostResult> = computed(() =>
 		calculateTrueCosts({
 			planResult: context.planResult.value,
 			repairCostPerDayByBuilding: repairCost.value.perBuilding,
 			repairMaterialUnitsPerDay: repairCost.value.materialUnitsPerDay,
 			resolveInputPrice: resolver.value,
+			shippingPerUnitIn: shipping.value.inbound,
+			shippingPerUnitOut: shipping.value.outbound,
 		})
 	);
 
@@ -443,7 +620,10 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 
 	/** All tickers the tool needs prices for */
 	const relevantTickers: ComputedRef<string[]> = computed(() =>
-		collectRelevantTickers(context.planResult.value)
+		collectRelevantTickers(
+			context.planResult.value,
+			shippingConfig.value.enabled
+		)
 	);
 
 	const isRefreshing: Ref<boolean> = ref(false);
@@ -533,6 +713,8 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 
 	return {
 		config,
+		shippingConfig,
+		shipping,
 		inputRows,
 		outputRows,
 		repairCost,

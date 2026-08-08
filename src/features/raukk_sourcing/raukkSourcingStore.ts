@@ -18,9 +18,17 @@ import {
 	RaukkSourcingExportType,
 } from "@/features/raukk_sourcing/raukkSourcingStore.schemas";
 
+// Calculations
+import {
+	raukkDefaultShippingConfig,
+	raukkShipProfilePresets,
+} from "@/features/raukk_sourcing/calculations/shippingProfiles";
+
 // Types & Interfaces
 import {
 	IRaukkPlanConfig,
+	IRaukkShipProfile,
+	IRaukkShippingConfig,
 	IRaukkSnapshot,
 	IRaukkTickerSource,
 	RAUKK_REPAIR_DAY,
@@ -36,6 +44,16 @@ import {
 /** Repair day used until a plan configures its own */
 const DEFAULT_REPAIR_DAY: RAUKK_REPAIR_DAY = 90;
 
+/**
+ * Preset ship profiles by id, built once. The store persists user
+ * overrides only, so a preset the user never touched keeps following the
+ * shipped calibration instead of freezing an old copy of it.
+ */
+const SHIP_PROFILE_PRESETS: Record<string, IRaukkShipProfile> =
+	Object.fromEntries(
+		raukkShipProfilePresets().map((profile) => [profile.id, profile])
+	);
+
 export const useRaukkSourcingStore = defineStore(
 	"prunplanner_raukk_sourcing",
 	() => {
@@ -44,6 +62,12 @@ export const useRaukkSourcingStore = defineStore(
 		const configs: Ref<Record<string, IRaukkPlanConfig>> = ref({});
 		/** Key: Plan.uuid */
 		const snapshots: Ref<Record<string, IRaukkSnapshot>> = ref({});
+		/** Key: ship profile id. User overrides of the presets only. */
+		const shipProfiles: Ref<Record<string, IRaukkShipProfile>> = ref({});
+		/** Account global, not per plan: one fleet serves every plan */
+		const shippingConfig: Ref<IRaukkShippingConfig> = ref(
+			raukkDefaultShippingConfig()
+		);
 
 		/**
 		 * Resets all store variables to their initial values
@@ -52,6 +76,8 @@ export const useRaukkSourcingStore = defineStore(
 		function $reset(): void {
 			configs.value = {};
 			snapshots.value = {};
+			shipProfiles.value = {};
+			shippingConfig.value = raukkDefaultShippingConfig();
 		}
 
 		// getters
@@ -86,6 +112,45 @@ export const useRaukkSourcingStore = defineStore(
 				snapshots.value[planUuid];
 
 			return findSnapshot ? inertClone(findSnapshot) : undefined;
+		}
+
+		/**
+		 * Gets a ship profile by id: the users override when one exists,
+		 * the shipped preset otherwise. An unknown id degrades to the
+		 * configured default profile and, should even that be gone, to
+		 * the first preset — the shipping math always needs a hull.
+		 * @author raukk
+		 *
+		 * @param {string} profileId Ship Profile Id
+		 * @returns {IRaukkShipProfile} Ship Profile
+		 */
+		function getShipProfile(profileId: string): IRaukkShipProfile {
+			const known: IRaukkShipProfile | undefined =
+				shipProfiles.value[profileId] ??
+				SHIP_PROFILE_PRESETS[profileId];
+
+			if (known) return inertClone(known);
+
+			const fallbackId: string = shippingConfig.value.defaultProfileId;
+
+			return inertClone(
+				shipProfiles.value[fallbackId] ??
+					SHIP_PROFILE_PRESETS[fallbackId] ??
+					Object.values(SHIP_PROFILE_PRESETS)[0]
+			);
+		}
+
+		/**
+		 * Lists every ship profile, presets with the users overrides
+		 * applied on top. Backs the calibration table.
+		 * @author raukk
+		 *
+		 * @returns {IRaukkShipProfile[]} Ship Profiles
+		 */
+		function listShipProfiles(): IRaukkShipProfile[] {
+			return Object.keys(SHIP_PROFILE_PRESETS).map((profileId) =>
+				getShipProfile(profileId)
+			);
 		}
 
 		/**
@@ -216,6 +281,78 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Marks every stored snapshot stale.
+		 *
+		 * Shipping configuration and ship profiles are account global:
+		 * changing them changes the numbers of every plan at once, so
+		 * there is nothing to cascade along the dependency graph — the
+		 * whole store is stale.
+		 * @author raukk
+		 */
+		function markAllStale(): void {
+			Object.values(snapshots.value).forEach((snapshot) => {
+				snapshot.stale = true;
+			});
+		}
+
+		/**
+		 * Patches the account global shipping configuration.
+		 *
+		 * Marks all snapshots stale, unless shipping was off before and
+		 * stays off: a change that cannot move a single number must not
+		 * flag the users whole empire.
+		 * @author raukk
+		 *
+		 * @param {Partial<IRaukkShippingConfig>} patch Configuration Patch
+		 */
+		function setShippingConfig(patch: Partial<IRaukkShippingConfig>): void {
+			const wasEnabled: boolean = shippingConfig.value.enabled;
+
+			shippingConfig.value = {
+				...shippingConfig.value,
+				...inertClone(patch),
+			};
+
+			if (wasEnabled || shippingConfig.value.enabled) markAllStale();
+		}
+
+		/**
+		 * Patches one ship profile, storing it as a user override of the
+		 * preset. Marks all snapshots stale while shipping is enabled.
+		 * @author raukk
+		 *
+		 * @param {string} profileId Ship Profile Id
+		 * @param {Partial<IRaukkShipProfile>} patch Profile Patch
+		 */
+		function setShipProfile(
+			profileId: string,
+			patch: Partial<IRaukkShipProfile>
+		): void {
+			shipProfiles.value[profileId] = {
+				...getShipProfile(profileId),
+				...inertClone(patch),
+				id: profileId,
+			};
+
+			if (shippingConfig.value.enabled) markAllStale();
+		}
+
+		/**
+		 * Drops a ship profiles user override, the preset applies again.
+		 * Marks all snapshots stale while shipping is enabled.
+		 * @author raukk
+		 *
+		 * @param {string} profileId Ship Profile Id
+		 */
+		function resetShipProfile(profileId: string): void {
+			if (shipProfiles.value[profileId] === undefined) return;
+
+			delete shipProfiles.value[profileId];
+
+			if (shippingConfig.value.enabled) markAllStale();
+		}
+
+		/**
 		 * Ensures a plan has a stored configuration and returns the
 		 * reactive, stored instance
 		 * @author raukk
@@ -342,6 +479,8 @@ export const useRaukkSourcingStore = defineStore(
 				version: RAUKK_SOURCING_EXPORT_VERSION,
 				configs: inertClone(configs.value),
 				snapshots: inertClone(snapshots.value),
+				shipProfiles: inertClone(shipProfiles.value),
+				shippingConfig: inertClone(shippingConfig.value),
 			};
 
 			return JSON.stringify(payload);
@@ -371,17 +510,24 @@ export const useRaukkSourcingStore = defineStore(
 
 			configs.value = validated.configs;
 			snapshots.value = validated.snapshots;
+			// absent in a v1 payload, the schema defaults both
+			shipProfiles.value = validated.shipProfiles;
+			shippingConfig.value = validated.shippingConfig;
 		}
 
 		return {
 			// state
 			configs,
 			snapshots,
+			shipProfiles,
+			shippingConfig,
 			// reset
 			$reset,
 			// getters
 			getConfig,
 			getSnapshot,
+			getShipProfile,
+			listShipProfiles,
 			producersOf,
 			subscription,
 			wouldCreateCycle,
@@ -390,7 +536,11 @@ export const useRaukkSourcingStore = defineStore(
 			clearTickerSource,
 			setRepairDay,
 			setSnapshot,
+			setShippingConfig,
+			setShipProfile,
+			resetShipProfile,
 			markStale,
+			markAllStale,
 			deletePlanData,
 			// import & export
 			exportJSON,
@@ -399,7 +549,8 @@ export const useRaukkSourcingStore = defineStore(
 	},
 	{
 		persist: {
-			pick: ["configs", "snapshots"],
+			// refs missing from this list silently never persist
+			pick: ["configs", "snapshots", "shipProfiles", "shippingConfig"],
 		},
 	}
 );

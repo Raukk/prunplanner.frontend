@@ -1,6 +1,22 @@
 // Shared type contract for the raukk sourcing feature.
 // See docs/raukk_sourcing/spec.md for the full model.
 
+// Types & Interfaces
+import { IRaukkShippingConfig } from "@/features/raukk_sourcing/calculations/shipping.types";
+
+/**
+ * The shipping shapes the store persists. They are defined next to the
+ * shipping math in `calculations/shipping.types.ts`; this module is the
+ * persisted contract of the feature and re-exports exactly the two the
+ * store writes to local storage and to its JSON export.
+ *
+ * @author raukk
+ */
+export type {
+	IRaukkShipProfile,
+	IRaukkShippingConfig,
+} from "@/features/raukk_sourcing/calculations/shipping.types";
+
 export type RAUKK_PRICE_MODE = "BID" | "ASK" | "MID" | "AVG7D" | "AVG30D";
 
 export type RAUKK_REPAIR_DAY = 30 | 60 | 90 | 120;
@@ -19,6 +35,12 @@ export interface IRaukkPlanConfig {
 	 * consumables and repair materials alike. Tickers without an
 	 * entry default to market at the plan's CX preference price. */
 	sources: Record<string, IRaukkTickerSource>;
+	/** Copy of the account-global shipping configuration, embedded into
+	 * the config a snapshot froze itself with. Only written while
+	 * shipping is enabled, so snapshots computed with shipping off stay
+	 * byte-identical to the ones written before shipping existed.
+	 * Never set on the per-plan configs of the store. */
+	shipping?: IRaukkShippingConfig;
 }
 
 /** Per-unit cost components; shipping stays 0 until the stretch goal */
@@ -60,4 +82,8 @@ export interface IRaukkSnapshot {
 	 * source baseFraction). May exceed the plan count on paper —
 	 * >1 signals this product chain ties up multiple permits. */
 	baseFraction?: number;
+	/** Ship time utilization of the route pairs this plan owns, summed.
+	 * 1.0 = one ship of the profile flies for it around the clock. Only
+	 * stored while shipping is enabled. */
+	shippingFraction?: number;
 }

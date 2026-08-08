@@ -164,6 +164,77 @@ describe("Raukk Base Fraction", () => {
 		).toBe(1);
 	});
 
+	describe("shipping exclusion", () => {
+		/** Same as `output`, with a shipping share inside the cost */
+		function shipped(
+			ticker: string,
+			unitsPerDay: number,
+			costPerUnit: number,
+			shipping: number
+		): IRaukkOutputCost {
+			return {
+				ticker,
+				unitsPerDay,
+				costPerUnit,
+				breakdown: {
+					workforce: 0,
+					repair: 0,
+					inputs: costPerUnit - shipping,
+					shipping,
+				},
+			};
+		}
+
+		it("weights outputs by their cost without shipping", () => {
+			/*
+			 * Both outputs cost 10 ȼ/u and run 100 units a day, but RAT
+			 * is almost pure freight: 1 ȼ/u of permit weight against DWs
+			 * 10. Drawing all of RAT therefore adds 100 / 1100 of a base
+			 * instead of the half it would add on the raw costs.
+			 */
+			const result: number = calculateBaseFraction(
+				{ source: { RAT: 100 } },
+				lookup({
+					source: snapshot([
+						shipped("RAT", 100, 10, 9),
+						shipped("DW", 100, 10, 0),
+					]),
+				})
+			);
+
+			expect(result).toBeCloseTo(1 + 1 / 11, 10);
+		});
+
+		it("matches the unshipped weights when shipping is zero", () => {
+			const result: number = calculateBaseFraction(
+				{ source: { RAT: 100 } },
+				lookup({
+					source: snapshot([
+						shipped("RAT", 100, 10, 0),
+						shipped("DW", 100, 10, 0),
+					]),
+				})
+			);
+
+			expect(result).toBe(1.5);
+		});
+
+		it("falls back to equal weights when only shipping remains", () => {
+			// every output is pure freight: no permit weight to divide
+			const result: number = calculateBaseFraction(
+				{ source: { RAT: 100 } },
+				lookup({
+					source: snapshot([
+						shipped("RAT", 100, 10, 10),
+						shipped("DW", 100, 10, 10),
+					]),
+				})
+			);
+
+			expect(result).toBe(1.5);
+		});
+	});
+
 	it("falls back to equal weights when the source has no cost", () => {
 		// two outputs, both weighted 0.5, RAT fully drawn
 		const result: number = calculateBaseFraction(
