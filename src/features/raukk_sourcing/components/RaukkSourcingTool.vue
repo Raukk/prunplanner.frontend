@@ -46,6 +46,7 @@
 	// Types & Interfaces
 	import { IPlanResult } from "@/features/planning/usePlanCalculation.types";
 	import {
+		IRaukkLocalPrice,
 		IRaukkTickerSource,
 		RAUKK_REPAIR_DAY,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -198,6 +199,41 @@
 		}
 
 		sourcingStore.setTickerSource(props.planUuid, ticker, source);
+	}
+
+	/**
+	 * Local market sale ads of the open plan, keyed by output ticker.
+	 * Read straight from the stored configuration rather than from the
+	 * output rows: the flag is configuration, not a computed result.
+	 */
+	const localSales: ComputedRef<Record<string, IRaukkLocalPrice>> = computed(
+		() =>
+			props.planUuid
+				? (sourcingStore.configs[props.planUuid]?.localSales ?? {})
+				: {}
+	);
+
+	/**
+	 * Flags or unflags one output ticker of the open plan as sold on the
+	 * local market of its own planet.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string} ticker Output Material Ticker
+	 * @param {IRaukkLocalPrice | undefined} price Ad price, undefined clears
+	 */
+	function changeLocalSale(
+		ticker: string,
+		price: IRaukkLocalPrice | undefined
+	): void {
+		if (readOnly.value || !props.planUuid) return;
+
+		if (price === undefined) {
+			sourcingStore.clearLocalSale(props.planUuid, ticker);
+			return;
+		}
+
+		sourcingStore.setLocalSale(props.planUuid, ticker, price);
 	}
 
 	/*
@@ -546,5 +582,9 @@
 	<h3 class="font-bold py-3">
 		{{ $t("raukk_sourcing.outputs_title") }}
 	</h3>
-	<RaukkOutputsTable :rows="outputRows" />
+	<RaukkOutputsTable
+		:rows="outputRows"
+		:local-sales="localSales"
+		:read-only="readOnly"
+		@update:local-sale="changeLocalSale" />
 </template>
