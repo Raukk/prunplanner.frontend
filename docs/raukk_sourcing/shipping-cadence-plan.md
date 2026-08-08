@@ -189,6 +189,35 @@ Points the phase left open, decided while building it:
   (calibrated minutes-per-parsec, reactor charge, STL blocks) and
   fuel estimate (burn × current FF/SF price).
 
+### Phase 3 as implemented
+
+Points the phase left open, decided while building it:
+
+- **One helper, one sentence.** `raukkVisitCadence` (calculations/
+  `shippingCadenceDisplay.ts`) inverts a trip rate into days per visit and
+  answers `null` wherever no interval can be stated — zero, negative,
+  infinite or missing trips. The sentence itself lives in exactly one
+  locale key (`cadence.visit`) rendered by one component,
+  `RaukkVisitCadence.vue`; no table formats the pair itself.
+- **The Hired Transport lane stays one table row.** The rate and the ship
+  type assignment are keyed by PAIR, not by leg, so splitting the lane
+  into one row per leg would duplicate both inputs. The row lists its legs
+  inside the days-per-visit cell instead: a bucket tag plus that bucket's
+  cadence, one line per leg, an em-dash for a lane that ships nothing.
+- **The chain "Ship Time" column is the percentage.** It is the figure
+  that read like a ship count, and it now carries the same red-and-bold
+  over-marking as the fleet table, deadbanded by `RAUKK_EPSILON_EQUAL`.
+  `shipDaysPerDay` stays on the row untouched, unrendered.
+- **Advisories roll up twice**: an identical advisory on the same
+  assignment and bucket collapses to one, and everything advising the same
+  swap collapses to one line stating how many assignments raised it. Its
+  trip figures are the WORST affected assignment rather than an average of
+  assignments that fly differently.
+- **Leg fuel is priced, never re-derived**: `ftlFuelPerParsec` over the
+  parsecs actually flown plus one sublight block per leg — the same terms
+  the chain cost math uses — times the current FF and SF price. A missing
+  price for either fuel is an em-dash, never a free trip.
+
 ## Deferred — NOT in this round of work
 
 - Self-sustained-cycle zero cost (the "ours −8,955.29" rule) and the

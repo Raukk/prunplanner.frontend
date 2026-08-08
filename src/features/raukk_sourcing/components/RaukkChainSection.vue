@@ -11,6 +11,7 @@
 	// Components
 	import RaukkChainDetail from "@/features/raukk_sourcing/components/RaukkChainDetail.vue";
 	import RaukkChainEditor from "@/features/raukk_sourcing/components/RaukkChainEditor.vue";
+	import RaukkVisitCadence from "@/features/raukk_sourcing/components/RaukkVisitCadence.vue";
 
 	// Calculations
 	import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
@@ -343,7 +344,7 @@
 				<th>{{ $t("raukk_sourcing.chains.stops") }}</th>
 				<th>{{ $t("raukk_sourcing.chains.ship_type") }}</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.chains.trips_per_day") }}
+					{{ $t("raukk_sourcing.chains.visits") }}
 				</th>
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.chains.daily_cost") }}
@@ -397,11 +398,7 @@
 							" />
 					</td>
 					<td class="text-right">
-						{{
-							row.tripsPerDay === null
-								? "—"
-								: formatNumber(row.tripsPerDay)
-						}}
+						<RaukkVisitCadence :trips-per-day="row.tripsPerDay" />
 					</td>
 					<td class="text-right">
 						{{
@@ -410,11 +407,13 @@
 								: formatNumber(row.dailyCost)
 						}}
 					</td>
-					<td class="text-right">
+					<td
+						class="text-right"
+						:class="row.over ? 'text-negative font-bold' : ''">
 						{{
-							row.shippingFraction === null
+							row.shippingFractionPercent === null
 								? "—"
-								: formatNumber(row.shippingFraction)
+								: `${formatNumber(row.shippingFractionPercent)} %`
 						}}
 					</td>
 					<td>
@@ -507,7 +506,7 @@
 					{{ $t("raukk_sourcing.auto_chains.cap_days") }}
 				</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.chains.trips_per_day") }}
+					{{ $t("raukk_sourcing.chains.visits") }}
 				</th>
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.chains.daily_cost") }}
@@ -547,14 +546,18 @@
 						" />
 				</td>
 				<td class="text-right">
-					{{ row.capDays === null ? "—" : formatNumber(row.capDays) }}
+					<PTooltip v-if="row.capDays !== null">
+						<template #trigger>
+							<span class="hover:cursor-help">
+								{{ formatNumber(row.capDays) }}
+							</span>
+						</template>
+						{{ $t("raukk_sourcing.auto_chains.cap_days_tooltip") }}
+					</PTooltip>
+					<span v-else>—</span>
 				</td>
 				<td class="text-right">
-					{{
-						row.tripsPerDay === null
-							? "—"
-							: formatNumber(row.tripsPerDay)
-					}}
+					<RaukkVisitCadence :trips-per-day="row.tripsPerDay" />
 				</td>
 				<td class="text-right">
 					{{
@@ -563,11 +566,13 @@
 							: formatNumber(row.dailyCost)
 					}}
 				</td>
-				<td class="text-right">
+				<td
+					class="text-right"
+					:class="row.over ? 'text-negative font-bold' : ''">
 					{{
-						row.shippingFraction === null
+						row.shippingFractionPercent === null
 							? "—"
-							: formatNumber(row.shippingFraction)
+							: `${formatNumber(row.shippingFractionPercent)} %`
 					}}
 				</td>
 			</tr>

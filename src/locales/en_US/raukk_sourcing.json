@@ -61,6 +61,9 @@
 		"workforce": "Workforce",
 		"repair": "Repair"
 	},
+	"cadence": {
+		"visit": "{days} days/visit ({trips}/day)"
+	},
 	"price_modes": {
 		"BID": "Bid",
 		"ASK": "Ask",
@@ -113,10 +116,10 @@
 		},
 		"lm": {
 			"title": "Hired Transport",
-			"info": "Enter the ȼ per trip an LM transport ad asks for a lane and compare it against flying it yourself. A hired lane pays the entered rate instead of the own fleet cost and drops out of the shipping fraction. ȼ/u figures are lane averages over everything moving on it, in both directions.",
+			"info": "Enter the ȼ per trip an LM transport ad asks for a lane and compare it against flying it yourself. A hired lane pays the entered rate instead of the own fleet cost and drops out of the shipping fraction — the rate covers the whole lane, all of its legs. A lane is flown as one leg per cargo class riding it, each on its own cadence, so days per visit is listed per class. ȼ/u figures are lane averages over everything moving on it, in both directions.",
 			"lane": "Lane",
 			"cx_lane": "Exchange",
-			"trips_per_day": "Trips / Day",
+			"visits": "Days / Visit",
 			"units_per_day": "Units / Day",
 			"own_per_trip": "Own ȼ/Trip",
 			"rate_per_trip": "LM ȼ/Trip",
@@ -144,7 +147,7 @@
 	},
 	"fleet": {
 		"title": "Fleet",
-		"info": "Ships you own, per type. A ship type is a cargo bay times an FTL reactor — the bay codes are in-game part designations and can't be renamed; the editable label is the blueprint design name. Utilization is the share of a type's daily flight time the lanes and chains assigned to it claim: over 100% means more ships or a bigger hull, it never blocks anything. Counts are account-global and stay editable on a read-only plan.",
+		"info": "Ships you own, per type. A ship type is a cargo bay times an FTL reactor — the bay codes are in-game part designations and can't be renamed; the editable label is the blueprint design name. Shipping capacity is the percentage of a type's daily flight time the lanes and chains assigned to it claim: 100% is one hull flying around the clock, and a figure past it — shown in red — means more ships or a bigger hull, it never blocks anything. A type without a single hull shows no percentage at all. Counts are account-global and stay editable on a read-only plan.",
 		"bay": "Bay",
 		"hull": "Hull",
 		"hull_label": "{weight} t / {volume} m³ · {reactor}",
@@ -159,6 +162,10 @@
 		"add": "Add Type",
 		"add_placeholder": "Add a ship type",
 		"empty": "No ships in the fleet yet — add a type below, then assign lanes and chains to it.",
+		"advisories": {
+			"title": "Fleet Advice",
+			"row": "Adding a {suggested} would improve shipping: {assignments} assignment(s) fly a {current} at up to {trips} trips/day, a {suggested} would fly the same work at {suggestedTrips} trips/day."
+		},
 		"reactors": {
 			"standard": "Standard Reactor",
 			"quick-charge": "Quick-Charge Reactor"
@@ -237,7 +244,7 @@
 		},
 		"ship_type": "Ship Type",
 		"auto": "Auto",
-		"trips_per_day": "Trips / Day",
+		"visits": "Days / Visit",
 		"daily_cost": "ȼ / Day",
 		"shipping_fraction": "Ship Time",
 		"not_computed": "Not computed",
@@ -267,13 +274,15 @@
 		"detail": {
 			"loop": "Loop",
 			"sub_chain": "Sub-chain {index}",
-			"summary": "{trips} trips/day · {minutes} min round trip · {cost} ȼ/day",
+			"summary": "· {minutes} min round trip · {cost} ȼ/day",
 			"hired": "Hired",
 			"leg": "Leg",
 			"parsecs": "Parsecs",
 			"weight": "t / Trip",
 			"volume": "m³ / Trip",
 			"utilization": "Load",
+			"duration": "Hours",
+			"fuel": "Fuel ȼ / Trip",
 			"cost_trip": "ȼ / Trip",
 			"binding": "Weakest link",
 			"same_system": "Same system",
@@ -293,6 +302,7 @@
 		"info": "Loops nobody authored: one per cargo class per exchange region, CX → base → … → CX, at most five stops in the cheapest order. They are rebuilt on every chain recomputation from the flows the authored chains left, so they cannot be edited — widen a detour budget, pin a ship type, or author a chain of your own instead.",
 		"tag": "Auto",
 		"cap_days": "Days / Visit Cap",
+		"cap_days_tooltip": "Longest gap between two visits this loop accepts, the tightest cadence of the bases it serves. A loop reaching the cap flies before its hold is full, and that partial trip pays a full trip.",
 		"empty": "No automatic chains. Bases carrying less than the stop share, sitting outside the detour budget or anchored at another exchange trade through the exchange instead.",
 		"config": {
 			"min_share": "Stop Share",

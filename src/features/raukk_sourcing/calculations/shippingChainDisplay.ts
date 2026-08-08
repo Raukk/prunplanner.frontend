@@ -8,6 +8,8 @@
 
 // Calculations
 import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
+import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+import { RAUKK_FUEL_TICKERS } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
 // Types & Interfaces
 import { IMaterialIO } from "@/features/planning/usePlanCalculation.types";
@@ -18,11 +20,17 @@ import {
 	IRaukkChainShipping,
 	RAUKK_STOP_REF,
 } from "@/features/raukk_sourcing/calculations/shippingChains.types";
-import { RAUKK_LOAD_DIMENSION } from "@/features/raukk_sourcing/calculations/shipping.types";
+import {
+	IRaukkShipProfile,
+	RAUKK_LOAD_DIMENSION,
+} from "@/features/raukk_sourcing/calculations/shipping.types";
 import { IRaukkChainResult } from "@/features/raukk_sourcing/raukkSourcing.types";
 
 /** Minutes of a day, the denominator of every ship time reading */
 const MINUTES_PER_DAY: number = 24 * 60;
+
+/** Minutes of an hour, the unit a leg duration reads in */
+const MINUTES_PER_HOUR: number = 60;
 
 /** One chain as the chain list renders it */
 export interface IRaukkChainListRow {
@@ -38,6 +46,10 @@ export interface IRaukkChainListRow {
 	tripsPerDay: number | null;
 	dailyCost: number | null;
 	shippingFraction: number | null;
+	/** The same share as a percentage, the reading the table shows */
+	shippingFractionPercent: number | null;
+	/** Over-booked: the loop claims more ship time than the type has */
+	over: boolean;
 	/** Ship days per day this chain claims of its assigned type */
 	shipDaysPerDay: number | null;
 	/** True for a DERIVED chain: nobody authored it, so nothing about it
@@ -66,6 +78,25 @@ export interface IRaukkChainLegRow {
 	isBinding: boolean;
 	costPerTrip: number;
 	dailyCost: number;
+	/** Time this leg takes, hours, from the calibrated flight minutes */
+	durationHours: number;
+	/** ȼ of fuel burnt on this leg, null when no price is known */
+	fuelCost: number | null;
+}
+
+/**
+ * What pricing one legs fuel burn takes: the flying profile and the
+ * current unit price of both fuels.
+ *
+ * The burn rates are calibration constants of the profile, so the only
+ * thing the display adds is a price — and a price it may not have. An
+ * absent FF or SF price is not a zero, it is an unknown, and the row says
+ * so with an em-dash rather than with free freight.
+ */
+export interface IRaukkChainLegFuel {
+	profile: IRaukkShipProfile;
+	/** Unit price per fuel ticker, as the price resolver holds them */
+	prices: Record<string, number>;
 }
 
 /** Split versus unsplit costing of one chain, as the line reads */
@@ -108,6 +139,25 @@ export interface IRaukkChainStorageWarning {
 	visitDays: number;
 	/** Days the stop's storage bridges at its own throughput */
 	filledDays: number;
+}
+
+/** A ship time share as the percentage the table reads, null carried */
+function percentOf(shippingFraction: number | null | undefined): number | null {
+	return shippingFraction === null || shippingFraction === undefined
+		? null
+		: shippingFraction * 100;
+}
+
+/**
+ * Whether a loop books more ship time than its type has, deadbanded by
+ * {@link RAUKK_EPSILON_EQUAL}: a hundredth over full is not over.
+ */
+function isOver(shippingFraction: number | null | undefined): boolean {
+	return (
+		shippingFraction !== null &&
+		shippingFraction !== undefined &&
+		shippingFraction > 1 + RAUKK_EPSILON_EQUAL
+	);
 }
 
 /**
@@ -198,6 +248,8 @@ export function raukkChainListRows(
 				tripsPerDay: result?.tripsPerDay ?? null,
 				dailyCost: result?.dailyCost ?? null,
 				shippingFraction: result?.shippingFraction ?? null,
+				shippingFractionPercent: percentOf(result?.shippingFraction),
+				over: isOver(result?.shippingFraction),
 				shipDaysPerDay:
 					result === undefined
 						? null
@@ -245,6 +297,8 @@ export function raukkAutoChainListRows(
 			tripsPerDay: result.tripsPerDay,
 			dailyCost: result.dailyCost,
 			shippingFraction: result.shippingFraction,
+			shippingFractionPercent: percentOf(result.shippingFraction),
+			over: isOver(result.shippingFraction),
 			shipDaysPerDay: result.shipMinutesPerDay / MINUTES_PER_DAY,
 			auto: true,
 			capDays: result.capDays ?? null,
@@ -260,17 +314,42 @@ export function raukkAutoChainListRows(
  * every single run, which is the number the binding dimension and the
  * utilization talk about.
  *
+ * Duration and fuel are the same numbers the cost math already flew the
+ * leg with — the calibrated minutes of the chain costing, and the
+ * profiles fuel burn over the parsecs actually flown plus the one
+ * sublight block a stop visit costs. Nothing is re-derived here; without
+ * a `fuel` argument, or without a price for FF or SF, the fuel estimate
+ * is simply not stated.
+ *
  * @author raukk
  *
  * @param {IRaukkChainShipping} shipping Computed chain
  * @param {Record<string, string>} stopNames Planet natural id to name
+ * @param {IRaukkChainLegFuel} [fuel] Flying profile and fuel prices
  * @returns {IRaukkChainLegRow[]} Leg rows
  */
 export function raukkChainLegRows(
 	shipping: IRaukkChainShipping,
-	stopNames: Record<string, string>
+	stopNames: Record<string, string>,
+	fuel?: IRaukkChainLegFuel
 ): IRaukkChainLegRow[] {
 	const trips: number = shipping.tripsPerDay;
+
+	const ftlPrice: number | undefined = fuel?.prices[RAUKK_FUEL_TICKERS.ftl];
+	const stlPrice: number | undefined = fuel?.prices[RAUKK_FUEL_TICKERS.stl];
+
+	/** ȼ of fuel one trip through a leg burns, null without a price */
+	function fuelCostOf(leg: IRaukkChainLegResult): number | null {
+		if (fuel === undefined) return null;
+		if (ftlPrice === undefined || stlPrice === undefined) return null;
+
+		return (
+			Math.max(fuel.profile.ftlFuelPerParsec, 0) *
+				Math.max(leg.effectiveParsecs, 0) *
+				ftlPrice +
+			Math.max(fuel.profile.stlFuelPerBlock, 0) * stlPrice
+		);
+	}
 
 	return shipping.legs.map((leg: IRaukkChainLegResult) => ({
 		index: leg.index,
@@ -287,6 +366,8 @@ export function raukkChainLegRows(
 		isBinding: leg.index === shipping.bindingLegIndex,
 		costPerTrip: leg.costPerTrip,
 		dailyCost: leg.dailyCost,
+		durationHours: leg.roundTripMinutes / MINUTES_PER_HOUR,
+		fuelCost: fuelCostOf(leg),
 	}));
 }
 

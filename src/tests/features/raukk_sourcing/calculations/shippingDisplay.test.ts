@@ -159,6 +159,65 @@ describe("raukk shipping display helpers", () => {
 			expect(row.tripsPerDay).toBe(0);
 			expect(row.unitsPerDay).toBe(0);
 			expect(row.ownCostPerUnit).toBe(0);
+			expect(row.legs).toStrictEqual([]);
+		});
+
+		it("states every cargo bucket riding the lane on its own cadence", () => {
+			const pair: IRaukkShippingPair = sourcingPair();
+			pair.back = [
+				{
+					ticker: "RAT",
+					bucket: "workforce",
+					unitsPerDay: 500,
+					weightPerUnit: 1,
+					volumePerUnit: 1,
+				},
+				{
+					ticker: "FEO",
+					bucket: "production",
+					unitsPerDay: 100,
+					weightPerUnit: 1,
+					volumePerUnit: 1,
+				},
+			];
+
+			const [row] = buildLmComparison([pair], config, 0, caps);
+
+			expect(row.legs.map((leg) => leg.bucket)).toStrictEqual([
+				"production",
+				"workforce",
+			]);
+
+			// 100 t a day into a 1000 t hull fill in 10 days, inside the cap
+			expect(row.legs[0].visitDays).toBeCloseTo(10);
+			expect(row.legs[0].capDays).toBe(14);
+			expect(row.legs[0].tripsPerDay).toBeCloseTo(0.1);
+
+			// 500 t a day fill the same hull in two, far inside the 30 day cap
+			expect(row.legs[1].visitDays).toBeCloseTo(2);
+			expect(row.legs[1].capDays).toBe(30);
+
+			// the lane's trips are the legs summed, each on its own rhythm
+			expect(row.tripsPerDay).toBeCloseTo(0.6);
+		});
+
+		it("holds a leg at its cap when the hold fills slower", () => {
+			const pair: IRaukkShippingPair = sourcingPair();
+			pair.back = [
+				{
+					ticker: "FEO",
+					bucket: "production",
+					unitsPerDay: 20,
+					weightPerUnit: 1,
+					volumePerUnit: 1,
+				},
+			];
+
+			const [row] = buildLmComparison([pair], config, 0, caps);
+
+			// 50 days to fill, but the cap flies it half empty every 14
+			expect(row.legs[0].visitDays).toBe(14);
+			expect(row.legs[0].tripsPerDay).toBeCloseTo(1 / 14);
 		});
 
 		it("sums both directions of the exchange pair", () => {

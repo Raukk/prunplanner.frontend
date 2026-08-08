@@ -16,6 +16,7 @@ import {
 	IRaukkShippedTicker,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
+	RAUKK_CARGO_BUCKET,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 
 /** Exchange pair of the plan itself, or a lane to one source plan */
@@ -30,10 +31,30 @@ export interface IRaukkPairIdentity {
 	sourcePlanUuid: string | undefined;
 }
 
+/**
+ * One CARGO BUCKET of a lane, flown on its own cadence.
+ *
+ * A lane is not one rhythm but up to three ({@link IRaukkLaneLeg}), so
+ * the comparison row states them individually: a single "trips per day"
+ * over a lane whose production cargo visits fortnightly and whose
+ * workforce cargo visits monthly describes neither of the two.
+ */
+export interface IRaukkLmComparisonLeg {
+	bucket: RAUKK_CARGO_BUCKET;
+	shipTypeId: string;
+	/** Days per visit the bucket may not exceed */
+	capDays: number;
+	/** Days between two visits, `min(capDays, fillDays)` */
+	visitDays: number;
+	tripsPerDay: number;
+}
+
 /** One lane of the hired versus own fleet comparison */
 export interface IRaukkLmComparisonRow {
 	pairKey: string;
 	identity: IRaukkPairIdentity;
+	/** The buckets riding this lane, each on its own cadence */
+	legs: IRaukkLmComparisonLeg[];
 	tripsPerDay: number;
 	/** Units per day riding this pair, both directions summed */
 	unitsPerDay: number;
@@ -112,8 +133,10 @@ function unitsOf(tickers: IRaukkShippedTicker[]): number {
  * summed over the LANES LEGS, one per cargo bucket riding it, and the
  * own ȼ per trip is the trip weighted mean over those legs: a lane whose
  * production and repair cargo fly on two different hulls has no single
- * cost per trip, only an average one. A lane moving nothing is still
- * listed with zero trips so the user can enter a rate before the flows
+ * cost per trip, only an average one. The legs are reported individually
+ * too, so the table can state the days per visit of each bucket instead
+ * of an average nobody flies. A lane moving nothing is still listed with
+ * zero trips and no legs so the user can enter a rate before the flows
  * exist.
  *
  * @author raukk
@@ -179,6 +202,13 @@ export function buildLmComparison(
 		return {
 			pairKey: pair.pairKey,
 			identity: raukkPairIdentity(pair.pairKey),
+			legs: legs.map((leg) => ({
+				bucket: leg.bucket,
+				shipTypeId: leg.shipTypeId,
+				capDays: leg.capDays,
+				visitDays: leg.visitDays,
+				tripsPerDay: leg.tripsPerDay,
+			})),
 			tripsPerDay,
 			unitsPerDay,
 			ownCostPerTrip,

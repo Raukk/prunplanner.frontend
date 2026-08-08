@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 // Calculations
 import {
 	raukkBayCode,
+	raukkFleetAdvisoryRows,
 	raukkFleetRows,
 	raukkShipTypeOptions,
 	raukkUtilizationBarWidth,
@@ -13,7 +14,10 @@ import {
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
 // Types & Interfaces
-import { IRaukkShipProfile } from "@/features/raukk_sourcing/calculations/shipping.types";
+import {
+	IRaukkFleetAdvisory,
+	IRaukkShipProfile,
+} from "@/features/raukk_sourcing/calculations/shipping.types";
 import { IRaukkFleetUtilization } from "@/features/raukk_sourcing/calculations/shippingFleet";
 
 function profileOf(shipTypeId: string): IRaukkShipProfile {
@@ -138,6 +142,94 @@ describe("Raukk Shipping: Fleet Display", () => {
 			expect(row.utilization).toBeNull();
 			expect(row.utilizationPercent).toBeNull();
 			expect(row.over).toBe(false);
+		});
+	});
+
+	describe("raukkFleetAdvisoryRows", () => {
+		function advisory(
+			overrides: Partial<IRaukkFleetAdvisory> = {}
+		): IRaukkFleetAdvisory {
+			return {
+				pairKey: "p1>CX",
+				bucket: "production",
+				shipTypeId: "1000x1000-standard",
+				tripsPerDay: 2,
+				suggestedShipTypeId: "5000x5000-standard",
+				suggestedTripsPerDay: 0.4,
+				...overrides,
+			};
+		}
+
+		it("states one advised swap with its trip comparison", () => {
+			const [row] = raukkFleetAdvisoryRows([advisory()]);
+
+			expect(row.shipTypeId).toBe("1000x1000-standard");
+			expect(row.suggestedShipTypeId).toBe("5000x5000-standard");
+			expect(row.tripsPerDay).toBe(2);
+			expect(row.suggestedTripsPerDay).toBe(0.4);
+			expect(row.assignmentCount).toBe(1);
+		});
+
+		it("counts the very same advisory only once", () => {
+			const rows = raukkFleetAdvisoryRows([advisory(), advisory()]);
+
+			expect(rows).toHaveLength(1);
+			expect(rows[0].assignmentCount).toBe(1);
+		});
+
+		it("counts one assignment per lane and cargo bucket", () => {
+			const rows = raukkFleetAdvisoryRows([
+				advisory(),
+				advisory({ bucket: "workforce", tripsPerDay: 1 }),
+				advisory({ pairKey: "p2>CX", tripsPerDay: 1 }),
+			]);
+
+			expect(rows).toHaveLength(1);
+			expect(rows[0].assignmentCount).toBe(3);
+		});
+
+		it("keeps the worst affected assignment of a rolled up advice", () => {
+			const [row] = raukkFleetAdvisoryRows([
+				advisory({ tripsPerDay: 1, suggestedTripsPerDay: 0.2 }),
+				advisory({
+					pairKey: "p2>CX",
+					tripsPerDay: 6,
+					suggestedTripsPerDay: 1.2,
+				}),
+				advisory({
+					pairKey: "p3>CX",
+					tripsPerDay: 3,
+					suggestedTripsPerDay: 0.6,
+				}),
+			]);
+
+			expect(row.tripsPerDay).toBe(6);
+			expect(row.suggestedTripsPerDay).toBe(1.2);
+		});
+
+		it("keeps two different swaps apart, ordered by ship type", () => {
+			const rows = raukkFleetAdvisoryRows([
+				advisory({
+					shipTypeId: "3000x1000-standard",
+					suggestedShipTypeId: "5000x5000-standard",
+				}),
+				advisory({ suggestedShipTypeId: "1000x3000-standard" }),
+				advisory(),
+			]);
+
+			expect(
+				rows.map(
+					(row) => `${row.shipTypeId}>${row.suggestedShipTypeId}`
+				)
+			).toStrictEqual([
+				"1000x1000-standard>1000x3000-standard",
+				"1000x1000-standard>5000x5000-standard",
+				"3000x1000-standard>5000x5000-standard",
+			]);
+		});
+
+		it("advises nothing when nothing was raised", () => {
+			expect(raukkFleetAdvisoryRows([])).toStrictEqual([]);
 		});
 	});
 

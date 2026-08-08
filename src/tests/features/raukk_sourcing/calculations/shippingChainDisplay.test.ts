@@ -15,6 +15,7 @@ import {
 	raukkStorageFilledDays,
 } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 import { raukkDefaultChainConfig } from "@/features/raukk_sourcing/calculations/shippingChains";
+import { raukkShipProfilePreset } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
 // Types & Interfaces
 import { IMaterialIO } from "@/features/planning/usePlanCalculation.types";
@@ -32,6 +33,7 @@ import {
 	IRaukkChainListRow,
 	IRaukkChainStorageWarning,
 } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+import { IRaukkShipProfile } from "@/features/raukk_sourcing/calculations/shipping.types";
 
 const STOP_NAMES: Record<string, string> = {
 	"ZV-759c": "Extractor",
@@ -70,6 +72,18 @@ function leg(
 		dailyCost: 50,
 		roundTripMinutes: 120,
 		...overrides,
+	};
+}
+
+/** A hull with round fuel burn rates, so the fuel math stays readable */
+function fuelProfile(): IRaukkShipProfile {
+	return {
+		...raukkShipProfilePreset(
+			{ cargoWeight: 3000, cargoVolume: 1000 },
+			"standard"
+		),
+		ftlFuelPerParsec: 5,
+		stlFuelPerBlock: 72,
 	};
 }
 
@@ -220,6 +234,46 @@ describe("Raukk Shipping: Chain Display", () => {
 			expect(row.shipDaysPerDay).toBeCloseTo(0.5);
 			expect(row.stopsSummary).toBe("Extractor → Smelter → Extractor");
 			expect(row.auto).toBe(false);
+			expect(row.shippingFractionPercent).toBeCloseTo(8);
+			expect(row.over).toBe(false);
+		});
+
+		it("flags a loop booking more ship time than its type has", () => {
+			const rows: IRaukkChainListRow[] = raukkChainListRows(
+				chains,
+				{ c1: chainResult({ shippingFraction: 5.34 }) },
+				STOP_NAMES
+			);
+
+			const row: IRaukkChainListRow = rows.find(
+				(entry) => entry.chainId === "c1"
+			)!;
+
+			expect(row.shippingFractionPercent).toBeCloseTo(534);
+			expect(row.over).toBe(true);
+		});
+
+		it("does not flag a hair over one as over-booked", () => {
+			const rows: IRaukkChainListRow[] = raukkChainListRows(
+				chains,
+				{ c1: chainResult({ shippingFraction: 1.005 }) },
+				STOP_NAMES
+			);
+
+			expect(rows.find((entry) => entry.chainId === "c1")!.over).toBe(
+				false
+			);
+		});
+
+		it("has no percentage for an uncomputed chain", () => {
+			const rows: IRaukkChainListRow[] = raukkChainListRows(
+				chains,
+				{},
+				STOP_NAMES
+			);
+
+			expect(rows[0].shippingFractionPercent).toBeNull();
+			expect(rows[0].over).toBe(false);
 		});
 	});
 
@@ -248,6 +302,8 @@ describe("Raukk Shipping: Chain Display", () => {
 			expect(rows[0].stopsSummary).toBe(
 				"Extractor → Smelter → Extractor"
 			);
+			expect(rows[0].shippingFractionPercent).toBeCloseTo(8);
+			expect(rows[0].over).toBe(false);
 		});
 	});
 
@@ -271,6 +327,40 @@ describe("Raukk Shipping: Chain Display", () => {
 
 			expect(rows[0].weightPerTrip).toBe(0);
 			expect(rows[0].volumePerTrip).toBe(0);
+		});
+
+		it("reads the leg duration off the calibrated flight minutes", () => {
+			const rows = raukkChainLegRows(
+				shipping({ legs: [leg(0, { roundTripMinutes: 150 })] }),
+				STOP_NAMES
+			);
+
+			expect(rows[0].durationHours).toBeCloseTo(2.5);
+		});
+
+		it("prices the fuel burn of a leg at the current FF and SF price", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES, {
+				profile: fuelProfile(),
+				prices: { FF: 100, SF: 10 },
+			});
+
+			// 4 pc * 5 FF * 100 + 72 SF * 10
+			expect(rows[0].fuelCost).toBeCloseTo(2720);
+		});
+
+		it("states no fuel estimate without a profile to burn it", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES);
+
+			expect(rows[0].fuelCost).toBeNull();
+		});
+
+		it("states no fuel estimate while a fuel price is unknown", () => {
+			const rows = raukkChainLegRows(shipping(), STOP_NAMES, {
+				profile: fuelProfile(),
+				prices: { FF: 100 },
+			});
+
+			expect(rows[0].fuelCost).toBeNull();
 		});
 	});
 

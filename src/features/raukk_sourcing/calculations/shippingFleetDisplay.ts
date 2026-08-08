@@ -14,6 +14,7 @@ import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/rauk
 
 // Types & Interfaces
 import {
+	IRaukkFleetAdvisory,
 	IRaukkShipHull,
 	IRaukkShipProfile,
 	RAUKK_FTL_REACTOR,
@@ -59,6 +60,20 @@ export interface IRaukkFleetRow {
 	over: boolean;
 	/** Number of lanes and chains assigned to this type */
 	assignedCount: number;
+}
+
+/** One piece of fleet advice, rolled up over the whole account */
+export interface IRaukkFleetAdvisoryRow {
+	/** Ship type the work flies today */
+	shipTypeId: string;
+	/** Ship type the fleet does not own that would serve it better */
+	suggestedShipTypeId: string;
+	/** Trips per day of the worst affected assignment */
+	tripsPerDay: number;
+	/** Trips per day the suggested hull would fly the same work */
+	suggestedTripsPerDay: number;
+	/** Lanes and chains this advice was raised on */
+	assignmentCount: number;
 }
 
 /** One selectable ship type of the add row */
@@ -146,6 +161,74 @@ export function raukkFleetRows(
 			assignedCount: entry.keys.length,
 		};
 	});
+}
+
+/**
+ * Rolls every fleet advisory of the account up into one line per advice.
+ *
+ * Advisories are raised per LEG of a lane and per chain, so the same
+ * sentence — "a bigger hull would fly this less often" — arrives dozens of
+ * times over an account. They are therefore deduplicated twice: an
+ * identical advisory on the same assignment and cargo bucket is one
+ * advisory, and everything advising the same swap is one line stating how
+ * many assignments raised it.
+ *
+ * The trip figures of that line are the WORST affected assignment, the
+ * one flying most often today, together with the rate the suggested hull
+ * would fly the very same work at: averaging over assignments would
+ * describe none of them, and the strongest case is the one worth buying a
+ * hull for.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkFleetAdvisory[]} advisories Advisories, in any order
+ * @returns {IRaukkFleetAdvisoryRow[]} One row per advised swap
+ */
+export function raukkFleetAdvisoryRows(
+	advisories: IRaukkFleetAdvisory[]
+): IRaukkFleetAdvisoryRow[] {
+	const seen: Set<string> = new Set();
+	const rows: Map<string, IRaukkFleetAdvisoryRow> = new Map();
+
+	advisories.forEach((advisory) => {
+		const assignment: string = [
+			advisory.pairKey,
+			advisory.bucket,
+			advisory.shipTypeId,
+			advisory.suggestedShipTypeId,
+		].join("#");
+
+		if (seen.has(assignment)) return;
+		seen.add(assignment);
+
+		const key: string = `${advisory.shipTypeId}#${advisory.suggestedShipTypeId}`;
+		const known: IRaukkFleetAdvisoryRow | undefined = rows.get(key);
+
+		if (known === undefined) {
+			rows.set(key, {
+				shipTypeId: advisory.shipTypeId,
+				suggestedShipTypeId: advisory.suggestedShipTypeId,
+				tripsPerDay: advisory.tripsPerDay,
+				suggestedTripsPerDay: advisory.suggestedTripsPerDay,
+				assignmentCount: 1,
+			});
+
+			return;
+		}
+
+		known.assignmentCount += 1;
+
+		if (advisory.tripsPerDay > known.tripsPerDay) {
+			known.tripsPerDay = advisory.tripsPerDay;
+			known.suggestedTripsPerDay = advisory.suggestedTripsPerDay;
+		}
+	});
+
+	return Array.from(rows.values()).sort(
+		(left, right) =>
+			left.shipTypeId.localeCompare(right.shipTypeId) ||
+			left.suggestedShipTypeId.localeCompare(right.suggestedShipTypeId)
+	);
 }
 
 /**
