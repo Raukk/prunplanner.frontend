@@ -366,6 +366,134 @@ describe("Raukk Shipping: Plan flows", () => {
 		});
 	});
 
+	describe("claims of two producers on one planet", () => {
+		/** The 100 ORE are drawn half from each of two same planet plans */
+		function twoProducers(
+			claimedUnitsOf?: IRaukkPairLookups["claimedUnitsOf"]
+		): IRaukkPairLookups {
+			return {
+				...lookups(claimedUnitsOf),
+				originOf: (ticker: string) =>
+					ticker === "ORE"
+						? [
+								{ planUuid: "sourceA", share: 0.5 },
+								{ planUuid: "sourceB", share: 0.5 },
+							]
+						: [],
+				planetOf: (planUuid: string) =>
+					planUuid === "sourceA" || planUuid === "sourceB"
+						? SOURCE_PLANET
+						: undefined,
+			};
+		}
+
+		/** A claim of `units` ORE, optionally naming its producing plan */
+		function oreClaim(
+			units: number,
+			sourcePlanUuid?: string
+		): IRaukkClaimedFlowCost[] {
+			return [
+				{
+					...(sourcePlanUuid !== undefined ? { sourcePlanUuid } : {}),
+					ticker: "ORE",
+					fromStop: SOURCE_PLANET,
+					toStop: OWN_PLANET,
+					unitsPerDay: units,
+					costPerUnit: 3,
+				},
+			];
+		}
+
+		/** `claimedUnitsOf` over one claim list, the exchange named */
+		function lookupOf(
+			claimed: IRaukkClaimedFlowCost[]
+		): IRaukkPairLookups["claimedUnitsOf"] {
+			const lookup = raukkClaimedUnitsLookup(claimed, OWN_PLANET);
+
+			return (
+				ticker: string,
+				counterpart: string | undefined,
+				inbound: boolean,
+				sourcePlanUuid?: string
+			) => lookup(ticker, counterpart ?? "AI1", inbound, sourcePlanUuid);
+		}
+
+		/** Daily ORE units of one sourcing lane */
+		function laneUnits(
+			pairs: ReturnType<typeof buildShippingPairs>,
+			pairKey: string
+		): number {
+			const pair = pairs.find((entry) => entry.pairKey === pairKey);
+
+			return pair?.back[0]?.unitsPerDay ?? 0;
+		}
+
+		it("takes a partial claim off its own lane only", () => {
+			const pairs = buildShippingPairs(
+				cargo(),
+				twoProducers(lookupOf(oreClaim(20, "sourceA"))),
+				config
+			);
+
+			// 50 units per lane, 20 of A's ride the chain
+			expect(laneUnits(pairs, "own>sourceA")).toBeCloseTo(30, 10);
+			// the sibling keeps its whole freight, it was never claimed
+			expect(laneUnits(pairs, "own>sourceB")).toBeCloseTo(50, 10);
+		});
+
+		it("empties the claimed lane and leaves the sibling whole", () => {
+			const pairs = buildShippingPairs(
+				cargo(),
+				twoProducers(lookupOf(oreClaim(50, "sourceA"))),
+				config
+			);
+
+			expect(
+				pairs.map((pair) => pair.pairKey).includes("own>sourceA")
+			).toBe(false);
+			expect(laneUnits(pairs, "own>sourceB")).toBeCloseTo(50, 10);
+		});
+
+		it("keeps the planet level behaviour for a legacy claim", () => {
+			// a result frozen before `sourcePlanUuid` existed names no
+			// producer: it must still match, and it matches every plan on
+			// its origin planet exactly as it always did
+			const pairs = buildShippingPairs(
+				cargo(),
+				twoProducers(lookupOf(oreClaim(20))),
+				config
+			);
+
+			expect(laneUnits(pairs, "own>sourceA")).toBeCloseTo(30, 10);
+			expect(laneUnits(pairs, "own>sourceB")).toBeCloseTo(30, 10);
+		});
+
+		it("adds a legacy claim to a named one on the same lane", () => {
+			const pairs = buildShippingPairs(
+				cargo(),
+				twoProducers(
+					lookupOf([...oreClaim(20, "sourceA"), ...oreClaim(10)])
+				),
+				config
+			);
+
+			expect(laneUnits(pairs, "own>sourceA")).toBeCloseTo(20, 10);
+			expect(laneUnits(pairs, "own>sourceB")).toBeCloseTo(40, 10);
+		});
+
+		it("answers the whole lane claim to a caller naming no plan", () => {
+			const lookup = raukkClaimedUnitsLookup(
+				[...oreClaim(20, "sourceA"), ...oreClaim(30, "sourceB")],
+				OWN_PLANET
+			);
+
+			expect(lookup("ORE", SOURCE_PLANET, true)).toBe(50);
+			expect(lookup("ORE", SOURCE_PLANET, true, "sourceA")).toBe(20);
+			expect(lookup("ORE", SOURCE_PLANET, true, "sourceB")).toBe(30);
+			expect(lookup("ORE", SOURCE_PLANET, true, "sourceC")).toBe(0);
+		});
+	});
+
 	describe("mergeClaimedShipping", () => {
 		const result: IRaukkShippingResult = {
 			pairs: [],

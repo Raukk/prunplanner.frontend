@@ -114,12 +114,50 @@ function anchorOf(planetNaturalId: string): string | undefined {
 
 describe("Raukk Sourcing: Automatic Chains", () => {
 	describe("chain ids", () => {
-		it("names a derived chain by class, region and position", () => {
-			expect(raukkAutoChainId("workforce", "AI1", 2)).toBe(
-				"auto:workforce:AI1:2"
-			);
-			expect(raukkIsAutoChainId("auto:workforce:AI1:2")).toBe(true);
+		it("names a derived chain by class, region and stops", () => {
+			expect(
+				raukkAutoChainId("workforce", "AI1", [
+					"AI1",
+					"AA-002b",
+					"AA-001a",
+				])
+			).toBe("auto:workforce:AI1:AA-001a+AA-002b");
+			expect(
+				raukkIsAutoChainId("auto:workforce:AI1:AA-001a+AA-002b")
+			).toBe(true);
 			expect(raukkIsAutoChainId("my-loop")).toBe(false);
+		});
+
+		it("is stable against the discovery order of the stops", () => {
+			expect(
+				raukkAutoChainId("production", "CX1", [
+					"CX1",
+					"AA-002b",
+					"AA-001a",
+				])
+			).toBe(
+				raukkAutoChainId("production", "CX1", [
+					"CX1",
+					"AA-001a",
+					"AA-002b",
+				])
+			);
+		});
+
+		it("names a loop of other stops differently", () => {
+			expect(
+				raukkAutoChainId("production", "CX1", [
+					"CX1",
+					"AA-001a",
+					"AA-002b",
+				])
+			).not.toBe(
+				raukkAutoChainId("production", "CX1", [
+					"CX1",
+					"AA-001a",
+					"AA-003c",
+				])
+			);
 		});
 	});
 
@@ -430,8 +468,8 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			const chains: IRaukkAutoChain[] = build();
 
 			expect(chains.map((chain) => chain.chainId)).toStrictEqual([
-				"auto:production:CX1:1",
-				"auto:workforce:CX1:1",
+				"auto:production:CX1:AA-001a+AA-002b",
+				"auto:workforce:CX1:AA-001a+AA-002b",
 			]);
 			expect(chains[0].stops[0]).toBe("CX1");
 			expect(chains[0].stops.slice(1).sort()).toStrictEqual([

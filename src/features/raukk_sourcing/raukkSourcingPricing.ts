@@ -4,7 +4,11 @@
 
 // Calculation Utils
 import { resolveMarketPrice } from "@/features/raukk_sourcing/calculations/priceMode";
-import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+import {
+	raukkEqualWithin,
+	raukkSettledWithin,
+	RAUKK_EPSILON_EQUAL,
+} from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
 // Types & Interfaces
 import { ICXData } from "@/stores/planningStore.types";
@@ -415,10 +419,53 @@ export function maxAbsoluteOutputDelta(
 	return max;
 }
 
-/** Absolute difference below which two snapshot numbers count equal,
- * see {@link RAUKK_EPSILON_EQUAL}. A change of less than a cent — or of
- * less than a hundredth of a unit — is invisible in the two decimal
- * display and must not cascade staleness onto downstream plans. */
+/**
+ * Whether the output costs of two passes have SETTLED.
+ *
+ * The convergence test of every loop iteration, per ticker rather than
+ * over the largest shift alone: the tolerance is hybrid (see
+ * {@link raukkSettledWithin}) and therefore depends on the MAGNITUDE of
+ * the ticker it judges, which a single pooled maximum cannot state. A
+ * ȼ 40,000 output settling within a few hundredths is settled; the same
+ * few hundredths on a ȼ 2 output are not.
+ *
+ * A ticker appearing in only one of the two sets is a structural change
+ * and never settles.
+ *
+ * @author raukk
+ *
+ * @param {Record<string, IRaukkOutputCost>} before Previous outputs
+ * @param {Record<string, IRaukkOutputCost>} after Current outputs
+ * @returns {boolean} Every output cost settled
+ */
+export function outputsSettled(
+	before: Record<string, IRaukkOutputCost>,
+	after: Record<string, IRaukkOutputCost>
+): boolean {
+	const tickers: Set<string> = new Set([
+		...Object.keys(before),
+		...Object.keys(after),
+	]);
+
+	for (const ticker of tickers) {
+		const previous: IRaukkOutputCost | undefined = before[ticker];
+		const current: IRaukkOutputCost | undefined = after[ticker];
+
+		if (!previous || !current) return false;
+
+		if (!raukkSettledWithin(previous.costPerUnit, current.costPerUnit))
+			return false;
+	}
+
+	return true;
+}
+
+/** Absolute FLOOR below which two snapshot numbers count equal, see
+ * {@link RAUKK_EPSILON_EQUAL}. A change of less than a cent — or of less
+ * than a hundredth of a unit — is invisible in the two decimal display
+ * and must not cascade staleness onto downstream plans. The comparison
+ * itself is hybrid and widens this floor at large magnitudes, see
+ * {@link raukkEqualWithin}. */
 export const RAUKK_SNAPSHOT_EQUAL_EPSILON: number = RAUKK_EPSILON_EQUAL;
 
 /**
@@ -453,10 +500,14 @@ export function snapshotMateriallyChanged(
 		if (!previousOutput || !nextOutput) return true;
 
 		if (
-			Math.abs(nextOutput.costPerUnit - previousOutput.costPerUnit) >=
-				RAUKK_SNAPSHOT_EQUAL_EPSILON ||
-			Math.abs(nextOutput.unitsPerDay - previousOutput.unitsPerDay) >=
-				RAUKK_SNAPSHOT_EQUAL_EPSILON
+			!raukkEqualWithin(
+				previousOutput.costPerUnit,
+				nextOutput.costPerUnit
+			) ||
+			!raukkEqualWithin(
+				previousOutput.unitsPerDay,
+				nextOutput.unitsPerDay
+			)
 		)
 			return true;
 	}
@@ -478,9 +529,10 @@ export function snapshotMateriallyChanged(
 
 		for (const ticker of drawTickers) {
 			if (
-				Math.abs(
-					(nextDraws[ticker] ?? 0) - (previousDraws[ticker] ?? 0)
-				) >= RAUKK_SNAPSHOT_EQUAL_EPSILON
+				!raukkEqualWithin(
+					previousDraws[ticker] ?? 0,
+					nextDraws[ticker] ?? 0
+				)
 			)
 				return true;
 		}

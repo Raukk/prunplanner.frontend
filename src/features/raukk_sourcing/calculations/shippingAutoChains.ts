@@ -80,21 +80,48 @@ const CARGO_BUCKETS: RAUKK_CARGO_BUCKET[] = [
 ];
 
 /**
- * Id of one automatic chain: `auto:<class>:<cxCode>:<n>`.
+ * Separator between the base stops inside a derived chain id. Planet
+ * natural ids carry digits, letters and a hyphen, never a plus.
+ *
+ * @author raukk
+ */
+export const RAUKK_AUTO_CHAIN_STOP_SEPARATOR: string = "+";
+
+/**
+ * Id of one automatic chain:
+ * `auto:<class>:<cxCode>:<base stops, sorted, "+" joined>`, for example
+ * `auto:production:AI1:OT-580b+UV-351a`.
+ *
+ * CONTENT stable, not positional: the id states WHAT the loop is, so the
+ * same loop keeps its id no matter in which order the clustering
+ * discovered it, and a loop whose membership changed becomes a different
+ * id rather than silently inheriting the pins of the loop that held that
+ * number before. Class, region and stop set identify a loop completely —
+ * two loops of one class in one region cannot hold the same stops — so
+ * the stop set is the whole key and no hash is needed; five stops is the
+ * hard cap, which keeps the id short and readable.
+ *
+ * The anchor exchange is a stop of every loop and is named by the id
+ * already, so it is dropped from the stop list.
  *
  * @author raukk
  *
  * @param {RAUKK_CARGO_BUCKET} bucket Cadence class of the loop
  * @param {string} cxCode Anchor exchange code
- * @param {number} index Position within that class and region, from 1
+ * @param {RAUKK_STOP_REF[]} stops Loop stops, the exchange included
  * @returns {string} Chain Id
  */
 export function raukkAutoChainId(
 	bucket: RAUKK_CARGO_BUCKET,
 	cxCode: string,
-	index: number
+	stops: RAUKK_STOP_REF[]
 ): string {
-	return `${RAUKK_AUTO_CHAIN_PREFIX}${bucket}:${cxCode}:${index}`;
+	const bases: string = stops
+		.filter((stopRef) => stopRef !== cxCode)
+		.sort()
+		.join(RAUKK_AUTO_CHAIN_STOP_SEPARATOR);
+
+	return `${RAUKK_AUTO_CHAIN_PREFIX}${bucket}:${cxCode}:${bases}`;
 }
 
 /**
@@ -694,15 +721,7 @@ export function raukkBuildAutoChains(
 				).map((planUuid) => input.capDaysOf(planUuid, bucket));
 
 				chains.push({
-					chainId: raukkAutoChainId(
-						bucket,
-						cxCode,
-						chains.filter(
-							(chain) =>
-								chain.bucket === bucket &&
-								chain.cxCode === cxCode
-						).length + 1
-					),
+					chainId: raukkAutoChainId(bucket, cxCode, loop.stops),
 					bucket,
 					cxCode,
 					stops: loop.stops,

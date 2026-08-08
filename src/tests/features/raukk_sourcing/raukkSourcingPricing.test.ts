@@ -9,6 +9,7 @@ import {
 	formatSourceOptionLabel,
 	isAggregateSource,
 	maxAbsoluteOutputDelta,
+	outputsSettled,
 	resolveCxExchangeCode,
 	snapshotMateriallyChanged,
 	splitAggregateDraws,
@@ -637,6 +638,50 @@ describe("Raukk Sourcing Pricing", () => {
 				)
 			).toBeLessThan(RAUKK_EPSILON_SETTLE);
 		});
+
+		describe("outputsSettled", () => {
+			it("settles identical outputs", () => {
+				expect(
+					outputsSettled(
+						outputs({ RAT: 10, DW: 5 }),
+						outputs({ RAT: 10, DW: 5 })
+					)
+				).toBe(true);
+			});
+
+			it("does not settle a visible shift", () => {
+				expect(
+					outputsSettled(
+						outputs({ RAT: 10, DW: 5 }),
+						outputs({ RAT: 10, DW: 5.5 })
+					)
+				).toBe(false);
+			});
+
+			it("never settles an appearing or vanishing ticker", () => {
+				expect(
+					outputsSettled(outputs({ RAT: 10 }), outputs({ DW: 5 }))
+				).toBe(false);
+			});
+
+			it("judges every ticker at its OWN magnitude", () => {
+				// a hundredth on a ȼ 500,000 output is noise, the same
+				// hundredth on a ȼ 2 output is a fifth of a percent — a
+				// pooled maximum over both cannot state either
+				expect(
+					outputsSettled(
+						outputs({ BIG: 500_000, SMALL: 2 }),
+						outputs({ BIG: 500_000.4, SMALL: 2 })
+					)
+				).toBe(true);
+				expect(
+					outputsSettled(
+						outputs({ BIG: 500_000, SMALL: 2 }),
+						outputs({ BIG: 500_000, SMALL: 2.4 })
+					)
+				).toBe(false);
+			});
+		});
 	});
 
 	describe("snapshotMateriallyChanged", () => {
@@ -715,6 +760,36 @@ describe("Raukk Sourcing Pricing", () => {
 					fullSnapshot(1000.005, 100, { a: { ORE: 5.005 } })
 				)
 			).toBe(false);
+		});
+
+		it("ignores a change under the relative half of the deadband", () => {
+			// a 50,000 units/day draw moving by three hundredths of a unit:
+			// the pure absolute hundredth flagged this and cascaded
+			// staleness through every downstream plan of a large empire
+			expect(
+				snapshotMateriallyChanged(
+					fullSnapshot(10, 50_000, { a: { ORE: 50_000 } }),
+					fullSnapshot(10, 50_000.03, { a: { ORE: 50_000.03 } })
+				)
+			).toBe(false);
+		});
+
+		it("still detects a real change at that magnitude", () => {
+			expect(
+				snapshotMateriallyChanged(
+					fullSnapshot(10, 50_000, { a: { ORE: 50_000 } }),
+					fullSnapshot(10, 50_000, { a: { ORE: 50_001 } })
+				)
+			).toBe(true);
+		});
+
+		it("keeps the absolute deadband on small numbers", () => {
+			expect(
+				snapshotMateriallyChanged(
+					fullSnapshot(10, 100, { a: { ORE: 5 } }),
+					fullSnapshot(10, 100, { a: { ORE: 5.03 } })
+				)
+			).toBe(true);
 		});
 
 		it("ignores metadata only differences", () => {

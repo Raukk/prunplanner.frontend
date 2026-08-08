@@ -6,6 +6,7 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 
 // Calculations
 import { raukkDefaultChainConfig } from "@/features/raukk_sourcing/calculations/shippingChains";
+import { raukkAutoChainId } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 import { raukkChainAssignmentKey } from "@/features/raukk_sourcing/calculations/shippingFleet";
 import { RAUKK_DEFAULT_SHIP_PROFILE_ID } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
@@ -468,9 +469,9 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		});
 
 		/*
-		 * A derived id is POSITIONAL: a pin left behind by a loop that no
-		 * longer exists would sit in the store forever and re-apply to
-		 * whatever loop takes that id on a later pass.
+		 * A pin left behind by a loop that no longer exists would sit in
+		 * the store forever and re-apply to whatever loop takes that id
+		 * on a later pass.
 		 */
 		it("drops the hull pins of derived chains that vanished", () => {
 			store.setAutoChainResults([
@@ -497,6 +498,93 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 				raukkChainAssignmentKey("c1"),
 				"source>CX",
 			]);
+		});
+
+		/*
+		 * Content stable ids: the same loop keeps its pin across passes,
+		 * a loop that changed becomes a DIFFERENT id and its pin is
+		 * pruned as an orphan rather than transferring to a loop the user
+		 * never pinned.
+		 */
+		it("keeps the pin of a loop whose stops did not change", () => {
+			const chainId: string = raukkAutoChainId("production", "AI1", [
+				"AI1",
+				"ZV-194a",
+				"ZV-759b",
+			]);
+
+			store.setAutoChainResults([makeChainResult(chainId, ["source"])]);
+			store.setAssignment(raukkChainAssignmentKey(chainId), "WCB");
+
+			// the next pass discovered the very same loop, other order
+			store.setAutoChainResults([
+				makeChainResult(
+					raukkAutoChainId("production", "AI1", [
+						"AI1",
+						"ZV-759b",
+						"ZV-194a",
+					]),
+					["source"]
+				),
+			]);
+
+			expect(store.assignments[raukkChainAssignmentKey(chainId)]).toBe(
+				"WCB"
+			);
+		});
+
+		it("prunes the pin of a loop that gained a stop", () => {
+			const before: string = raukkAutoChainId("production", "AI1", [
+				"AI1",
+				"ZV-194a",
+				"ZV-759b",
+			]);
+			const after: string = raukkAutoChainId("production", "AI1", [
+				"AI1",
+				"ZV-194a",
+				"ZV-759b",
+				"ZV-307c",
+			]);
+
+			expect(after).not.toBe(before);
+
+			store.setAutoChainResults([makeChainResult(before, ["source"])]);
+			store.setAssignment(raukkChainAssignmentKey(before), "WCB");
+
+			store.setAutoChainResults([makeChainResult(after, ["source"])]);
+
+			expect(
+				store.assignments[raukkChainAssignmentKey(before)]
+			).toBeUndefined();
+			expect(
+				store.assignments[raukkChainAssignmentKey(after)]
+			).toBeUndefined();
+		});
+
+		it("replaces a stored positional result and prunes its pin", () => {
+			// a blob frozen under the old `auto:<class>:<cx>:<n>` scheme
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+			]);
+			store.setAssignment(
+				raukkChainAssignmentKey("auto:production:AI1:1"),
+				"WCB"
+			);
+
+			const contentId: string = raukkAutoChainId("production", "AI1", [
+				"AI1",
+				"ZV-194a",
+				"ZV-759b",
+			]);
+
+			store.setAutoChainResults([makeChainResult(contentId, ["source"])]);
+
+			expect(Object.keys(store.chainResults)).toStrictEqual([contentId]);
+			expect(
+				store.assignments[
+					raukkChainAssignmentKey("auto:production:AI1:1")
+				]
+			).toBeUndefined();
 		});
 
 		it("keeps the pins of a purge it cannot vouch for", () => {

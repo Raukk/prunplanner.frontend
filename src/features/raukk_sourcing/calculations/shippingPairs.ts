@@ -89,13 +89,17 @@ export interface IRaukkPairLookups {
 	 * plans planet on a sourcing lane and `undefined` on the plans own
 	 * exchange lane — the exchange has no plan uuid, and naming it by
 	 * code here would drag the chain models stop vocabulary into the v1
-	 * pair math. Absent lookup: nothing is claimed, which is the state
-	 * before any chain exists.
+	 * pair math. `sourcePlanUuid` names the PRODUCING plan of a sourcing
+	 * lane and is `undefined` on the market lane: two plans on one planet
+	 * share a counterpart but not their claims, and keying by the planet
+	 * alone would subtract one claim from both lanes. Absent lookup:
+	 * nothing is claimed, which is the state before any chain exists.
 	 */
 	claimedUnitsOf?(
 		ticker: string,
 		counterpart: string | undefined,
-		inbound: boolean
+		inbound: boolean,
+		sourcePlanUuid?: string
 	): number;
 	/**
 	 * True when the lane FROM that source plan lost the mutual verdict of
@@ -366,8 +370,10 @@ export function raukkCxPairKey(planUuid: string): string {
  * Cargo a chain already claimed is subtracted per lane through
  * `claimedUnitsOf` before anything is loaded: those units ride the chain
  * and take their ȼ per unit from its stored result, so charging them here
- * as well would bill the same freight twice. A lane left with nothing
- * simply disappears.
+ * as well would bill the same freight twice. A lane is the counterpart
+ * AND the producing plan, so drawing one ticker from two plans on one
+ * planet gives each lane its own claim. A lane left with nothing simply
+ * disappears.
  *
  * @author raukk
  *
@@ -427,19 +433,27 @@ export function buildShippingPairs(
 
 	/**
 	 * Units of one lane a chain did NOT take over, of a whole tickers
-	 * daily amount on that lane. Claims are per ticker and lane, the
-	 * bucket rows of a ticker therefore share one claim and give it up
-	 * proportionally — a single row keeps the plain subtraction.
+	 * daily amount on that lane. Claims are per ticker, lane and
+	 * PRODUCING plan; the bucket rows of a ticker therefore share one
+	 * claim and give it up proportionally — a single row keeps the plain
+	 * subtraction — while a sibling plan on the same planet is a lane of
+	 * its own and keeps its own freight.
 	 */
 	function unclaimed(
 		ticker: string,
 		counterpart: string | undefined,
 		inbound: boolean,
-		unitsPerDay: number
+		unitsPerDay: number,
+		sourcePlanUuid?: string
 	): number {
 		return Math.max(
 			unitsPerDay -
-				(lookups.claimedUnitsOf?.(ticker, counterpart, inbound) ?? 0),
+				(lookups.claimedUnitsOf?.(
+					ticker,
+					counterpart,
+					inbound,
+					sourcePlanUuid
+				) ?? 0),
 			0
 		);
 	}
@@ -462,7 +476,8 @@ export function buildShippingPairs(
 		/** The rows of one lane, their shared claim already taken off */
 		function laneRows(
 			counterpart: string | undefined,
-			share: number
+			share: number,
+			sourcePlanUuid?: string
 		): IRaukkLaneRow[] {
 			const total: number = rows.reduce(
 				(sum, entry) => sum + entry.unitsPerDay * share,
@@ -474,7 +489,8 @@ export function buildShippingPairs(
 				ticker,
 				counterpart,
 				true,
-				total
+				total,
+				sourcePlanUuid
 			);
 			if (remaining <= 0) return [];
 
@@ -499,7 +515,8 @@ export function buildShippingPairs(
 
 			const shipped: IRaukkLaneRow[] = laneRows(
 				lookups.planetOf(origin.planUuid),
-				origin.share
+				origin.share,
+				origin.planUuid
 			);
 			if (shipped.length === 0) return;
 

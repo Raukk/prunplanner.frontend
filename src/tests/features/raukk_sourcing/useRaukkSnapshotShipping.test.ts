@@ -632,15 +632,18 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			expect(snapshot.shippingFraction).toBe(0);
 		});
 
-		it("uses the per pair profile override", async () => {
+		/*
+		 * Since the starter fleet, the owned list is never empty, so the
+		 * v1 per edge profile override no longer reaches a leg — a hull
+		 * is pinned with a MANUAL assignment instead.
+		 */
+		it("uses the manually assigned hull", async () => {
 			store.setShipProfile("5000x5000-standard", {
 				...flatProfile,
 				cargoWeight: 5000,
 				cargoVolume: 5000,
 			});
-			store.setShippingConfig({
-				perEdgeProfile: { "consumer>CX": "5000x5000-standard" },
-			});
+			store.setAssignment("consumer>CX", "5000x5000-standard");
 
 			const { snapshot } = await computePlanSnapshot(
 				context(planResult(1, 3))

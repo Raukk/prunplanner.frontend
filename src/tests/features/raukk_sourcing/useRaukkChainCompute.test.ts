@@ -657,8 +657,13 @@ describe("Raukk Sourcing: account level chain compute", () => {
 	});
 
 	describe("automatic chains", () => {
-		/** Id of the in/out loop of the Antares region */
-		const AUTO_ID: string = "auto:production:AI1:1";
+		/** Id of the in/out loop of the Antares region, content keyed */
+		const AUTO_ID: string = `auto:production:AI1:${[
+			SOURCE_PLANET,
+			CONSUMER_PLANET,
+		]
+			.sort()
+			.join("+")}`;
 
 		beforeEach(() => {
 			store.setShippingConfig({ enabled: true });
@@ -943,7 +948,12 @@ describe("Raukk Sourcing: account level chain compute", () => {
 	 */
 	describe("claim hygiene", () => {
 		/** Id of the in/out loop the two Antares bases derive */
-		const AUTO_ID: string = "auto:production:AI1:1";
+		const AUTO_ID: string = `auto:production:AI1:${[
+			SOURCE_PLANET,
+			CONSUMER_PLANET,
+		]
+			.sort()
+			.join("+")}`;
 
 		/** A loader that fails the n-th call, everything else priced */
 		function failingLoader(failCall: number) {

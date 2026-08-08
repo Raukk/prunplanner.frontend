@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 import {
 	raukkChainDropSuggestions,
 	raukkChainLegRows,
+	raukkAutoChainLabel,
 	raukkAutoChainListRows,
 	raukkChainListRows,
 	raukkChainReversedComparison,
@@ -306,6 +307,33 @@ describe("Raukk Shipping: Chain Display", () => {
 			);
 			expect(rows[0].shippingFractionPercent).toBeCloseTo(8);
 			expect(rows[0].over).toBe(false);
+		});
+
+		it("names a content keyed loop readably", () => {
+			const chainId: string = "auto:production:NC1:OT-580b+UV-351a";
+
+			const rows: IRaukkChainListRow[] = raukkAutoChainListRows(
+				{ [chainId]: chainResult({ chainId, auto: true }) },
+				STOP_NAMES
+			);
+
+			expect(rows[0].name).toBe("production · NC1 · OT-580b + UV-351a");
+			// the id itself stays the key everything else is pinned by
+			expect(rows[0].chainId).toBe(chainId);
+		});
+	});
+
+	describe("raukkAutoChainLabel", () => {
+		it("reads class, region and stops out of the id", () => {
+			expect(
+				raukkAutoChainLabel("auto:workforce:AI1:ZV-194a+ZV-759b")
+			).toBe("workforce · AI1 · ZV-194a + ZV-759b");
+		});
+
+		it("reads an id of the older positional scheme as well", () => {
+			expect(raukkAutoChainLabel("auto:production:NC1:2")).toBe(
+				"production · NC1 · 2"
+			);
 		});
 	});
 

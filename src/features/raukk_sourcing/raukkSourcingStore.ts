@@ -592,11 +592,17 @@ export const useRaukkSourcingStore = defineStore(
 		 * Hull pins follow the set: an assignment naming a derived chain
 		 * the new set no longer contains is dropped, or it would sit in the
 		 * store forever and re-apply to whatever loop takes that id later.
-		 * Derived ids are POSITIONAL (`auto:<class>:<cx>:<n>`, see
-		 * `raukkAutoChainId`), so a pin that survives re-clustering may
-		 * well be flying a different loop than the one it was set on — an
-		 * accepted caveat of a set that is rebuilt from scratch every pass,
-		 * and the reason an id that vanished must not linger.
+		 * Derived ids state their CONTENT (`auto:<class>:<cx>:<sorted
+		 * stops>`, see `raukkAutoChainId`), so a pin can only survive
+		 * re-clustering when the loop it names still has exactly the same
+		 * stops — it is then the same loop and the pin still means what it
+		 * meant. A loop that gained or lost a stop is a NEW id, and the pin
+		 * of the old one is pruned here as an orphan rather than
+		 * transferring to a loop the user never pinned. Results frozen
+		 * under the old positional scheme (`auto:<class>:<cx>:<n>`) are
+		 * replaced wholesale by the same rule: the next pass writes content
+		 * ids, the positional ones are absent from `live` and their pins go
+		 * with them.
 		 *
 		 * `pruneAssignments` says whether the given set really IS the
 		 * derived set: only a pass that computed it may prune. A purge

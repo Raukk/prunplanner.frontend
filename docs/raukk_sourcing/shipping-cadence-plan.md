@@ -38,6 +38,31 @@ default). Comparisons move from relative to absolute epsilons:
   (shippingChains.ts), mutual-lane verdict (shippingPairs.ts),
   fleet `over` (utilization > 1 → > 1 + EQUAL), LM saving sign.
 
+### Phase 0a as implemented
+
+- **Equality and settling are HYBRID, verdicts stay absolute.** A pure
+  absolute hundredth is TIGHTER than the 1e-6 relative tolerance it
+  replaced as soon as the numbers pass ten thousand — a 50,000
+  units/day draw used to carry a ~0.05 deadband — so large plans
+  cascaded staleness on noise the two decimal display cannot show
+  either. Two values are the same when `|a − b| <= max(ABS, REL ×
+  max(|a|, |b|))`, with `ABS` the 0.01 / 0.05 floors and `REL = 1e-6`
+  (`RAUKK_EPSILON_RELATIVE`). The rule lives in `raukkEqualWithin` and
+  `raukkSettledWithin` (`calculations/raukkEpsilon.ts`) and is used at
+  the three EQUALITY sites: `snapshotMateriallyChanged`
+  (raukkSourcingPricing.ts), the chain settle test
+  (useRaukkChainRecompute.ts) and the self-loop settle
+  (useRaukkSnapshot.ts). The one-sided VERDICT thresholds —
+  `recommendDrop`, the mutual verdict, the fleet/chain over flag, the
+  LM saving sign, the HCB promotion boundary — keep the plain absolute
+  deadband: they are thresholds, not equality tests.
+- **Settling is judged per output ticker.** A hybrid tolerance depends
+  on the magnitude of the value it judges, which the single pooled
+  `maxAbsoluteOutputDelta` maximum cannot state, so both loop passes
+  ask `outputsSettled` (raukkSourcingPricing.ts) instead — every ticker
+  against its own tolerance, a ticker present on only one side never
+  settling. `maxAbsoluteOutputDelta` stays as the raw measure.
+
 ## Phase 0b — per-ticker, per-bucket flow identity
 
 Prerequisite for everything below. Today `shippingPairs.ts`
@@ -110,6 +135,14 @@ Two points the phase left open, decided while building it:
   comparisons (`shippingChains.ts`) cost their standalone lanes at the
   ACCOUNT default caps: a chain is account level and knows no
   consuming plan.
+- User decision (review round): an account with NO configured fleet
+  is assumed to own the game's starter fleet — TWO SCB 500t/500m³
+  standard ships (`RAUKK_STARTER_FLEET`); the account default profile
+  is the SCB, not the MCB. The advisories then immediately suggest
+  bigger hulls, mirroring the community's SCB→WCB upgrade guidance.
+  Consequence: the owned list is never empty, so the v1
+  `perEdgeProfile` fallback no longer reaches a leg — a hull is
+  pinned per lane with a manual assignment.
 
 ## Phase 2 — auto chains + exchange hub/spoke
 
@@ -170,6 +203,34 @@ Points the phase left open, decided while building it:
   on every pass: a loop the new flows no longer justify must lose its
   result, or its stored claims would keep taking cargo off lanes that
   are flown again.
+- **Derived chain ids state their CONTENT**, not their position:
+  `auto:<class>:<cxCode>:<base stops, sorted, "+" joined>`, e.g.
+  `auto:production:AI1:OT-580b+UV-351a` (`raukkAutoChainId`). Class,
+  region and stop set identify a loop completely — two loops of one
+  class in one region cannot hold the same stops — so no hash is
+  needed and the id stays readable; five stops is the hard cap. The
+  positional `:<n>` let a hull pin (`chain:auto:...`) silently
+  re-target a different loop that inherited the number after
+  re-clustering. Consequences: a loop rediscovered in another order
+  keeps its id and its pin; a loop that gained or lost a stop is a NEW
+  id and the old pin is pruned as an orphan by `setAutoChainResults`
+  rather than transferring; results stored under the positional scheme
+  are replaced wholesale on the next pass like any other derived
+  result, and their pins go with them. The name column renders
+  `raukkAutoChainLabel` — the id re-punctuated to
+  `production · AI1 · OT-580b + UV-351a` — next to the existing stops
+  column, so class, region and stops stay visible.
+- **Consumer-side chain claims are keyed per PRODUCING plan.** The
+  producer half already was; `raukkClaimedUnitsLookup`
+  (shippingFlows.ts) and `IRaukkPairLookups.claimedUnitsOf`
+  (shippingPairs.ts) took only the counterpart PLANET, so a consumer
+  drawing one ticker from two plans on one planet subtracted the shared
+  claim from EACH lane and clamped at zero — under-shipping the sibling
+  whenever the claim was partial. Both now take the producing plan
+  uuid. A claim carrying no `sourcePlanUuid` (any result frozen before
+  the field existed) keeps the planet-level behaviour and counts for
+  every producer on its origin planet, and a caller naming no plan (the
+  market lane) still gets the whole claim of the lane.
 - **No CX split on a derived chain.** It already opens and closes at its
   region's exchange, which is what the split rule exists to arrange.
 - Chain cadence enters `calculateChainShipping` through an optional

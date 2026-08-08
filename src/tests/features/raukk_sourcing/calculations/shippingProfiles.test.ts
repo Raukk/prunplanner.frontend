@@ -122,7 +122,10 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			raukkShipProfilePresets().forEach((preset) => {
 				expect(preset.costPerParsec).toBeNull();
 				expect(preset.stlBlockCost).toBeNull();
-				expect(preset.shipsAvailable).toBe(1);
+				// a fresh game account starts with TWO SCB standard ships
+				expect(preset.shipsAvailable).toBe(
+					preset.id === "500x500-standard" ? 2 : 1
+				);
 			});
 		});
 
@@ -247,6 +250,7 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			cadenceWorkforceDays: 30,
 			cxAnchorMode: "nearest",
 		});
-		expect(RAUKK_DEFAULT_SHIP_PROFILE_ID).toBe("1000x1000-standard");
+		// the SCB starter hull every new game account flies
+		expect(RAUKK_DEFAULT_SHIP_PROFILE_ID).toBe("500x500-standard");
 	});
 });

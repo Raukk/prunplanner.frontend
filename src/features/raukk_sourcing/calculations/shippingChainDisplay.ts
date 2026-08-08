@@ -9,6 +9,10 @@
 // Calculations
 import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
 import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+import {
+	RAUKK_AUTO_CHAIN_PREFIX,
+	RAUKK_AUTO_CHAIN_STOP_SEPARATOR,
+} from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 import { RAUKK_FUEL_TICKERS } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
 // Types & Interfaces
@@ -293,6 +297,30 @@ export function raukkChainListRows(
 }
 
 /**
+ * Human readable name of a DERIVED chain id.
+ *
+ * A derived id states its content — class, anchor exchange and the
+ * sorted base stops, see `raukkAutoChainId` — which is exactly what the
+ * name column should read. It is only re-punctuated here: the `auto:`
+ * marker is dropped, the tag next to the name already says it is one,
+ * and the machine separators become spaced ones. Nothing is parsed or
+ * validated, so an id of the older positional scheme reads just as well.
+ *
+ * @author raukk
+ *
+ * @param {string} chainId Derived Chain Id
+ * @returns {string} Name to display
+ */
+export function raukkAutoChainLabel(chainId: string): string {
+	return chainId
+		.replace(RAUKK_AUTO_CHAIN_PREFIX, "")
+		.split(":")
+		.join(" · ")
+		.split(RAUKK_AUTO_CHAIN_STOP_SEPARATOR)
+		.join(" + ");
+}
+
+/**
  * One list row per DERIVED chain.
  *
  * An automatic chain exists only as its result — it is rebuilt from the
@@ -300,6 +328,9 @@ export function raukkChainListRows(
  * loop, its cadence and its numbers, with nothing to edit or delete. The
  * ship type assignment is the one exception and belongs to the caller,
  * a derived chain can be pinned to a hull like any other.
+ *
+ * Its name is its id read out loud ({@link raukkAutoChainLabel}), which
+ * a content stable id makes readable: class, region and stops.
  *
  * @author raukk
  *
@@ -315,7 +346,7 @@ export function raukkAutoChainListRows(
 		.filter((result) => result.auto === true)
 		.map((result) => ({
 			chainId: result.chainId,
-			name: result.chainId,
+			name: raukkAutoChainLabel(result.chainId),
 			stopsSummary: raukkChainStopsSummary(
 				result.unsplit.stops,
 				stopNames

@@ -16,7 +16,6 @@ import {
 	calculateRepairMaterialsPerDay,
 } from "@/features/raukk_sourcing/calculations/repairCapitalCost";
 import { calculateBaseFraction } from "@/features/raukk_sourcing/calculations/baseFraction";
-import { RAUKK_EPSILON_SETTLE } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 import { raukkSplitCargoBuckets } from "@/features/raukk_sourcing/calculations/cargoBuckets";
 import {
 	calculateRepairBillCost,
@@ -35,6 +34,7 @@ import { raukkAssignedShipTypeId } from "@/features/raukk_sourcing/calculations/
 import { raukkCadenceCaps } from "@/features/raukk_sourcing/calculations/shippingCadence";
 import {
 	RAUKK_FUEL_TICKERS,
+	RAUKK_STARTER_FLEET,
 	raukkResolveShipProfile,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 import {
@@ -42,7 +42,7 @@ import {
 	buildSourceOptions,
 	createRaukkPriceResolver,
 	isAggregateSource,
-	maxAbsoluteOutputDelta,
+	outputsSettled,
 	resolveCxExchangeCode,
 	splitAggregateDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
@@ -141,9 +141,9 @@ export interface IRaukkPlanSnapshotResult {
  * {@link computePlanSnapshot} */
 const RAUKK_SELF_LOOP_MAX_ITERATIONS: number = 10;
 
-/** Absolute ȼ change below which a self supply loop counts as settled,
- * see {@link RAUKK_EPSILON_SETTLE} */
-const RAUKK_SELF_LOOP_EPSILON: number = RAUKK_EPSILON_SETTLE;
+// The self supply loop settles within the hybrid tolerance of
+// {@link outputsSettled}, over the `RAUKK_EPSILON_SETTLE` floor: an
+// output whose ȼ per unit no longer moves at its own magnitude.
 
 /**
  * All tickers a plans sourcing numbers need prices for: everything
@@ -595,12 +595,20 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 	 * The automatic hull pick assigns OWNED types only, so the fleet is
 	 * the candidate list: a type without a single hull is an advisory at
 	 * best. `all` is every known type and answers what would be better.
+	 * An account that never configured a fleet is assumed to fly the
+	 * two SCB starter ships every new game account owns — see
+	 * {@link RAUKK_STARTER_FLEET} — rather than a phantom bigger hull.
 	 */
-	const ownedCandidates: IRaukkHullCandidate[] = Object.entries(
+	const configuredCandidates: IRaukkHullCandidate[] = Object.entries(
 		sourcingStore.fleet
 	)
 		.filter(([, ship]) => ship.count > 0)
 		.map(([shipTypeId]) => candidateOf(shipTypeId));
+
+	const ownedCandidates: IRaukkHullCandidate[] =
+		configuredCandidates.length > 0
+			? configuredCandidates
+			: [candidateOf(RAUKK_STARTER_FLEET.shipTypeId)];
 
 	const allCandidates: IRaukkHullCandidate[] = sourcingStore
 		.listShipProfiles()
@@ -645,16 +653,23 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 		 * A lane whose cargo a chain carries must not be charged for it
 		 * twice. The counterpart of the plans own market lane is its
 		 * exchange, which a chain addresses by CODE.
+		 *
+		 * The producing plan is named as well: two source plans on one
+		 * planet are two lanes, and a claim taken off both of them would
+		 * under-ship the sibling. A claim frozen before `sourcePlanUuid`
+		 * existed still counts for either of them, see
+		 * {@link raukkClaimedUnitsLookup}.
 		 */
 		claimedUnitsOf: (
 			ticker: string,
 			counterpart: string | undefined,
-			inbound: boolean
+			inbound: boolean,
+			sourcePlanUuid?: string
 		): number => {
 			const stop: string | undefined = counterpart ?? cxCode;
 			if (stop === undefined) return 0;
 
-			return claimedUnits(ticker, stop, inbound);
+			return claimedUnits(ticker, stop, inbound, sourcePlanUuid);
 		},
 		profileOf,
 		/*
@@ -1061,9 +1076,7 @@ export async function computePlanSnapshot(
 		iteration++
 	) {
 		const next: IRaukkSnapshot = computeOnce();
-		const settled: boolean =
-			maxAbsoluteOutputDelta(snapshot.outputs, next.outputs) <
-			RAUKK_SELF_LOOP_EPSILON;
+		const settled: boolean = outputsSettled(snapshot.outputs, next.outputs);
 
 		snapshot = next;
 		sourcingStore.setSnapshot(context.planUuid, snapshot);
