@@ -208,6 +208,34 @@ These supersede the matching decisions above.
    would unlock STL-only ship routing (HCB requires upgraded
    gates). Deferred until the user sources the list.
 
+## Round 7 (post-merge: supply loops × pair model)
+
+Upstream now allows supply loops (mutual A⇄B sourcing and
+self-sourcing), removing the cycle guard the v1 "backhaul is
+structurally empty" argument relied on.
+
+1. **Backhauls MUST route via the CX (USER).** A reverse-direction
+   flow never functions as a direct backhaul: outputs are pulled
+   forward, dumped at the CX, and dragged onward on a later run —
+   economically identical to selling to and re-buying from the
+   exchange. Implementation: when mutual A⇄B edges exist, only the
+   HEAVIER direction (more required trips/day by binding dimension;
+   tie → lower plan uuid) keeps its direct sourcing lane; the
+   lighter direction's units join the source's CX-pair outbound and
+   the consumer's CX-pair inbound loads instead (amortizing with
+   each plan's existing market flows, CX-anchored distances —
+   correct, since the cargo physically travels via the exchange).
+   Mutuality detection: account-level sourcing configs + the
+   counterpart's stored snapshot draws (frozen-data pattern; the
+   usual one-round lag applies).
+2. Self-sourcing (plan drawing from itself) ships nothing: the
+   merge already zeroes the self origin's freight share; self-drawn
+   units also leave the plan's CX outbound. (Merge reconciliation,
+   kept.)
+3. Doc wording referencing "the cycle guard" elsewhere in these
+   files predates the upstream change — read it as historical
+   context for v1's original reasoning.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up, and
 shipping-fleet.md for fleet & calibration.
