@@ -63,9 +63,17 @@
 	}
 
 	/**
-	 * Re-emits the whole price with another number. An emptied field is
-	 * the neutral 0 — following the market basis exactly, or asking
-	 * nothing at all on MANUAL.
+	 * Re-emits the whole price with another number. Anything that is not
+	 * a finite number becomes the neutral 0 — following the market basis
+	 * exactly, or asking nothing at all on MANUAL.
+	 *
+	 * An emptied field arrives as null, but a lone `-` or `.` — which the
+	 * offset field invites, the offset being signed — arrives as `NaN`
+	 * and has to be caught with it: `NaN` compares false against every
+	 * bound, so it would travel into the store, turn the whole plans sell
+	 * prices and margins into `NaN`, and finally reach the export, where
+	 * JSON writes it as `null` and the users own backup no longer
+	 * re-imports.
 	 *
 	 * @author raukk
 	 *
@@ -74,7 +82,10 @@
 	function changeValue(value: number | null | undefined): void {
 		if (!props.price) return;
 
-		emit("update:price", { ...props.price, value: value ?? 0 });
+		emit("update:price", {
+			...props.price,
+			value: Number.isFinite(value) ? (value as number) : 0,
+		});
 	}
 </script>
 

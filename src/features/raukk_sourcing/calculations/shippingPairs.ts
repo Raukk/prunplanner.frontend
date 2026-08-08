@@ -627,11 +627,18 @@ export function buildShippingPairs(
 	 * only that second term: its market bound excess is sold on the own
 	 * planets local market and never reaches the exchange, while the units
 	 * a counterpart draws are consumed elsewhere and still have to travel.
+	 *
+	 * OVERSUBSCRIPTION is a supported state — counterpart draws may exceed
+	 * what the plan produces — so the LM sold branch is capped at the own
+	 * production: a plan can never ship more than it makes. At the cap both
+	 * branches agree, the unflagged one being clamped by its own
+	 * `Math.max` at exactly the same point.
 	 */
 	function cxOutUnits(entry: IRaukkShippedTicker): number {
 		const viaCx: number = lookups.viaCxSoldOf?.(entry.ticker) ?? 0;
 
-		if (lookups.localSaleOf?.(entry.ticker) === true) return viaCx;
+		if (lookups.localSaleOf?.(entry.ticker) === true)
+			return Math.max(Math.min(viaCx, entry.unitsPerDay), 0);
 
 		return Math.max(
 			entry.unitsPerDay - lookups.subscribedOf(entry.ticker) + viaCx,

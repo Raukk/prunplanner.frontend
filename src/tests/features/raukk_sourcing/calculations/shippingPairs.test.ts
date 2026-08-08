@@ -623,6 +623,37 @@ describe("Raukk Sourcing: Shipping Pairs", () => {
 			expect(pairs[0].out).toStrictEqual([cargo("MET", 20)]);
 		});
 
+		it("never ships more of it than the plan produces", () => {
+			// oversubscription is allowed: 80 units a day are drawn off an
+			// output of 50, and all of them route through the exchange
+			const oversubscribed: Partial<IRaukkPairLookups> = {
+				subscribedOf: (ticker: string) => (ticker === "MET" ? 80 : 0),
+				viaCxSoldOf: (ticker: string) => (ticker === "MET" ? 80 : 0),
+			};
+
+			const local: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					...oversubscribed,
+					localSaleOf: (ticker) => ticker === "MET",
+				}),
+				config
+			);
+
+			// the whole output leaves, and not one unit more
+			expect(local[0].out).toStrictEqual([cargo("MET", 50)]);
+
+			// the unflagged branch clamps at the very same point, so both
+			// agree at the boundary
+			const exchange: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups(oversubscribed),
+				config
+			);
+
+			expect(exchange[0].out).toStrictEqual([cargo("MET", 50)]);
+		});
+
 		it("leaves the chain claim on the rerouted portion", () => {
 			const pairs: IRaukkShippingPair[] = buildShippingPairs(
 				flows,

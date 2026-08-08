@@ -5,7 +5,6 @@
 // Types & Interfaces
 import {
 	IRaukkCostBreakdown,
-	IRaukkLocalPrice,
 	IRaukkSnapshot,
 	IRaukkTickerSource,
 	RAUKK_SOURCE_AGGREGATE,
@@ -56,12 +55,10 @@ export interface IRaukkOutputRow {
 	costPerUnit: number;
 	breakdown: IRaukkCostBreakdown;
 	/** Sell price of one unit: the plans CX preference normally, the
-	 * resolved local price while `localSale` is set */
+	 * resolved local price while the ticker carries an LM sell ad */
 	marketPrice: number;
 	/** `marketPrice - costPerUnit` */
 	marginPerUnit: number;
-	/** LM sell ad of this ticker, absent while it sells at the exchange */
-	localSale?: IRaukkLocalPrice;
 }
 
 /** A selectable entry of the source dropdown of one ticker */

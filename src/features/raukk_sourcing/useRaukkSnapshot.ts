@@ -1342,7 +1342,6 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 					breakdown: output.breakdown,
 					marketPrice,
 					marginPerUnit: marketPrice - output.costPerUnit,
-					...(localSale !== undefined ? { localSale } : {}),
 				};
 			})
 			.sort((a, b) => b.unitsPerDay - a.unitsPerDay)

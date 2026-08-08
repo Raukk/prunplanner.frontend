@@ -10,7 +10,6 @@ import {
 import {
 	raukkEqualWithin,
 	raukkSettledWithin,
-	RAUKK_EPSILON_EQUAL,
 } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
 // Types & Interfaces
@@ -472,14 +471,6 @@ export function outputsSettled(
 
 	return true;
 }
-
-/** Absolute FLOOR below which two snapshot numbers count equal, see
- * {@link RAUKK_EPSILON_EQUAL}. A change of less than a cent — or of less
- * than a hundredth of a unit — is invisible in the two decimal display
- * and must not cascade staleness onto downstream plans. The comparison
- * itself is hybrid and widens this floor at large magnitudes, see
- * {@link raukkEqualWithin}. */
-export const RAUKK_SNAPSHOT_EQUAL_EPSILON: number = RAUKK_EPSILON_EQUAL;
 
 /**
  * Determines if a freshly computed snapshot differs materially from the
