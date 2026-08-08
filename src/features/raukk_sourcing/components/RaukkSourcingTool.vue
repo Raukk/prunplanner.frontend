@@ -17,6 +17,13 @@
 	import RaukkOutputsTable from "@/features/raukk_sourcing/components/RaukkOutputsTable.vue";
 	import RaukkShippingSection from "@/features/raukk_sourcing/components/RaukkShippingSection.vue";
 
+	// Calculations
+	import { raukkStorageFilledDays } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+	import {
+		getVolumeOfAllStorages,
+		getWeightOfAllStorages,
+	} from "@/features/planning/calculations/infrastructureCalculations";
+
 	// Util
 	import { formatDate } from "@/util/date";
 	import { formatNumber } from "@/util/numbers";
@@ -98,6 +105,28 @@
 			])
 		)
 	);
+
+	/**
+	 * Days the OPEN plan's storage bridges, the chain storage
+	 * cross-check's only input.
+	 *
+	 * A chain's other stops belong to plans whose snapshot stores no
+	 * storage capacity, so the cross-check can only speak about the plan
+	 * currently open — visiting each plan's own sourcing tab walks the
+	 * whole loop. Warning only, never a gate.
+	 */
+	const storageDays: ComputedRef<
+		{ stopRef: string; filledDays: number | null }[]
+	> = computed(() => [
+		{
+			stopRef: props.planetNaturalId,
+			filledDays: raukkStorageFilledDays(
+				getWeightOfAllStorages(props.planResult.storage),
+				getVolumeOfAllStorages(props.planResult.storage),
+				props.planResult.materialio
+			),
+		},
+	]);
 
 	const repairDayOptions: ComputedRef<PSelectOption[]> = computed(() =>
 		[30, 60, 90, 120].map((day) => ({ label: `${day}`, value: day }))
@@ -419,6 +448,7 @@
 		:repair-bill-cost="repairBillCost"
 		:fuel-prices="fuelPrices"
 		:plan-names="planNames"
+		:storage-days="storageDays"
 		:disabled="readOnly" />
 
 	<h3 class="font-bold py-3">

@@ -64,6 +64,18 @@ export interface IRaukkCalibrationInput {
 	densityRef?: number;
 	/** Overrides the reactor seed of the charge time */
 	chargeMinutes?: number;
+	/**
+	 * Overrides the reference seed of the empty sublight block.
+	 *
+	 * Two flights cannot separate the block from the jump speed, so one
+	 * of the two has to be seeded (see the solver notes). A blueprint
+	 * seeded profile knows a better block than the nearest reference
+	 * flight does — the design's own acceleration — and hands it in
+	 * here, which is what makes the documented order blueprint seed →
+	 * BTF refine work at all rather than the refine silently discarding
+	 * the seed.
+	 */
+	stlBlockMinutesEmpty?: number;
 }
 
 /** Geometry one observed flight resolves to */
@@ -370,7 +382,8 @@ export function calibrateShipProfile(
 	);
 
 	const chargeMinutes: number = input.chargeMinutes ?? seed.chargeMinutes;
-	const stlBlockMinutesEmpty: number = seed.stlBlockMinutesEmpty;
+	const stlBlockMinutesEmpty: number =
+		input.stlBlockMinutesEmpty ?? seed.stlBlockMinutesEmpty;
 
 	const constants: IRaukkCalibrationConstants = {
 		minutesPerParsec: seed.minutesPerParsec,

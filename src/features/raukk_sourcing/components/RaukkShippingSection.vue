@@ -11,9 +11,12 @@
 	// Components
 	import RaukkShipProfileEditor from "@/features/raukk_sourcing/components/RaukkShipProfileEditor.vue";
 	import RaukkLmRatesTable from "@/features/raukk_sourcing/components/RaukkLmRatesTable.vue";
+	import RaukkFleetSection from "@/features/raukk_sourcing/components/RaukkFleetSection.vue";
+	import RaukkChainSection from "@/features/raukk_sourcing/components/RaukkChainSection.vue";
 
 	// Calculations
 	import { buildLmComparison } from "@/features/raukk_sourcing/calculations/shippingDisplay";
+	import { raukkBayCode } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 
 	// UI
 	import { PButton, PCheckbox, PInputNumber, PSelect } from "@/ui";
@@ -51,6 +54,14 @@
 			required: false,
 			default: () => ({}),
 		},
+		/** Days the open plans storage bridges, the chain cross-check input */
+		storageDays: {
+			type: Array as PropType<
+				{ stopRef: string; filledDays: number | null }[]
+			>,
+			required: false,
+			default: () => [],
+		},
 		/** LM rates are keyed by the open plans pairs, so they follow the
 		 * plans read-only state; the configuration itself is account
 		 * global and stays editable */
@@ -78,6 +89,20 @@
 			label: profile.name,
 			value: profile.id,
 		}))
+	);
+
+	/** Profiles as ship TYPES: the bay code is what the user recognizes */
+	const shipTypeOptions: ComputedRef<PSelectOption[]> = computed(() =>
+		profiles.value.map((profile) => ({
+			label: `${
+				raukkBayCode(profile.cargoWeight, profile.cargoVolume) ?? "—"
+			} · ${profile.name}`,
+			value: profile.id,
+		}))
+	);
+
+	const assignments: ComputedRef<Record<string, string>> = computed(
+		() => sourcingStore.assignments
 	);
 
 	const routingOptions: ComputedRef<PSelectOption[]> = computed(() =>
@@ -140,6 +165,23 @@
 		else lmRates[pairKey] = rate;
 
 		sourcingStore.setShippingConfig({ lmRates });
+	}
+
+	/**
+	 * Assigns a ship type to one lane of the open plan, or puts it back
+	 * to auto — which is the account default profile, or a v1 per edge
+	 * override where one exists.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string} pairKey Pair Key
+	 * @param {string | undefined} shipTypeId Ship Type Id
+	 */
+	function changeAssignment(
+		pairKey: string,
+		shipTypeId: string | undefined
+	): void {
+		sourcingStore.setAssignment(pairKey, shipTypeId);
 	}
 </script>
 
@@ -227,7 +269,18 @@
 		<RaukkLmRatesTable
 			:rows="lmRows"
 			:plan-names="planNames"
+			:ship-type-options="shipTypeOptions"
+			:assignments="assignments"
 			:disabled="disabled"
-			@update:rate="changeLmRate" />
+			@update:rate="changeLmRate"
+			@update:assignment="changeAssignment" />
+
+		<RaukkFleetSection />
+
+		<RaukkChainSection
+			:fuel-prices="fuelPrices"
+			:repair-bill-cost="repairBillCost"
+			:ship-type-options="shipTypeOptions"
+			:storage-days="storageDays" />
 	</template>
 </template>

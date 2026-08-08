@@ -5,7 +5,8 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PInputNumber, PTable, PTag } from "@/ui";
+	import { PInputNumber, PSelect, PTable, PTag } from "@/ui";
+	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
 	import { IRaukkLmComparisonRow } from "@/features/raukk_sourcing/calculations/shippingDisplay";
@@ -20,6 +21,18 @@
 			type: Object as PropType<Record<string, string>>,
 			required: true,
 		},
+		/** Ship types a lane can be assigned to, empty leaves it on auto */
+		shipTypeOptions: {
+			type: Array as PropType<PSelectOption[]>,
+			required: false,
+			default: () => [],
+		},
+		/** Assigned ship type per pair key, absent means auto */
+		assignments: {
+			type: Object as PropType<Record<string, string>>,
+			required: false,
+			default: () => ({}),
+		},
 		disabled: {
 			type: Boolean,
 			required: false,
@@ -29,6 +42,11 @@
 
 	const emit = defineEmits<{
 		(e: "update:rate", pairKey: string, rate: number | undefined): void;
+		(
+			e: "update:assignment",
+			pairKey: string,
+			shipTypeId: string | undefined
+		): void;
 	}>();
 
 	/**
@@ -54,6 +72,25 @@
 
 		emit("update:rate", pairKey, value ?? undefined);
 	}
+
+	/**
+	 * Assigns a ship type to one lane. The picker is plan scoped — the
+	 * lane belongs to the open plan — and therefore follows its read-only
+	 * state, unlike the account global fleet itself.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string} pairKey Pair Key
+	 * @param {string | null} shipTypeId Ship type, null goes back to auto
+	 */
+	function changeAssignment(
+		pairKey: string,
+		shipTypeId: string | null
+	): void {
+		if (props.disabled) return;
+
+		emit("update:assignment", pairKey, shipTypeId ?? undefined);
+	}
 </script>
 
 <template>
@@ -61,6 +98,7 @@
 		<thead>
 			<tr>
 				<th>{{ $t("raukk_sourcing.shipping.lm.lane") }}</th>
+				<th>{{ $t("raukk_sourcing.shipping.lm.ship_type") }}</th>
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.shipping.lm.trips_per_day") }}
 				</th>
@@ -91,6 +129,22 @@
 						{{ $t("raukk_sourcing.shipping.lm.cx_lane") }}
 					</PTag>
 					<span v-else>{{ label(row) }}</span>
+				</td>
+				<td>
+					<PSelect
+						class="w-50!"
+						clearable
+						:value="assignments[row.pairKey] ?? null"
+						:options="shipTypeOptions"
+						:disabled="disabled"
+						:placeholder="$t('raukk_sourcing.shipping.lm.auto')"
+						@update:value="
+							(v) =>
+								changeAssignment(
+									row.pairKey,
+									v as string | null
+								)
+						" />
 				</td>
 				<td class="text-right">{{ formatNumber(row.tripsPerDay) }}</td>
 				<td class="text-right">{{ formatNumber(row.unitsPerDay) }}</td>
@@ -135,7 +189,7 @@
 				</td>
 			</tr>
 			<tr v-if="rows.length === 0">
-				<td colspan="8" class="text-center text-white/50">
+				<td colspan="9" class="text-center text-white/50">
 					{{ $t("raukk_sourcing.shipping.lm.empty") }}
 				</td>
 			</tr>
