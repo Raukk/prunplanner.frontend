@@ -177,5 +177,37 @@ These supersede the matching decisions above.
    snapshot's price resolver (FF/SF join the relevant-tickers set
    when shipping is enabled). Manual override wins per profile.
 
-See shipping-plan.md for the implementation plan and
-shipping-chains-v2.md for the chains follow-up.
+## Round 6 (fleet & calibration; see shipping-fleet.md)
+
+1. **Calibration by observed flight replaces the raw constants table
+   as primary UX** (USER): two flights per ship type (empty +
+   loaded), entered as {cargo t, total duration, STL fuel, FTL fuel,
+   damage%} over a known planet pair; a solver derives the profile
+   constants. The in-game BLUEPRINT TEST FLIGHT simulator produces
+   these values for any path without flying it — calibration flow
+   copy must point users at it.
+2. **Fleet page** (USER): counts per ship type ("4× WCB, 1× LCB"),
+   per-lane/chain ship-type assignment (auto default), per-type
+   utilization rollup shown as "% shipping capacity" (may exceed
+   100%, red, never blocks).
+3. **Bay-name → hull mapping (USER, authoritative):**
+   SCB small 500t/500m³ · MCB medium 1000/1000 · LCB large
+   2000/2000 · HCB huge 5000/5000 · WCB weight 3000t/1000m³ ·
+   VCB volume 1000t/3000m³ (VSC/TCB exist but unused — omit).
+   Bay codes are in-game part designations — do NOT make them
+   customizable; the editable name is the ship DESIGN label
+   (e.g. FSE_WCB_QCR = fuel-save engine, weight cargo bay,
+   quick-charge reactor).
+4. **Parsec scale is EXACTLY 12 position units** (verified:
+   rest.fnar.net/global/simulationdata ParsecLength=12; also
+   FlightSTLFactor=1, FlightFTLFactor=1, PlanetaryMotionFactor=20).
+   Replaces the 11.7878 single-connection calibration (~1.8% off).
+5. **Gates: no FIO data available** (probed: no gate/gateway
+   endpoints; infrastructure routes empty/auth-only). Design
+   placeholder: a user-maintained list {planetA, planetB, upgraded}
+   would unlock STL-only ship routing (HCB requires upgraded
+   gates). Deferred until the user sources the list.
+
+See shipping-plan.md for the implementation plan,
+shipping-chains-v2.md for the chains follow-up, and
+shipping-fleet.md for fleet & calibration.

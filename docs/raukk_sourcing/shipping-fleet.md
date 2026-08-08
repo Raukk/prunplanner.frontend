@@ -40,10 +40,15 @@ Solver (pure module, `calculations/shippingCalibration.ts`):
 ## Fleet page (USER)
 
 - Fleet = counts per ship type: e.g. 4× WCB, 1× LCB. A ship type =
-  hull preset (+ reactor flag) with an editable display name seeded
-  from the bay-name mapping (PENDING USER: which of SCB/LCB/HCB/…
-  map to 500/500, 1000/1000, 2000/2000, 5000/5000; 1000/3000 and
-  3000/1000 presumed VCB/WCB).
+  hull preset (+ reactor flag). Bay-name → hull mapping (USER,
+  authoritative): SCB 500/500, MCB 1000/1000, LCB 2000/2000,
+  HCB 5000/5000, WCB 3000t/1000m³, VCB 1000t/3000m³ (VSC/TCB
+  unused — omit). Bay codes are in-game part designations, NOT
+  customizable; the editable label is the ship design name
+  (e.g. FSE_WCB_QCR).
+- Calibration flow copy points users at the in-game BLUEPRINT TEST
+  FLIGHT simulator: it produces {duration, STL fuel, FTL fuel,
+  damage} for any path and load without flying it.
 - Assignment: every lane (v1 pair) and chain gets a supporting ship
   type — auto-assigned (default profile) or user-picked per section.
 - Utilization rollup per ship type:
