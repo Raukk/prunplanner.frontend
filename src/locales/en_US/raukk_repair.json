@@ -9,6 +9,10 @@
 		"sourced": "At Sourced Prices / Day ({days}d cycle)",
 		"sourced_tooltip": "Repair capital cost per day at the sourcing snapshot's configured prices and repair cycle. The market priced numbers above stay untouched."
 	},
+	"day_table": {
+		"sourced": "sourced",
+		"total_sourced": "Total at Sourced Prices"
+	},
 	"per_unit": {
 		"title": "Repair Cost per Unit of Output",
 		"description": "Daily repair cost of each building attributed to its outputs, amortized by recipe runtime share and split across multi output recipes.",

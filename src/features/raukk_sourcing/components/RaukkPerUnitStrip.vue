@@ -67,10 +67,12 @@
 			: undefined;
 	});
 
+	// direct reactive store read, not getSnapshot: its inert clone drops
+	// the proxy, the in-place stale flag change would not invalidate this
 	const localSnapshot: ComputedRef<IRaukkSnapshot | undefined> = computed(
 		() =>
 			localPlanUuid.value
-				? raukkSourcingStore.getSnapshot(localPlanUuid.value)
+				? raukkSourcingStore.snapshots[localPlanUuid.value]
 				: undefined
 	);
 

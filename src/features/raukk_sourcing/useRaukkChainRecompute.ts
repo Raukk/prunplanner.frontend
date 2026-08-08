@@ -17,7 +17,10 @@ import {
 } from "@/features/raukk_sourcing/raukkSourcingGraph";
 
 // Pricing
-import { maxRelativeOutputDelta } from "@/features/raukk_sourcing/raukkSourcingPricing";
+import {
+	maxRelativeOutputDelta,
+	RAUKK_SNAPSHOT_EQUAL_EPSILON,
+} from "@/features/raukk_sourcing/raukkSourcingPricing";
 
 // Types & Interfaces
 import { IPlan, IPlanEmpireElement } from "@/stores/planningStore.types";
@@ -34,8 +37,11 @@ export interface IRaukkChainError {
 /** Total pass cap of a cyclic chain run, first pass included */
 const RAUKK_CHAIN_MAX_PASSES: number = 5;
 
-/** Relative cost change below which a supply loop counts as settled */
-const RAUKK_CHAIN_EPSILON: number = 1e-6;
+/** Relative cost change below which a supply loop counts as settled.
+ * The same epsilon the staleness cascade of `setSnapshot` uses — a
+ * settled pass must also count as materially unchanged, otherwise it
+ * would re-flag the rest of the loop stale. */
+const RAUKK_CHAIN_EPSILON: number = RAUKK_SNAPSHOT_EQUAL_EPSILON;
 
 /**
  * Recomputes a whole sourcing chain instead of a single plan.
@@ -131,10 +137,7 @@ export function useRaukkChainRecompute() {
 	function captureOutputs(
 		order: string[]
 	): Record<string, Record<string, IRaukkOutputCost>> {
-		const captured: Record<
-			string,
-			Record<string, IRaukkOutputCost>
-		> = {};
+		const captured: Record<string, Record<string, IRaukkOutputCost>> = {};
 
 		order.forEach((uuid) => {
 			captured[uuid] = sourcingStore.snapshots[uuid]?.outputs ?? {};
@@ -181,7 +184,9 @@ export function useRaukkChainRecompute() {
 		/**
 		 * One recompute pass over the whole ordered scope.
 		 */
-		async function runPass(empireList: IPlanEmpireElement[]): Promise<void> {
+		async function runPass(
+			empireList: IPlanEmpireElement[]
+		): Promise<void> {
 			for (const uuid of order) {
 				const planName: string =
 					sourcingStore.snapshots[uuid]?.planName ?? uuid;

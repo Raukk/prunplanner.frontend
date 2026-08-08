@@ -272,7 +272,8 @@ export async function computePlanSnapshot(
 			context.planResult,
 			repairCost.materialUnitsPerDay,
 			config.sources,
-			resolver
+			resolver,
+			(ticker: string) => prices.defaultPrices[ticker] ?? 0
 		).forEach((row) => {
 			inputPrices[row.ticker] = row.price;
 		});
@@ -358,9 +359,18 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 	const sellPrices: Ref<Record<string, number>> = ref({});
 	const exchangePrices: Ref<Record<string, IRaukkExchangePrices>> = ref({});
 
-	const config: ComputedRef<IRaukkPlanConfig> = computed(() =>
-		sourcingStore.getConfig(context.planUuid.value ?? "")
-	);
+	// must read through the reactive store state, not getConfig: its
+	// inert clone drops the proxy, nested source changes would not
+	// invalidate this computed
+	const config: ComputedRef<IRaukkPlanConfig> = computed(() => {
+		const stored: IRaukkPlanConfig | undefined =
+			sourcingStore.configs[context.planUuid.value ?? ""];
+
+		if (!stored)
+			return sourcingStore.getConfig(context.planUuid.value ?? "");
+
+		return { repairDay: stored.repairDay, sources: { ...stored.sources } };
+	});
 
 	const cxData: ComputedRef<ICXData | undefined> = computed(() => {
 		if (!context.cxUuid.value) return undefined;
@@ -417,12 +427,15 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		})
 	);
 
+	// sorted at the CX preference price so configuring a source does not
+	// reorder the table
 	const inputRows: ComputedRef<IRaukkInputRow[]> = computed(() =>
 		buildInputRows(
 			context.planResult.value,
 			repairCost.value.materialUnitsPerDay,
 			config.value.sources,
-			resolver.value
+			resolver.value,
+			(ticker: string) => defaultPrices.value[ticker] ?? 0
 		)
 	);
 

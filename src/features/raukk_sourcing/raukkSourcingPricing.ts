@@ -418,18 +418,19 @@ export function maxRelativeOutputDelta(
 	return max;
 }
 
-/** Relative difference below which two snapshot numbers count equal */
-const RAUKK_SNAPSHOT_EQUAL_EPSILON: number = 1e-9;
+/** Relative difference below which two snapshot numbers count equal.
+ * Shared by the chain recompute as its loop settling threshold: it must
+ * not be tighter than that settling check, or the final pass of a
+ * settled supply loop still cascades staleness onto the other loop
+ * members and the loop never shows current. */
+export const RAUKK_SNAPSHOT_EQUAL_EPSILON: number = 1e-6;
 
 /**
  * Relative difference of two numbers against the larger magnitude,
  * 0 when both are 0.
  */
 function relativeDelta(previous: number, current: number): number {
-	const reference: number = Math.max(
-		Math.abs(previous),
-		Math.abs(current)
-	);
+	const reference: number = Math.max(Math.abs(previous), Math.abs(current));
 
 	if (reference === 0) return 0;
 
@@ -482,7 +483,8 @@ export function snapshotMateriallyChanged(
 	]);
 
 	for (const planUuid of drawPlans) {
-		const previousDraws: IRaukkMaterialUnits = previous.draws[planUuid] ?? {};
+		const previousDraws: IRaukkMaterialUnits =
+			previous.draws[planUuid] ?? {};
 		const nextDraws: IRaukkMaterialUnits = next.draws[planUuid] ?? {};
 
 		const drawTickers: Set<string> = new Set([
@@ -554,19 +556,26 @@ export function formatSourceOptionLabel(
  * A ticker can belong to several buckets at once, its daily need is the
  * sum over all of them, matching what the true cost rollup charges.
  *
+ * With `getDefaultPrice` given, rows sort by their daily cost at that
+ * price — the CX preference price — instead of the effective one, so
+ * configuring a plan source does not reorder the table under the users
+ * cursor. Without it the effective daily cost sorts.
+ *
  * @author raukk
  *
  * @param {IRaukkInputRowSource} planResult Plan Result
  * @param {IRaukkMaterialUnits} repairUnitsPerDay Repair demand per day
  * @param {Record<string, IRaukkTickerSource>} sources Plan sources
  * @param {IRaukkPriceResolver} resolve Price Resolver
+ * @param {(ticker: string) => number} [getDefaultPrice] Stable sort price
  * @returns {IRaukkInputRow[]} Priced input rows
  */
 export function buildInputRows(
 	planResult: IRaukkInputRowSource,
 	repairUnitsPerDay: IRaukkMaterialUnits,
 	sources: Record<string, IRaukkTickerSource>,
-	resolve: IRaukkPriceResolver
+	resolve: IRaukkPriceResolver,
+	getDefaultPrice?: (ticker: string) => number
 ): IRaukkInputRow[] {
 	const units: IRaukkMaterialUnits = {};
 	const buckets: Record<string, IRaukkInputBuckets> = {};
@@ -604,6 +613,12 @@ export function buildInputRows(
 		bucketOf(ticker).repair = true;
 	});
 
+	function sortCost(row: IRaukkInputRow): number {
+		return getDefaultPrice
+			? row.unitsPerDay * getDefaultPrice(row.ticker)
+			: row.costPerDay;
+	}
+
 	return Object.entries(units)
 		.map(([ticker, unitsPerDay]) => {
 			const resolved: IRaukkResolvedPrice = resolve(ticker);
@@ -618,7 +633,7 @@ export function buildInputRows(
 				fromPlanUuid: resolved.fromPlanUuid,
 			};
 		})
-		.sort((a, b) => b.costPerDay - a.costPerDay);
+		.sort((a, b) => sortCost(b) - sortCost(a));
 }
 
 /**

@@ -1,8 +1,14 @@
 <script setup lang="ts">
 	import { computed, ComputedRef, PropType, Ref, ref, watch } from "vue";
+	// raukk: plan uuid comes from the plan views route
+	import { useRoute } from "vue-router";
 
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
+
+	// Stores
+	// raukk: sourcing snapshot backs the internal repair cost note
+	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
 	// Composables
 	import { usePrice } from "@/features/cx/usePrice";
@@ -32,8 +38,11 @@
 		// raukk: per unit of output allocation input
 		IProductionBuilding,
 	} from "@/features/planning/usePlanCalculation.types";
-	// raukk: repair cycle days
-	import { RAUKK_REPAIR_DAY } from "@/features/raukk_sourcing/raukkSourcing.types";
+	// raukk: repair cycle days + snapshot shape of the sourced note
+	import {
+		IRaukkSnapshot,
+		RAUKK_REPAIR_DAY,
+	} from "@/features/raukk_sourcing/raukkSourcing.types";
 
 	// UI
 	import { PForm, PFormItem, PSelect } from "@/ui";
@@ -129,6 +138,58 @@
 			selectedDay.value as RAUKK_REPAIR_DAY,
 			(ticker: string) => raukkPrices.value[ticker] ?? 0
 		)
+	);
+
+	/*
+	 * raukk: internal cost of plan sourced repair materials
+	 *
+	 * The material table prices at market like the rest of this tool;
+	 * repair materials whose sourcing config draws them from a plan
+	 * (own output included) additionally show what the same amount
+	 * costs at the snapshots frozen internal price.
+	 */
+
+	const raukkSourcingStore = useRaukkSourcingStore();
+	const raukkRoute = useRoute();
+
+	/** Plan uuid from the plan views route, the tool knows no uuid */
+	const raukkPlanUuid: ComputedRef<string | undefined> = computed(() => {
+		const routeUuid: unknown = raukkRoute?.params?.planUuid;
+
+		return typeof routeUuid === "string" && routeUuid !== ""
+			? routeUuid
+			: undefined;
+	});
+
+	// direct reactive store read, not getSnapshot: its inert clone drops
+	// the proxy, the in-place stale flag change would not invalidate this
+	const raukkSnapshot: ComputedRef<IRaukkSnapshot | undefined> = computed(
+		() =>
+			raukkPlanUuid.value
+				? raukkSourcingStore.snapshots[raukkPlanUuid.value]
+				: undefined
+	);
+
+	/** Internal ȼ per unit of every plan sourced ticker of the snapshot */
+	const raukkSourcedPrices: ComputedRef<Record<string, number>> = computed(
+		() => {
+			const snapshot: IRaukkSnapshot | undefined = raukkSnapshot.value;
+			const result: Record<string, number> = {};
+
+			if (!snapshot?.config || !snapshot.inputPrices) return result;
+
+			Object.entries(snapshot.config.sources).forEach(
+				([ticker, source]) => {
+					const price: number | undefined =
+						snapshot.inputPrices?.[ticker];
+
+					if (source.mode === "plan" && price !== undefined)
+						result[ticker] = price;
+				}
+			);
+
+			return result;
+		}
 	);
 
 	// full buildings are used when handed in, otherwise the data prop is
@@ -304,12 +365,15 @@
 			</PForm>
 
 			<div class="py-3">
+				<!-- raukk: sourced props back the internal cost note -->
 				<DayRepairMaterialTable
 					v-if="
 						dailyRepairMaterials &&
 						dailyRepairMaterials[selectedDay]
 					"
-					:materials="dailyRepairMaterials[selectedDay]" />
+					:materials="dailyRepairMaterials[selectedDay]"
+					:sourced-prices="raukkSourcedPrices"
+					:sourced-stale="raukkSnapshot?.stale === true" />
 			</div>
 
 			<!-- raukk: plan total per cycle and per day -->
