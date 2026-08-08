@@ -3,11 +3,13 @@
 // logic stays unit testable in isolation.
 
 // Calculation Utils
-import { resolveMarketPrice } from "@/features/raukk_sourcing/calculations/priceMode";
+import {
+	resolveLocalPrice,
+	resolveMarketPrice,
+} from "@/features/raukk_sourcing/calculations/priceMode";
 import {
 	raukkEqualWithin,
 	raukkSettledWithin,
-	RAUKK_EPSILON_EQUAL,
 } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
 // Types & Interfaces
@@ -102,6 +104,8 @@ export function aggregateProducerPrice(
  *  - no configuration entry: the plans existing CX preference price,
  *    matching the behavior of the untouched plan calculation
  *  - `{ mode: "market" }`: exchange data at the configured price mode
+ *  - `{ mode: "local" }`: the local market ad price of the consuming
+ *    planet, bought there and therefore drawn from no plan at all
  *  - `{ mode: "plan" }`: the source snapshots `costPerUnit`, reported
  *    with its plan uuid so the daily units land in `draws`
  *
@@ -130,6 +134,14 @@ export function createRaukkPriceResolver(
 				price: resolveMarketPrice(
 					context.getExchange(ticker),
 					source.priceMode
+				),
+			};
+
+		if (source.mode === "local")
+			return {
+				price: resolveLocalPrice(
+					source.price,
+					context.getExchange(ticker)
 				),
 			};
 
@@ -505,14 +517,6 @@ export function outputsSettled(
 
 	return true;
 }
-
-/** Absolute FLOOR below which two snapshot numbers count equal, see
- * {@link RAUKK_EPSILON_EQUAL}. A change of less than a cent — or of less
- * than a hundredth of a unit — is invisible in the two decimal display
- * and must not cascade staleness onto downstream plans. The comparison
- * itself is hybrid and widens this floor at large magnitudes, see
- * {@link raukkEqualWithin}. */
-export const RAUKK_SNAPSHOT_EQUAL_EPSILON: number = RAUKK_EPSILON_EQUAL;
 
 /**
  * Determines if a freshly computed snapshot differs materially from the

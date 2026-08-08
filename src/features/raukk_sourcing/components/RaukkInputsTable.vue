@@ -6,17 +6,19 @@
 
 	// Components
 	import MaterialTile from "@/features/material_tile/components/MaterialTile.vue";
+	import RaukkLocalPriceInput from "@/features/raukk_sourcing/components/RaukkLocalPriceInput.vue";
 	import RaukkSourceCell from "@/features/raukk_sourcing/components/RaukkSourceCell.vue";
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PSelect, PTable, PTag } from "@/ui";
+	import { PSelect, PTable, PTag, PTooltip } from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
 	import {
+		IRaukkLocalPrice,
 		IRaukkTickerSource,
 		RAUKK_PRICE_MODE,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -27,6 +29,12 @@
 
 	/** Sentinel of the "no configuration, use CX preference" entry */
 	const DEFAULT_MODE: string = "DEFAULT";
+
+	/** Sentinel of the "bought on the local market here" entry */
+	const LOCAL_MODE: string = "LOCAL";
+
+	/** Ad price a freshly picked local buy starts from */
+	const DEFAULT_LOCAL_PRICE: IRaukkLocalPrice = { basis: "BID", value: 0 };
 
 	const props = defineProps({
 		rows: {
@@ -72,9 +80,12 @@
 		{ label: t("raukk_sourcing.price_modes.MID"), value: "MID" },
 		{ label: t("raukk_sourcing.price_modes.AVG7D"), value: "AVG7D" },
 		{ label: t("raukk_sourcing.price_modes.AVG30D"), value: "AVG30D" },
+		{ label: t("raukk_sourcing.inputs.lm_buy"), value: LOCAL_MODE },
 	]);
 
 	function priceModeValue(row: IRaukkInputRow): string {
+		if (row.source?.mode === "local") return LOCAL_MODE;
+
 		return row.source?.mode === "market"
 			? row.source.priceMode
 			: DEFAULT_MODE;
@@ -86,10 +97,31 @@
 			return;
 		}
 
+		if (value === LOCAL_MODE) {
+			emit("update:source", row.ticker, {
+				mode: "local",
+				price: { ...DEFAULT_LOCAL_PRICE },
+			});
+			return;
+		}
+
 		emit("update:source", row.ticker, {
 			mode: "market",
 			priceMode: value as RAUKK_PRICE_MODE,
 		});
+	}
+
+	/**
+	 * Ad price of a locally bought input, undefined while the ticker is
+	 * bought at the exchange or drawn from another plan.
+	 *
+	 * @author raukk
+	 *
+	 * @param {IRaukkInputRow} row Input Row
+	 * @returns {IRaukkLocalPrice | undefined} Ad Price
+	 */
+	function localPrice(row: IRaukkInputRow): IRaukkLocalPrice | undefined {
+		return row.source?.mode === "local" ? row.source.price : undefined;
 	}
 
 	/**
@@ -172,7 +204,17 @@
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.inputs.daily_need") }}
 				</th>
-				<th>{{ $t("raukk_sourcing.inputs.price_mode") }}</th>
+				<th>
+					{{ $t("raukk_sourcing.inputs.price_mode") }}
+					<PTooltip>
+						<template #trigger>
+							<span class="pl-1 text-white/40 hover:cursor-help">
+								(i)
+							</span>
+						</template>
+						{{ $t("raukk_sourcing.inputs.lm_buy_tooltip") }}
+					</PTooltip>
+				</th>
 				<th>{{ $t("raukk_sourcing.inputs.source") }}</th>
 				<th v-if="shippingEnabled" class="text-right!">
 					{{ $t("raukk_sourcing.inputs.shipping_price") }}
@@ -233,18 +275,32 @@
 						{{ formatNumber(row.unitsPerDay) }}
 					</td>
 					<td>
-						<PSelect
-							class="w-37.5!"
-							:value="priceModeValue(row)"
-							:options="priceModeOptions"
-							:disabled="disabled || row.source?.mode === 'plan'"
-							@update:value="
-								(v) =>
-									changePriceMode(
-										row,
-										String(v ?? DEFAULT_MODE)
-									)
-							" />
+						<div class="flex flex-col gap-y-1">
+							<PSelect
+								class="w-37.5!"
+								:value="priceModeValue(row)"
+								:options="priceModeOptions"
+								:disabled="
+									disabled || row.source?.mode === 'plan'
+								"
+								@update:value="
+									(v) =>
+										changePriceMode(
+											row,
+											String(v ?? DEFAULT_MODE)
+										)
+								" />
+							<RaukkLocalPriceInput
+								:price="localPrice(row)"
+								:disabled="disabled"
+								@update:price="
+									(price) =>
+										emit('update:source', row.ticker, {
+											mode: 'local',
+											price,
+										})
+								" />
+						</div>
 					</td>
 					<td>
 						<RaukkSourceCell

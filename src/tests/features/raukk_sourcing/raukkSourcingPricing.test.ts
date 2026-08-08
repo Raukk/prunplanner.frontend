@@ -179,6 +179,53 @@ describe("Raukk Sourcing Pricing", () => {
 
 			expect(resolve("DW")).toStrictEqual({ price: 42 });
 		});
+
+		it("resolves a manual local buy without a draw", () => {
+			const resolve = resolverFor({
+				RAT: {
+					mode: "local",
+					price: { basis: "MANUAL", value: 66 },
+				},
+			});
+
+			expect(resolve("RAT")).toStrictEqual({ price: 66 });
+		});
+
+		it("resolves a local buy at an offset market basis", () => {
+			expect(
+				resolverFor({
+					RAT: {
+						mode: "local",
+						price: { basis: "MID", value: 10 },
+					},
+				})("RAT")
+			).toStrictEqual({ price: 90 });
+
+			// no exchange data for DW, the offset clamps at 0
+			expect(
+				resolverFor({
+					DW: {
+						mode: "local",
+						price: { basis: "BID", value: 3 },
+					},
+				})("DW")
+			).toStrictEqual({ price: 0 });
+		});
+
+		it("leaves market and plan sources untouched", () => {
+			const resolve = resolverFor({
+				RAT: {
+					mode: "local",
+					price: { basis: "MANUAL", value: 66 },
+				},
+				DW: { mode: "market", priceMode: "BID" },
+				HEX: { mode: "plan", sourcePlanUuid: "b" },
+			});
+
+			expect(resolve("DW")).toStrictEqual({ price: 0 });
+			// no producer of HEX exists, it degrades to the default price
+			expect(resolve("HEX")).toStrictEqual({ price: 42 });
+		});
 	});
 
 	describe("splitAggregateDraws", () => {

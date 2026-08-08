@@ -116,6 +116,57 @@ describe("Raukk Sourcing Store", () => {
 			expect(store.getConfig("a").repairDay).toBe(30);
 		});
 
+		it("setLocalSale creates the config on demand", () => {
+			store.setLocalSale("a", "ALO", { basis: "BID", value: 0 });
+
+			expect(store.getConfig("a")).toStrictEqual({
+				repairDay: 90,
+				sources: {},
+				localSales: { ALO: { basis: "BID", value: 0 } },
+			});
+		});
+
+		it("setLocalSale marks the plan and dependents stale", () => {
+			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot(
+				"b",
+				makeSnapshot("B", { MET: 10 }, { a: { ORE: 50 } })
+			);
+
+			store.setLocalSale("a", "ORE", { basis: "MANUAL", value: 120 });
+
+			expect(store.snapshots.a.stale).toBe(true);
+			expect(store.snapshots.b.stale).toBe(true);
+		});
+
+		it("clearLocalSale removes one flag and marks stale", () => {
+			store.setLocalSale("a", "ALO", { basis: "BID", value: 0 });
+			store.setLocalSale("a", "SIO", { basis: "ASK", value: 5 });
+			store.setSnapshot("a", makeSnapshot("A", { ALO: 100 }));
+
+			store.clearLocalSale("a", "ALO");
+
+			expect(store.getConfig("a").localSales).toStrictEqual({
+				SIO: { basis: "ASK", value: 5 },
+			});
+			expect(store.snapshots.a.stale).toBe(true);
+		});
+
+		it("clearLocalSale is a no-op for unknown data", () => {
+			store.clearLocalSale("a", "ALO");
+			expect(store.configs.a).toBeUndefined();
+
+			store.setLocalSale("a", "ALO", { basis: "BID", value: 0 });
+			store.setSnapshot("a", makeSnapshot("A", { ALO: 100 }));
+
+			store.clearLocalSale("a", "NOPE");
+
+			expect(store.getConfig("a").localSales).toStrictEqual({
+				ALO: { basis: "BID", value: 0 },
+			});
+			expect(store.snapshots.a.stale).toBe(false);
+		});
+
 		it("setPlanCadence stores and clears one bucket override", () => {
 			store.setPlanCadence("a", "production", 365);
 			store.setPlanCadence("a", "repair", 7);
@@ -456,6 +507,55 @@ describe("Raukk Sourcing Store", () => {
 			expect(JSON.parse(JSON.stringify(store.snapshots))).toStrictEqual(
 				snapshotsBefore
 			);
+		});
+
+		it("round trips the local market slice", () => {
+			store.setLocalSale("a", "ALO", { basis: "BID", value: 2.5 });
+			store.setTickerSource("a", "DW", {
+				mode: "local",
+				price: { basis: "MANUAL", value: 90 },
+			});
+
+			const exported: string = store.exportJSON();
+			const before = JSON.parse(JSON.stringify(store.configs));
+
+			store.$reset();
+			store.importJSON(exported);
+
+			expect(JSON.parse(JSON.stringify(store.configs))).toStrictEqual(
+				before
+			);
+			expect(store.configs.a.localSales).toStrictEqual({
+				ALO: { basis: "BID", value: 2.5 },
+			});
+			expect(store.configs.a.sources.DW).toStrictEqual({
+				mode: "local",
+				price: { basis: "MANUAL", value: 90 },
+			});
+		});
+
+		it("imports a payload predating the local market model", () => {
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: {
+						a: {
+							repairDay: 90,
+							sources: {
+								DW: { mode: "market", priceMode: "BID" },
+								ORE: { mode: "plan", sourcePlanUuid: "b" },
+							},
+						},
+					},
+					snapshots: {},
+				})
+			);
+
+			expect(store.configs.a.localSales).toBeUndefined();
+			expect(store.configs.a.sources).toStrictEqual({
+				DW: { mode: "market", priceMode: "BID" },
+				ORE: { mode: "plan", sourcePlanUuid: "b" },
+			});
 		});
 
 		it("defaults the cadence fields of a pre cadence payload", () => {

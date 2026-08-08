@@ -49,6 +49,8 @@
 		"repair_cost": "Repair Capital Cost / Day",
 		"no_producers": "No plan produces this ticker",
 		"market": "Market",
+		"lm_buy": "LM Buy",
+		"lm_buy_tooltip": "LM Buy prices this input at an ad on the local market of this base's own planet: nothing is bought at the exchange and no freight is charged for it, whatever cargo class it belongs to. Pick a basis and a price — Manual is the absolute ȼ/unit you offer, any market basis follows that price at the plan's exchange minus the offset you enter (negative bids above it), never dropping below zero. Trading on the local market needs a Pro license in game; a Basic account can still trade when the counterpart holds one.",
 		"empty": "This plan has no net inputs.",
 		"groups": {
 			"workforce": "Workforce Consumables",
@@ -73,7 +75,12 @@
 		"MID": "Mid",
 		"AVG7D": "Average 7d",
 		"AVG30D": "Average 30d",
+		"MANUAL": "Manual",
 		"default": "CX Preference"
+	},
+	"local_price": {
+		"absolute": "ȼ/u",
+		"offset": "offset"
 	},
 	"source_option": {
 		"yours": "this base",
@@ -144,6 +151,8 @@
 		"shipping": "Shipping",
 		"market_price": "Market ȼ/u",
 		"margin": "Margin ȼ/u",
+		"lm_sell": "LM Sell",
+		"lm_sell_tooltip": "LM Sell puts all of this ticker's market-bound excess on the local market of this base's own planet instead of shipping it to the exchange — the whole ticker is then valued at the ad price. Units other bases draw from here are unaffected and keep shipping on their usual lanes. Pick a basis and a price — Manual is the absolute ȼ/unit you ask, any market basis follows that price at the plan's exchange minus the offset you enter (negative asks above it), never dropping below zero. Trading on the local market needs a Pro license in game; a Basic account can still trade when the counterpart holds one.",
 		"empty": "This plan has no net outputs."
 	},
 	"fleet": {

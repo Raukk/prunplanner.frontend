@@ -585,6 +585,175 @@ describe("Raukk Sourcing: Shipping Pairs", () => {
 			expect(pairs[0].out).toStrictEqual([cargo("MET", 20)]);
 		});
 	});
+
+	describe("local market", () => {
+		it("keeps an LM sold output off the exchange lane", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({ localSaleOf: (ticker) => ticker === "MET" }),
+				config
+			);
+
+			// nobody draws the MET, so all 50 units are market bound
+			// excess and sell on the own planet instead
+			expect(pairs[0].out).toStrictEqual([]);
+			expect(pairs[0].back).toStrictEqual([
+				cargo("ORE", 100),
+				cargo("RAT", 10),
+			]);
+		});
+
+		it("keeps an LM sold output off it with subscribers as well", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					subscribedOf: (ticker) => (ticker === "MET" ? 30 : 0),
+					localSaleOf: (ticker) => ticker === "MET",
+				}),
+				config
+			);
+
+			// 30 of the 50 are drawn and were never market bound; the
+			// remaining 20 are, and those are what the flag removes
+			expect(pairs[0].out).toStrictEqual([]);
+		});
+
+		it("still ships what a counterpart draws off an LM sold output", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					subscribedOf: () => 50,
+					viaCxSoldOf: (ticker: string) =>
+						ticker === "MET" ? 20 : 0,
+					localSaleOf: (ticker) => ticker === "MET",
+				}),
+				config
+			);
+
+			// exactly the rerouted 20 units stay outbound: they are
+			// consumed on another planet and cannot sell on this one
+			expect(pairs[0].out).toStrictEqual([cargo("MET", 20)]);
+		});
+
+		it("never ships more of it than the plan produces", () => {
+			// oversubscription is allowed: 80 units a day are drawn off an
+			// output of 50, and all of them route through the exchange
+			const oversubscribed: Partial<IRaukkPairLookups> = {
+				subscribedOf: (ticker: string) => (ticker === "MET" ? 80 : 0),
+				viaCxSoldOf: (ticker: string) => (ticker === "MET" ? 80 : 0),
+			};
+
+			const local: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					...oversubscribed,
+					localSaleOf: (ticker) => ticker === "MET",
+				}),
+				config
+			);
+
+			// the whole output leaves, and not one unit more
+			expect(local[0].out).toStrictEqual([cargo("MET", 50)]);
+
+			// the unflagged branch clamps at the very same point, so both
+			// agree at the boundary
+			const exchange: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups(oversubscribed),
+				config
+			);
+
+			expect(exchange[0].out).toStrictEqual([cargo("MET", 50)]);
+		});
+
+		it("leaves the chain claim on the rerouted portion", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					subscribedOf: () => 50,
+					viaCxSoldOf: (ticker: string) =>
+						ticker === "MET" ? 20 : 0,
+					localSaleOf: (ticker) => ticker === "MET",
+					claimedUnitsOf: (
+						ticker: string,
+						counterpart: string | undefined,
+						inbound: boolean
+					) =>
+						ticker === "MET" &&
+						counterpart === undefined &&
+						!inbound
+							? 5
+							: 0,
+				}),
+				config
+			);
+
+			expect(pairs[0].out).toStrictEqual([cargo("MET", 15)]);
+		});
+
+		it("keeps an LM bought input off the exchange lane", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({ localBuyOf: (ticker) => ticker === "ORE" }),
+				config
+			);
+
+			// the ORE is bought where it is consumed, the RAT is not
+			expect(pairs[0].back).toStrictEqual([cargo("RAT", 10)]);
+			expect(pairs[0].out).toStrictEqual([cargo("MET", 50)]);
+		});
+
+		it("keeps every bucket of an LM bought input off it", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				{
+					...flows,
+					inputs: [
+						cargo("ORE", 60),
+						cargo("ORE", 20, 1, 1, "workforce"),
+						cargo("ORE", 20, 1, 1, "repair"),
+						cargo("RAT", 10),
+					],
+				},
+				lookups({ localBuyOf: (ticker) => ticker === "ORE" }),
+				config
+			);
+
+			expect(pairs[0].back).toStrictEqual([cargo("RAT", 10)]);
+		});
+
+		it("drops the exchange pair when both sides are local", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					localBuyOf: () => true,
+					localSaleOf: () => true,
+				}),
+				config
+			);
+
+			expect(pairs).toStrictEqual([]);
+		});
+
+		it("leaves a hub/spoke rerouted draw untouched", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					originOf: (ticker: string) =>
+						ticker === "ORE"
+							? [{ planUuid: "source", share: 1 }]
+							: [],
+					planetOf: () => "AA-003a",
+					viaCxSourceOf: () => true,
+					localBuyOf: (ticker) => ticker === "RAT",
+				}),
+				config
+			);
+
+			// the ORE is a plan sourced draw rerouted through the
+			// exchange, not a market buy: the flag never reaches it
+			expect(pairs[0].back).toStrictEqual([cargo("ORE", 100)]);
+		});
+	});
 });
 
 const heavy: IRaukkShippedTicker[] = [cargo("ORE", 300, 1, 1)];

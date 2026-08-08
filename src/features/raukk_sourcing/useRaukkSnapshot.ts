@@ -16,6 +16,7 @@ import {
 	calculateRepairMaterialsPerDay,
 } from "@/features/raukk_sourcing/calculations/repairCapitalCost";
 import { calculateBaseFraction } from "@/features/raukk_sourcing/calculations/baseFraction";
+import { resolveLocalPrice } from "@/features/raukk_sourcing/calculations/priceMode";
 import { raukkSplitCargoBuckets } from "@/features/raukk_sourcing/calculations/cargoBuckets";
 import {
 	calculateRepairBillCost,
@@ -59,10 +60,12 @@ import {
 	IRaukkChainFlow,
 	IRaukkChainFlowCost,
 	IRaukkChainResult,
+	IRaukkLocalPrice,
 	IRaukkPlanConfig,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
 	IRaukkSnapshotLane,
+	IRaukkTickerSource,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import {
 	IRaukkCadenceCaps,
@@ -194,6 +197,10 @@ interface IRaukkShippingInput {
 	resolver: IRaukkPriceResolver;
 	getProducers: (ticker: string) => IRaukkProducerOption[];
 	shippingConfig: IRaukkShippingConfig;
+	/** Per ticker sourcing configuration, the LM buy flags read it */
+	sources: Record<string, IRaukkTickerSource>;
+	/** LM sell ads of the plan, keyed by output ticker */
+	localSales: Record<string, IRaukkLocalPrice>;
 	/** Daily repair material demand of the plan, cargo of its own bucket */
 	repairUnitsPerDay: IRaukkMaterialUnits;
 	/** Weight and volume per unit, for cargo the material I/O does not
@@ -703,6 +710,16 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 		viaCxSourceOf: (): boolean => true,
 		viaCxSoldOf: (ticker: string): number =>
 			hubSpoke.viaCxSold[ticker] ?? 0,
+		/*
+		 * The local market flags of this plan: an output carrying a sell
+		 * ad keeps its excess on its own planet, an input whose source
+		 * mode is "local" is bought on the planet it is consumed on. Both
+		 * are per ticker and, for the buy side, bucket agnostic.
+		 */
+		localSaleOf: (ticker: string): boolean =>
+			input.localSales[ticker] !== undefined,
+		localBuyOf: (ticker: string): boolean =>
+			input.sources[ticker]?.mode === "local",
 		anchorCxCode: cxCode,
 		anchorCxSystemId: cxSystemId,
 	};
@@ -999,6 +1016,8 @@ export async function computePlanSnapshot(
 			resolver,
 			getProducers,
 			shippingConfig,
+			sources: config.sources,
+			localSales: config.localSales ?? {},
 			repairUnitsPerDay,
 			dimensionOf: (ticker: string) => prices.dimensions[ticker],
 			caps: raukkCadenceCaps(
@@ -1048,9 +1067,24 @@ export async function computePlanSnapshot(
 			inputPrices[row.ticker] = row.effectivePrice;
 		});
 
+		/*
+		 * An LM sold ticker sells at its resolved local price, flat and
+		 * for the whole ticker: the sell price simply BECOMES that value.
+		 * Everything reading the frozen number — margin, overview profit,
+		 * per base profit — follows without knowing about the flag.
+		 */
 		const sellPrices: Record<string, number> = {};
 		Object.keys(result.outputs).forEach((ticker) => {
-			sellPrices[ticker] = prices.sellPrices[ticker] ?? 0;
+			const localSale: IRaukkLocalPrice | undefined =
+				config.localSales?.[ticker];
+
+			sellPrices[ticker] =
+				localSale !== undefined
+					? resolveLocalPrice(
+							localSale,
+							prices.exchangePrices[ticker]
+						)
+					: (prices.sellPrices[ticker] ?? 0);
 		});
 
 		/*
@@ -1159,6 +1193,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		return {
 			repairDay: stored.repairDay,
 			sources: { ...stored.sources },
+			localSales: { ...stored.localSales },
 			cadence: { ...stored.cadence },
 			cxAnchor: stored.cxAnchor,
 		};
@@ -1231,6 +1266,8 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		resolver: resolver.value,
 		getProducers,
 		shippingConfig: shippingConfig.value,
+		sources: config.value.sources,
+		localSales: config.value.localSales ?? {},
 		repairUnitsPerDay: repairUnitsPerDay.value,
 		dimensionOf: (ticker: string) => dimensions.value[ticker],
 		caps: caps.value,
@@ -1314,11 +1351,22 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		)
 	);
 
+	// the live mirror of the frozen sell prices, see {@link
+	// computePlanSnapshot}: an LM sold ticker shows its local price here
+	// as well, before any snapshot is stored
 	const outputRows: ComputedRef<IRaukkOutputRow[]> = computed(() =>
 		Object.values(trueCost.value.outputs)
 			.map((output) => {
+				const localSale: IRaukkLocalPrice | undefined =
+					config.value.localSales?.[output.ticker];
+
 				const marketPrice: number =
-					sellPrices.value[output.ticker] ?? 0;
+					localSale !== undefined
+						? resolveLocalPrice(
+								localSale,
+								exchangePrices.value[output.ticker]
+							)
+						: (sellPrices.value[output.ticker] ?? 0);
 
 				return {
 					ticker: output.ticker,

@@ -296,6 +296,94 @@ describe("Raukk Shipping: Plan flows", () => {
 		});
 	});
 
+	describe("local market", () => {
+		/** The flows of one plan, as `[ticker, from, to, units]` tuples */
+		function tuples(
+			overrides: Partial<IRaukkPairLookups>,
+			flowCargo: IRaukkPairPlanFlows = cargo()
+		): (string | number)[][] {
+			return buildPlanChainFlows(
+				flowCargo,
+				{ ...lookups(), ...overrides } as IRaukkFlowLookups,
+				config
+			).map((flow) => [
+				flow.ticker,
+				flow.fromStop,
+				flow.toStop,
+				flow.unitsPerDay,
+			]);
+		}
+
+		it("emits no own to exchange flow for an LM sold output", () => {
+			// the own→CX flow IS the market bound excess here: the 10 ALO
+			// a counterpart draws are ITS inbound flow, not this one
+			expect(
+				tuples({ localSaleOf: (ticker: string) => ticker === "ALO" })
+			).toStrictEqual([
+				["ORE", SOURCE_PLANET, OWN_PLANET, 100],
+				["DW", "AI1", OWN_PLANET, 20],
+			]);
+		});
+
+		it("emits no exchange to own flow for an LM bought input", () => {
+			expect(
+				tuples({ localBuyOf: (ticker: string) => ticker === "DW" })
+			).toStrictEqual([
+				["ORE", SOURCE_PLANET, OWN_PLANET, 100],
+				["ALO", OWN_PLANET, "AI1", 50],
+			]);
+		});
+
+		it("drops an LM bought repair or workforce ticker alike", () => {
+			const withRepair: IRaukkPairPlanFlows = {
+				...cargo(),
+				inputs: [
+					...cargo().inputs,
+					{
+						ticker: "BSE",
+						bucket: "repair",
+						unitsPerDay: 10,
+						weightPerUnit: 0.3,
+						volumePerUnit: 0.5,
+					},
+				],
+			};
+
+			// the exclusion is per TICKER and bucket agnostic
+			expect(
+				tuples(
+					{
+						localBuyOf: (ticker: string) =>
+							ticker === "BSE" || ticker === "DW",
+					},
+					withRepair
+				)
+			).toStrictEqual([
+				["ORE", SOURCE_PLANET, OWN_PLANET, 100],
+				["ALO", OWN_PLANET, "AI1", 50],
+			]);
+
+			// and the unflagged control still ships both of them
+			expect(tuples({}, withRepair)).toStrictEqual([
+				["ORE", SOURCE_PLANET, OWN_PLANET, 100],
+				["DW", "AI1", OWN_PLANET, 20],
+				["BSE", "AI1", OWN_PLANET, 10],
+				["ALO", OWN_PLANET, "AI1", 50],
+			]);
+		});
+
+		it("leaves a plan sourced input untouched", () => {
+			// ORE comes from another plan, so no local flag of this plan
+			// can reach it — the lane stays exactly as it was
+			expect(
+				tuples({
+					localBuyOf: () => true,
+					localSaleOf: () => true,
+				})
+			).toStrictEqual([["ORE", SOURCE_PLANET, OWN_PLANET, 100]]);
+		});
+	});
+
 	describe("claimed flow exclusion", () => {
 		const claimed: IRaukkClaimedFlowCost[] = [
 			{

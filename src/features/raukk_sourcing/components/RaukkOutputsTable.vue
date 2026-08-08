@@ -3,22 +3,80 @@
 
 	// Components
 	import MaterialTile from "@/features/material_tile/components/MaterialTile.vue";
+	import RaukkLocalPriceInput from "@/features/raukk_sourcing/components/RaukkLocalPriceInput.vue";
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PTable } from "@/ui";
+	import { PCheckbox, PTable, PTooltip } from "@/ui";
 
 	// Types & Interfaces
+	import { IRaukkLocalPrice } from "@/features/raukk_sourcing/raukkSourcing.types";
 	import { IRaukkOutputRow } from "@/features/raukk_sourcing/raukkSourcingUi.types";
 
-	defineProps({
+	/** Price a freshly flagged ticker asks: the bid, followed exactly */
+	const DEFAULT_LOCAL_PRICE: IRaukkLocalPrice = { basis: "BID", value: 0 };
+
+	const props = defineProps({
 		rows: {
 			type: Array as PropType<IRaukkOutputRow[]>,
 			required: true,
 		},
+		/** Local market sale ads of this plan, keyed by output ticker. Read
+		 * from the stored plan configuration, not from the rows */
+		localSales: {
+			type: Object as PropType<Record<string, IRaukkLocalPrice>>,
+			required: false,
+			default: () => ({}),
+		},
+		readOnly: {
+			type: Boolean,
+			required: false,
+			default: false,
+		},
 	});
+
+	const emit = defineEmits<{
+		(
+			e: "update:localSale",
+			ticker: string,
+			price: IRaukkLocalPrice | undefined
+		): void;
+	}>();
+
+	/**
+	 * Local market sale ad of one output ticker, undefined while the
+	 * ticker sells at the exchange as it always did.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string} ticker Output Material Ticker
+	 * @returns {IRaukkLocalPrice | undefined} Ad Price
+	 */
+	function localSale(ticker: string): IRaukkLocalPrice | undefined {
+		return props.localSales[ticker];
+	}
+
+	/**
+	 * Flags or unflags one output ticker as sold locally, starting from
+	 * the default ad price.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string} ticker Output Material Ticker
+	 * @param {boolean | undefined} checked Checkbox state
+	 */
+	function toggleLocalSale(
+		ticker: string,
+		checked: boolean | undefined
+	): void {
+		emit(
+			"update:localSale",
+			ticker,
+			checked ? { ...DEFAULT_LOCAL_PRICE } : undefined
+		);
+	}
 </script>
 
 <template>
@@ -49,6 +107,17 @@
 				</th>
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.outputs.margin") }}
+				</th>
+				<th>
+					{{ $t("raukk_sourcing.outputs.lm_sell") }}
+					<PTooltip>
+						<template #trigger>
+							<span class="pl-1 text-white/40 hover:cursor-help">
+								(i)
+							</span>
+						</template>
+						{{ $t("raukk_sourcing.outputs.lm_sell_tooltip") }}
+					</PTooltip>
 				</th>
 			</tr>
 		</thead>
@@ -85,9 +154,27 @@
 					">
 					{{ formatNumber(row.marginPerUnit) }}
 				</td>
+				<td>
+					<div class="flex flex-row gap-x-2 items-center">
+						<PCheckbox
+							:checked="localSale(row.ticker) !== undefined"
+							:disabled="readOnly"
+							@update:checked="
+								(checked) =>
+									toggleLocalSale(row.ticker, checked)
+							" />
+						<RaukkLocalPriceInput
+							:price="localSale(row.ticker)"
+							:disabled="readOnly"
+							@update:price="
+								(price) =>
+									emit('update:localSale', row.ticker, price)
+							" />
+					</div>
+				</td>
 			</tr>
 			<tr v-if="rows.length === 0">
-				<td colspan="9" class="text-center text-white/50">
+				<td colspan="10" class="text-center text-white/50">
 					{{ $t("raukk_sourcing.outputs.empty") }}
 				</td>
 			</tr>

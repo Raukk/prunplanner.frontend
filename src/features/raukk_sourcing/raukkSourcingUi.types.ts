@@ -58,7 +58,8 @@ export interface IRaukkOutputRow {
 	unitsPerDay: number;
 	costPerUnit: number;
 	breakdown: IRaukkCostBreakdown;
-	/** Market sell price of one unit at the plans CX preference */
+	/** Sell price of one unit: the plans CX preference normally, the
+	 * resolved local price while the ticker carries an LM sell ad */
 	marketPrice: number;
 	/** `marketPrice - costPerUnit` */
 	marginPerUnit: number;
