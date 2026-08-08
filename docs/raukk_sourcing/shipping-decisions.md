@@ -236,6 +236,20 @@ structurally empty" argument relied on.
    files predates the upstream change — read it as historical
    context for v1's original reasoning.
 
+## Round 8 (gateways transcribed)
+
+The user sourced the in-game GATEWAYS (GTW) list; transcribed to
+`src/features/raukk_sourcing/assets/raukk_gates.json` (2026-08-08):
+17 traversable planet⇄planet links + 7 one-sided/unlinked gates.
+Supersedes round 6 item 5's "no data" status. Still unknown per
+gate: traversal cost (typically 4,000–6,000 credits) and upgrade
+level (large-hull clearance, e.g. HCB needs upgraded gates) — both
+null in the asset until sourced. NOT yet consumed by routing;
+future work: gate edges in the route graph (planet-anchored: STL to
+gate, traverse for credits, STL out — enables STL-only ships and
+possibly cheaper routes for FTL ships), gated by the unknown
+upgrade/cost fields defaulting conservatively.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up, and
 shipping-fleet.md for fleet & calibration.

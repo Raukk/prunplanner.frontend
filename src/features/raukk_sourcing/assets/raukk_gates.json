@@ -1,0 +1,178 @@
+{
+	"comment": "In-game GATEWAYS (GTW) transcription, 2026-08-08. Gates sit on PLANETS (planet natural ids). links = both ends built AND linked (traversable). unlinked = gate exists but no counterpart link yet. traversalCost (typically 4000-6000 credits) and upgrade level (large-hull clearance, e.g. HCB) are NOT visible in the GTW list — null until sourced. Not yet consumed by routing; see shipping-decisions.md round 8.",
+	"links": [
+		{
+			"a": "QQ-001b",
+			"aName": "Circinus - Circe",
+			"b": "OT-580b",
+			"bName": "Moria - Montem",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "ZV-307c",
+			"aName": "Antares I - Hephaestus",
+			"b": "LS-300c",
+			"bName": "Antares V - Griffonstone",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "XH-594b",
+			"aName": "Nova - Kiruna",
+			"b": "OT-580b",
+			"bName": "Moria - Montem",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "KW-688c",
+			"aName": "New Antares - Etherwind",
+			"b": "UV-351a",
+			"bName": "Benten - Katoa",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "ZV-307c",
+			"aName": "Antares I - Hephaestus",
+			"b": "IA-158b",
+			"bName": "Amethyst b",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "WB-675c",
+			"aName": "Midway - Sand",
+			"b": "OT-580b",
+			"bName": "Moria - Montem",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "LS-300c",
+			"aName": "Antares V - Griffonstone",
+			"b": "KW-688c",
+			"bName": "New Antares - Etherwind",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "WB-675i",
+			"aName": "Midway - Gasworld",
+			"b": "YI-265j",
+			"bName": "YI-265 j",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "OF-375b",
+			"aName": "Krupp - Berthier",
+			"b": "VH-331a",
+			"bName": "Hortus - Promitor",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "WB-675c",
+			"aName": "Midway - Sand",
+			"b": "YI-715b",
+			"bName": "Gloria Carbonis Messiae - Verdant",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "XH-594b",
+			"aName": "Nova - Kiruna",
+			"b": "KW-688c",
+			"bName": "New Antares - Etherwind",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "VH-331a",
+			"aName": "Hortus - Promitor",
+			"b": "IA-158b",
+			"bName": "Amethyst b",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "BN-908b",
+			"aName": "Eremos - Rhenos Pater",
+			"b": "AU-876a",
+			"bName": "AU-876 a",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "LB-476b",
+			"aName": "LB-476 b",
+			"b": "OT-580b",
+			"bName": "Moria - Montem",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "LB-476b",
+			"aName": "LB-476 b",
+			"b": "OF-375b",
+			"bName": "Krupp - Berthier",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "ZV-307a",
+			"aName": "Antares I - Eos",
+			"b": "YK-649b",
+			"bName": "YK-649 - Norwick",
+			"cost": null,
+			"upgraded": null
+		},
+		{
+			"a": "VH-331a",
+			"aName": "Hortus - Promitor",
+			"b": "BS-658e",
+			"bName": "BS-658 e",
+			"cost": null,
+			"upgraded": null
+		}
+	],
+	"unlinked": [
+		{
+			"planet": "LG-418b",
+			"name": "Dolzena - Kinza",
+			"gateName": "xk37crash5291KinzaGate"
+		},
+		{
+			"planet": "EW-238c",
+			"name": "EW-238 - Trail's End",
+			"gateName": "ew-238c->Eos"
+		},
+		{
+			"planet": "FK-794b",
+			"name": "Wet Water - Boucher",
+			"gateName": "Boucher -> BS-658e"
+		},
+		{
+			"planet": "BS-658e",
+			"name": "BS-658 e",
+			"gateName": "BS-658e -> Boucher"
+		},
+		{
+			"planet": "LG-913e",
+			"name": "LG-913 - Kerfyland",
+			"gateName": "GTW-RIR-720"
+		},
+		{
+			"planet": "UY-408a",
+			"name": "UY-408 a",
+			"gateName": "UY-408 -> Verdant"
+		},
+		{
+			"planet": "YI-715b",
+			"name": "Gloria Carbonis Messiae - Verdant",
+			"gateName": "Verdant -> UY-408a"
+		}
+	]
+}
