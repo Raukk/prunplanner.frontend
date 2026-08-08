@@ -30,7 +30,9 @@
 	},
 	"material_io": {
 		"production_planets": "Production Planets",
-		"consumption_planets": "Consumption Planets"
+		"consumption_planets": "Consumption Planets",
+		"site_bases": "{count} bases",
+		"site_bases_tooltip": "One docking site: {names}"
 	},
 	"filters": {
 		"display": "Display",

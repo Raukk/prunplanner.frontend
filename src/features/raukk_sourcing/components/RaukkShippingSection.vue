@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, ComputedRef, PropType, ref, Ref } from "vue";
+	import { computed, ComputedRef, PropType, ref, Ref, toRef } from "vue";
 
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
@@ -7,6 +7,9 @@
 	// Stores
 	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 	const sourcingStore = useRaukkSourcingStore();
+
+	// Composables
+	import { useRaukkLease } from "@/features/raukk_sourcing/useRaukkLease";
 
 	// Components
 	import RaukkShipProfileEditor from "@/features/raukk_sourcing/components/RaukkShipProfileEditor.vue";
@@ -90,6 +93,20 @@
 			default: false,
 		},
 	});
+
+	/*
+	 * Lease link of the open plan. A LEASE plans no shipping of its own
+	 * — its pairs, cadence and lanes are all empty by construction, and
+	 * a note pointing at the host says so instead. A HOST reads numbers
+	 * that are SITE totals, its own cargo plus the folded cargo of every
+	 * base leasing from it, which is worth stating on the very tables.
+	 */
+	const {
+		host: leaseHost,
+		leases,
+		isLease,
+		isHost,
+	} = useRaukkLease(toRef(props, "planUuid"));
 
 	const config: ComputedRef<IRaukkShippingConfig> = computed(
 		() => sourcingStore.shippingConfig
@@ -410,20 +427,63 @@
 				@reset:profile="resetProfile" />
 		</div>
 
-		<h4 class="font-bold py-3">
-			{{ $t("raukk_sourcing.shipping.lm.title") }}
-		</h4>
-		<div class="text-white/50 pb-3">
-			{{ $t("raukk_sourcing.shipping.lm.info") }}
+		<div v-if="isLease" class="pt-3 flex flex-row flex-wrap gap-3">
+			<span class="text-white/50">
+				{{
+					$t("raukk_sourcing.lease.delegated_note", {
+						host:
+							leaseHost?.planName ??
+							$t("raukk_sourcing.lease.unknown_plan"),
+					})
+				}}
+			</span>
+			<router-link
+				v-if="leaseHost?.route"
+				:to="leaseHost.route"
+				class="text-link-primary hover:underline">
+				{{ leaseHost.planName ?? leaseHost.planUuid }}
+			</router-link>
 		</div>
-		<RaukkLmRatesTable
-			:rows="lmRows"
-			:plan-names="planNames"
-			:ship-type-options="shipTypeOptions"
-			:assignments="assignments"
-			:disabled="disabled"
-			@update:rate="changeLmRate"
-			@update:assignment="changeAssignment" />
+
+		<template v-else>
+			<div
+				v-if="isHost"
+				class="pt-3 flex flex-row flex-wrap gap-3 text-white/50">
+				<span>
+					{{
+						$t("raukk_sourcing.lease.host_note", {
+							count: leases.length,
+						})
+					}}
+				</span>
+				<template v-for="lease in leases" :key="lease.planUuid">
+					<router-link
+						v-if="lease.route"
+						:to="lease.route"
+						class="text-link-primary hover:underline">
+						{{ lease.planName ?? lease.planUuid }}
+					</router-link>
+					<span v-else>
+						{{ lease.planName ?? lease.planUuid }}
+					</span>
+				</template>
+			</div>
+
+			<h4 class="font-bold py-3">
+				{{ $t("raukk_sourcing.shipping.lm.title") }}
+			</h4>
+			<div class="text-white/50 pb-3">
+				{{ $t("raukk_sourcing.shipping.lm.info") }}
+			</div>
+			<RaukkLmRatesTable
+				:rows="lmRows"
+				:plan-names="planNames"
+				:ship-type-options="shipTypeOptions"
+				:assignments="assignments"
+				:disabled="disabled"
+				@update:rate="changeLmRate"
+				@update:assignment="changeAssignment" />
+		</template>
 
 		<RaukkFleetSection />
 

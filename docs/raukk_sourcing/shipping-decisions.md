@@ -435,6 +435,34 @@ LM rate and ship assignment are pair-keyed.
    frozen rate back into the leases prices is a second cross plan read
    with its own convergence lag — and a candidate for a later round.
 
+## Round 14 (lease link: the surfaces that show it)
+
+1. **One composable** (`useRaukkLease`) answers every surface: host,
+   leases, and the candidate hosts. The candidates are filtered by the
+   very conditions `setLeaseHost` throws on — another plan, holding a
+   snapshot, on this plans planet, itself no lease, and none at all
+   while the open plan hosts leases — so the select never offers a
+   choice the store refuses. A refusal that happens anyway is caught
+   and shown as the stores own message, never as an exception: the
+   rules stay in the store, the UI only asks.
+2. **Where a link is stated**: its own section in the sourcing tool
+   (link, unlink, or the note that this base hosts leases), and again
+   on the shipping section, which is where the numbers it changes are
+   read. A LEASE shows a note pointing at its host instead of its empty
+   pair and lane tables; a HOST states that its tonnage, cadence and
+   ship time are SITE totals and names the bases folded into them. Plan
+   lists carry a tag-sized badge, so a link is visible without opening
+   the plan.
+3. **Site grouping of the empire material i/o is a DISPLAY step**, in
+   `EmpireMaterialIO.vue` over a pure `groupMaterialIOSites`, not in
+   `combineEmpireMaterialIO`. The combination feeds
+   `empireMaterialIOState`, whose `plan_details` are keyed by plan uuid
+   and stored on the backend: a synthetic site entry there would change
+   a persisted shape. The grouped line keeps the HOSTs uuid, so the
+   plan link still points at the base that flies the site, and only
+   LINKED plans fold — two unlinked plans sharing a planet are two
+   sites with two ship visits and stay two lines.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration, and

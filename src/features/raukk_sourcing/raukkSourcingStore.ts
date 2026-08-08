@@ -1456,6 +1456,7 @@ export const useRaukkSourcingStore = defineStore(
 			assignedShipTypeId,
 			depotStopRefs,
 			leasesOf,
+			planetOf,
 			// setters
 			setLeaseHost,
 			clearLeaseHost,

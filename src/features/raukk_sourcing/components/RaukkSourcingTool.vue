@@ -16,6 +16,7 @@
 	import RaukkInputsTable from "@/features/raukk_sourcing/components/RaukkInputsTable.vue";
 	import RaukkOutputsTable from "@/features/raukk_sourcing/components/RaukkOutputsTable.vue";
 	import RaukkShippingSection from "@/features/raukk_sourcing/components/RaukkShippingSection.vue";
+	import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSection.vue";
 
 	// Calculations
 	import {
@@ -557,6 +558,11 @@
 	<div v-else-if="props.disabled" class="pt-3 text-white/50">
 		{{ $t("raukk_sourcing.read_only") }}
 	</div>
+
+	<RaukkLeaseSection
+		v-if="planUuid !== undefined"
+		:plan-uuid="planUuid"
+		:disabled="readOnly" />
 
 	<RaukkShippingSection
 		:plan-uuid="planUuid"

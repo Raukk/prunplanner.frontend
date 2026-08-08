@@ -369,5 +369,20 @@
 			"rent_tooltip": "Warehouse rent of every depot a chain calls at, weekly rent divided by seven. Charged ONCE per depot and day however many chains visit it — it is the warehouse standing there, not a docking fee.",
 			"total": "Shipping ȼ / Day"
 		}
+	},
+	"lease": {
+		"title": "Lease",
+		"info": "A base leased from another player sits on a planet you already ship to, so both bases share one docking site. Linking them plans and pays the whole site's shipping on the host base: one visit, one hull, combined tonnage.",
+		"select_label": "This base is leased — ships via",
+		"select_placeholder": "Host base on this planet",
+		"no_candidates": "No other base of yours on this planet holds a snapshot yet, so there is nothing to lease from.",
+		"linked": "Leased base — shipping delegated to {host}",
+		"unlink": "Unlink Lease",
+		"hosting": "This base hosts {count} leased base(s); their cargo ships with yours.",
+		"delegated_note": "Shipping is planned on {host}.",
+		"host_note": "Site totals — includes {count} leased base(s):",
+		"badge_lease": "Lease → {host}",
+		"badge_host": "+{count} leased",
+		"unknown_plan": "Unknown plan"
 	}
 }

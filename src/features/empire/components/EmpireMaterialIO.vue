@@ -11,6 +11,17 @@
 	import { usePlanetData } from "@/database/services/usePlanetData";
 	const { planetNames, loadPlanetNames } = usePlanetData();
 
+	// Stores
+	// raukk: bases leasing from one another share a docking site
+	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+	const sourcingStore = useRaukkSourcingStore();
+
+	// Calculations
+	import {
+		groupEmpireMaterialIOSites,
+		IRaukkMaterialIOSiteRow,
+	} from "@/features/raukk_sourcing/calculations/leaseSites";
+
 	// Util
 	import { formatNumber } from "@/util/numbers";
 
@@ -27,8 +38,21 @@
 		},
 	});
 
-	// Local State
-	const localEmpireMaterialIO = computed(() => props.empireMaterialIO);
+	/*
+	 * Local State. A host base and the bases leased at it are ONE
+	 * docking site with one ship visit, so their contributions of a
+	 * ticker are shown as one line. Grouped here, at the display, and
+	 * not in `combineEmpireMaterialIO`: the empire state persisted from
+	 * that combination is keyed by plan uuid, and a synthetic site would
+	 * change a shape the backend stores.
+	 */
+	const localEmpireMaterialIO = computed<IRaukkMaterialIOSiteRow[]>(() =>
+		groupEmpireMaterialIOSites(
+			props.empireMaterialIO,
+			(planUuid: string) =>
+				sourcingStore.configs[planUuid]?.leaseHostPlanUuid
+		)
+	);
 
 	watch(
 		() => props.empireMaterialIO,
@@ -133,6 +157,20 @@
 								{{ formatNumber(p.output) }}
 							</strong>
 						</router-link>
+						<span
+							v-if="p.baseCount > 1"
+							class="pl-1 text-white/50"
+							:title="
+								t('empire.material_io.site_bases_tooltip', {
+									names: p.planNames.join(', '),
+								})
+							">
+							{{
+								t("empire.material_io.site_bases", {
+									count: p.baseCount,
+								})
+							}}
+						</span>
 					</div>
 				</template>
 			</x-n-data-table-column>
@@ -151,6 +189,20 @@
 								{{ formatNumber(p.input) }}
 							</strong>
 						</router-link>
+						<span
+							v-if="p.baseCount > 1"
+							class="pl-1 text-white/50"
+							:title="
+								t('empire.material_io.site_bases_tooltip', {
+									names: p.planNames.join(', '),
+								})
+							">
+							{{
+								t("empire.material_io.site_bases", {
+									count: p.baseCount,
+								})
+							}}
+						</span>
 					</div>
 				</template>
 			</x-n-data-table-column>
