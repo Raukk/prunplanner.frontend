@@ -26,6 +26,7 @@
 		IRaukkInputRow,
 		IRaukkSourceOption,
 	} from "@/features/raukk_sourcing/raukkSourcingUi.types";
+	import { IRaukkExchangePrices } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 
 	/** Sentinel of the "no configuration, use CX preference" entry */
 	const DEFAULT_MODE: string = "DEFAULT";
@@ -57,6 +58,18 @@
 			type: Boolean,
 			required: false,
 			default: false,
+		},
+		/** Exchange data per ticker, backs the LM buy market bases */
+		exchangePrices: {
+			type: Object as PropType<Record<string, IRaukkExchangePrices>>,
+			required: false,
+			default: () => ({}),
+		},
+		/** Exchange those market bases read, e.g. `AI1` or `UNIVERSE` */
+		exchangeCode: {
+			type: String,
+			required: false,
+			default: "",
 		},
 		disabled: {
 			type: Boolean,
@@ -292,6 +305,8 @@
 								" />
 							<RaukkLocalPriceInput
 								:price="localPrice(row)"
+								:exchange="exchangePrices[row.ticker]"
+								:exchange-code="exchangeCode"
 								:disabled="disabled"
 								@update:price="
 									(price) =>

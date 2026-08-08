@@ -31,10 +31,15 @@ export const RaukkRepairDaySchema = z.union([
  * a market basis states an offset subtracted from that basis price; the
  * offset may carry any sign and any magnitude, only the resolved price is
  * clamped at >= 0 (see `resolveLocalPrice`).
+ *
+ * The value must be finite: `NaN` and the infinities compare false
+ * against every bound, so they would travel unchecked into every margin
+ * the plan reports and re-export as JSON `null`, which no longer
+ * imports.
  */
 export const RaukkLocalPriceSchema = z.object({
 	basis: z.enum(["MANUAL", "BID", "ASK", "MID", "AVG7D", "AVG30D"]),
-	value: z.number(),
+	value: z.number().finite(),
 });
 
 export const RaukkTickerSourceSchema = z.discriminatedUnion("mode", [

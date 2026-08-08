@@ -421,6 +421,43 @@ LM rate and ship assignment are pair-keyed.
    {suggestedVisit} d." The bay code and hull label stay — that part is
    what identifies the hull — everything repeated per side is gone.
 
+## Round 14 (local market ad pricing: basis fallback, offset traps)
+
+1. **A market basis falls back to the VWAP when its side of the book is
+   empty**: `resolveMarketPrice` read `exchange.bid` / `exchange.ask`
+   raw, and the synthetic `UNIVERSE` exchange — the one every account
+   without a CX preference resolves to — carries `bid: 0` and `ask: 0`
+   BY CONSTRUCTION, populating only the VWAPs. A freshly checked "LM
+   Sell" box therefore defaulted to `{BID, 0}` and priced the whole
+   ticker at 0.00 ȼ/u with a fully negative margin. `BID` and `ASK` now
+   fall back to `vwap_30d`, then `vwap_7d`, mirroring the fallback
+   `usePrice.getPrice` already takes. LM sell and LM buy share the
+   resolver, so both are fixed at once.
+2. **MID of a one-sided book IS that side**: with both sides real it
+   stays `(bid + ask) / 2`. With only one side real, halving it would
+   invent a price nobody quoted, so `MID` is the real side alone. With
+   neither side real both sides collapsed onto the same VWAP and the
+   average is that VWAP.
+3. **Switching across the MANUAL boundary resets the number**: an
+   absolute 175 ȼ/u carried into `BID` silently became a 175 ȼ undercut.
+   Market ↔ market switches still keep the offset — there it stays an
+   offset.
+4. **The number field is bounded on MANUAL only**: `min` 0 on an
+   absolute price, unbounded on an offset. A NEGATIVE offset is a
+   feature, not an error — it asks (or bids) above the market — so the
+   persisted schema stays signed and only gains `.finite()`; `NaN` and
+   the infinities are what actually corrupt a plan and re-export as JSON
+   `null`.
+5. **A clamped 0 has to look different from an honest 0**: the editor
+   shows the resolved ȼ/u inline next to the field, computed through the
+   one shared `quoteLocalPrice` — no second pricing path in a component
+   — and renders it in the negative style with "(offset ate the basis)"
+   once a real basis price was clamped away. The exchange the basis
+   reads (`AI1`, `UNIVERSE`, …) is named next to the dropdown, and the
+   number carries a persistent unit affix ("ȼ/u", "ȼ/u off Bid")
+   because the old placeholder only ever showed on an empty field and
+   the field is never empty.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration, and

@@ -10,6 +10,9 @@ import {
 	raukkDefaultShippingConfig,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
+// Schemas
+import { RaukkLocalPriceSchema } from "@/features/raukk_sourcing/raukkSourcingStore.schemas";
+
 // Types & Interfaces
 import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
 
@@ -1058,6 +1061,35 @@ describe("Raukk Sourcing Store", () => {
 			expect(store.shippingConfig).toStrictEqual(
 				raukkDefaultShippingConfig()
 			);
+		});
+	});
+
+	describe("RaukkLocalPriceSchema", () => {
+		it("accepts a manual price and a signed market offset", () => {
+			expect(
+				RaukkLocalPriceSchema.parse({ basis: "MANUAL", value: 175 })
+			).toStrictEqual({ basis: "MANUAL", value: 175 });
+
+			// asking above the market is a signed offset, not an error
+			expect(
+				RaukkLocalPriceSchema.parse({ basis: "ASK", value: -10 })
+			).toStrictEqual({ basis: "ASK", value: -10 });
+		});
+
+		it("rejects a non finite value", () => {
+			expect(() =>
+				RaukkLocalPriceSchema.parse({ basis: "BID", value: NaN })
+			).toThrow();
+
+			expect(() =>
+				RaukkLocalPriceSchema.parse({ basis: "BID", value: Infinity })
+			).toThrow();
+		});
+
+		it("rejects an unknown basis", () => {
+			expect(() =>
+				RaukkLocalPriceSchema.parse({ basis: "AVG90D", value: 0 })
+			).toThrow();
 		});
 	});
 });

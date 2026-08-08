@@ -50,7 +50,7 @@
 		"no_producers": "No plan produces this ticker",
 		"market": "Market",
 		"lm_buy": "LM Buy",
-		"lm_buy_tooltip": "LM Buy prices this input at an ad on the local market of this base's own planet: nothing is bought at the exchange and no freight is charged for it, whatever cargo class it belongs to. Pick a basis and a price — Manual is the absolute ȼ/unit you offer, any market basis follows that price at the plan's exchange minus the offset you enter (negative bids above it), never dropping below zero. Trading on the local market needs a Pro license in game; a Basic account can still trade when the counterpart holds one.",
+		"lm_buy_tooltip": "LM Buy prices this input at an ad on the local market of this base's own planet: nothing is bought at the exchange and no freight is charged for it, whatever cargo class it belongs to. Pick a basis and a price — Manual is the absolute ȼ/unit you offer, any market basis follows that price at the exchange named next to the basis minus the offset you enter (negative bids above it), never dropping below zero. A basis whose side of the book is empty — every side of the synthetic UNIVERSE exchange is — falls back to the 30 day VWAP. The resolved ȼ/unit is shown after the field and turns red once the offset has eaten the whole basis price. Trading on the local market needs a Pro license in game; a Basic account can still trade when the counterpart holds one.",
 		"empty": "This plan has no net inputs.",
 		"groups": {
 			"workforce": "Workforce Consumables",
@@ -80,7 +80,12 @@
 	},
 	"local_price": {
 		"absolute": "ȼ/u",
-		"offset": "offset"
+		"offset": "offset",
+		"unit_manual": "ȼ/u",
+		"unit_offset": "ȼ/u off {basis}",
+		"at_exchange": "{'@'} {exchangeCode}",
+		"resolved": "= {price} ȼ/u",
+		"clamped": "(offset ate the basis)"
 	},
 	"source_option": {
 		"yours": "this base",
@@ -152,7 +157,7 @@
 		"market_price": "Market ȼ/u",
 		"margin": "Margin ȼ/u",
 		"lm_sell": "LM Sell",
-		"lm_sell_tooltip": "LM Sell puts all of this ticker's market-bound excess on the local market of this base's own planet instead of shipping it to the exchange — the whole ticker is then valued at the ad price. Units other bases draw from here are unaffected and keep shipping on their usual lanes. Pick a basis and a price — Manual is the absolute ȼ/unit you ask, any market basis follows that price at the plan's exchange minus the offset you enter (negative asks above it), never dropping below zero. Trading on the local market needs a Pro license in game; a Basic account can still trade when the counterpart holds one.",
+		"lm_sell_tooltip": "LM Sell puts all of this ticker's market-bound excess on the local market of this base's own planet instead of shipping it to the exchange — the whole ticker is then valued at the ad price. Units other bases draw from here are unaffected and keep shipping on their usual lanes. Pick a basis and a price — Manual is the absolute ȼ/unit you ask, any market basis follows that price at the exchange named next to the basis minus the offset you enter (negative asks above it), never dropping below zero. A basis whose side of the book is empty — every side of the synthetic UNIVERSE exchange is — falls back to the 30 day VWAP. The resolved ȼ/unit is shown after the field and turns red once the offset has eaten the whole basis price. Trading on the local market needs a Pro license in game; a Basic account can still trade when the counterpart holds one.",
 		"empty": "This plan has no net outputs."
 	},
 	"fleet": {

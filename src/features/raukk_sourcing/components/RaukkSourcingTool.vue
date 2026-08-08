@@ -92,6 +92,8 @@
 		fuelPrices,
 		inputRows,
 		outputRows,
+		exchangePrices,
+		cxExchangeCode,
 		repairCost,
 		snapshot,
 		staleSources,
@@ -577,6 +579,8 @@
 		:source-options="sourceOptions"
 		:repair-cost-per-day="repairCost.total"
 		:shipping-enabled="shippingConfig.enabled"
+		:exchange-prices="exchangePrices"
+		:exchange-code="cxExchangeCode"
 		:disabled="readOnly"
 		@update:source="changeSource" />
 
@@ -586,6 +590,8 @@
 	<RaukkOutputsTable
 		:rows="outputRows"
 		:local-sales="localSales"
+		:exchange-prices="exchangePrices"
+		:exchange-code="cxExchangeCode"
 		:read-only="readOnly"
 		@update:local-sale="changeLocalSale" />
 </template>

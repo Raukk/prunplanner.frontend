@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 // Calculations
 import {
+	quoteLocalPrice,
 	resolveLocalPrice,
 	resolveMarketPrice,
 } from "@/features/raukk_sourcing/calculations/priceMode";
@@ -40,9 +41,71 @@ describe("Raukk Sourcing: Price Mode", () => {
 			} as unknown as IRaukkExchangePrices;
 
 			expect(resolveMarketPrice(broken, "BID")).toBe(0);
-			expect(resolveMarketPrice(broken, "MID")).toBe(25);
 			expect(resolveMarketPrice(broken, "AVG7D")).toBe(0);
 			expect(resolveMarketPrice(broken, "AVG30D")).toBe(0);
+		});
+
+		it("prices MID as the only real side of a one sided book", () => {
+			const oneSided = {
+				bid: NaN,
+				ask: 50,
+				vwap_7d: undefined,
+				vwap_30d: null,
+			} as unknown as IRaukkExchangePrices;
+
+			expect(resolveMarketPrice(oneSided, "MID")).toBe(50);
+		});
+
+		it("falls back to the 30 day vwap on an empty book side", () => {
+			const universe: IRaukkExchangePrices = {
+				bid: 0,
+				ask: 0,
+				vwap_7d: 118,
+				vwap_30d: 125,
+			};
+
+			expect(resolveMarketPrice(universe, "BID")).toBe(125);
+			expect(resolveMarketPrice(universe, "ASK")).toBe(125);
+			expect(resolveMarketPrice(universe, "MID")).toBe(125);
+			expect(resolveMarketPrice(universe, "AVG7D")).toBe(118);
+			expect(resolveMarketPrice(universe, "AVG30D")).toBe(125);
+		});
+
+		it("falls back to the 7 day vwap without a 30 day one", () => {
+			const weekly: IRaukkExchangePrices = {
+				bid: 0,
+				ask: 0,
+				vwap_7d: 118,
+				vwap_30d: 0,
+			};
+
+			expect(resolveMarketPrice(weekly, "BID")).toBe(118);
+			expect(resolveMarketPrice(weekly, "MID")).toBe(118);
+		});
+
+		it("keeps a real book side over the vwap fallback", () => {
+			const halfQuoted: IRaukkExchangePrices = {
+				bid: 0,
+				ask: 140,
+				vwap_7d: 115,
+				vwap_30d: 125,
+			};
+
+			expect(resolveMarketPrice(halfQuoted, "BID")).toBe(125);
+			expect(resolveMarketPrice(halfQuoted, "ASK")).toBe(140);
+			expect(resolveMarketPrice(halfQuoted, "MID")).toBe(132.5);
+		});
+
+		it("resolves to 0 without any quote at all", () => {
+			const empty: IRaukkExchangePrices = {
+				bid: 0,
+				ask: 0,
+				vwap_7d: 0,
+				vwap_30d: 0,
+			};
+
+			expect(resolveMarketPrice(empty, "BID")).toBe(0);
+			expect(resolveMarketPrice(empty, "MID")).toBe(0);
 		});
 
 		it("falls back to 0 on an unknown mode", () => {
@@ -126,6 +189,60 @@ describe("Raukk Sourcing: Price Mode", () => {
 			expect(
 				resolveLocalPrice({ basis: "MANUAL", value: 12 }, undefined)
 			).toBe(12);
+		});
+
+		it("prices a market basis off the vwap of an empty book", () => {
+			const universe: IRaukkExchangePrices = {
+				bid: 0,
+				ask: 0,
+				vwap_7d: 118,
+				vwap_30d: 125,
+			};
+
+			expect(
+				resolveLocalPrice({ basis: "BID", value: 0 }, universe)
+			).toBe(125);
+			expect(
+				resolveLocalPrice({ basis: "MID", value: 25 }, universe)
+			).toBe(100);
+		});
+	});
+
+	describe("quoteLocalPrice", () => {
+		it("reports a manual price as its own basis free value", () => {
+			expect(
+				quoteLocalPrice({ basis: "MANUAL", value: 175 }, exchange)
+			).toStrictEqual({ price: 175, basisPrice: 0, clamped: false });
+		});
+
+		it("flags a clamped negative manual price", () => {
+			expect(
+				quoteLocalPrice({ basis: "MANUAL", value: -20 }, exchange)
+			).toStrictEqual({ price: 0, basisPrice: 0, clamped: true });
+		});
+
+		it("reports the basis price a market offset was taken from", () => {
+			expect(
+				quoteLocalPrice({ basis: "BID", value: 25 }, exchange)
+			).toStrictEqual({ price: 75, basisPrice: 100, clamped: false });
+		});
+
+		it("flags an offset that ate the whole basis price", () => {
+			expect(
+				quoteLocalPrice({ basis: "MID", value: 23213 }, exchange)
+			).toStrictEqual({ price: 0, basisPrice: 120, clamped: true });
+		});
+
+		it("flags an offset that exactly reaches the basis price", () => {
+			expect(
+				quoteLocalPrice({ basis: "BID", value: 100 }, exchange)
+			).toStrictEqual({ price: 0, basisPrice: 100, clamped: true });
+		});
+
+		it("does not flag a 0 without any basis price to clamp", () => {
+			expect(
+				quoteLocalPrice({ basis: "BID", value: 0 }, undefined)
+			).toStrictEqual({ price: 0, basisPrice: 0, clamped: false });
 		});
 	});
 });

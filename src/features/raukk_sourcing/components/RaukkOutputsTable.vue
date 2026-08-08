@@ -14,6 +14,7 @@
 	// Types & Interfaces
 	import { IRaukkLocalPrice } from "@/features/raukk_sourcing/raukkSourcing.types";
 	import { IRaukkOutputRow } from "@/features/raukk_sourcing/raukkSourcingUi.types";
+	import { IRaukkExchangePrices } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 
 	/** Price a freshly flagged ticker asks: the bid, followed exactly */
 	const DEFAULT_LOCAL_PRICE: IRaukkLocalPrice = { basis: "BID", value: 0 };
@@ -29,6 +30,18 @@
 			type: Object as PropType<Record<string, IRaukkLocalPrice>>,
 			required: false,
 			default: () => ({}),
+		},
+		/** Exchange data per ticker, backs the LM sell market bases */
+		exchangePrices: {
+			type: Object as PropType<Record<string, IRaukkExchangePrices>>,
+			required: false,
+			default: () => ({}),
+		},
+		/** Exchange those market bases read, e.g. `AI1` or `UNIVERSE` */
+		exchangeCode: {
+			type: String,
+			required: false,
+			default: "",
 		},
 		readOnly: {
 			type: Boolean,
@@ -165,6 +178,8 @@
 							" />
 						<RaukkLocalPriceInput
 							:price="localSale(row.ticker)"
+							:exchange="exchangePrices[row.ticker]"
+							:exchange-code="exchangeCode"
 							:disabled="readOnly"
 							@update:price="
 								(price) =>

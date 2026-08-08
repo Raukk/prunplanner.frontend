@@ -1202,6 +1202,12 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		}
 	});
 
+	/** Exchange every explicit price mode and every market basis of a
+	 * local market ad reads, `UNIVERSE` without a CX preference */
+	const cxExchangeCode: ComputedRef<string> = computed(() =>
+		resolveCxExchangeCode(cxData.value, context.planetNaturalId.value)
+	);
+
 	/**
 	 * Producers of a ticker, the plan itself included: production and
 	 * workforce self consumption is netted by the material I/O already,
@@ -1463,10 +1469,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 			adoptPrices(
 				await loadRaukkPrices({
 					tickers: relevantTickers.value,
-					exchangeCode: resolveCxExchangeCode(
-						cxData.value,
-						context.planetNaturalId.value
-					),
+					exchangeCode: cxExchangeCode.value,
 					getPrice,
 					getExchangeTicker,
 					getMaterial,
@@ -1541,6 +1544,8 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		fuelPrices,
 		inputRows,
 		outputRows,
+		exchangePrices,
+		cxExchangeCode,
 		repairCost,
 		snapshot,
 		staleSources,
