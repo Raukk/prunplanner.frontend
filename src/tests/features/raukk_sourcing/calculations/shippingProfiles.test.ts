@@ -4,9 +4,14 @@ import { describe, expect, it } from "vitest";
 import {
 	RAUKK_DEFAULT_SHIP_PROFILE_ID,
 	RAUKK_FTL_REACTORS,
+	RAUKK_FUEL_TICKERS,
 	RAUKK_SHIP_HULLS,
+	raukkCompleteShipProfile,
 	raukkDefaultShippingConfig,
+	raukkDerivedCostPerParsec,
+	raukkDerivedStlBlockCost,
 	raukkNearestCalibration,
+	raukkResolveShipProfile,
 	raukkShipProfileId,
 	raukkShipProfilePreset,
 	raukkShipProfilePresets,
@@ -14,9 +19,17 @@ import {
 
 // Types & Interfaces
 import {
+	IRaukkResolvedShipProfile,
 	IRaukkShipProfile,
 	IRaukkTimeCalibration,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
+
+/** FF at 100 ȼ, SF at 10 ȼ, everything else free */
+const fuelPrices: Record<string, number> = { FF: 100, SF: 10 };
+
+function resolvePrice(ticker: string): number {
+	return fuelPrices[ticker] ?? 0;
+}
 
 describe("Raukk Sourcing: Ship Profiles", () => {
 	it("carries the six hulls of the visitation frequency tool", () => {
@@ -105,12 +118,114 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			).toBe("quick-charge");
 		});
 
-		it("leaves the ȼ constants at zero, they are not derivable", () => {
+		it("leaves the ȼ constants at derive, never at zero", () => {
 			raukkShipProfilePresets().forEach((preset) => {
-				expect(preset.costPerParsec).toBe(0);
-				expect(preset.stlBlockCost).toBe(0);
+				expect(preset.costPerParsec).toBeNull();
+				expect(preset.stlBlockCost).toBeNull();
 				expect(preset.shipsAvailable).toBe(1);
 			});
+		});
+
+		it("pre-fills the fuel burn of the covered reference flights", () => {
+			const standard: IRaukkShipProfile = raukkShipProfilePreset(
+				{ cargoWeight: 3000, cargoVolume: 1000 },
+				"standard"
+			);
+			const quick: IRaukkShipProfile = raukkShipProfilePreset(
+				{ cargoWeight: 5000, cargoVolume: 5000 },
+				"quick-charge"
+			);
+
+			// 73 FTL units over 18 pc, block fuel the mean of 72 and 108
+			expect(standard.ftlFuelPerParsec).toBeCloseTo(73 / 18, 10);
+			expect(standard.stlFuelPerBlock).toBe(90);
+			// 105 FTL units over 18 pc, block fuel the mean of 237 and 285
+			expect(quick.ftlFuelPerParsec).toBeCloseTo(105 / 18, 10);
+			expect(quick.stlFuelPerBlock).toBe(261);
+		});
+
+		it("copies the fuel burn of the nearest covered profile", () => {
+			const small: IRaukkShipProfile = raukkShipProfilePreset(
+				{ cargoWeight: 500, cargoVolume: 500 },
+				"standard"
+			);
+
+			expect(small.ftlFuelPerParsec).toBeCloseTo(73 / 18, 10);
+			expect(small.stlFuelPerBlock).toBe(90);
+		});
+	});
+
+	describe("fuel derived ȼ constants", () => {
+		const preset: IRaukkShipProfile = raukkShipProfilePreset(
+			{ cargoWeight: 3000, cargoVolume: 1000 },
+			"standard"
+		);
+
+		it("prices the burn rates with FF and SF", () => {
+			expect(RAUKK_FUEL_TICKERS).toStrictEqual({ ftl: "FF", stl: "SF" });
+			expect(raukkDerivedCostPerParsec(preset, resolvePrice)).toBeCloseTo(
+				(73 / 18) * 100,
+				10
+			);
+			expect(raukkDerivedStlBlockCost(preset, resolvePrice)).toBeCloseTo(
+				90 * 10,
+				10
+			);
+		});
+
+		it("derives both constants of an untouched preset", () => {
+			const resolved: IRaukkResolvedShipProfile = raukkResolveShipProfile(
+				preset,
+				resolvePrice
+			);
+
+			expect(resolved.costPerParsec).toBeCloseTo((73 / 18) * 100, 10);
+			expect(resolved.stlBlockCost).toBe(900);
+		});
+
+		it("lets a manual value win, a manual zero included", () => {
+			const resolved: IRaukkResolvedShipProfile = raukkResolveShipProfile(
+				{ ...preset, costPerParsec: 42, stlBlockCost: 0 },
+				resolvePrice
+			);
+
+			expect(resolved.costPerParsec).toBe(42);
+			expect(resolved.stlBlockCost).toBe(0);
+		});
+
+		it("derives zero while the fuel has no price", () => {
+			const resolved: IRaukkResolvedShipProfile = raukkResolveShipProfile(
+				preset,
+				() => 0
+			);
+
+			expect(resolved.costPerParsec).toBe(0);
+			expect(resolved.stlBlockCost).toBe(0);
+		});
+
+		it("fills the burn rates a pre round 5 profile lacks", () => {
+			const stored = {
+				...preset,
+				ftlFuelPerParsec: undefined,
+				stlFuelPerBlock: undefined,
+			};
+
+			const completed: IRaukkShipProfile =
+				raukkCompleteShipProfile(stored);
+
+			expect(completed.ftlFuelPerParsec).toBeCloseTo(73 / 18, 10);
+			expect(completed.stlFuelPerBlock).toBe(90);
+		});
+
+		it("leaves burn rates the profile carries alone, zero included", () => {
+			const completed: IRaukkShipProfile = raukkCompleteShipProfile({
+				...preset,
+				ftlFuelPerParsec: 0,
+				stlFuelPerBlock: 7,
+			});
+
+			expect(completed.ftlFuelPerParsec).toBe(0);
+			expect(completed.stlFuelPerBlock).toBe(7);
 		});
 
 		it("pre-fills the damage per parsec of the reference flights", () => {

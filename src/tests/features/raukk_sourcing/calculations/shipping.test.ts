@@ -19,14 +19,14 @@ import {
 import {
 	IRaukkDirectionLoad,
 	IRaukkPairShipping,
-	IRaukkShipProfile,
+	IRaukkResolvedShipProfile,
 	IRaukkShippedTicker,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
 	IRaukkShippingResult,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 
-const profile: IRaukkShipProfile = {
+const profile: IRaukkResolvedShipProfile = {
 	id: "test",
 	name: "Test Hauler",
 	cargoWeight: 1000,
@@ -368,7 +368,7 @@ describe("Raukk Sourcing: Shipping", () => {
 			);
 		});
 
-		it("guards a profile without any ship", () => {
+		it("signals an undefined fraction without any ship", () => {
 			const result: IRaukkPairShipping = calculatePairShipping(
 				{
 					...pair([], [ticker("ORE", 500, 1, 0.5)]),
@@ -378,8 +378,23 @@ describe("Raukk Sourcing: Shipping", () => {
 				REPAIR_BILL_COST
 			);
 
-			expect(result.shippingFraction).toBe(0);
+			// null, never 0: a zero would read as infinite capacity
+			expect(result.shippingFraction).toBeNull();
 			expect(result.dailyCost).toBeCloseTo(1086, 10);
+		});
+
+		it("keeps a hired lane at a hard zero, not at undefined", () => {
+			const result: IRaukkPairShipping = calculatePairShipping(
+				{
+					...pair([], [ticker("ORE", 500, 1, 0.5)]),
+					profile: { ...profile, shipsAvailable: 0 },
+				},
+				{ ...config, lmRates: { pair: 4000 } },
+				REPAIR_BILL_COST
+			);
+
+			// somebody elses ship: the own fleet really does fly zero
+			expect(result.shippingFraction).toBe(0);
 		});
 
 		it("replaces the own fleet cost with a hired LM rate", () => {
@@ -423,6 +438,25 @@ describe("Raukk Sourcing: Shipping", () => {
 	});
 
 	describe("calculateShipping", () => {
+		it("reports an undefined sum as soon as one pair is undefined", () => {
+			const result: IRaukkShippingResult = calculateShipping(
+				[
+					pair([], [ticker("ORE", 500, 1, 0.5)], "sourcing"),
+					{
+						...pair([ticker("FE", 250, 1, 1)], [], "cx"),
+						profile: { ...profile, shipsAvailable: 0 },
+					},
+				],
+				config,
+				resolvePrice
+			);
+
+			// summing over an unknown term would understate the fleet
+			expect(result.pairs[0].shippingFraction).not.toBeNull();
+			expect(result.pairs[1].shippingFraction).toBeNull();
+			expect(result.shippingFraction).toBeNull();
+		});
+
 		it("sums the fraction and merges per unit costs", () => {
 			const result: IRaukkShippingResult = calculateShipping(
 				[
@@ -439,8 +473,8 @@ describe("Raukk Sourcing: Shipping", () => {
 
 			expect(result.pairs).toHaveLength(2);
 			expect(result.shippingFraction).toBeCloseTo(
-				result.pairs[0].shippingFraction +
-					result.pairs[1].shippingFraction,
+				(result.pairs[0].shippingFraction ?? 0) +
+					(result.pairs[1].shippingFraction ?? 0),
 				10
 			);
 			expect(result.inbound.ORE).toBeCloseTo(1086 / 500, 10);

@@ -42,6 +42,24 @@ function system(
 }
 
 /**
+ * Fixture with two EXACTLY equal length paths of different hop counts.
+ *
+ * BB-001 to BB-004 measures 100 units either way: two hops of 50 over
+ * BB-002, or three hops of 25, 50 and 25 over BB-003 and BB-005. Every
+ * leg is a pythagorean triple, so both sums are bit identical floats and
+ * the tie is real rather than a rounding artefact. BB-006 hangs behind
+ * the target and checks that the tie break propagates downstream.
+ */
+const tieGraph: IRaukkSystemNode[] = [
+	system("BB-001", [0, 0, 0], ["BB-002", "BB-003"]),
+	system("BB-002", [30, 40, 0], ["BB-004"]),
+	system("BB-003", [15, 20, 0], ["BB-005"]),
+	system("BB-004", [60, 80, 0], ["BB-006"]),
+	system("BB-005", [45, 60, 0], ["BB-004"]),
+	system("BB-006", [60, 80, 100], []),
+];
+
+/**
  * Fixture where the minimum jump path is NOT the minimum parsec path.
  *
  * AA-001 to AA-002 is two jumps over the far detour AA-003, but three
@@ -120,6 +138,73 @@ describe("Raukk Sourcing: Route Distance", () => {
 			expect(index.parsecDistance("sys-AA-001", "sys-AA-002")).toBe(
 				index.parsecDistance("sys-AA-001", "sys-AA-002")
 			);
+		});
+	});
+
+	describe("equal length path ties", () => {
+		const index: IRaukkRouteDistance = createRouteDistance(tieGraph);
+
+		it("takes the fewest jumps among the equally long paths", () => {
+			const route: IRaukkRoute | null = index.route(
+				"sys-BB-001",
+				"sys-BB-004"
+			);
+			const found: IRaukkRoutePath | null = index.path!(
+				"sys-BB-001",
+				"sys-BB-004"
+			);
+
+			expect(route?.parsecs).toBeCloseTo(
+				100 / RAUKK_POSITION_UNITS_PER_PARSEC,
+				10
+			);
+			expect(route?.jumps).toBe(2);
+			expect(found?.systemIds).toStrictEqual([
+				"sys-BB-001",
+				"sys-BB-002",
+				"sys-BB-004",
+			]);
+		});
+
+		it("reports a jump count the reported path really has", () => {
+			[
+				"sys-BB-002",
+				"sys-BB-003",
+				"sys-BB-004",
+				"sys-BB-005",
+				"sys-BB-006",
+			].forEach((systemId) => {
+				const route: IRaukkRoute | null = index.route(
+					"sys-BB-001",
+					systemId
+				);
+				const found: IRaukkRoutePath | null = index.path!(
+					"sys-BB-001",
+					systemId
+				);
+
+				expect(found).not.toBeNull();
+				expect(route?.jumps).toBe(found!.systemIds.length - 1);
+			});
+		});
+
+		it("propagates the tie break to the nodes behind the target", () => {
+			// BB-006 hangs off BB-004: three hops over the two hop tie
+			const route: IRaukkRoute | null = index.route(
+				"sys-BB-001",
+				"sys-BB-006"
+			);
+
+			expect(route?.jumps).toBe(3);
+			expect(route?.parsecs).toBeCloseTo(
+				200 / RAUKK_POSITION_UNITS_PER_PARSEC,
+				10
+			);
+		});
+
+		it("is symmetric under the tie as well", () => {
+			expect(index.jumpCount("sys-BB-006", "sys-BB-001")).toBe(3);
+			expect(index.jumpCount("sys-BB-004", "sys-BB-001")).toBe(2);
 		});
 	});
 
@@ -215,13 +300,18 @@ describe("Raukk Sourcing: Route Distance", () => {
 	});
 
 	describe("static game data", () => {
-		it("matches the reference flight of 4 parsecs", () => {
-			// ZV-307 (Antares I) to ZV-759, one jump the game calls 4 pc:
-			// the position unit scale is calibrated on exactly this leg
+		it("scales positions with the simulations parsec length", () => {
+			// FIO global/simulationdata reports ParsecLength 12; the
+			// ZV-307 to ZV-759 connection the game labels 4 pc is
+			// 47.15113757979825 units, hence 3.93 real parsecs
 			const zv759: string | null = resolveSystemId("ZV-759c");
 
+			expect(RAUKK_POSITION_UNITS_PER_PARSEC).toBe(12);
 			expect(zv759).not.toBeNull();
-			expect(parsecDistance(SYSTEM_ZV307, zv759!)).toBeCloseTo(4, 10);
+			expect(parsecDistance(SYSTEM_ZV307, zv759!)).toBeCloseTo(
+				47.15113757979825 / 12,
+				10
+			);
 			expect(jumpCount(SYSTEM_ZV307, zv759!)).toBe(1);
 		});
 

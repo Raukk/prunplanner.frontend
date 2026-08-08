@@ -33,10 +33,21 @@ export interface IRaukkShipProfile extends IRaukkShipHull {
 	id: string;
 	name: string;
 	ftlReactor: RAUKK_FTL_REACTOR;
-	/** ȼ per parsec flown, one way */
-	costPerParsec: number;
-	/** ȼ per sublight block, one per trip direction */
-	stlBlockCost: number;
+	/**
+	 * ȼ per parsec flown, one way. `null` means DERIVE: the effective
+	 * value is `ftlFuelPerParsec` times the current FF market price. Any
+	 * number — zero included — is a manual override and always wins.
+	 */
+	costPerParsec: number | null;
+	/**
+	 * ȼ per sublight block, one per trip direction. `null` means DERIVE
+	 * from `stlFuelPerBlock` and the current SF market price.
+	 */
+	stlBlockCost: number | null;
+	/** FTL fuel units burnt per parsec, basis of the derived ȼ/parsec */
+	ftlFuelPerParsec: number;
+	/** STL fuel units burnt per sublight block, basis of the derived ȼ */
+	stlFuelPerBlock: number;
 	/** Minutes per parsec flown */
 	minutesPerParsec: number;
 	/** Minutes of an empty sublight block */
@@ -53,7 +64,7 @@ export interface IRaukkShipProfile extends IRaukkShipHull {
 	shipsAvailable: number;
 }
 
-/** Time constants one covered reference flight provides */
+/** Time and fuel constants one covered reference flight provides */
 export interface IRaukkTimeCalibration {
 	hull: IRaukkShipHull;
 	ftlReactor: RAUKK_FTL_REACTOR;
@@ -61,6 +72,27 @@ export interface IRaukkTimeCalibration {
 	chargeMinutes: number;
 	stlBlockMinutesEmpty: number;
 	stlBlockMinutesLoaded: number;
+	/** FTL fuel units per parsec of that flight */
+	ftlFuelPerParsec: number;
+	/** STL fuel units of one sublight block of that flight */
+	stlFuelPerBlock: number;
+}
+
+/**
+ * A ship profile whose ȼ constants are resolved to plain numbers.
+ *
+ * The persisted {@link IRaukkShipProfile} may leave `costPerParsec` and
+ * `stlBlockCost` at `null`, meaning "derive from the fuel burn and the
+ * current market price". Every pure calculation consumes THIS shape
+ * instead: resolution happens once, in the snapshot layer, through
+ * `raukkResolveShipProfile` — the math never sees a price.
+ */
+export interface IRaukkResolvedShipProfile extends Omit<
+	IRaukkShipProfile,
+	"costPerParsec" | "stlBlockCost"
+> {
+	costPerParsec: number;
+	stlBlockCost: number;
 }
 
 /** Account global shipping configuration */
@@ -99,7 +131,7 @@ export interface IRaukkShippedTicker {
 export interface IRaukkShippingPair {
 	/** Stable key, also the lookup key of a hired LM rate */
 	pairKey: string;
-	profile: IRaukkShipProfile;
+	profile: IRaukkResolvedShipProfile;
 	/** One way route, already hub substituted where applicable */
 	route: IRaukkRoute;
 	out: IRaukkShippedTicker[];
@@ -128,8 +160,16 @@ export interface IRaukkPairShipping {
 	/** ȼ per day of the whole round trip */
 	dailyCost: number;
 	roundTripMinutes: number;
-	/** Ship time share of this pair, 0 when hired */
-	shippingFraction: number;
+	/**
+	 * Ship time share of this pair, 0 when hired.
+	 *
+	 * `null` signals an UNDEFINED fraction: the profile claims a non
+	 * positive ship count, so the denominator does not exist. Zero would
+	 * read as "no ship time at all", i.e. infinite capacity, which is the
+	 * opposite of what an empty ship count means. The schema forbids such
+	 * a profile; the signal remains for legacy local storage state.
+	 */
+	shippingFraction: number | null;
 	loadOut: IRaukkDirectionLoad;
 	loadBack: IRaukkDirectionLoad;
 	/** ȼ per unit leaving the plan, keyed by ticker */
@@ -141,8 +181,12 @@ export interface IRaukkPairShipping {
 /** Shipping result of all pairs one plan owns */
 export interface IRaukkShippingResult {
 	pairs: IRaukkPairShipping[];
-	/** Summed ship time utilization over all owned pairs */
-	shippingFraction: number;
+	/**
+	 * Summed ship time utilization over all owned pairs, `null` as soon
+	 * as ONE pair has no defined fraction — a sum that silently skips an
+	 * unknown term would understate the fleet load.
+	 */
+	shippingFraction: number | null;
 	/** ȼ per unit arriving at the plan, keyed by ticker */
 	inbound: Record<string, number>;
 	/** ȼ per unit leaving the plan, keyed by ticker */

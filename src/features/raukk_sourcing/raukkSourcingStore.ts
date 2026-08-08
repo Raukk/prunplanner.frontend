@@ -20,9 +20,11 @@ import {
 
 // Calculations
 import {
+	raukkCompleteShipProfile,
 	raukkDefaultShippingConfig,
 	raukkShipProfilePresets,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import { raukkPairIdentity } from "@/features/raukk_sourcing/calculations/shippingDisplay";
 
 // Types & Interfaces
 import {
@@ -129,14 +131,18 @@ export const useRaukkSourcingStore = defineStore(
 				shipProfiles.value[profileId] ??
 				SHIP_PROFILE_PRESETS[profileId];
 
-			if (known) return inertClone(known);
+			// a local storage blob written before the fuel burn rates
+			// existed carries a profile without them
+			if (known) return raukkCompleteShipProfile(inertClone(known));
 
 			const fallbackId: string = shippingConfig.value.defaultProfileId;
 
-			return inertClone(
-				shipProfiles.value[fallbackId] ??
-					SHIP_PROFILE_PRESETS[fallbackId] ??
-					Object.values(SHIP_PROFILE_PRESETS)[0]
+			return raukkCompleteShipProfile(
+				inertClone(
+					shipProfiles.value[fallbackId] ??
+						SHIP_PROFILE_PRESETS[fallbackId] ??
+						Object.values(SHIP_PROFILE_PRESETS)[0]
+				)
 			);
 		}
 
@@ -441,9 +447,55 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Drops every shipping configuration entry keyed by a pair the
+		 * given plan takes part in.
+		 *
+		 * Pair keys are `owner>counterpart`, so a deleted plan appears in
+		 * BOTH shapes: `<uuid>>CX` as the owner of its exchange pair and
+		 * `<consumer>><uuid>` as the source of somebody elses sourcing
+		 * pair. Leaving either behind would silently re-apply a hired
+		 * rate or a profile override to a future plan whose uuid happens
+		 * to collide, and grows the persisted blob forever.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 */
+		function scrubShippingKeys(planUuid: string): void {
+			function scrub<T>(
+				entries: Record<string, T> | undefined
+			): Record<string, T> | undefined {
+				if (entries === undefined) return undefined;
+
+				const kept: Record<string, T> = {};
+
+				Object.entries(entries).forEach(([pairKey, value]) => {
+					const identity = raukkPairIdentity(pairKey);
+
+					if (
+						identity.planUuid === planUuid ||
+						identity.sourcePlanUuid === planUuid
+					)
+						return;
+
+					kept[pairKey] = value;
+				});
+
+				return kept;
+			}
+
+			shippingConfig.value = {
+				...shippingConfig.value,
+				lmRates: scrub(shippingConfig.value.lmRates),
+				perEdgeProfile: scrub(shippingConfig.value.perEdgeProfile),
+			};
+		}
+
+		/**
 		 * Removes configuration and snapshot of a plan, e.g. after the
 		 * plan itself was deleted, and marks all plans that depended on
-		 * it stale.
+		 * it stale. The account global shipping configuration is scrubbed
+		 * of the pairs that plan was part of, see
+		 * {@link scrubShippingKeys}.
 		 * @author raukk
 		 *
 		 * @param {string} planUuid Plan Uuid
@@ -456,6 +508,8 @@ export const useRaukkSourcingStore = defineStore(
 
 			delete configs.value[planUuid];
 			delete snapshots.value[planUuid];
+
+			scrubShippingKeys(planUuid);
 
 			dependents.forEach((dependentUuid) => {
 				const dependent: IRaukkSnapshot | undefined =
@@ -510,8 +564,17 @@ export const useRaukkSourcingStore = defineStore(
 
 			configs.value = validated.configs;
 			snapshots.value = validated.snapshots;
-			// absent in a v1 payload, the schema defaults both
-			shipProfiles.value = validated.shipProfiles;
+			// absent in a v1 payload, the schema defaults both; a payload
+			// predating the fuel burn rates has them filled from the
+			// preset of its own hull instead of burning nothing
+			shipProfiles.value = Object.fromEntries(
+				Object.entries(validated.shipProfiles).map(
+					([profileId, profile]) => [
+						profileId,
+						raukkCompleteShipProfile(profile),
+					]
+				)
+			);
 			shippingConfig.value = validated.shippingConfig;
 		}
 

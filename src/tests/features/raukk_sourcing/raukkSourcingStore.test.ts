@@ -371,6 +371,42 @@ describe("Raukk Sourcing Store", () => {
 			expect(store.snapshots.b.stale).toBe(true);
 			expect(store.snapshots.c.stale).toBe(true);
 		});
+
+		it("scrubs the shipping keys of the deleted plan", () => {
+			store.setShippingConfig({
+				enabled: true,
+				lmRates: {
+					"a>CX": 100,
+					"b>a": 200,
+					"b>CX": 300,
+					"c>b": 400,
+				},
+				perEdgeProfile: {
+					"a>CX": "2000x2000-standard",
+					"c>a": "5000x5000-standard",
+					"c>b": "1000x1000-standard",
+				},
+			});
+
+			store.deletePlanData("a");
+
+			// both key shapes go: the plans own exchange pair and every
+			// sourcing pair naming it as the source
+			expect(store.shippingConfig.lmRates).toStrictEqual({
+				"b>CX": 300,
+				"c>b": 400,
+			});
+			expect(store.shippingConfig.perEdgeProfile).toStrictEqual({
+				"c>b": "1000x1000-standard",
+			});
+		});
+
+		it("leaves an absent lm rate map absent", () => {
+			store.deletePlanData("a");
+
+			expect(store.shippingConfig.lmRates).toBeUndefined();
+			expect(store.shippingConfig.perEdgeProfile).toBeUndefined();
+		});
 	});
 
 	describe("export and import", () => {
@@ -474,7 +510,7 @@ describe("Raukk Sourcing Store", () => {
 			expect(
 				store.getShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID)
 					.costPerParsec
-			).toBe(0);
+			).toBeNull();
 		});
 
 		it("round trips the shipping slice", () => {
@@ -514,6 +550,102 @@ describe("Raukk Sourcing Store", () => {
 			).toBe(3);
 		});
 
+		it("keeps a profile exported before the fuel burn rates existed", () => {
+			const preset = store.getShipProfile("2000x2000-standard");
+
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: {},
+					snapshots: {},
+					shipProfiles: {
+						"2000x2000-standard": {
+							id: "2000x2000-standard",
+							name: preset.name,
+							cargoWeight: 2000,
+							cargoVolume: 2000,
+							ftlReactor: "standard",
+							// the v1 shape: ȼ present as a plain zero, no
+							// fuel burn rates at all
+							costPerParsec: 0,
+							stlBlockCost: 0,
+							minutesPerParsec: 27.5,
+							stlBlockMinutesEmpty: 70,
+							stlBlockMinutesLoaded: 420,
+							chargeMinutes: 1,
+							damagePerParsec: 0.0002,
+							damagePerStlBlock: 0,
+							shipsAvailable: 2,
+						},
+					},
+				})
+			);
+
+			const imported = store.getShipProfile("2000x2000-standard");
+
+			// a stored zero stays a manual zero, it is not guessed into
+			// "derive"; the missing burn rates come from the preset
+			expect(imported.costPerParsec).toBe(0);
+			expect(imported.stlBlockCost).toBe(0);
+			expect(imported.ftlFuelPerParsec).toBe(preset.ftlFuelPerParsec);
+			expect(imported.stlFuelPerBlock).toBe(preset.stlFuelPerBlock);
+			expect(imported.shipsAvailable).toBe(2);
+		});
+
+		it("imports an absent ȼ constant as derive", () => {
+			const preset = store.getShipProfile("2000x2000-standard");
+
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: {},
+					snapshots: {},
+					shipProfiles: {
+						"2000x2000-standard": {
+							...JSON.parse(JSON.stringify(preset)),
+							costPerParsec: undefined,
+							stlBlockCost: undefined,
+							shipsAvailable: 4,
+						},
+					},
+				})
+			);
+
+			expect(
+				store.getShipProfile("2000x2000-standard").costPerParsec
+			).toBeNull();
+			expect(
+				store.getShipProfile("2000x2000-standard").stlBlockCost
+			).toBeNull();
+		});
+
+		it("rejects a profile with zero capacity or no ship", () => {
+			const preset = JSON.parse(
+				JSON.stringify(store.getShipProfile("2000x2000-standard"))
+			);
+
+			function importProfile(patch: Record<string, unknown>): void {
+				store.importJSON(
+					JSON.stringify({
+						version: 1,
+						configs: {},
+						snapshots: {},
+						shipProfiles: {
+							"2000x2000-standard": { ...preset, ...patch },
+						},
+					})
+				);
+			}
+
+			// a hand edited zero capacity used to import fine and then
+			// produce FREE freight: no cargo ever fills a hull of size 0
+			expect(() => importProfile({ cargoWeight: 0 })).toThrowError();
+			expect(() => importProfile({ cargoVolume: 0 })).toThrowError();
+			expect(() => importProfile({ shipsAvailable: 0 })).toThrowError();
+			expect(() => importProfile({ shipsAvailable: 1.5 })).toThrowError();
+			expect(() => importProfile({ shipsAvailable: 2 })).not.toThrow();
+		});
+
 		it("rejects a broken shipping configuration", () => {
 			expect(() =>
 				store.importJSON(
@@ -550,7 +682,7 @@ describe("Raukk Sourcing Store", () => {
 			expect(
 				store.getShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID)
 					.costPerParsec
-			).toBe(0);
+			).toBeNull();
 		});
 
 		it("stores an override and keeps the id", () => {
@@ -577,7 +709,7 @@ describe("Raukk Sourcing Store", () => {
 			expect(
 				store.getShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID)
 					.costPerParsec
-			).toBe(0);
+			).toBeNull();
 		});
 
 		it("lists every preset with the overrides applied", () => {

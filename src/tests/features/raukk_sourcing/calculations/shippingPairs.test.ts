@@ -19,13 +19,13 @@ import {
 	IRaukkPairPlanFlows,
 } from "@/features/raukk_sourcing/calculations/shippingPairs";
 import {
-	IRaukkShipProfile,
+	IRaukkResolvedShipProfile,
 	IRaukkShippedTicker,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 
-const profile: IRaukkShipProfile = {
+const profile: IRaukkResolvedShipProfile = {
 	id: "test",
 	name: "Test Hauler",
 	cargoWeight: 1000,
@@ -304,7 +304,7 @@ describe("Raukk Sourcing: Shipping Pairs", () => {
 	});
 
 	it("uses the per pair profile override", () => {
-		const other: IRaukkShipProfile = { ...profile, id: "other" };
+		const other: IRaukkResolvedShipProfile = { ...profile, id: "other" };
 
 		const pairs: IRaukkShippingPair[] = buildShippingPairs(
 			flows,

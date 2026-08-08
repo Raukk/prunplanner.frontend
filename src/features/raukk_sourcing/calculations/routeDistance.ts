@@ -31,18 +31,20 @@ export const RAUKK_CX_SYSTEM_IDS: string[] = [
 /**
  * Position units of the systems JSON per in-game parsec.
  *
- * The FIO coordinates carry no unit. Calibrated against the single
- * verifiable reference flight of `docs/raukk_sourcing/shipping-
- * decisions.md`: ZV-307 (Antares I) to ZV-759 is one jump the game
- * reports as 4 parsecs, and the euclidean distance between both systems
- * is 47.15113757979825 position units.
+ * The FIO coordinates carry no unit, but the simulation states the scale
+ * itself: `https://rest.fnar.net/global/simulationdata` reports
+ * `ParsecLength: 12`. That official constant replaces the value this
+ * module started with — 47.15113757979825 / 4 ≈ 11.7878, calibrated off
+ * the single ZV-307 to ZV-759 connection the game labels 4 parsecs,
+ * whose euclidean length is 47.15113757979825 units and therefore 3.93
+ * real parsecs. Nothing is fetched at runtime; the number is hardcoded.
  *
  * Everything the profile calibration expresses per parsec (cost, time,
  * damage) is stated in those in-game parsecs, hence the conversion.
  *
  * @author raukk
  */
-export const RAUKK_POSITION_UNITS_PER_PARSEC: number = 47.15113757979825 / 4;
+export const RAUKK_POSITION_UNITS_PER_PARSEC: number = 12;
 
 /** Systems JSON entry, plus the natural id used for planet resolution */
 export interface IRaukkSystemNode extends ISystemsJSON {
@@ -202,8 +204,16 @@ function buildGraph(systems: IRaukkSystemNode[]): ISystemGraph {
  *
  * Plain binary heap Dijkstra with lazy deletion; the graph is small
  * (~700 systems, ~1800 connections) and the result is memoized per
- * source anyway. Equal distances are broken towards the path with fewer
- * jumps, which keeps the reported jump count deterministic.
+ * source anyway.
+ *
+ * Labels are LEXICOGRAPHIC, `(distance, jumps)`: both components are
+ * additive and non negative, so ordering the heap by distance first and
+ * jumps second makes the node popped first carry the minimum jump count
+ * among all minimum distance paths — for that node AND, because it is
+ * only relaxed onwards after it was finalized, for everything behind it.
+ * Finalized nodes are never touched again: an improvement that cannot
+ * propagate would leave the reported jump count inconsistent with the
+ * reported path.
  *
  * @author raukk
  *
@@ -222,25 +232,33 @@ function dijkstra(graph: ISystemGraph, sourceIndex: number): IDijkstraResult {
 	distance[sourceIndex] = 0;
 	jumps[sourceIndex] = 0;
 
-	/** Min heap of `[distance, index]`, lazily deleted */
-	const heap: [number, number][] = [[0, sourceIndex]];
+	/** Min heap of `[distance, jumps, index]`, lazily deleted */
+	const heap: [number, number, number][] = [[0, 0, sourceIndex]];
 
-	function push(entry: [number, number]): void {
+	/** Lexicographic order: distance first, jump count second */
+	function before(
+		a: [number, number, number],
+		b: [number, number, number]
+	): boolean {
+		return a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+	}
+
+	function push(entry: [number, number, number]): void {
 		heap.push(entry);
 
 		let child: number = heap.length - 1;
 		while (child > 0) {
 			const parent: number = (child - 1) >> 1;
-			if (heap[parent][0] <= heap[child][0]) break;
+			if (!before(heap[child], heap[parent])) break;
 
 			[heap[parent], heap[child]] = [heap[child], heap[parent]];
 			child = parent;
 		}
 	}
 
-	function pop(): [number, number] {
-		const top: [number, number] = heap[0];
-		const last: [number, number] = heap.pop()!;
+	function pop(): [number, number, number] {
+		const top: [number, number, number] = heap[0];
+		const last: [number, number, number] = heap.pop()!;
 
 		if (heap.length > 0) {
 			heap[0] = last;
@@ -251,9 +269,9 @@ function dijkstra(graph: ISystemGraph, sourceIndex: number): IDijkstraResult {
 				const right: number = left + 1;
 				let smallest: number = parent;
 
-				if (left < heap.length && heap[left][0] < heap[smallest][0])
+				if (left < heap.length && before(heap[left], heap[smallest]))
 					smallest = left;
-				if (right < heap.length && heap[right][0] < heap[smallest][0])
+				if (right < heap.length && before(heap[right], heap[smallest]))
 					smallest = right;
 				if (smallest === parent) break;
 
@@ -266,12 +284,15 @@ function dijkstra(graph: ISystemGraph, sourceIndex: number): IDijkstraResult {
 	}
 
 	while (heap.length > 0) {
-		const [, current] = pop();
+		const [, , current] = pop();
 
 		if (done[current]) continue;
 		done[current] = 1;
 
 		for (const edge of graph.adjacent[current]) {
+			// finalized: an improvement here could not propagate onwards
+			if (done[edge.index]) continue;
+
 			const candidate: number = distance[current] + edge.weight;
 			const candidateJumps: number = jumps[current] + 1;
 
@@ -283,7 +304,7 @@ function dijkstra(graph: ISystemGraph, sourceIndex: number): IDijkstraResult {
 				distance[edge.index] = candidate;
 				jumps[edge.index] = candidateJumps;
 				previous[edge.index] = current;
-				push([candidate, edge.index]);
+				push([candidate, candidateJumps, edge.index]);
 			}
 		}
 	}

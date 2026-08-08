@@ -45,6 +45,12 @@
 			type: Object as PropType<Record<string, string>>,
 			required: true,
 		},
+		/** Unit price per fuel ticker, backs the derived ȼ placeholders */
+		fuelPrices: {
+			type: Object as PropType<Record<string, number>>,
+			required: false,
+			default: () => ({}),
+		},
 		/** LM rates are keyed by the open plans pairs, so they follow the
 		 * plans read-only state; the configuration itself is account
 		 * global and stays editable */
@@ -207,6 +213,7 @@
 				:profiles="profiles"
 				:overridden-ids="overriddenIds"
 				:default-profile-id="config.defaultProfileId"
+				:fuel-prices="fuelPrices"
 				@update:profile="changeProfile"
 				@reset:profile="resetProfile" />
 		</div>

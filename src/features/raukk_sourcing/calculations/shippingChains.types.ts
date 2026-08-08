@@ -15,7 +15,7 @@ import {
 } from "@/features/raukk_sourcing/calculations/shippingChainData";
 import {
 	IRaukkPairShipping,
-	IRaukkShipProfile,
+	IRaukkResolvedShipProfile,
 	IRaukkShippingConfig,
 	RAUKK_LOAD_DIMENSION,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
@@ -29,6 +29,16 @@ export type RAUKK_STOP_REF = string;
 
 /** How a same system legs distance term was priced */
 export type RAUKK_SAME_SYSTEM_MODE = "flat" | "stl" | "two-jump" | "free";
+
+/**
+ * Which point of the orbital separation band a same system leg pays.
+ *
+ * Round 5 decision 1: planets sync up, so the sublight crossing has a
+ * best and a worst case and a single point has to be priced — never a
+ * range. `average` takes the band midpoint `max(a1, a2)`, `worst` the
+ * opposition distance `a1 + a2`.
+ */
+export type RAUKK_SAME_SYSTEM_PRICING = "average" | "worst";
 
 /** One persisted chain: an ordered LOOP of stops, repeats allowed */
 export interface IRaukkChain {
@@ -65,6 +75,14 @@ export interface IRaukkChainConfig {
 	stlCostPerMegameter: number;
 	/** Auto split default, overridden per chain by `autoCxSplit` */
 	autoCxSplit: boolean;
+	/**
+	 * Band point a same system leg is priced at, DEFAULT "average".
+	 *
+	 * Optional so every chain configuration written before round 5 —
+	 * literals in tests included — stays valid; absent reads as
+	 * "average", the shipped default.
+	 */
+	sameSystemPricing?: RAUKK_SAME_SYSTEM_PRICING;
 }
 
 /**
@@ -170,7 +188,7 @@ export interface IRaukkChainFlowResult {
 /** Everything one chain costing needs */
 export interface IRaukkChainInput {
 	chain: IRaukkChain;
-	profile: IRaukkShipProfile;
+	profile: IRaukkResolvedShipProfile;
 	/** Candidate flows; the chain claims what it can carry */
 	flows: IRaukkChainFlow[];
 	config: IRaukkShippingConfig;

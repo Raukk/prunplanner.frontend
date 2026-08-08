@@ -22,7 +22,7 @@ import {
 	IRaukkRouteDistance,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import {
-	IRaukkShipProfile,
+	IRaukkResolvedShipProfile,
 	IRaukkShippedTicker,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
@@ -64,7 +64,7 @@ export interface IRaukkPairLookups {
 	/** Units per day other plans draw of one own output ticker */
 	subscribedOf(ticker: string): number;
 	/** Ship profile of one pair, by its pair key */
-	profileOf(pairKey: string): IRaukkShipProfile;
+	profileOf(pairKey: string): IRaukkResolvedShipProfile;
 	routes?: IRaukkRouteDistance;
 }
 

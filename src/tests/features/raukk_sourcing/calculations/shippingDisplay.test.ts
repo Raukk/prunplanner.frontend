@@ -12,12 +12,12 @@ import {
 
 // Types & Interfaces
 import {
-	IRaukkShipProfile,
+	IRaukkResolvedShipProfile,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 
-const profile: IRaukkShipProfile = {
+const profile: IRaukkResolvedShipProfile = {
 	id: "test",
 	name: "Test Hauler",
 	cargoWeight: 1000,

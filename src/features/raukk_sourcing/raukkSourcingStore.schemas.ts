@@ -41,22 +41,41 @@ export const RaukkRoutingModeSchema = z.enum(["direct", "cx-hub"]);
  * A user edited ship profile. Only overridden profiles are persisted,
  * everything else comes from the presets of `shippingProfiles.ts`, so
  * this schema never has to parse anything a v1 payload could contain.
+ *
+ * Capacity rules, deliberately strict: a hull without weight or volume
+ * capacity and a fleet without a single ship are not configurations, they
+ * are broken data. A hand edited zero capacity used to sail through
+ * validation and then produce FREE freight (no load ever fills a hull of
+ * size zero) and an undefined shipping fraction; both now fail the
+ * import instead. `shipsAvailable` is therefore an integer of at least
+ * ONE — the null fraction path of `shipping.ts` stays as the signal for
+ * legacy local storage state, which never passes through this schema.
+ *
+ * Cost rules, round 5: `costPerParsec` and `stlBlockCost` may be null —
+ * "derive from the fuel burn and the current market price". Migration of
+ * older payloads is deliberately non guessing: an ABSENT value becomes
+ * null (derive), a PRESENT one stays exactly what it says, zero
+ * included, because a stored zero is indistinguishable from a user who
+ * really wants free freight. The two fuel burn rates are optional and
+ * fall back to the preset of the same profile id at read time.
  */
 export const RaukkShipProfileSchema = z.object({
 	id: z.string().min(1),
 	name: z.string(),
-	cargoWeight: z.number(),
-	cargoVolume: z.number(),
+	cargoWeight: z.number().positive(),
+	cargoVolume: z.number().positive(),
 	ftlReactor: RaukkFtlReactorSchema,
-	costPerParsec: z.number(),
-	stlBlockCost: z.number(),
+	costPerParsec: z.number().nullable().default(null),
+	stlBlockCost: z.number().nullable().default(null),
+	ftlFuelPerParsec: z.number().nonnegative().optional(),
+	stlFuelPerBlock: z.number().nonnegative().optional(),
 	minutesPerParsec: z.number(),
 	stlBlockMinutesEmpty: z.number(),
 	stlBlockMinutesLoaded: z.number(),
 	chargeMinutes: z.number(),
 	damagePerParsec: z.number(),
 	damagePerStlBlock: z.number(),
-	shipsAvailable: z.number(),
+	shipsAvailable: z.number().int().min(1),
 });
 
 /**
@@ -105,7 +124,9 @@ export const RaukkSnapshotSchema = z.object({
 	draws: z.record(z.string(), z.record(z.string(), z.number())),
 	config: RaukkPlanConfigSchema.optional(),
 	baseFraction: z.number().optional(),
-	shippingFraction: z.number().optional(),
+	// null: the profile of a pair claims no ship at all, so the fraction
+	// has no denominator and is displayed as an em-dash
+	shippingFraction: z.number().nullable().optional(),
 });
 
 /**

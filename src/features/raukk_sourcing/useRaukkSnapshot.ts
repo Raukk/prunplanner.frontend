@@ -19,6 +19,10 @@ import {
 } from "@/features/raukk_sourcing/calculations/shipping";
 import { buildShippingPairs } from "@/features/raukk_sourcing/calculations/shippingPairs";
 import {
+	RAUKK_FUEL_TICKERS,
+	raukkResolveShipProfile,
+} from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import {
 	buildInputRows,
 	buildSourceOptions,
 	createRaukkPriceResolver,
@@ -98,10 +102,11 @@ export interface IRaukkPlanSnapshotResult {
  * moving through its material I/O plus all construction materials of
  * its buildings, those are the repairable ones.
  *
- * With shipping enabled the four ship repair bill tickers join them.
- * They are no cargo of the plan and appear nowhere in its material I/O,
- * but the repair cost per trip prices them — without loading them the
- * resolvers `?? 0` fallback would silently zero that whole term.
+ * With shipping enabled the four ship repair bill tickers join them, and
+ * so do the two fuels FF and SF. None of them is cargo of the plan and
+ * none appears in its material I/O, but the repair cost per trip prices
+ * the bill and the derived ȼ constants price the fuels — without loading
+ * them the resolvers `?? 0` fallback would silently zero those terms.
  *
  * @author raukk
  *
@@ -122,8 +127,11 @@ function collectRelevantTickers(
 		)
 	);
 
-	if (withShipRepair)
+	if (withShipRepair) {
 		Object.keys(RAUKK_REPAIR_BILL).forEach((ticker) => tickers.add(ticker));
+		tickers.add(RAUKK_FUEL_TICKERS.ftl);
+		tickers.add(RAUKK_FUEL_TICKERS.stl);
+	}
 
 	return Array.from(tickers).sort();
 }
@@ -219,10 +227,19 @@ function buildPlanShippingPairs(
 			subscribedOf: (ticker: string): number =>
 				sourcingStore.subscription(input.planUuid, ticker)
 					.totalDrawnPerDay,
+			/*
+			 * The ȼ constants of a profile may be "derive": resolving
+			 * them against the plans own price resolver is the ONLY
+			 * place a price meets a profile, everything downstream is
+			 * pure math over plain numbers.
+			 */
 			profileOf: (pairKey: string) =>
-				sourcingStore.getShipProfile(
-					input.shippingConfig.perEdgeProfile?.[pairKey] ??
-						input.shippingConfig.defaultProfileId
+				raukkResolveShipProfile(
+					sourcingStore.getShipProfile(
+						input.shippingConfig.perEdgeProfile?.[pairKey] ??
+							input.shippingConfig.defaultProfileId
+					),
+					(ticker: string) => input.resolver(ticker).price
 				),
 		},
 		input.shippingConfig
@@ -538,6 +555,16 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		buildPlanShippingPairs(shippingInput.value)
 	);
 
+	/**
+	 * Current unit price of both shipping fuels, at the plans configured
+	 * sources. Backs the derived ȼ placeholders of the profile editor;
+	 * the shipping math resolves them again through `profileOf`.
+	 */
+	const fuelPrices: ComputedRef<Record<string, number>> = computed(() => ({
+		[RAUKK_FUEL_TICKERS.ftl]: resolver.value(RAUKK_FUEL_TICKERS.ftl).price,
+		[RAUKK_FUEL_TICKERS.stl]: resolver.value(RAUKK_FUEL_TICKERS.stl).price,
+	}));
+
 	/** ȼ of one full ship repair bill at the plans configured sources */
 	const repairBillCost: ComputedRef<number> = computed(() =>
 		calculateRepairBillCost(
@@ -745,6 +772,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		shipping,
 		shippingPairs,
 		repairBillCost,
+		fuelPrices,
 		inputRows,
 		outputRows,
 		repairCost,

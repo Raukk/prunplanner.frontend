@@ -8,7 +8,7 @@ import { IRaukkRoute } from "@/features/raukk_sourcing/calculations/routeDistanc
 import {
 	IRaukkDirectionLoad,
 	IRaukkPairShipping,
-	IRaukkShipProfile,
+	IRaukkResolvedShipProfile,
 	IRaukkShippedTicker,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
@@ -73,12 +73,12 @@ function emptyLoad(): IRaukkDirectionLoad {
  * @author raukk
  *
  * @param {IRaukkShippedTicker[]} tickers Daily cargo of the direction
- * @param {IRaukkShipProfile} profile Ship profile
+ * @param {IRaukkResolvedShipProfile} profile Ship profile
  * @returns {IRaukkDirectionLoad} Loads and binding dimension
  */
 export function calculateDirectionLoad(
 	tickers: IRaukkShippedTicker[],
-	profile: IRaukkShipProfile
+	profile: IRaukkResolvedShipProfile
 ): IRaukkDirectionLoad {
 	let weightPerDay: number = 0;
 	let volumePerDay: number = 0;
@@ -135,13 +135,13 @@ export function calculateRepairBillCost(
  * @author raukk
  *
  * @param {IRaukkRoute} route One way route
- * @param {IRaukkShipProfile} profile Ship profile
+ * @param {IRaukkResolvedShipProfile} profile Ship profile
  * @param {number} repairBillCost ȼ of a full repair bill
  * @returns {number} ȼ per round trip
  */
 export function calculateRepairCostPerTrip(
 	route: IRaukkRoute,
-	profile: IRaukkShipProfile,
+	profile: IRaukkResolvedShipProfile,
 	repairBillCost: number
 ): number {
 	const tripDamage: number =
@@ -161,14 +161,14 @@ export function calculateRepairCostPerTrip(
  * @author raukk
  *
  * @param {IRaukkRoute} route One way route
- * @param {IRaukkShipProfile} profile Ship profile
+ * @param {IRaukkResolvedShipProfile} profile Ship profile
  * @param {IRaukkShippingConfig} config Shipping configuration
  * @param {number} repairBillCost ȼ of a full repair bill
  * @returns {number} ȼ per round trip
  */
 export function calculateCostPerTrip(
 	route: IRaukkRoute,
-	profile: IRaukkShipProfile,
+	profile: IRaukkResolvedShipProfile,
 	config: IRaukkShippingConfig,
 	repairBillCost: number
 ): number {
@@ -191,12 +191,12 @@ export function calculateCostPerTrip(
  *
  * @author raukk
  *
- * @param {IRaukkShipProfile} profile Ship profile
+ * @param {IRaukkResolvedShipProfile} profile Ship profile
  * @param {number} loadFactor Capacity used on that direction, 0 to 1
  * @returns {number} Minutes
  */
 export function stlBlockMinutes(
-	profile: IRaukkShipProfile,
+	profile: IRaukkResolvedShipProfile,
 	loadFactor: number
 ): number {
 	const factor: number = Math.min(Math.max(loadFactor, 0), 1);
@@ -217,14 +217,14 @@ export function stlBlockMinutes(
  * @author raukk
  *
  * @param {IRaukkRoute} route One way route
- * @param {IRaukkShipProfile} profile Ship profile
+ * @param {IRaukkResolvedShipProfile} profile Ship profile
  * @param {number} loadFactorOut Load factor leaving the plan
  * @param {number} loadFactorBack Load factor returning to the plan
  * @returns {number} Minutes per round trip
  */
 export function calculateRoundTripMinutes(
 	route: IRaukkRoute,
-	profile: IRaukkShipProfile,
+	profile: IRaukkResolvedShipProfile,
 	loadFactorOut: number,
 	loadFactorBack: number
 ): number {
@@ -395,11 +395,19 @@ export function calculatePairShipping(
 		loadBack.loads / tripsPerDay
 	);
 
-	const shippingFraction: number =
-		hired || pair.profile.shipsAvailable <= 0
-			? 0
-			: (tripsPerDay * roundTripMinutes) /
-				(MINUTES_PER_DAY * pair.profile.shipsAvailable);
+	/*
+	 * A hired lane occupies none of the own fleets time, that is a hard
+	 * zero. A profile without a single ship is a different thing: its
+	 * denominator does not exist, so the fraction is UNDEFINED and says
+	 * so. Reporting zero there would read as infinite capacity — the
+	 * exact opposite of what an empty ship count means.
+	 */
+	const shippingFraction: number | null = hired
+		? 0
+		: pair.profile.shipsAvailable > 0
+			? (tripsPerDay * roundTripMinutes) /
+				(MINUTES_PER_DAY * pair.profile.shipsAvailable)
+			: null;
 
 	return {
 		pairKey: pair.pairKey,
@@ -510,12 +518,18 @@ export function calculateShipping(
 		return result;
 	}
 
+	/** Undefined as soon as one pair has no defined fraction */
+	const shippingFraction: number | null = results.reduce(
+		(sum: number | null, result) =>
+			sum === null || result.shippingFraction === null
+				? null
+				: sum + result.shippingFraction,
+		0 as number | null
+	);
+
 	return {
 		pairs: results,
-		shippingFraction: results.reduce(
-			(sum, result) => sum + result.shippingFraction,
-			0
-		),
+		shippingFraction,
 		inbound: perUnitOf(inboundCost, inboundUnits),
 		outbound: perUnitOf(outboundCost, outboundUnits),
 	};

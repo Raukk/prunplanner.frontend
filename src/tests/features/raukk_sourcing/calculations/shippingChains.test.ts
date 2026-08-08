@@ -33,7 +33,7 @@ import {
 // Types & Interfaces
 import {
 	IRaukkPairShipping,
-	IRaukkShipProfile,
+	IRaukkResolvedShipProfile,
 	IRaukkShippingConfig,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 import {
@@ -103,7 +103,7 @@ const data: IRaukkChainStaticData = createChainStaticData(
 	flatDensities
 );
 
-const profile: IRaukkShipProfile = {
+const profile: IRaukkResolvedShipProfile = {
 	id: "chain",
 	name: "Chain Hauler",
 	cargoWeight: 1000,
@@ -178,6 +178,7 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 				densityRef: 3.28,
 				stlCostPerMegameter: 0,
 				autoCxSplit: true,
+				sameSystemPricing: "average",
 			});
 		});
 
@@ -682,6 +683,47 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 					profile.stlBlockCost +
 					(profile.damagePerStlBlock / 0.8) * REPAIR_BILL,
 				10
+			);
+		});
+
+		it("prices the band worst point in the worst pricing mode", () => {
+			const average: IRaukkChainShipping = calculateChainShipping(
+				sameSystemInput({ stlCostPerMegameter: 0.1 })
+			);
+			const worst: IRaukkChainShipping = calculateChainShipping(
+				sameSystemInput({
+					stlCostPerMegameter: 0.1,
+					sameSystemPricing: "worst",
+				})
+			);
+
+			// same band either way, only the priced point moves: 400 Mm of
+			// opposition instead of the 300 Mm midpoint
+			expect(worst.legs[0].sameSystemBand).toStrictEqual(
+				average.legs[0].sameSystemBand
+			);
+			expect(worst.legs[0].sameSystemMode).toBe("stl");
+			expect(
+				worst.legs[0].costPerTrip - average.legs[0].costPerTrip
+			).toBeCloseTo(10, 10);
+		});
+
+		it("treats an absent pricing mode as the average", () => {
+			const implicit: IRaukkChainShipping = calculateChainShipping(
+				sameSystemInput({
+					stlCostPerMegameter: 0.1,
+					sameSystemPricing: undefined,
+				})
+			);
+			const explicit: IRaukkChainShipping = calculateChainShipping(
+				sameSystemInput({
+					stlCostPerMegameter: 0.1,
+					sameSystemPricing: "average",
+				})
+			);
+
+			expect(implicit.legs[0].costPerTrip).toBe(
+				explicit.legs[0].costPerTrip
 			);
 		});
 

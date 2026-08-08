@@ -31,7 +31,7 @@ import {
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import {
 	IRaukkPairShipping,
-	IRaukkShipProfile,
+	IRaukkResolvedShipProfile,
 	IRaukkShippedTicker,
 	IRaukkShippingConfig,
 	IRaukkShippingPair,
@@ -117,6 +117,7 @@ export function raukkDefaultChainConfig(): IRaukkChainConfig {
 		densityRef: 3.28,
 		stlCostPerMegameter: 0,
 		autoCxSplit: true,
+		sameSystemPricing: "average",
 	};
 }
 
@@ -340,7 +341,9 @@ function pathMeanDensity(
  * Ordinary legs pay one way parsecs times the profiles ȼ per parsec.
  * Same system legs replace v1s flat cost with the cheaper of two real
  * options: the sublight crossing of the orbital separation band, priced
- * at its midpoint `max(a1, a2)` with `stlCostPerMegameter`, and a two
+ * at the band point `sameSystemPricing` selects — midpoint `max(a1, a2)`
+ * by default, opposition `a1 + a2` in "worst" — with
+ * `stlCostPerMegameter`, and a two
  * jump out and back over the nearest connected system, priced with the
  * normal parsec math. `sameSystemFlatCost` still overrides both when it
  * is set to a non zero value.
@@ -352,7 +355,7 @@ function pathMeanDensity(
  * @author raukk
  *
  * @param {IRaukkChainLeg} leg Leg
- * @param {IRaukkShipProfile} profile Ship profile
+ * @param {IRaukkResolvedShipProfile} profile Ship profile
  * @param {IRaukkShippingConfig} config Shipping configuration
  * @param {IRaukkChainConfig} chainConfig Chain configuration
  * @param {IRaukkRouteDistance} routes Route lookups
@@ -361,7 +364,7 @@ function pathMeanDensity(
  */
 function priceLeg(
 	leg: IRaukkChainLeg,
-	profile: IRaukkShipProfile,
+	profile: IRaukkResolvedShipProfile,
 	config: IRaukkShippingConfig,
 	chainConfig: IRaukkChainConfig,
 	routes: IRaukkRouteDistance,
@@ -416,9 +419,21 @@ function priceLeg(
 			? { bestMegameters: 0, worstMegameters: 0, midpointMegameters: 0 }
 			: data.bandBetween(leg.fromStop, leg.toStop);
 
-	const stlCost: number | null =
+	/*
+	 * Round 5 decision 1: a single point of the separation band is
+	 * priced, never a range. "average" is the band midpoint, "worst" its
+	 * opposition distance; an absent setting is the shipped average.
+	 */
+	const bandMegameters: number | null =
 		band !== null
-			? band.midpointMegameters * chainConfig.stlCostPerMegameter
+			? chainConfig.sameSystemPricing === "worst"
+				? band.worstMegameters
+				: band.midpointMegameters
+			: null;
+
+	const stlCost: number | null =
+		bandMegameters !== null
+			? bandMegameters * chainConfig.stlCostPerMegameter
 			: null;
 
 	const neighbor: IRaukkNearestNeighbor | null =

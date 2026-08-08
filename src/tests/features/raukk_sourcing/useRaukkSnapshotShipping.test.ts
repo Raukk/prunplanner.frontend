@@ -168,6 +168,8 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				SSC: 100,
 				MFK: 10,
 				FLP: 10,
+				FF: 50,
+				SF: 5,
 			};
 
 			return prices[ticker] ?? 0;
@@ -237,7 +239,7 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			expect(snapshot.shippingFraction).toBeUndefined();
 		});
 
-		it("does not price the ship repair bill", async () => {
+		it("does not price the ship repair bill or the fuels", async () => {
 			await computePlanSnapshot(context(planResult(1, 3)));
 
 			const asked: string[] = mockGetPrice.mock.calls.map(
@@ -247,6 +249,8 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			expect(asked).toContain("ORE");
 			expect(asked).not.toContain("LHP");
 			expect(asked).not.toContain("MFK");
+			expect(asked).not.toContain("FF");
+			expect(asked).not.toContain("SF");
 		});
 
 		it("keeps the draws of a sourced ticker untouched", async () => {
@@ -370,6 +374,66 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 		});
 	});
 
+	describe("fuel derived costs", () => {
+		beforeEach(() => {
+			store.setShippingConfig({ enabled: true });
+		});
+
+		it("collects the fuel tickers while shipping is enabled", async () => {
+			await computePlanSnapshot(context(planResult(1, 3)));
+
+			const asked: string[] = mockGetPrice.mock.calls.map(
+				(call) => call[0]
+			);
+
+			expect(asked).toContain("FF");
+			expect(asked).toContain("SF");
+		});
+
+		it("derives both ȼ constants from the fuel prices", async () => {
+			store.setShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
+				...flatProfile,
+				// derive: 4 FF a parsec at 50 ȼ, 20 SF a block at 5 ȼ
+				costPerParsec: null,
+				stlBlockCost: null,
+				ftlFuelPerParsec: 4,
+				stlFuelPerBlock: 20,
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			const dailyCost: number =
+				0.3 * (2 * CX_TO_CONSUMER * (4 * 50) + 2 * (20 * 5));
+
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				dailyCost / 100,
+				10
+			);
+		});
+
+		it("lets a manually set ȼ value win over the derived one", async () => {
+			store.setShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
+				...flatProfile,
+				// manual 10 ȼ a parsec, manual zero per sublight block
+				costPerParsec: 10,
+				stlBlockCost: 0,
+				ftlFuelPerParsec: 4,
+				stlFuelPerBlock: 20,
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				10
+			);
+		});
+	});
+
 	describe("cx pair", () => {
 		beforeEach(() => {
 			store.setShippingConfig({ enabled: true });
@@ -383,13 +447,15 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 
 			/*
 			 * The busier direction sets the trips: 0.3 a day. The round
-			 * trip costs 2 * 4 pc * 10 = 80 ȼ, so 24 ȼ a day, split 3:1
-			 * by load share into 18 ȼ out and 6 ȼ back.
+			 * trip costs 2 × parsecs × 10 ȼ and the daily cost is split
+			 * 3:1 by load share between the sells and the buys.
 			 */
-			expect(CX_TO_CONSUMER).toBe(4);
-			// 6 ȼ over 100 ORE, plus 18 ȼ over 100 ALO sold
+			// one jump of 47.15 position units at ParsecLength 12
+			expect(CX_TO_CONSUMER).toBeCloseTo(47.15113757979825 / 12, 10);
+			// a quarter of the daily cost over 100 ORE bought, three
+			// quarters over the 100 ALO sold
 			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
-				0.06 + 0.18,
+				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100,
 				10
 			);
 		});
@@ -409,9 +475,9 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				context(planResult(1, 3))
 			);
 
-			// only the 100 t of ORE remain: 0.1 trips at 80 ȼ = 8 ȼ a day
+			// only the 100 t of ORE remain, at 0.1 trips a day
 			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
-				8 / 100,
+				(0.1 * (2 * CX_TO_CONSUMER * 10)) / 100,
 				10
 			);
 		});
@@ -448,7 +514,7 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 
 			// five times the hull, a fifth of the trips and of the cost
 			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
-				(0.06 + 0.18) / 5,
+				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100 / 5,
 				10
 			);
 		});

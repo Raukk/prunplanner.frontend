@@ -68,6 +68,7 @@
 		shippingConfig,
 		shippingPairs,
 		repairBillCost,
+		fuelPrices,
 		inputRows,
 		outputRows,
 		repairCost,
@@ -380,7 +381,12 @@
 					<span class="text-white/60 hover:cursor-help">
 						{{
 							$t("raukk_sourcing.snapshot.shipping_fraction", {
-								value: formatNumber(snapshot.shippingFraction),
+								value:
+									snapshot.shippingFraction === null
+										? "—"
+										: formatNumber(
+												snapshot.shippingFraction
+											),
 							})
 						}}
 					</span>
@@ -411,6 +417,7 @@
 	<RaukkShippingSection
 		:pairs="shippingPairs"
 		:repair-bill-cost="repairBillCost"
+		:fuel-prices="fuelPrices"
 		:plan-names="planNames"
 		:disabled="readOnly" />
 

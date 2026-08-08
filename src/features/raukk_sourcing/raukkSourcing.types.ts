@@ -84,6 +84,8 @@ export interface IRaukkSnapshot {
 	baseFraction?: number;
 	/** Ship time utilization of the route pairs this plan owns, summed.
 	 * 1.0 = one ship of the profile flies for it around the clock. Only
-	 * stored while shipping is enabled. */
-	shippingFraction?: number;
+	 * stored while shipping is enabled. `null` when a pairs profile
+	 * claims no ship at all: the fraction has no denominator then and is
+	 * displayed as an em-dash rather than as a reassuring zero. */
+	shippingFraction?: number | null;
 }
