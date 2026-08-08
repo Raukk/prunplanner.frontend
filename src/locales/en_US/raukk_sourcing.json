@@ -174,7 +174,7 @@
 		"empty": "No ships in the fleet yet — add a type below, then assign lanes and chains to it.",
 		"advisories": {
 			"title": "Fleet Advice",
-			"row": "Adding a {suggested} would improve shipping: {assignments} assignment(s) fly a {current} as often as every {visit} days, a {suggested} would serve the same work every {suggestedVisit} days."
+			"row": "{suggested}: {assignments} assignment(s) now on {current}, every {visit} d → {suggestedVisit} d."
 		},
 		"reactors": {
 			"standard": "Standard Reactor",
@@ -333,7 +333,7 @@
 	},
 	"hub_spoke": {
 		"title": "Exchange Hub/Spoke",
-		"info": "Cargo no chain hauls: the consumer buys it at its exchange and the producer sells its excess at its own. One row per resource, never per base — what matters is what is traded, not who trades it.",
+		"info": "Cargo of THIS base no chain hauls: it buys what it needs at its exchange and sells its excess at the same one. One row per resource, optionally split by the base pair it moves between; the share is of this base's exchange cargo.",
 		"ticker": "Material",
 		"bucket": "Class",
 		"from": "From",
@@ -343,7 +343,7 @@
 		"volume": "m³ / Day",
 		"share": "Share",
 		"grouped": "Group by base",
-		"empty": "Nothing goes through the exchange: every plan to plan flow rides a chain."
+		"empty": "Nothing of this base goes through the exchange: every plan to plan flow it touches rides a chain."
 	},
 	"cx_anchor": {
 		"label": "CX Anchor",

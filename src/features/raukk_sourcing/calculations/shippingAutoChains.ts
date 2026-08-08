@@ -858,6 +858,47 @@ export function raukkUnclaimedFlows(
 }
 
 /**
+ * Whether one flow concerns the base whose plan is open.
+ *
+ * Round 13 decision (USER, authoritative): the hub/spoke table reads as
+ * the open base's exchange traffic, not the account's, so the flows are
+ * scoped before the rows are built — rows carry no base once grouping is
+ * off, which is why the filter belongs here and not on the rows.
+ *
+ * A flow concerns the base when the open plan CONSUMES it
+ * (`ownerPlanUuid`, the authoring plan) or PRODUCES it
+ * (`sourcePlanUuid`, the plan the cargo is drawn from — an outbound lane
+ * to a sibling base is authored by that sibling and would otherwise
+ * never show here). The two endpoint comparisons are the fallback for
+ * flows frozen before those fields existed, which know their planets
+ * only.
+ *
+ * With no plan uuid — an unsaved plan — nothing can be scoped and every
+ * flow passes: an empty table would state something false.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkChainFlow} flow One frozen flow
+ * @param {string} [planUuid] Uuid of the open plan
+ * @param {string} [planetNaturalId] Planet of the open plan
+ * @returns {boolean} The flow belongs in the open base's listing
+ */
+export function raukkFlowConcernsPlan(
+	flow: IRaukkChainFlow,
+	planUuid?: string,
+	planetNaturalId?: string
+): boolean {
+	if (planUuid === undefined) return true;
+
+	return (
+		flow.ownerPlanUuid === planUuid ||
+		flow.sourcePlanUuid === planUuid ||
+		flow.fromStop === planetNaturalId ||
+		flow.toStop === planetNaturalId
+	);
+}
+
+/**
  * The exchange hub/spoke listing: what nobody hauls directly.
  *
  * RESOURCE first, never base only (shipping-cadence-plan.md, Phase 2): a

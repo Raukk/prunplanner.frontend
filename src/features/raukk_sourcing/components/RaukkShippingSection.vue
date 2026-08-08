@@ -48,6 +48,13 @@
 			required: false,
 			default: undefined,
 		},
+		/** Planet of the open plan, the fallback identity of flows frozen
+		 * before they carried plan uuids */
+		planetNaturalId: {
+			type: String,
+			required: false,
+			default: undefined,
+		},
 		/** Route pairs the open plan owns, empty while shipping is off */
 		pairs: {
 			type: Array as PropType<IRaukkShippingPair[]>,
@@ -428,6 +435,8 @@
 		<RaukkFleetSection />
 
 		<RaukkChainSection
+			:plan-uuid="planUuid"
+			:planet-natural-id="planetNaturalId"
 			:fuel-prices="fuelPrices"
 			:repair-bill-cost="repairBillCost"
 			:ship-type-options="shipTypeOptions"

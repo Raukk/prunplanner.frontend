@@ -10,7 +10,10 @@ import {
 	RAUKK_SHIP_HULLS,
 	raukkShipProfileId,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
-import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+import {
+	RAUKK_EPSILON_EQUAL,
+	raukkEqualWithin,
+} from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 import { raukkVisitCadence } from "@/features/raukk_sourcing/calculations/shippingCadenceDisplay";
 
 // Types & Interfaces
@@ -187,10 +190,18 @@ export function raukkFleetRows(
  * two rates of "0.01 trips/day" are the same sentence twice, "every 90
  * days" against "every 143 days" is an argument.
  *
+ * A row whose two cadences READ the same is dropped: rounded to what the
+ * page shows, "every 30.00 days" against "every 30.00 days" argues
+ * nothing, and a line that argues nothing is noise on a page the user
+ * scans for the swaps worth paying for. Same means equal within
+ * {@link raukkEqualWithin}, or both rates too slow to state a cadence at
+ * all.
+ *
  * @author raukk
  *
  * @param {IRaukkFleetAdvisory[]} advisories Advisories, in any order
- * @returns {IRaukkFleetAdvisoryRow[]} One row per advised swap
+ * @returns {IRaukkFleetAdvisoryRow[]} One row per advised swap worth
+ * stating
  */
 export function raukkFleetAdvisoryRows(
 	advisories: IRaukkFleetAdvisory[]
@@ -240,11 +251,30 @@ export function raukkFleetAdvisoryRows(
 		}
 	});
 
-	return Array.from(rows.values()).sort(
-		(left, right) =>
-			left.shipTypeId.localeCompare(right.shipTypeId) ||
-			left.suggestedShipTypeId.localeCompare(right.suggestedShipTypeId)
-	);
+	return Array.from(rows.values())
+		.filter((row) => statesAChange(row))
+		.sort(
+			(left, right) =>
+				left.shipTypeId.localeCompare(right.shipTypeId) ||
+				left.suggestedShipTypeId.localeCompare(
+					right.suggestedShipTypeId
+				)
+		);
+}
+
+/**
+ * Whether an advisory row actually promises a different cadence.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkFleetAdvisoryRow} row One rolled up advisory
+ * @returns {boolean} The two cadences differ readably
+ */
+function statesAChange(row: IRaukkFleetAdvisoryRow): boolean {
+	if (row.visitDays === null && row.suggestedVisitDays === null) return false;
+	if (row.visitDays === null || row.suggestedVisitDays === null) return true;
+
+	return !raukkEqualWithin(row.visitDays, row.suggestedVisitDays);
 }
 
 /**

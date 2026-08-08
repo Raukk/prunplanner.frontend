@@ -385,6 +385,42 @@ LM rate and ship assignment are pair-keyed.
    symptom: the pick no longer falls through to the default when the
    fleet is empty.
 
+## Round 13 (chain editor placement, hub/spoke scope, advisory copy)
+
+1. **The chain editor belongs next to its button**: the "New Chain"
+   button read as dead because the editor it opens sat at the very END
+   of the chain section — the auto-chain table and the hub/spoke table
+   were inserted between the two in the cadence redesign (549e64a), so
+   the form mounted several screens below the fold. The editor block now
+   follows the button directly. Reopening the editor while it already
+   stands open also remounts it (an incrementing `:key`), so a second
+   click visibly resets the form instead of doing nothing.
+2. **"Group by base" is on by default**: it stays a plain view toggle,
+   NOT a persisted preference — the default is simply the useful one.
+3. **Hub/spoke is scoped to the OPEN base**: the table lists only flows
+   the open plan consumes (`ownerPlanUuid`) or produces
+   (`sourcePlanUuid`), with the two endpoint planets as the fallback for
+   flows frozen before those fields existed
+   (`raukkFlowConcernsPlan`). An unsaved plan has no uuid to scope by
+   and therefore still sees everything. Scoping happens AFTER the
+   account-wide claim subtraction, which is keyed per owning plan and
+   lane and so is unaffected.
+   - **The share column is now base-relative**: it reads "share of this
+     base's exchange cargo", not the account's. The copy of
+     `hub_spoke.info` and `hub_spoke.empty` says so.
+   - **The account-wide view no longer exists anywhere.** An
+     empire-style shipping page that would restore it is noted as a
+     possible future item; it is NOT decided.
+4. **An advisory must argue something**: a fleet advisory row whose
+   current and suggested cadence are the same — equal within the display
+   epsilon, or both too slow to state a cadence at all — is dropped in
+   `raukkFleetAdvisoryRows`. "Every 30.00 days → every 30.00 days" is
+   not advice.
+5. **Terse advisory copy**: one line per swap, "{suggested}:
+   {assignments} assignment(s) now on {current}, every {visit} d →
+   {suggestedVisit} d." The bay code and hull label stay — that part is
+   what identifies the hull — everything repeated per side is gone.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration, and

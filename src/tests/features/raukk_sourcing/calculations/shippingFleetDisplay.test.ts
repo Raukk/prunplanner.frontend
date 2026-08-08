@@ -193,11 +193,36 @@ describe("Raukk Shipping: Fleet Display", () => {
 
 		it("has no interval where a rate states none", () => {
 			const [row] = raukkFleetAdvisoryRows([
-				advisory({ tripsPerDay: 0, suggestedTripsPerDay: 0 }),
+				advisory({ tripsPerDay: 0, suggestedTripsPerDay: 0.4 }),
 			]);
 
 			expect(row.visitDays).toBeNull();
-			expect(row.suggestedVisitDays).toBeNull();
+			expect(row.suggestedVisitDays).toBe(2.5);
+		});
+
+		it("advises nothing where neither side states an interval", () => {
+			expect(
+				raukkFleetAdvisoryRows([
+					advisory({ tripsPerDay: 0, suggestedTripsPerDay: 0 }),
+				])
+			).toStrictEqual([]);
+		});
+
+		it("drops the swap that promises the very same cadence", () => {
+			const rows = raukkFleetAdvisoryRows([
+				advisory({
+					suggestedShipTypeId: "1000x3000-standard",
+					tripsPerDay: 1 / 30,
+					suggestedTripsPerDay: 1 / 30,
+				}),
+				advisory({ tripsPerDay: 1 / 30, suggestedTripsPerDay: 1 / 45 }),
+			]);
+
+			expect(rows.map((row) => row.suggestedShipTypeId)).toStrictEqual([
+				"5000x5000-standard",
+			]);
+			expect(rows[0].visitDays).toBeCloseTo(30, 10);
+			expect(rows[0].suggestedVisitDays).toBeCloseTo(45, 10);
 		});
 
 		it("counts the very same advisory only once", () => {

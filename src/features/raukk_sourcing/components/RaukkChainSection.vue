@@ -25,6 +25,7 @@
 		raukkChainListRows,
 	} from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 	import {
+		raukkFlowConcernsPlan,
 		raukkHubSpokeRows,
 		raukkUnclaimedFlows,
 	} from "@/features/raukk_sourcing/calculations/shippingAutoChains";
@@ -57,7 +58,21 @@
 	import { IRaukkHubSpokeRow } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
 	import { RAUKK_SAME_SYSTEM_PRICING } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 
-	defineProps({
+	const props = defineProps({
+		/** Open plan, undefined on an unsaved one: the hub/spoke listing
+		 * is scoped to the base whose plan is open */
+		planUuid: {
+			type: String,
+			required: false,
+			default: undefined,
+		},
+		/** Planet of the open plan, the fallback identity of flows frozen
+		 * before they carried plan uuids */
+		planetNaturalId: {
+			type: String,
+			required: false,
+			default: undefined,
+		},
 		/** Unit price per fuel ticker, prices the display side costing */
 		fuelPrices: {
 			type: Object as PropType<Record<string, number>>,
@@ -160,11 +175,25 @@
 		)
 	);
 
-	const refGroupHubSpoke: Ref<boolean> = ref(false);
+	const refGroupHubSpoke: Ref<boolean> = ref(true);
 
+	/**
+	 * What the OPEN base still routes through the exchange.
+	 *
+	 * Claims are subtracted account wide first and the scoping follows:
+	 * a claim is keyed per owning plan and lane, so dropping the other
+	 * bases' flows afterwards changes no remainder.
+	 */
 	const hubSpokeRows: ComputedRef<IRaukkHubSpokeRow[]> = computed(() =>
 		raukkHubSpokeRows(
-			raukkUnclaimedFlows(accountFlows.value, claimedFlows.value),
+			raukkUnclaimedFlows(accountFlows.value, claimedFlows.value).filter(
+				(flow) =>
+					raukkFlowConcernsPlan(
+						flow,
+						props.planUuid,
+						props.planetNaturalId
+					)
+			),
 			refGroupHubSpoke.value
 		)
 	);
@@ -188,15 +217,20 @@
 	const refShowEditor: Ref<boolean> = ref(false);
 	const refExpanded: Ref<string | undefined> = ref(undefined);
 	const refConfirmDelete: Ref<string | undefined> = ref(undefined);
+	/** Remounts the editor, so opening it again always shows a fresh form
+	 * even when it already stood open on the very same chain */
+	const refEditorKey: Ref<number> = ref(0);
 
 	function create(): void {
 		refEditing.value = undefined;
 		refShowEditor.value = true;
+		refEditorKey.value += 1;
 	}
 
 	function edit(chainId: string): void {
 		refEditing.value = chainId;
 		refShowEditor.value = true;
+		refEditorKey.value += 1;
 	}
 
 	function toggleDetail(chainId: string): void {
@@ -515,6 +549,16 @@
 		</PButton>
 	</div>
 
+	<div v-if="refShowEditor" class="pt-3">
+		<RaukkChainEditor
+			:key="refEditorKey"
+			:chain-id="refEditing"
+			:stop-options="stopOptions"
+			:profile-options="profileOptions"
+			:stop-names="stopNames"
+			@close="refShowEditor = false" />
+	</div>
+
 	<h4 class="font-bold py-3">
 		{{ $t("raukk_sourcing.auto_chains.title") }}
 	</h4>
@@ -679,13 +723,4 @@
 			</tr>
 		</tbody>
 	</PTable>
-
-	<div v-if="refShowEditor" class="pt-3">
-		<RaukkChainEditor
-			:chain-id="refEditing"
-			:stop-options="stopOptions"
-			:profile-options="profileOptions"
-			:stop-names="stopNames"
-			@close="refShowEditor = false" />
-	</div>
 </template>

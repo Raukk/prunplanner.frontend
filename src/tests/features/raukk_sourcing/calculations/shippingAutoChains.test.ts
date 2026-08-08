@@ -16,6 +16,7 @@ import {
 	raukkBuildAutoChains,
 	raukkClassDetourBudget,
 	raukkClusterChainStops,
+	raukkFlowConcernsPlan,
 	raukkHubSpokeRows,
 	raukkIsAutoChainId,
 	raukkOrderChainStops,
@@ -573,6 +574,53 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 					},
 				])
 			).toStrictEqual([]);
+		});
+	});
+
+	describe("scoping flows to the open base", () => {
+		const lane: IRaukkChainFlow = {
+			...flow(
+				"ORE",
+				"AA-001a",
+				"AA-002b",
+				100,
+				1,
+				1,
+				"production",
+				"consumer"
+			),
+			sourcePlanUuid: "producer",
+		};
+
+		it("keeps what the open plan consumes", () => {
+			expect(raukkFlowConcernsPlan(lane, "consumer")).toBe(true);
+		});
+
+		it("keeps what the open plan produces for a sibling base", () => {
+			expect(raukkFlowConcernsPlan(lane, "producer")).toBe(true);
+		});
+
+		it("keeps a flow of an ownerless snapshot by its planets", () => {
+			const legacy: IRaukkChainFlow = flow(
+				"ORE",
+				"AA-001a",
+				"AA-002b",
+				100
+			);
+			delete legacy.ownerPlanUuid;
+
+			expect(raukkFlowConcernsPlan(legacy, "open", "AA-001a")).toBe(true);
+			expect(raukkFlowConcernsPlan(legacy, "open", "AA-002b")).toBe(true);
+		});
+
+		it("drops what neither touches the open plan nor its planet", () => {
+			expect(raukkFlowConcernsPlan(lane, "open", "AA-004a")).toBe(false);
+		});
+
+		it("scopes nothing while the open plan is unsaved", () => {
+			expect(raukkFlowConcernsPlan(lane, undefined, "AA-004a")).toBe(
+				true
+			);
 		});
 	});
 

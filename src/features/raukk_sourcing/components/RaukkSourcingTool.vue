@@ -560,6 +560,7 @@
 
 	<RaukkShippingSection
 		:plan-uuid="planUuid"
+		:planet-natural-id="planetNaturalId"
 		:pairs="shippingPairs"
 		:repair-bill-cost="repairBillCost"
 		:caps="caps"
