@@ -134,15 +134,28 @@ These supersede the matching decisions above.
      105 FTL (DEP 1h07m, APP 1h21m). Jump times identical in both:
      4pc/2h10m, 9pc/4h46m, 5pc/2h57m; CHRG 1m14s.
 
-## Open items (ask before or during implementation)
+## Round 4 (final)
 
-- Price sources for repair tickers (LHP/SSC/MFK/FLP) — presumably
-  the same market price-mode mechanism as other inputs; confirm.
-- Ships-available count for the shipping fraction denominator:
-  per profile? account-wide?
-- Whether the outputs table keeps the separate shipping breakdown
-  column in addition to the folded price.
-- Calibration constants to bake in per (hull volume × reactor
-  flag): min-reactor jump minutes-per-parsec and the fixed STL-leg
-  block empty vs loaded — derive from the reference flights above,
-  with a config escape hatch for user-measured overrides.
+1. **Repair tickers (LHP/SSC/MFK/FLP) priced like any other
+   ticker**: the shared per-plan sourcing mechanism — market price
+   mode, or a plan snapshot when a plan in the empire produces the
+   ticker (confirmed desirable if doable; it is — same `{ticker →
+   source}` map).
+2. **Display placement: implementer's call.** Chosen: shipping
+   folds into the inputs table's effective ȼ/u and into the
+   outputs' true ȼ/u; the outputs table KEEPS its existing separate
+   shipping breakdown column (it already exists, aids trust); the
+   snapshot line shows the shipping fraction next to the base
+   fraction.
+3. Parallel bug-fix work is happening on another branch; expect
+   minor rebases, nothing structural.
+
+## Remaining defaults chosen by implementer
+
+- Ships available per profile: config field, default 1 (shipping
+  fraction denominator).
+- Calibration constants per (hull × reactor flag): shipped as an
+  editable table in the config UI, pre-filled from the reference
+  flights above; user-measured overrides always win.
+
+See shipping-plan.md for the implementation plan.
