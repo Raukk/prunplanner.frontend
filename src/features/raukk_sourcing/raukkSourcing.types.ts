@@ -5,6 +5,7 @@
 import {
 	IRaukkCadenceOverrides,
 	IRaukkFleetAdvisory,
+	IRaukkShippedTicker,
 	IRaukkShippingConfig,
 	RAUKK_CARGO_BUCKET,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
@@ -101,6 +102,15 @@ export interface IRaukkPlanConfig {
 	 * region an automatic chain is built over. Absent: the account mode,
 	 * which itself defaults to the nearest exchange. */
 	cxAnchor?: string;
+	/** Plan this one is a LEASE of: a second base leased on a planet the
+	 * account already sits on, sharing the hosts docking site. The two
+	 * plans keep their own production, sourcing and prices; only the
+	 * SHIPPING is delegated — the lease builds no pairs at all and its
+	 * residual cargo is folded into the hosts, so one ship visit clears
+	 * the whole site. Absent is the default and the state of every plan
+	 * that stands on its own. Never chained: a host may not itself be a
+	 * lease, see the store setter. */
+	leaseHostPlanUuid?: string;
 	/** Copy of the account-global shipping configuration, embedded into
 	 * the config a snapshot froze itself with. Only written while
 	 * shipping is enabled, so snapshots computed with shipping off stay
@@ -179,6 +189,34 @@ export interface IRaukkSnapshot {
 	 * claims no ship at all: the fraction has no denominator then and is
 	 * displayed as an em-dash rather than as a reassuring zero. */
 	shippingFraction?: number | null;
+	/** Residual cargo this plan DELEGATES to its lease host, frozen for
+	 * the host to fold into its own lanes. Only a lease plan — one whose
+	 * config names a `leaseHostPlanUuid` — writes it, and only while
+	 * shipping is enabled; absent on every other snapshot and on every
+	 * result written before the lease link existed. The host reads it
+	 * from here rather than from live numbers, the frozen snapshot rule
+	 * every cross plan read follows. */
+	leaseCargo?: IRaukkLeaseCargo;
+}
+
+/**
+ * Cargo one LEASE plan hands to its host, per day.
+ *
+ * Exactly what would have ridden the leases own exchange lane: the market
+ * bought inputs it needs and the net outputs it sells, both already
+ * resolved against the leases own sources, its LM flags and its draws —
+ * the host folds them as they are, it never re-resolves them against its
+ * own configuration. Units drawn from a plan on the shared planet are
+ * absent by construction, the local transfer rule of round 12 having
+ * taken them off every lane before this cargo is minted.
+ *
+ * @author raukk
+ */
+export interface IRaukkLeaseCargo {
+	/** Market bought cargo arriving for the lease */
+	inbound: IRaukkShippedTicker[];
+	/** Net exchange bound outputs leaving the lease */
+	outbound: IRaukkShippedTicker[];
 }
 
 /**

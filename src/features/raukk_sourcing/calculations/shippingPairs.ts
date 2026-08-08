@@ -294,6 +294,31 @@ export interface IRaukkPairPlanFlows {
 	inputs: IRaukkShippedTicker[];
 	/** Net output cargo per day, before subscriber draws */
 	outputs: IRaukkShippedTicker[];
+	/**
+	 * Cargo a LEASE plan on this plans own planet delegated to it, already
+	 * RESOLVED: the market buys it would have flown home itself. It joins
+	 * this plans exchange lane untouched — neither `originOf` nor
+	 * `localBuyOf` is asked again, those questions were answered by the
+	 * leases own configuration when its snapshot was frozen. Absent on
+	 * every plan hosting no lease, which is the state before the link.
+	 */
+	delegatedInputs?: IRaukkShippedTicker[];
+	/**
+	 * The outbound half of the same delegation: the leases net exchange
+	 * bound outputs, its subscriber draws and LM sell flags already taken
+	 * off. Joins this plans exchange sells as it stands.
+	 */
+	delegatedOutputs?: IRaukkShippedTicker[];
+}
+
+/** Cargo of one plans lanes, before any route is resolved */
+export interface IRaukkPlanLaneCargo {
+	/** Market bought cargo, inbound on the plans own exchange lane */
+	marketBack: IRaukkShippedTicker[];
+	/** Cargo of a direct sourcing lane, keyed by source plan uuid */
+	sourcedBack: Map<string, IRaukkShippedTicker[]>;
+	/** Net outputs leaving through the exchange */
+	cxOut: IRaukkShippedTicker[];
 }
 
 /**
@@ -362,90 +387,43 @@ export function raukkCxPairKey(planUuid: string): string {
 }
 
 /**
- * Builds the route pairs one plan owns.
+ * Sorts one plans daily cargo into the lanes it rides, routes aside.
  *
- * Two kinds, and no others (see "Ownership rule"):
- *
- *  - one sourcing pair per source plan, carrying the tickers this plan
- *    draws there. Its `out` stays empty: a mutual A⇄B relationship keeps
- *    at most ONE direct lane (see {@link resolveMutualLanes}), so no pair
- *    ever has a loaded backhaul and the imports pay the full round trip.
- *  - exactly one CX pair, carrying the plans market buys back and its
- *    exchange sells out. Both directions come from this plans own data —
- *    the buys are the input tickers no source plan covers, the sells its
- *    net outputs minus what subscribers already draw, clamped at zero
- *    because oversubscription beyond the whole output is allowed.
- *
- * Hub routing substitutes distance on the sourcing pairs only: source to
- * the consumers exchange and on to the consumer. The pair stays a single
- * consumer owned pair, it is not pooled with the CX pair.
- *
- * Pairs whose planet, system or route cannot be resolved are dropped —
- * an unroutable lane charges nothing rather than guessing a distance.
- *
- * The lighter direction of a mutual relationship has no lane of its own:
- * `viaCxSourceOf` moves its cargo onto this plans market buys, and
- * `viaCxSoldOf` puts the mirror image — what a rerouted counterpart
- * draws here — back into this plans exchange sells. Each plan adds only
- * its OWN half, the ownership rule is untouched.
- *
- * The local market flags remove cargo outright: `localSaleOf` leaves an
- * output with nothing but its `viaCxSoldOf` portion outbound — the excess
- * sells on the own planet — and `localBuyOf` keeps a market bought input
- * off the exchange lane entirely. Neither touches a plan to plan draw,
- * which is consumed on another planet and must still travel.
- *
- * Cargo a chain already claimed is subtracted per lane through
- * `claimedUnitsOf` before anything is loaded: those units ride the chain
- * and take their ȼ per unit from its stored result, so charging them here
- * as well would bill the same freight twice. A lane is the counterpart
- * AND the producing plan, so drawing one ticker from two plans on one
- * planet gives each lane its own claim. A lane left with nothing simply
- * disappears.
+ * The whole "which lane" decision of {@link buildShippingPairs} and
+ * nothing else: origins, chain claims, the hub/spoke reroute and the two
+ * local market flags all apply here, while distance, hull and cadence
+ * stay with the caller. Split out because a LEASE plan needs exactly this
+ * answer without owning a single pair — its market bound cargo is frozen
+ * onto its snapshot and flown by its host — and both sides must sort
+ * cargo by the very same rules or the delegated tonnage would differ from
+ * what the lease would have shipped itself.
  *
  * @author raukk
  *
  * @param {IRaukkPairPlanFlows} flows Own daily flows of the plan
  * @param {IRaukkPairLookups} lookups Cross plan lookups
- * @param {IRaukkShippingConfig} config Shipping configuration
- * @returns {IRaukkShippingPair[]} Route pairs the plan owns
+ * @returns {IRaukkPlanLaneCargo} Cargo per lane
  */
-export function buildShippingPairs(
+export function resolvePlanLaneCargo(
 	flows: IRaukkPairPlanFlows,
-	lookups: IRaukkPairLookups,
-	config: IRaukkShippingConfig
-): IRaukkShippingPair[] {
-	if (!config.enabled) return [];
-
-	const routes: IRaukkRouteDistance = lookups.routes ?? RAUKK_DEFAULT_ROUTES;
-
-	const consumerSystemId: string | null = routes.resolveSystemId(
-		flows.planetNaturalId
-	);
-	if (consumerSystemId === null) return [];
-
-	const cx: IRaukkNearestCx | null = anchorCx(
-		routes,
-		consumerSystemId,
-		lookups.anchorCxSystemId
-	);
-
+	lookups: IRaukkPairLookups
+): IRaukkPlanLaneCargo {
 	/** Market buys, and per source plan the tickers drawn there */
 	const marketBack: IRaukkShippedTicker[] = [];
 	const sourcedBack: Map<string, IRaukkShippedTicker[]> = new Map();
 
 	/**
-	 * Adds cargo to the exchange lane, merging a row already riding it.
-	 * Identity is ticker AND bucket: two entries of one ticker in a
-	 * single bucket would each be charged over their own units and
-	 * overstate the ȼ per unit, while two BUCKETS of one ticker are
-	 * distinct cargo and stay apart.
+	 * Adds cargo to a lane, merging a row already riding it. Identity is
+	 * ticker AND bucket: two entries of one ticker in a single bucket would
+	 * each be charged over their own units and overstate the ȼ per unit,
+	 * while two BUCKETS of one ticker are distinct cargo and stay apart.
 	 */
-	function pushMarketBack(
+	function pushCargo(
+		lane: IRaukkShippedTicker[],
 		entry: IRaukkShippedTicker,
 		unitsPerDay: number
 	): void {
-		const known: IRaukkShippedTicker | undefined = marketBack.find(
+		const known: IRaukkShippedTicker | undefined = lane.find(
 			(element) =>
 				element.ticker === entry.ticker &&
 				element.bucket === entry.bucket
@@ -456,7 +434,7 @@ export function buildShippingPairs(
 			return;
 		}
 
-		marketBack.push({ ...entry, unitsPerDay });
+		lane.push({ ...entry, unitsPerDay });
 	}
 
 	/**
@@ -537,7 +515,7 @@ export function buildShippingPairs(
 			if (lookups.localBuyOf?.(ticker) === true) return;
 
 			laneRows(undefined, 1).forEach((row) =>
-				pushMarketBack(row.entry, row.unitsPerDay)
+				pushCargo(marketBack, row.entry, row.unitsPerDay)
 			);
 			return;
 		}
@@ -560,7 +538,7 @@ export function buildShippingPairs(
 			 */
 			if (lookups.viaCxSourceOf?.(origin.planUuid) === true) {
 				shipped.forEach((row) =>
-					pushMarketBack(row.entry, row.unitsPerDay)
+					pushCargo(marketBack, row.entry, row.unitsPerDay)
 				);
 				return;
 			}
@@ -574,6 +552,146 @@ export function buildShippingPairs(
 			sourcedBack.set(origin.planUuid, cargo);
 		});
 	});
+
+	/**
+	 * Units of one own output that leave through the exchange.
+	 *
+	 * Normally the whole net output minus what subscribers draw, plus the
+	 * drawn units a rerouted lane no longer hauls. An LM SOLD ticker keeps
+	 * only that second term: its market bound excess is sold on the own
+	 * planets local market and never reaches the exchange, while the units
+	 * a counterpart draws are consumed elsewhere and still have to travel.
+	 *
+	 * OVERSUBSCRIPTION is a supported state — counterpart draws may exceed
+	 * what the plan produces — so the LM sold branch is capped at the own
+	 * production: a plan can never ship more than it makes. At the cap both
+	 * branches agree, the unflagged one being clamped by its own
+	 * `Math.max` at exactly the same point.
+	 */
+	function cxOutUnits(entry: IRaukkShippedTicker): number {
+		const viaCx: number = lookups.viaCxSoldOf?.(entry.ticker) ?? 0;
+
+		if (lookups.localSaleOf?.(entry.ticker) === true)
+			return Math.max(Math.min(viaCx, entry.unitsPerDay), 0);
+
+		return Math.max(
+			entry.unitsPerDay - lookups.subscribedOf(entry.ticker) + viaCx,
+			0
+		);
+	}
+
+	const cxOut: IRaukkShippedTicker[] = flows.outputs
+		.map((entry) => ({
+			...entry,
+			unitsPerDay: unclaimed(
+				entry.ticker,
+				undefined,
+				false,
+				cxOutUnits(entry)
+			),
+		}))
+		.filter((entry) => entry.unitsPerDay > 0);
+
+	/*
+	 * Delegated cargo joins last and joins RESOLVED: a lease shares the
+	 * hosts docking site, so its market buys and its exchange sells ride
+	 * the hosts exchange lane as if the host had them itself. Merged per
+	 * ticker and bucket, exactly as two rows of the hosts own cargo are —
+	 * one visit clears the site, one row states what it carries.
+	 */
+	(flows.delegatedInputs ?? []).forEach((entry) => {
+		if (entry.unitsPerDay <= 0) return;
+
+		pushCargo(marketBack, entry, entry.unitsPerDay);
+	});
+
+	(flows.delegatedOutputs ?? []).forEach((entry) => {
+		if (entry.unitsPerDay <= 0) return;
+
+		pushCargo(cxOut, entry, entry.unitsPerDay);
+	});
+
+	return { marketBack, sourcedBack, cxOut };
+}
+
+/**
+ * Builds the route pairs one plan owns.
+ *
+ * Two kinds, and no others (see "Ownership rule"):
+ *
+ *  - one sourcing pair per source plan, carrying the tickers this plan
+ *    draws there. Its `out` stays empty: a mutual A⇄B relationship keeps
+ *    at most ONE direct lane (see {@link resolveMutualLanes}), so no pair
+ *    ever has a loaded backhaul and the imports pay the full round trip.
+ *  - exactly one CX pair, carrying the plans market buys back and its
+ *    exchange sells out. Both directions come from this plans own data —
+ *    the buys are the input tickers no source plan covers, the sells its
+ *    net outputs minus what subscribers already draw, clamped at zero
+ *    because oversubscription beyond the whole output is allowed.
+ *
+ * Hub routing substitutes distance on the sourcing pairs only: source to
+ * the consumers exchange and on to the consumer. The pair stays a single
+ * consumer owned pair, it is not pooled with the CX pair.
+ *
+ * Pairs whose planet, system or route cannot be resolved are dropped —
+ * an unroutable lane charges nothing rather than guessing a distance.
+ *
+ * The lighter direction of a mutual relationship has no lane of its own:
+ * `viaCxSourceOf` moves its cargo onto this plans market buys, and
+ * `viaCxSoldOf` puts the mirror image — what a rerouted counterpart
+ * draws here — back into this plans exchange sells. Each plan adds only
+ * its OWN half, the ownership rule is untouched.
+ *
+ * The local market flags remove cargo outright: `localSaleOf` leaves an
+ * output with nothing but its `viaCxSoldOf` portion outbound — the excess
+ * sells on the own planet — and `localBuyOf` keeps a market bought input
+ * off the exchange lane entirely. Neither touches a plan to plan draw,
+ * which is consumed on another planet and must still travel.
+ *
+ * A LEASE plan sharing this plans planet owns no pairs of its own: its
+ * residual cargo arrives as `delegatedInputs` and `delegatedOutputs` and
+ * rides this plans exchange pair, which is what makes one ship visit
+ * clear the whole docking site. See {@link resolvePlanLaneCargo}.
+ *
+ * Cargo a chain already claimed is subtracted per lane through
+ * `claimedUnitsOf` before anything is loaded: those units ride the chain
+ * and take their ȼ per unit from its stored result, so charging them here
+ * as well would bill the same freight twice. A lane is the counterpart
+ * AND the producing plan, so drawing one ticker from two plans on one
+ * planet gives each lane its own claim. A lane left with nothing simply
+ * disappears.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkPairPlanFlows} flows Own daily flows of the plan
+ * @param {IRaukkPairLookups} lookups Cross plan lookups
+ * @param {IRaukkShippingConfig} config Shipping configuration
+ * @returns {IRaukkShippingPair[]} Route pairs the plan owns
+ */
+export function buildShippingPairs(
+	flows: IRaukkPairPlanFlows,
+	lookups: IRaukkPairLookups,
+	config: IRaukkShippingConfig
+): IRaukkShippingPair[] {
+	if (!config.enabled) return [];
+
+	const routes: IRaukkRouteDistance = lookups.routes ?? RAUKK_DEFAULT_ROUTES;
+
+	const consumerSystemId: string | null = routes.resolveSystemId(
+		flows.planetNaturalId
+	);
+	if (consumerSystemId === null) return [];
+
+	const cx: IRaukkNearestCx | null = anchorCx(
+		routes,
+		consumerSystemId,
+		lookups.anchorCxSystemId
+	);
+
+	const { marketBack, sourcedBack, cxOut } = resolvePlanLaneCargo(
+		flows,
+		lookups
+	);
 
 	const pairs: IRaukkShippingPair[] = [];
 
@@ -638,45 +756,6 @@ export function buildShippingPairs(
 	});
 
 	if (cx === null) return pairs;
-
-	/**
-	 * Units of one own output that leave through the exchange.
-	 *
-	 * Normally the whole net output minus what subscribers draw, plus the
-	 * drawn units a rerouted lane no longer hauls. An LM SOLD ticker keeps
-	 * only that second term: its market bound excess is sold on the own
-	 * planets local market and never reaches the exchange, while the units
-	 * a counterpart draws are consumed elsewhere and still have to travel.
-	 *
-	 * OVERSUBSCRIPTION is a supported state — counterpart draws may exceed
-	 * what the plan produces — so the LM sold branch is capped at the own
-	 * production: a plan can never ship more than it makes. At the cap both
-	 * branches agree, the unflagged one being clamped by its own
-	 * `Math.max` at exactly the same point.
-	 */
-	function cxOutUnits(entry: IRaukkShippedTicker): number {
-		const viaCx: number = lookups.viaCxSoldOf?.(entry.ticker) ?? 0;
-
-		if (lookups.localSaleOf?.(entry.ticker) === true)
-			return Math.max(Math.min(viaCx, entry.unitsPerDay), 0);
-
-		return Math.max(
-			entry.unitsPerDay - lookups.subscribedOf(entry.ticker) + viaCx,
-			0
-		);
-	}
-
-	const cxOut: IRaukkShippedTicker[] = flows.outputs
-		.map((entry) => ({
-			...entry,
-			unitsPerDay: unclaimed(
-				entry.ticker,
-				undefined,
-				false,
-				cxOutUnits(entry)
-			),
-		}))
-		.filter((entry) => entry.unitsPerDay > 0);
 
 	if (cxOut.length === 0 && marketBack.length === 0) return pairs;
 

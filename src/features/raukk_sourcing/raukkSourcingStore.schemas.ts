@@ -333,6 +333,25 @@ export const RaukkSnapshotLaneSchema = z.object({
 	hired: z.boolean(),
 });
 
+/** One row of daily cargo, ticker and cargo class with its dimensions */
+export const RaukkShippedTickerSchema = z.object({
+	ticker: z.string(),
+	bucket: RaukkCargoBucketSchema,
+	unitsPerDay: z.number(),
+	weightPerUnit: z.number(),
+	volumePerUnit: z.number(),
+});
+
+/**
+ * Residual cargo a LEASE plan delegates to its host. Both directions
+ * default to empty: a lease that buys nothing on the market and sells
+ * nothing at the exchange delegates no cargo, it still delegates.
+ */
+export const RaukkLeaseCargoSchema = z.object({
+	inbound: z.array(RaukkShippedTickerSchema).default([]),
+	outbound: z.array(RaukkShippedTickerSchema).default([]),
+});
+
 export const RaukkPlanConfigSchema = z.object({
 	repairDay: RaukkRepairDaySchema,
 	sources: z.record(z.string(), RaukkTickerSourceSchema),
@@ -343,6 +362,13 @@ export const RaukkPlanConfigSchema = z.object({
 	cadence: RaukkCadenceOverridesSchema.optional(),
 	// exchange this plan is anchored at, absent means the account mode
 	cxAnchor: z.string().min(1).optional(),
+	// plan this one leases its base from, absent in every payload written
+	// before the lease link and on every plan standing on its own. The
+	// same planet, no chain and no self link rules live in the store
+	// setter: an import of a hand edited payload must not lose the whole
+	// store over one broken link, and a link naming a plan the payload
+	// does not contain simply folds nothing
+	leaseHostPlanUuid: z.string().min(1).optional(),
 	// only ever set on the copy a snapshot embeds, and only while
 	// shipping is enabled
 	shipping: RaukkShippingConfigSchema.optional(),
@@ -384,6 +410,9 @@ export const RaukkSnapshotSchema = z.object({
 	// null: the profile of a pair claims no ship at all, so the fraction
 	// has no denominator and is displayed as an em-dash
 	shippingFraction: z.number().nullable().optional(),
+	// lease delegation: written by a lease plan only, and only while
+	// shipping is enabled. Absent everywhere else, the link included
+	leaseCargo: RaukkLeaseCargoSchema.optional(),
 });
 
 /**

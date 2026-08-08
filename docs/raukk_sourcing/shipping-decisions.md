@@ -381,6 +381,60 @@ LM rate and ship assignment are pair-keyed.
    lease link itself are a separate upcoming phase; nothing here needs
    them.
 
+## Round 13 (lease link: one site, one ship visit)
+
+1. **The link**: a per plan config field `leaseHostPlanUuid` names the
+   HOST plan a base is leased at. Two bases on one planet share one
+   physical docking site, and the link is what tells the model so. It is
+   validated at the store setter and nowhere else: no self link, both
+   plans must hold a snapshot (the planet of a plan is what its snapshot
+   says it is, exactly as chain membership reads it), the two must sit
+   on the SAME PLANET, and links are never CHAINED — a host may not be a
+   lease and a lease may not host one. Additive and optional in the
+   persisted shape, so every older export still parses.
+2. **Delegation**: a lease computes everything as before EXCEPT
+   shipping. It builds no pairs, authors no flows, reports no lanes, no
+   advisories and no fuel burn, its shipping fraction freezes as `null`
+   — the existing "no denominator" convention — and its freight
+   contribution is 0. The skip sits at the shipping INPUT
+   (`computePlanShipping`), so freight per unit, repair freight, fuel
+   draws and the lane summary all fall out empty on their own rather
+   than through a conditional per consumer. Its cadence override
+   governs nothing: the host flies the site and the hosts caps decide.
+3. **The fold**: the lease freezes its RESIDUAL cargo onto its snapshot
+   as `leaseCargo` — exactly what its own exchange lane would have
+   carried, sorted by the shared `resolvePlanLaneCargo`, so its
+   sources, its LM flags, its subscriber draws and the local transfer
+   rule of round 12 all apply on the leases side, where its
+   configuration is. The host reads that FROZEN value, never live
+   numbers, and appends it to its own flows as `delegatedInputs` /
+   `delegatedOutputs` before pairs are built. Delegated cargo is
+   RESOLVED cargo: the host never asks `originOf` or the LM flags about
+   it again, delegation is of shipping, not of sourcing.
+4. **One pair, one cadence, one hull**: the hosts pairs are then built
+   exactly as before, so the combined tonnage rides the hosts exchange
+   pair under the hosts cadence caps and hull pick, the flows are
+   authored with the HOST as `ownerPlanUuid`, and the fuel the site
+   burns is drawn by the host — it flies the ships. Chains, depots and
+   the LM logic are untouched: the folded cargo travels through them as
+   the hosts own.
+5. **Ordering and staleness**: the lease link is an edge of the
+   dependency graph, pointing from the host to its lease. The staleness
+   cascade and the upstream first recompute order of the empire pass
+   both follow it for free — a recomputed lease stales its host, and a
+   pass computes leases before hosts. Changed `leaseCargo` stales the
+   dependents itself, the same blind spot the frozen flows patch.
+   Deleting a host drops the dangling link off its leases; deleting a
+   lease stales its host through the very same edge.
+6. **What is NOT billed**: the freight of the delegated cargo is
+   planned on the host but priced per unit over the COMBINED units, so
+   the hosts own ȼ per unit stays its honest lane rate and the leases
+   stays freight free. The site total is therefore visible in trips,
+   tonnage and ship time, while the leases share of it appears in no
+   plans break even price. Deliberate for now — folding the hosts
+   frozen rate back into the leases prices is a second cross plan read
+   with its own convergence lag — and a candidate for a later round.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration, and

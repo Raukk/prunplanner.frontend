@@ -274,6 +274,40 @@ export const useRaukkSourcingStore = defineStore(
 			};
 		}
 
+		/**
+		 * Plans leasing a base from the given HOST plan, the lease link
+		 * read backwards.
+		 *
+		 * Derived from the configs, never stored on the host: the link is
+		 * one field on the lease and one place to keep consistent. Sorted,
+		 * so the cargo a host folds arrives in a stable order.
+		 * @author raukk
+		 *
+		 * @param {string} hostPlanUuid Host Plan Uuid
+		 * @returns {string[]} Lease Plan Uuids
+		 */
+		function leasesOf(hostPlanUuid: string): string[] {
+			return Object.entries(configs.value)
+				.filter(
+					([, config]) => config.leaseHostPlanUuid === hostPlanUuid
+				)
+				.map(([planUuid]) => planUuid)
+				.sort();
+		}
+
+		/**
+		 * Planet a plan sits on, exactly as the snapshot pipeline resolves
+		 * it: its stored snapshot is the answer. A plan without one has no
+		 * planet the store knows of, the same rule chain membership follows.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 * @returns {(string | undefined)} Planet Natural Id
+		 */
+		function planetOf(planUuid: string): string | undefined {
+			return snapshots.value[planUuid]?.planetNaturalId;
+		}
+
 		// setters
 
 		/**
@@ -1039,6 +1073,93 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Links one plan to the HOST plan it leases its base from.
+		 *
+		 * Two bases on one planet share one physical docking site, so all
+		 * remaining shipping of the lease is planned and paid under the
+		 * host: the lease builds no pairs, and its residual cargo is folded
+		 * into the hosts lanes. Four rules are enforced here rather than in
+		 * the UI, because the store is what everything else reads, and all
+		 * four throw and leave the store untouched:
+		 *
+		 *  - no self link, a plan cannot dock at itself.
+		 *  - both plans must be KNOWN, which — exactly as chain membership
+		 *    and the pair construction read it — means holding a snapshot:
+		 *    the planet of a plan is what its snapshot says it is.
+		 *  - SAME PLANET, the whole premise of the delegation. A host in
+		 *    another system shares no site and no ship visit.
+		 *  - no CHAINS: a host may not itself be a lease, and a plan that
+		 *    already hosts leases may not become one. One fold, one level,
+		 *    one plan that flies the site.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Leasing Plan Uuid
+		 * @param {string} hostPlanUuid Host Plan Uuid
+		 */
+		function setLeaseHost(planUuid: string, hostPlanUuid: string): void {
+			if (planUuid === hostPlanUuid)
+				throw new Error("A plan cannot lease its base from itself.");
+
+			const ownPlanet: string | undefined = planetOf(planUuid);
+			const hostPlanet: string | undefined = planetOf(hostPlanUuid);
+
+			if (hostPlanet === undefined)
+				throw new Error(
+					`Host plan '${hostPlanUuid}' has no snapshot yet; compute it before leasing from it.`
+				);
+
+			if (ownPlanet === undefined)
+				throw new Error(
+					`Plan '${planUuid}' has no snapshot yet; compute it before leasing.`
+				);
+
+			if (ownPlanet !== hostPlanet)
+				throw new Error(
+					`A lease shares its hosts docking site: plan '${planUuid}' sits on ${ownPlanet}, host '${hostPlanUuid}' on ${hostPlanet}.`
+				);
+
+			if (configs.value[hostPlanUuid]?.leaseHostPlanUuid !== undefined)
+				throw new Error(
+					`Host plan '${hostPlanUuid}' is itself a lease; lease links are never chained.`
+				);
+
+			const ownLeases: string[] = leasesOf(planUuid);
+
+			if (ownLeases.length > 0)
+				throw new Error(
+					`Plan '${planUuid}' hosts ${ownLeases.length} lease(s) of its own; lease links are never chained.`
+				);
+
+			ensureConfig(planUuid).leaseHostPlanUuid = hostPlanUuid;
+
+			// both sides move: the lease loses its lanes, the host gains
+			// their cargo. The dependency edge cascades from here on
+			markStale(planUuid);
+			markStale(hostPlanUuid);
+		}
+
+		/**
+		 * Drops a plans lease link, it plans and pays its own shipping
+		 * again. Both plans go stale with their dependents, exactly as
+		 * {@link setLeaseHost} stales them.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Leasing Plan Uuid
+		 */
+		function clearLeaseHost(planUuid: string): void {
+			const config: IRaukkPlanConfig | undefined =
+				configs.value[planUuid];
+			const hostPlanUuid: string | undefined = config?.leaseHostPlanUuid;
+
+			if (!config || hostPlanUuid === undefined) return;
+
+			delete config.leaseHostPlanUuid;
+
+			markStale(planUuid);
+			markStale(hostPlanUuid);
+		}
+
+		/**
 		 * Sets the repair day of a plans cost model. Marks the plan and
 		 * all downstream plans stale.
 		 * @author raukk
@@ -1082,6 +1203,19 @@ export const useRaukkSourcingStore = defineStore(
 
 			// dependents derive from the new draws as well
 			if (!previous || snapshotMateriallyChanged(previous, snapshot))
+				cascadeStale(planUuid);
+
+			/*
+			 * The residual cargo of a LEASE is a value its host consumes and
+			 * `snapshotMateriallyChanged` — which weighs outputs and draws —
+			 * knows nothing of, the same blind spot the frozen flows have.
+			 * Changed lease cargo therefore stales the dependents itself, the
+			 * host being one of them through the lease edge of the graph.
+			 */
+			if (
+				JSON.stringify(previous?.leaseCargo ?? null) !==
+				JSON.stringify(snapshot.leaseCargo ?? null)
+			)
 				cascadeStale(planUuid);
 
 			if (
@@ -1179,6 +1313,17 @@ export const useRaukkSourcingStore = defineStore(
 				planUuid
 			);
 
+			/*
+			 * Leases of a deleted HOST lose their link: a dangling uuid would
+			 * keep them from ever building a pair again, their cargo waiting
+			 * for a host that no longer exists. They plan their own shipping
+			 * from here on and are stale below. The other direction needs no
+			 * cleanup — a deleted LEASE takes its config with it — and its
+			 * host is already among the dependents, the lease edge of the
+			 * graph having put it there.
+			 */
+			const orphanedLeases: string[] = leasesOf(planUuid);
+
 			// a chain the plan was a member of loses its flows and has to
 			// be recomputed; the chain itself stays, its stops are
 			// planets and outlive any single plan
@@ -1191,6 +1336,15 @@ export const useRaukkSourcingStore = defineStore(
 			delete snapshots.value[planUuid];
 
 			scrubShippingKeys(planUuid);
+
+			orphanedLeases.forEach((leaseUuid) => {
+				delete configs.value[leaseUuid]?.leaseHostPlanUuid;
+
+				const lease: IRaukkSnapshot | undefined =
+					snapshots.value[leaseUuid];
+
+				if (lease) lease.stale = true;
+			});
 
 			dependents.forEach((dependentUuid) => {
 				const dependent: IRaukkSnapshot | undefined =
@@ -1301,7 +1455,10 @@ export const useRaukkSourcingStore = defineStore(
 			chainConflictOf,
 			assignedShipTypeId,
 			depotStopRefs,
+			leasesOf,
 			// setters
+			setLeaseHost,
+			clearLeaseHost,
 			setTickerSource,
 			clearTickerSource,
 			setLocalSale,

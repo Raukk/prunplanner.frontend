@@ -23,7 +23,10 @@ import {
 	calculateShipping,
 	RAUKK_REPAIR_BILL,
 } from "@/features/raukk_sourcing/calculations/shipping";
-import { buildShippingPairs } from "@/features/raukk_sourcing/calculations/shippingPairs";
+import {
+	buildShippingPairs,
+	resolvePlanLaneCargo,
+} from "@/features/raukk_sourcing/calculations/shippingPairs";
 import {
 	buildPlanChainFlows,
 	mergeClaimedShipping,
@@ -60,6 +63,7 @@ import {
 	IRaukkChainFlow,
 	IRaukkChainFlowCost,
 	IRaukkChainResult,
+	IRaukkLeaseCargo,
 	IRaukkLocalPrice,
 	IRaukkPlanConfig,
 	IRaukkShippingConfig,
@@ -80,6 +84,7 @@ import {
 	IRaukkCargoDimension,
 	IRaukkPairLookups,
 	IRaukkPairPlanFlows,
+	IRaukkPlanLaneCargo,
 	IRaukkTickerOrigin,
 } from "@/features/raukk_sourcing/calculations/shippingPairs";
 import {
@@ -210,6 +215,20 @@ interface IRaukkShippingInput {
 	caps: IRaukkCadenceCaps;
 	/** Exchange THIS plan is anchored at, overriding the account mode */
 	cxAnchor?: string;
+	/**
+	 * True when this plan LEASES its base at another plans docking site
+	 * and delegates its whole shipping to that host: no pairs, no flows,
+	 * no lanes, no fuel and no freight cost of its own. Its residual cargo
+	 * is frozen onto its snapshot for the host to fly instead.
+	 */
+	delegated?: boolean;
+	/**
+	 * Frozen residual cargo of the plans OWN leases, one entry per lease,
+	 * read from their stored snapshots as the frozen snapshot rule
+	 * demands. Empty on every plan hosting none — and on a lease itself,
+	 * links are never chained.
+	 */
+	leaseCargo?: IRaukkLeaseCargo[];
 }
 
 /**
@@ -312,11 +331,58 @@ function planCargo(input: IRaukkShippingInput): IRaukkPairPlanFlows {
 		});
 	});
 
+	const leases: IRaukkLeaseCargo[] = input.leaseCargo ?? [];
+
 	return {
 		planUuid: input.planUuid,
 		planetNaturalId: input.planetNaturalId,
 		inputs,
 		outputs,
+		// the leases of this plan dock where it docks: their residual
+		// cargo joins its lanes already resolved, see {@link
+		// resolvePlanLaneCargo}. Absent while it hosts none, so a plan
+		// without a lease mints exactly the rows it always did
+		...(leases.length > 0
+			? {
+					delegatedInputs: leases.flatMap((cargo) => cargo.inbound),
+					delegatedOutputs: leases.flatMap((cargo) => cargo.outbound),
+				}
+			: {}),
+	};
+}
+
+/**
+ * The cargo a LEASE plan hands to its host, per day.
+ *
+ * Exactly the cargo its own exchange lane would have carried: the sorting
+ * of {@link resolvePlanLaneCargo} over its own flows and its own lookups,
+ * so market buys, LM flags, subscriber draws and the local transfer rule
+ * of round 12 all apply on the leases side, where its configuration is.
+ * The host folds the result as it stands.
+ *
+ * A DIRECT sourcing lane joins the inbound half rather than disappearing:
+ * under the hub/spoke rule of the cadence model no such lane exists —
+ * every plan to plan draw a chain does not carry is bought at the
+ * consumers exchange — so the branch is the conservative answer to a
+ * lookup set that says otherwise, never the normal path.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingInput} input Plan flows, resolver and config
+ * @returns {IRaukkLeaseCargo} Residual cargo of the lease
+ */
+function buildPlanLeaseCargo(input: IRaukkShippingInput): IRaukkLeaseCargo {
+	const cargo: IRaukkPlanLaneCargo = resolvePlanLaneCargo(
+		planCargo(input),
+		planLookups(input)
+	);
+
+	return {
+		inbound: [
+			...cargo.marketBack,
+			...Array.from(cargo.sourcedBack.values()).flat(),
+		],
+		outbound: cargo.cxOut,
 	};
 }
 
@@ -760,6 +826,10 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
  * @returns {IRaukkChainFlow[]} Directed flows the plan owns
  */
 function buildPlanFlows(input: IRaukkShippingInput): IRaukkChainFlow[] {
+	// a lease authors none: its cargo is stated among the hosts flows, so
+	// a chain calling at the shared planet claims it exactly once
+	if (input.delegated === true) return [];
+
 	return buildPlanChainFlows(
 		planCargo(input),
 		planLookups(input),
@@ -828,7 +898,15 @@ interface IRaukkPlanShipping {
  * @returns {IRaukkPlanShipping} Per pair shipping and fuel burn
  */
 function computePlanShipping(input: IRaukkShippingInput): IRaukkPlanShipping {
-	const pairs: IRaukkShippingPair[] = buildPlanShippingPairs(input);
+	/*
+	 * A LEASE owns no pair at all: it shares its hosts docking site, the
+	 * host plans and pays the whole sites shipping. The skip happens HERE,
+	 * at the shipping input, so everything downstream — freight per unit,
+	 * repair freight, fuel burn, lanes, advisories — falls out empty on
+	 * its own instead of asking about leases one conditional at a time.
+	 */
+	const pairs: IRaukkShippingPair[] =
+		input.delegated === true ? [] : buildPlanShippingPairs(input);
 
 	const result: IRaukkShippingResult = calculateShipping(
 		pairs,
@@ -1034,6 +1112,26 @@ export async function computePlanSnapshot(
 				config.repairDay
 			).total;
 
+		/*
+		 * Lease delegation. A lease reads no cargo of its own leases —
+		 * links are never chained — and its cadence override never
+		 * governs anything: the host flies the site and its caps decide.
+		 */
+		const delegated: boolean = config.leaseHostPlanUuid !== undefined;
+
+		const leaseCargo: IRaukkLeaseCargo[] = delegated
+			? []
+			: sourcingStore
+					.leasesOf(context.planUuid)
+					.map(
+						(leaseUuid) =>
+							sourcingStore.snapshots[leaseUuid]?.leaseCargo
+					)
+					.filter(
+						(cargo): cargo is IRaukkLeaseCargo =>
+							cargo !== undefined
+					);
+
 		const shippingInput: IRaukkShippingInput = {
 			planUuid: context.planUuid,
 			planetNaturalId: context.planetNaturalId,
@@ -1051,6 +1149,8 @@ export async function computePlanSnapshot(
 				config.cadence
 			),
 			cxAnchor: config.cxAnchor,
+			delegated,
+			leaseCargo,
 		};
 
 		const { shipping, fuelUnitsPerDay } =
@@ -1135,13 +1235,28 @@ export async function computePlanSnapshot(
 			),
 			inputPrices,
 			sellPrices,
+			/*
+			 * A LEASE freezes the mirror image of all this: no flows, no
+			 * lanes, no advisories, and `null` rather than a reassuring
+			 * zero for the fraction — the existing "no denominator"
+			 * convention, its ship time being the hosts. What it does
+			 * freeze is the cargo the host has to fly for it.
+			 */
 			...(shippingConfig.enabled
-				? {
-						flows: buildPlanFlows(shippingInput),
-						lanes: buildPlanLanes(shipping),
-						advisories: shipping.advisories,
-						shippingFraction: shipping.shippingFraction,
-					}
+				? delegated
+					? {
+							flows: [],
+							lanes: [],
+							advisories: [],
+							shippingFraction: null,
+							leaseCargo: buildPlanLeaseCargo(shippingInput),
+						}
+					: {
+							flows: buildPlanFlows(shippingInput),
+							lanes: buildPlanLanes(shipping),
+							advisories: shipping.advisories,
+							shippingFraction: shipping.shippingFraction,
+						}
 				: {}),
 		};
 	}
@@ -1221,6 +1336,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 			localSales: { ...stored.localSales },
 			cadence: { ...stored.cadence },
 			cxAnchor: stored.cxAnchor,
+			leaseHostPlanUuid: stored.leaseHostPlanUuid,
 		};
 	});
 
@@ -1297,6 +1413,22 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		dimensionOf: (ticker: string) => dimensions.value[ticker],
 		caps: caps.value,
 		cxAnchor: config.value.cxAnchor,
+		// the displayed numbers are the frozen ones a computation would
+		// write: a lease shows no freight, a host shows its leases cargo
+		delegated: config.value.leaseHostPlanUuid !== undefined,
+		leaseCargo:
+			config.value.leaseHostPlanUuid !== undefined
+				? []
+				: sourcingStore
+						.leasesOf(context.planUuid.value ?? "")
+						.map(
+							(leaseUuid) =>
+								sourcingStore.snapshots[leaseUuid]?.leaseCargo
+						)
+						.filter(
+							(cargo): cargo is IRaukkLeaseCargo =>
+								cargo !== undefined
+						),
 	}));
 
 	/** Live shipping of the pairs this plan owns, empty while disabled */

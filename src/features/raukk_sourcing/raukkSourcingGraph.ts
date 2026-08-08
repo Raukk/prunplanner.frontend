@@ -46,7 +46,9 @@ export function expandAggregateSource(
  * Plan P depends on plan S when either
  *  - P's snapshot draws material from S (`snapshot.draws[S]`), or
  *  - P's config sources a ticker with `{ mode: "plan",
- *    sourcePlanUuid: S }`.
+ *    sourcePlanUuid: S }`, or
+ *  - S's config names P as its `leaseHostPlanUuid`: P hosts the lease S
+ *    and ships its cargo, so P consumes S's frozen snapshot.
  *
  * Aggregate sources are expanded to all plans producing the ticker.
  * Self edges are dropped: a plan feeding its own repairs needs no graph
@@ -97,6 +99,16 @@ export function buildDependencyGraph(
 				addEdge(planUuid, source.sourcePlanUuid);
 			}
 		});
+	});
+
+	// lease links: the HOST folds the frozen residual cargo of every plan
+	// leasing a base at its docking site into its own shipping, so it
+	// depends on their snapshots — recompute order and staleness cascade
+	// both follow this one edge, pointing from the host to the lease
+	Object.entries(configs).forEach(([planUuid, config]) => {
+		if (config.leaseHostPlanUuid === undefined) return;
+
+		addEdge(config.leaseHostPlanUuid, planUuid);
 	});
 
 	return graph;
