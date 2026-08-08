@@ -130,9 +130,26 @@ plan's current CX preference behavior.
 - Automatic single-base snapshot upkeep: PlanView keeps the open
   plan's snapshot current (`useRaukkAutoSnapshot`) — computed,
   debounced, when the view opens without a current snapshot, after any
-  plan change, and whenever the snapshot is flagged stale. Always this
-  one plan only, never its chain; read-only and unsaved plans are
-  skipped; failures are logged and swallowed.
+  plan change, and whenever the snapshot is flagged stale. A run still
+  pending when the view closes is flushed immediately, an edit
+  followed by a quick navigation away must not lose its recompute.
+  Always this one plan only, never its chain; read-only and unsaved
+  plans are skipped; failures are logged and swallowed.
+- Automatic empire-wide snapshot upkeep: after the EmpireView finishes
+  its plan calculations (`useRaukkEmpireAutoSnapshot`, debounced), all
+  empire plans whose snapshot is MISSING or STALE are computed in the
+  background, upstream-first over the config-derived dependency graph,
+  each in its own empire/CX context via the shared per-plan recompute
+  (`recomputePlanSnapshot`) — a fresh browser fills its sourcing data
+  from one Empire view load, and an edit's downstream staleness clears
+  on the next one, instead of a per-plan click-through. A recompute
+  whose numbers materially changed re-flags its dependents; the run
+  follows that cascade (and loop settling) in additional passes,
+  capped at 5. Current snapshots are never touched; dependents outside
+  the loaded empire stay stale until their empire loads or their page
+  is visited. Per-plan failures are logged, swallowed and not retried
+  within the run; a started run finishes even when the view navigates
+  away.
 
 ## Persistence
 
@@ -193,7 +210,11 @@ other stores. Shape (indicative):
      when the snapshot's `inputPrices` differ from the vanilla price.
    - Plan overview: total true cost/day, repair capital cost/day (the
      degradation counterpart) and profit/day against the frozen
-     `sellPrices`, stale-flagged in amber.
+     `sellPrices`, stale-flagged in amber; plus that profit divided by
+     the snapshot's `baseFraction` as "Per base: X ȼ/d (BF 1.85)" —
+     the profit normalized to one base permit, comparable across
+     plans regardless of how much upstream base capacity the product
+     chain occupies.
 
 ## Conventions
 

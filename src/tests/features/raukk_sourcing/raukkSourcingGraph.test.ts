@@ -9,6 +9,7 @@ import {
 	expandAggregateSource,
 	IRaukkDependencyGraph,
 	IRaukkRecomputePlanning,
+	orderUpstreamFirst,
 	reverseGraph,
 } from "@/features/raukk_sourcing/raukkSourcingGraph";
 
@@ -321,6 +322,75 @@ describe("raukkSourcingGraph", () => {
 					(uuid) => snapshots[uuid] !== undefined
 				).order
 			).toStrictEqual(["a", "b", "c"]);
+		});
+	});
+
+	describe("orderUpstreamFirst", () => {
+		it("orders a fixed set upstream first", () => {
+			// a <- b <- c, all missing
+			const graph: IRaukkDependencyGraph = {
+				a: [],
+				b: ["a"],
+				c: ["b"],
+			};
+
+			expect(orderUpstreamFirst(graph, ["c", "a", "b"])).toStrictEqual([
+				"a",
+				"b",
+				"c",
+			]);
+		});
+
+		it("emits every given plan exactly once, nothing else", () => {
+			const graph: IRaukkDependencyGraph = {
+				a: [],
+				b: ["a"],
+				c: ["b"],
+			};
+
+			expect(orderUpstreamFirst(graph, ["b"])).toStrictEqual(["b"]);
+			expect(orderUpstreamFirst(graph, [])).toStrictEqual([]);
+		});
+
+		it("orders through direct edges only, out of set plans ignored", () => {
+			// a <- b <- c, b holds a snapshot and is not in the set: c
+			// reads b's frozen values, a's order relative to c is free
+			const graph: IRaukkDependencyGraph = {
+				a: [],
+				b: ["a"],
+				c: ["b"],
+			};
+
+			expect(orderUpstreamFirst(graph, ["c", "a"])).toStrictEqual([
+				"a",
+				"c",
+			]);
+		});
+
+		it("handles unknown plans and breaks supply loops", () => {
+			const cyclic: IRaukkDependencyGraph = {
+				a: ["b"],
+				b: ["a"],
+			};
+
+			expect(
+				orderUpstreamFirst(cyclic, ["a", "b", "unknown"]).sort()
+			).toStrictEqual(["a", "b", "unknown"]);
+		});
+
+		it("is deterministic, ties resolve in uuid sort order", () => {
+			// b and c both draw from a, no order between them
+			const graph: IRaukkDependencyGraph = {
+				a: [],
+				b: ["a"],
+				c: ["a"],
+			};
+
+			expect(orderUpstreamFirst(graph, ["c", "b", "a"])).toStrictEqual([
+				"a",
+				"b",
+				"c",
+			]);
 		});
 	});
 });

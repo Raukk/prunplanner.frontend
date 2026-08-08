@@ -21,6 +21,8 @@
 	import { useQuery } from "@/lib/query_cache/useQuery";
 	import { usePlanCalculation } from "@/features/planning/usePlanCalculation";
 	import { useMaterialIOUtil } from "@/features/planning/util/materialIO.util";
+	// raukk: background computation of missing sourcing snapshots
+	import { useRaukkEmpireAutoSnapshot } from "@/features/raukk_sourcing/useRaukkEmpireAutoSnapshot";
 	import { usePreferences } from "@/features/preferences/usePreferences";
 	const { combineEmpireMaterialIO, empireMaterialIOState } =
 		await useMaterialIOUtil();
@@ -95,6 +97,12 @@
 	const isCalculating: Ref<boolean> = ref(true);
 	const progressCurrent = ref(0);
 	const progressTotal = ref(0);
+
+	// raukk: compute first sourcing snapshots of plans that never had one
+	useRaukkEmpireAutoSnapshot({
+		planUuids: computed(() => planData.value.map((plan) => plan.uuid)),
+		calculating: isCalculating,
+	});
 
 	/**
 	 * Calculates all given plans
