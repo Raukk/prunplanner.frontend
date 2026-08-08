@@ -1,0 +1,249 @@
+// Types of the raukk shipping CHAIN model (v2).
+// See docs/raukk_sourcing/shipping-chains-v2.md, sections "Model",
+// "Flow claiming", "CX-split rule", "Low-utilization leg drop rule",
+// "Same-system legs" and "Per-system damage". Purely additive over the
+// v1 shapes in shipping.types.ts, which stay untouched.
+
+// Types & Interfaces
+import {
+	IRaukkRoute,
+	IRaukkRouteDistance,
+} from "@/features/raukk_sourcing/calculations/routeDistance";
+import {
+	IRaukkOrbitBand,
+	IRaukkChainStaticData,
+} from "@/features/raukk_sourcing/calculations/shippingChainData";
+import {
+	IRaukkPairShipping,
+	IRaukkShipProfile,
+	IRaukkShippingConfig,
+	RAUKK_LOAD_DIMENSION,
+} from "@/features/raukk_sourcing/calculations/shipping.types";
+
+/**
+ * One stop of a chain: a planet natural id or an exchange code such as
+ * `NC1`. Exchange codes are resolved through the chain inputs
+ * `cxSystems` map, everything else through `resolveSystemId`.
+ */
+export type RAUKK_STOP_REF = string;
+
+/** How a same system legs distance term was priced */
+export type RAUKK_SAME_SYSTEM_MODE = "flat" | "stl" | "two-jump" | "free";
+
+/** One persisted chain: an ordered LOOP of stops, repeats allowed */
+export interface IRaukkChain {
+	chainId: string;
+	name?: string;
+	/** Ordered loop; the last stop connects back to the first */
+	stops: RAUKK_STOP_REF[];
+	/** Ship profile, falls back to the account default */
+	profileId?: string;
+	/** Hired ȼ per trip replacing the own fleet cost of the whole chain */
+	lmRatePerTrip?: number;
+	/** Per chain override of the account wide auto split */
+	autoCxSplit?: boolean;
+}
+
+/** Account wide knobs of the chain model */
+export interface IRaukkChainConfig {
+	/** Detour in parsecs still triggering a CX split, DEFAULT 6 */
+	cxSplitDetourParsecs: number;
+	/** Leg utilization below which a drop is evaluated, DEFAULT 0.25 */
+	legUtilizationSplitThreshold: number;
+	/** Meteoroid density `damagePerParsec` is calibrated at, DEFAULT
+	 * 3.28 — the median of the shipped per system densities */
+	densityRef: number;
+	/**
+	 * ȼ per megameter flown sublight, the same-system band price.
+	 *
+	 * Nothing in the v1 profile calibration relates ȼ to a sublight
+	 * DISTANCE — `stlBlockCost` is a flat per block figure — so this is
+	 * an explicit new calibration constant rather than a derivation. It
+	 * defaults to 0 for the same reason `costPerParsec` does: an
+	 * invented number would be worse than an obvious zero.
+	 */
+	stlCostPerMegameter: number;
+	/** Auto split default, overridden per chain by `autoCxSplit` */
+	autoCxSplit: boolean;
+}
+
+/**
+ * One directed cargo flow between two stops.
+ *
+ * It rides every leg from its origin stop FORWARD around the loop to
+ * its destination, so direction matters: in A→B→C→A a C→B flow rides
+ * C→A and A→B.
+ */
+export interface IRaukkChainFlow {
+	/** Optional stable id, defaults to the flows position */
+	flowId?: string;
+	ticker: string;
+	fromStop: RAUKK_STOP_REF;
+	toStop: RAUKK_STOP_REF;
+	unitsPerDay: number;
+	/** Tonnes per unit */
+	weightPerUnit: number;
+	/** m³ per unit */
+	volumePerUnit: number;
+}
+
+/** A flow a chain claimed, resolved onto the loop */
+export interface IRaukkClaimedFlow {
+	flowIndex: number;
+	flow: IRaukkChainFlow;
+	/** Loop position the flow boards at */
+	fromIndex: number;
+	/** Loop position the flow leaves at */
+	toIndex: number;
+	/** Leg indexes ridden, in travel order */
+	legIndexes: number[];
+}
+
+/** Flow claiming result of one chain */
+export interface IRaukkChainClaim {
+	claimed: IRaukkClaimedFlow[];
+	/** Flows with an endpoint outside the chain, left to the v1 pairs */
+	unclaimed: IRaukkChainFlow[];
+}
+
+/** One leg of a chain loop, geometry only */
+export interface IRaukkChainLeg {
+	/** Leg identity is the POSITION, never the stop id: a loop may
+	 * legally visit the same stop twice */
+	index: number;
+	fromIndex: number;
+	toIndex: number;
+	fromStop: RAUKK_STOP_REF;
+	toStop: RAUKK_STOP_REF;
+	fromSystemId: string | null;
+	toSystemId: string | null;
+	/** Direct route, null when either end or the path is unresolvable */
+	route: IRaukkRoute | null;
+	sameSystem: boolean;
+	/** False when a stop or the path could not be resolved */
+	routable: boolean;
+}
+
+/** One leg of a chain loop, priced and loaded */
+export interface IRaukkChainLegResult extends IRaukkChainLeg {
+	weightPerDay: number;
+	volumePerDay: number;
+	/** Ship loads per day of this leg, the larger of both dimensions */
+	loads: number;
+	binding: RAUKK_LOAD_DIMENSION;
+	/** Daily amount of the binding dimension, t or m³ */
+	bindingPerDay: number;
+	/** Share of the hull this leg carries on every trip, 0 to 1 */
+	utilization: number;
+	/** Parsecs actually flown, differs from the route on same system
+	 * legs priced as a two jump out and back */
+	effectiveParsecs: number;
+	effectiveJumps: number;
+	sameSystemMode: RAUKK_SAME_SYSTEM_MODE | null;
+	/** Orbital separation band of a same system leg, when known */
+	sameSystemBand: IRaukkOrbitBand | null;
+	/** Parsec weighted mean meteoroid density of the path */
+	pathMeanDensity: number | null;
+	/** `profile.damagePerParsec` scaled by the density ratio */
+	damagePerParsec: number;
+	costPerTrip: number;
+	repairCostPerTrip: number;
+	dailyCost: number;
+	roundTripMinutes: number;
+}
+
+/** Cost result of one claimed flow */
+export interface IRaukkChainFlowResult {
+	flowIndex: number;
+	flowId: string;
+	ticker: string;
+	fromStop: RAUKK_STOP_REF;
+	toStop: RAUKK_STOP_REF;
+	unitsPerDay: number;
+	legIndexes: number[];
+	/** Parsecs the flow rides, summed over its legs */
+	parsecs: number;
+	dailyCost: number;
+	costPerUnit: number;
+}
+
+/** Everything one chain costing needs */
+export interface IRaukkChainInput {
+	chain: IRaukkChain;
+	profile: IRaukkShipProfile;
+	/** Candidate flows; the chain claims what it can carry */
+	flows: IRaukkChainFlow[];
+	config: IRaukkShippingConfig;
+	chainConfig: IRaukkChainConfig;
+	/** ȼ of a full repair bill, from `calculateRepairBillCost` */
+	repairBillCost: number;
+	/** Route lookups, defaults to the real systems graph */
+	routes?: IRaukkRouteDistance;
+	/** Orbit and density lookups, defaults to the shipped assets */
+	data?: IRaukkChainStaticData;
+	/** Exchange code to system id, defaults to the four real exchanges */
+	cxSystems?: Record<string, string>;
+}
+
+/** Shipping result of one chain */
+export interface IRaukkChainShipping {
+	chainId: string;
+	/** True when a chain LM rate replaced the own fleet cost */
+	hired: boolean;
+	tripsPerDay: number;
+	costPerTrip: number;
+	repairCostPerTrip: number;
+	dailyCost: number;
+	roundTripMinutes: number;
+	/** Ship time share of this chain, 0 when hired */
+	shippingFraction: number;
+	legs: IRaukkChainLegResult[];
+	/** Position of the weakest link, -1 when nothing moves */
+	bindingLegIndex: number;
+	flows: IRaukkChainFlowResult[];
+	unclaimed: IRaukkChainFlow[];
+	/** ȼ per unit per ticker, merged over all claimed flows */
+	perUnit: Record<string, number>;
+}
+
+/** A leg whose shortest path all but touches an exchange */
+export interface IRaukkCxSplitTrigger {
+	legIndex: number;
+	cxCode: string;
+	cxSystemId: string;
+	/** parsecs(via CX) − parsecs(direct) of that leg */
+	detourParsecs: number;
+}
+
+/** One sub chain of a split, with the flows it inherited */
+export interface IRaukkCxSubChain {
+	chain: IRaukkChain;
+	flows: IRaukkChainFlow[];
+}
+
+/** Split versus unsplit costing of one chain */
+export interface IRaukkCxSplitResult {
+	trigger: IRaukkCxSplitTrigger | null;
+	unsplit: IRaukkChainShipping;
+	subChains: IRaukkChainShipping[];
+	unsplitDailyCost: number;
+	splitDailyCost: number;
+	/** Undefined when no trigger fired and nothing was split */
+	splitCheaper: boolean;
+}
+
+/** Three way comparison of dropping one low utilization stop */
+export interface IRaukkChainDropEvaluation {
+	stopIndex: number;
+	stopRef: RAUKK_STOP_REF;
+	/** Lowest utilization of the stops two adjacent legs */
+	utilization: number;
+	dailyCostAsIs: number;
+	dailyCostWithoutStop: number;
+	/** Dropped flows run as their own v1 pairs, at their own frequency */
+	dailyCostStandalone: number;
+	standalonePairs: IRaukkPairShipping[];
+	/** Positive when dropping is cheaper */
+	savingPerDay: number;
+	recommendDrop: boolean;
+}

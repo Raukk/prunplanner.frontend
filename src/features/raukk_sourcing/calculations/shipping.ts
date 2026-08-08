@@ -186,13 +186,16 @@ export function calculateCostPerTrip(
 /**
  * Sublight block time of one direction, linear in its load factor.
  *
+ * Exported unchanged for the v2 chain math, which times one block per
+ * stop visit with that stops own load factor.
+ *
  * @author raukk
  *
  * @param {IRaukkShipProfile} profile Ship profile
  * @param {number} loadFactor Capacity used on that direction, 0 to 1
  * @returns {number} Minutes
  */
-function stlBlockMinutes(
+export function stlBlockMinutes(
 	profile: IRaukkShipProfile,
 	loadFactor: number
 ): number {

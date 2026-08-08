@@ -64,6 +64,28 @@ export interface IRaukkNearestCx {
 	route: IRaukkRoute;
 }
 
+/**
+ * One resolved route plus the systems it passes through.
+ *
+ * Additive over {@link IRaukkRoute} for the v2 chain math, which prices
+ * hull damage per system crossed and therefore needs the path itself,
+ * not only its length.
+ *
+ * @author raukk
+ */
+export interface IRaukkRoutePath extends IRaukkRoute {
+	/** Systems of the minimum parsec path, source and target included */
+	systemIds: string[];
+	/** Parsecs of every hop, one entry less than `systemIds` */
+	hopParsecs: number[];
+}
+
+/** Closest directly connected system, by parsecs of that one jump */
+export interface IRaukkNearestNeighbor {
+	systemId: string;
+	parsecs: number;
+}
+
 /** Session scoped route lookups over one system graph */
 export interface IRaukkRouteDistance {
 	route(systemIdA: string, systemIdB: string): IRaukkRoute | null;
@@ -71,6 +93,15 @@ export interface IRaukkRouteDistance {
 	jumpCount(systemIdA: string, systemIdB: string): number | null;
 	nearestCx(systemId: string): IRaukkNearestCx | null;
 	resolveSystemId(naturalId: string): string | null;
+	/**
+	 * Optional, added for the v2 chains: the minimum parsec path with the
+	 * systems it visits. Optional so every existing implementation of
+	 * this interface — `RAUKK_DEFAULT_ROUTES` and the fixture graphs of
+	 * the v1 tests — stays valid without a change.
+	 */
+	path?(systemIdA: string, systemIdB: string): IRaukkRoutePath | null;
+	/** Optional, added for the v2 same system legs */
+	nearestNeighbor?(systemId: string): IRaukkNearestNeighbor | null;
 }
 
 /** Shortest path tree of one source node */
@@ -79,6 +110,10 @@ interface IDijkstraResult {
 	distance: Float64Array;
 	/** Jumps along the shortest path, -1 when unreachable */
 	jumps: Int32Array;
+	/** Predecessor node index on that path, -1 at the source and when
+	 * unreachable. Added for {@link IRaukkRoutePath}, the distances
+	 * themselves are untouched. */
+	previous: Int32Array;
 }
 
 /** Numeric graph over the systems, weights in position units */
@@ -181,6 +216,7 @@ function dijkstra(graph: ISystemGraph, sourceIndex: number): IDijkstraResult {
 
 	const distance: Float64Array = new Float64Array(count).fill(Infinity);
 	const jumps: Int32Array = new Int32Array(count).fill(-1);
+	const previous: Int32Array = new Int32Array(count).fill(-1);
 	const done: Uint8Array = new Uint8Array(count);
 
 	distance[sourceIndex] = 0;
@@ -246,12 +282,13 @@ function dijkstra(graph: ISystemGraph, sourceIndex: number): IDijkstraResult {
 			) {
 				distance[edge.index] = candidate;
 				jumps[edge.index] = candidateJumps;
+				previous[edge.index] = current;
 				push([candidate, edge.index]);
 			}
 		}
 	}
 
-	return { distance, jumps };
+	return { distance, jumps, previous };
 }
 
 /**
@@ -302,6 +339,74 @@ export function createRouteDistance(
 			jumps: tree.jumps[b],
 			sameSystem: false,
 		};
+	}
+
+	function path(
+		systemIdA: string,
+		systemIdB: string
+	): IRaukkRoutePath | null {
+		const a: number | undefined = graph.idToIndex.get(systemIdA);
+		const b: number | undefined = graph.idToIndex.get(systemIdB);
+
+		if (a === undefined || b === undefined) return null;
+		if (a === b) {
+			return {
+				parsecs: 0,
+				jumps: 0,
+				sameSystem: true,
+				systemIds: [systemIdA],
+				hopParsecs: [],
+			};
+		}
+
+		const tree: IDijkstraResult = treeOf(a);
+		if (!Number.isFinite(tree.distance[b])) return null;
+
+		/** Walked backwards from the target, then reversed */
+		const indexes: number[] = [b];
+		let cursor: number = b;
+
+		while (cursor !== a) {
+			cursor = tree.previous[cursor];
+			if (cursor < 0) return null;
+			indexes.push(cursor);
+		}
+
+		indexes.reverse();
+
+		const hopParsecs: number[] = [];
+		for (let i = 1; i < indexes.length; i++) {
+			hopParsecs.push(
+				(tree.distance[indexes[i]] - tree.distance[indexes[i - 1]]) /
+					RAUKK_POSITION_UNITS_PER_PARSEC
+			);
+		}
+
+		return {
+			parsecs: tree.distance[b] / RAUKK_POSITION_UNITS_PER_PARSEC,
+			jumps: tree.jumps[b],
+			sameSystem: false,
+			systemIds: indexes.map((index) => graph.indexToId[index]),
+			hopParsecs,
+		};
+	}
+
+	function nearestNeighbor(systemId: string): IRaukkNearestNeighbor | null {
+		const a: number | undefined = graph.idToIndex.get(systemId);
+		if (a === undefined) return null;
+
+		let best: IRaukkNearestNeighbor | null = null;
+
+		graph.adjacent[a].forEach((edge) => {
+			const parsecs: number =
+				edge.weight / RAUKK_POSITION_UNITS_PER_PARSEC;
+
+			if (best === null || parsecs < best.parsecs) {
+				best = { systemId: graph.indexToId[edge.index], parsecs };
+			}
+		});
+
+		return best;
 	}
 
 	function parsecDistance(
@@ -358,7 +463,15 @@ export function createRouteDistance(
 		return graph.naturalIdToId.get(system) ?? null;
 	}
 
-	return { route, parsecDistance, jumpCount, nearestCx, resolveSystemId };
+	return {
+		route,
+		parsecDistance,
+		jumpCount,
+		nearestCx,
+		resolveSystemId,
+		path,
+		nearestNeighbor,
+	};
 }
 
 /**
@@ -392,6 +505,43 @@ export function routeBetween(
 	systemIdB: string
 ): IRaukkRoute | null {
 	return index().route(systemIdA, systemIdB);
+}
+
+/**
+ * Minimum parsec path between two systems, systems included.
+ *
+ * Same path `routeBetween` measures; this variant also reports which
+ * systems it crosses and how long each hop is, which the v2 chain math
+ * needs to weight hull damage by the meteoroid density of the systems
+ * actually flown through.
+ *
+ * @author raukk
+ *
+ * @param {string} systemIdA Source system id
+ * @param {string} systemIdB Target system id
+ * @returns {(IRaukkRoutePath | null)} Path, null if unknown or
+ * unreachable
+ */
+export function routePath(
+	systemIdA: string,
+	systemIdB: string
+): IRaukkRoutePath | null {
+	return index().path!(systemIdA, systemIdB);
+}
+
+/**
+ * Closest system one single jump away.
+ *
+ * @author raukk
+ *
+ * @param {string} systemId System id
+ * @returns {(IRaukkNearestNeighbor | null)} Neighbor and its parsecs,
+ * null if the system is unknown or has no connection
+ */
+export function nearestNeighbor(
+	systemId: string
+): IRaukkNearestNeighbor | null {
+	return index().nearestNeighbor!(systemId);
 }
 
 /**

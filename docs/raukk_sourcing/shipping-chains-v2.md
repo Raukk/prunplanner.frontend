@@ -208,6 +208,41 @@ pnpm test / tsc / lint / knip / prettier before every commit)
   line + storage cross-check warnings + split suggestion; i18n
   raukk_sourcing.json (en_US only); P* wrappers; `@author raukk`.
 
+## C1 implementation notes (shipped)
+
+Modules: `calculations/shippingChains.ts`,
+`calculations/shippingChains.types.ts`,
+`calculations/shippingChainData.ts` (+ tests). Decisions C1 had to
+make, all open to veto in C2:
+
+- **`stlCostPerMegameter`** — the doc asks for an STL estimate over the
+  orbital band but nothing in the v1 profile calibration prices
+  sublight DISTANCE (`stlBlockCost` is flat per block), so no honest
+  derivation exists. Added as an explicit chain config field with
+  DEFAULT 0, exactly like `costPerParsec`. At 0 the sublight option is
+  free and always wins the `min(STL, 2-jump)`, which reproduces v1's
+  free same-system behaviour until the user calibrates it.
+- **routeDistance additions** (purely additive, v1 math untouched):
+  `path()` / `routePath()` returning the path's system ids and per-hop
+  parsecs (needed for the density weighting) and `nearestNeighbor()`
+  (needed for the 2-jump same-system option). Both are OPTIONAL members
+  of `IRaukkRouteDistance`, so `RAUKK_DEFAULT_ROUTES` and the v1
+  fixtures stay valid; the chain math carries its own
+  `RAUKK_DEFAULT_CHAIN_ROUTES`. `stlBlockMinutes` in shipping.ts was
+  exported unchanged.
+- **CX split cut points** — cutting a cycle at ONE vertex still yields
+  one cycle, so the split uses TWO: the triggering leg plus an exchange
+  stop the loop already has, or, when it has none, the next best leg of
+  the same exchange by detour.
+- **Flow boarding with repeated stops** — the origin/destination pair
+  with the fewest ridden legs wins, ties towards the earlier position.
+- **Allocation versus v1** — a two stop chain reproduces the v1 pair's
+  trips, cost per trip, daily cost, round trip time and shipping
+  fraction exactly. Per-unit costs also match when both directions
+  carry the same load; with unequal loads they differ by design (v1
+  amortizes the round trip by load share, the chain charges each leg to
+  its own riders).
+
 ## Non-goals (v2)
 
 Route optimization / TSP, per-flow split-out UI, variance modeling,

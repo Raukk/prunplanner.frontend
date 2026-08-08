@@ -3,17 +3,21 @@ import { describe, expect, it } from "vitest";
 // Calculations
 import {
 	IRaukkNearestCx,
+	IRaukkNearestNeighbor,
 	IRaukkRoute,
 	IRaukkRouteDistance,
+	IRaukkRoutePath,
 	IRaukkSystemNode,
 	RAUKK_CX_SYSTEM_IDS,
 	RAUKK_POSITION_UNITS_PER_PARSEC,
 	createRouteDistance,
 	jumpCount,
 	nearestCx,
+	nearestNeighbor,
 	parsecDistance,
 	resolveSystemId,
 	routeBetween,
+	routePath,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 
 /** Real system ids of the reference flight ZV-307 to ZV-759 */
@@ -253,6 +257,108 @@ describe("Raukk Sourcing: Route Distance", () => {
 			expect(resolveSystemId("OT-580b")).toBe(SYSTEM_NC1);
 			expect(resolveSystemId("OT-580")).toBe(SYSTEM_NC1);
 			expect(resolveSystemId("NOPE")).toBeNull();
+		});
+	});
+
+	describe("path", () => {
+		const index: IRaukkRouteDistance = createRouteDistance(detourGraph);
+
+		it("reports the systems of the minimum parsec path", () => {
+			const found: IRaukkRoutePath | null = index.path!(
+				"sys-AA-001",
+				"sys-AA-002"
+			);
+
+			expect(found?.systemIds).toStrictEqual([
+				"sys-AA-001",
+				"sys-AA-004",
+				"sys-AA-005",
+				"sys-AA-002",
+			]);
+			expect(found?.jumps).toBe(3);
+			expect(found?.hopParsecs).toHaveLength(3);
+		});
+
+		it("hops sum up to the routes parsecs", () => {
+			const found: IRaukkRoutePath | null = index.path!(
+				"sys-AA-001",
+				"sys-AA-002"
+			);
+
+			expect(
+				found!.hopParsecs.reduce((sum, hop) => sum + hop, 0)
+			).toBeCloseTo(found!.parsecs, 10);
+			expect(found?.parsecs).toBeCloseTo(
+				index.parsecDistance("sys-AA-001", "sys-AA-002") ?? -1,
+				10
+			);
+		});
+
+		it("is the system itself within one system", () => {
+			expect(index.path!("sys-AA-001", "sys-AA-001")).toStrictEqual({
+				parsecs: 0,
+				jumps: 0,
+				sameSystem: true,
+				systemIds: ["sys-AA-001"],
+				hopParsecs: [],
+			});
+		});
+
+		it("is null for unknown and unreachable systems", () => {
+			expect(index.path!("nope", "sys-AA-001")).toBeNull();
+
+			const split: IRaukkRouteDistance = createRouteDistance([
+				system("AA-001", [0, 0, 0], []),
+				system("AA-002", [10, 0, 0], []),
+			]);
+
+			expect(split.path!("sys-AA-001", "sys-AA-002")).toBeNull();
+		});
+
+		it("works on the static game data", () => {
+			const found: IRaukkRoutePath | null = routePath(
+				SYSTEM_NC1,
+				SYSTEM_ZV307
+			);
+
+			expect(found).not.toBeNull();
+			expect(found!.systemIds[0]).toBe(SYSTEM_NC1);
+			expect(found!.systemIds[found!.systemIds.length - 1]).toBe(
+				SYSTEM_ZV307
+			);
+			expect(found!.hopParsecs).toHaveLength(found!.systemIds.length - 1);
+		});
+	});
+
+	describe("nearestNeighbor", () => {
+		const index: IRaukkRouteDistance = createRouteDistance(detourGraph);
+
+		it("is the closest system one jump away", () => {
+			const found: IRaukkNearestNeighbor | null =
+				index.nearestNeighbor!("sys-AA-001");
+
+			expect(found?.systemId).toBe("sys-AA-004");
+			expect(found?.parsecs).toBeCloseTo(
+				33 / RAUKK_POSITION_UNITS_PER_PARSEC,
+				10
+			);
+		});
+
+		it("is null without any connection and for unknown systems", () => {
+			const lonely: IRaukkRouteDistance = createRouteDistance([
+				system("AA-001", [0, 0, 0], []),
+			]);
+
+			expect(lonely.nearestNeighbor!("sys-AA-001")).toBeNull();
+			expect(index.nearestNeighbor!("nope")).toBeNull();
+		});
+
+		it("works on the static game data", () => {
+			const found: IRaukkNearestNeighbor | null =
+				nearestNeighbor(SYSTEM_NC1);
+
+			expect(found).not.toBeNull();
+			expect(found!.parsecs).toBeGreaterThan(0);
 		});
 	});
 });
