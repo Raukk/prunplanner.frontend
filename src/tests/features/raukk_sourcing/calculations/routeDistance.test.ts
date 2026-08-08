@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 // Calculations
 import {
+	IRaukkGateLink,
+	IRaukkMultiModalPath,
 	IRaukkNearestCx,
 	IRaukkNearestNeighbor,
 	IRaukkRoute,
@@ -9,8 +11,12 @@ import {
 	IRaukkRoutePath,
 	IRaukkSystemNode,
 	RAUKK_CX_SYSTEM_IDS,
+	RAUKK_DEFAULT_ROUTE_TIME,
+	RAUKK_GATE_LINKS,
+	RAUKK_GATE_TRAVERSAL,
 	RAUKK_POSITION_UNITS_PER_PARSEC,
 	createRouteDistance,
+	fastestRoutePath,
 	jumpCount,
 	nearestCx,
 	nearestNeighbor,
@@ -449,6 +455,399 @@ describe("Raukk Sourcing: Route Distance", () => {
 
 			expect(found).not.toBeNull();
 			expect(found!.parsecs).toBeGreaterThan(0);
+		});
+	});
+
+	describe("gate edges", () => {
+		/**
+		 * Four systems in a row, 120 units apart, plus one gate link that
+		 * spans the whole row.
+		 *
+		 * FTL: three jumps of 10 pc each, 30 pc in total. The gate covers
+		 * the same 30 pc straight line in one hop, which is slower per
+		 * parsec but pays neither the per jump charge nor the detour, so
+		 * it wins on minutes while tying on parsecs.
+		 */
+		const gateGraph: IRaukkSystemNode[] = [
+			system("GG-001", [0, 0, 0], ["GG-002"]),
+			system("GG-002", [120, 0, 0], ["GG-003"]),
+			system("GG-003", [240, 0, 0], ["GG-004"]),
+			system("GG-004", [360, 0, 0], []),
+		];
+
+		function side(
+			id: string,
+			fee: number,
+			cur: string
+		): IRaukkGateLink["aGate"] {
+			return {
+				id,
+				fee,
+				cur,
+				maxM3: 3000,
+				jumps24h: 250,
+				up: "0/5 c, 1/3 v, 1/3 d",
+				est: "100d",
+			};
+		}
+
+		const gateLinks: IRaukkGateLink[] = [
+			{
+				a: "GG-001b",
+				aName: "Alpha - One",
+				b: "GG-004a",
+				bName: "Delta - Four",
+				aGate: side("GTW-AAA-001", 1234, "NCC"),
+				bGate: side("GTW-BBB-002", 4321, "AIC"),
+				maxTraversalM3: 3000,
+				hcbCapable: false,
+			},
+			// one sided data: the counterpart system does not exist
+			{
+				a: "GG-001b",
+				aName: "Alpha - One",
+				b: "ZZ-999a",
+				bName: "Nowhere",
+				aGate: side("GTW-CCC-003", 999, "NCC"),
+				bGate: side("GTW-DDD-004", 999, "NCC"),
+				maxTraversalM3: 3000,
+				hcbCapable: false,
+			},
+			// both gates inside one system: nothing to traverse
+			{
+				a: "GG-002a",
+				aName: "Beta - a",
+				b: "GG-002b",
+				bName: "Beta - b",
+				aGate: side("GTW-EEE-005", 500, "NCC"),
+				bGate: side("GTW-FFF-006", 500, "NCC"),
+				maxTraversalM3: 3000,
+				hcbCapable: false,
+			},
+		];
+
+		const index: IRaukkRouteDistance = createRouteDistance(
+			gateGraph,
+			RAUKK_CX_SYSTEM_IDS,
+			gateLinks
+		);
+
+		it("leaves the FTL only lookups untouched", () => {
+			const route: IRaukkRoute | null = index.route(
+				"sys-GG-001",
+				"sys-GG-004"
+			);
+			const found: IRaukkRoutePath | null = index.path!(
+				"sys-GG-001",
+				"sys-GG-004"
+			);
+
+			expect(route?.jumps).toBe(3);
+			expect(found?.systemIds).toStrictEqual([
+				"sys-GG-001",
+				"sys-GG-002",
+				"sys-GG-003",
+				"sys-GG-004",
+			]);
+			// the additive fields exist on the multi modal path only
+			expect(found).not.toHaveProperty("hops");
+			expect(index.nearestNeighbor!("sys-GG-001")?.systemId).toBe(
+				"sys-GG-002"
+			);
+		});
+
+		it("takes the gate when it is faster", () => {
+			const found: IRaukkMultiModalPath | null = index.fastestPath!(
+				"sys-GG-001",
+				"sys-GG-004"
+			);
+
+			expect(found?.gateHops).toBe(1);
+			expect(found?.jumps).toBe(1);
+			expect(found?.systemIds).toStrictEqual([
+				"sys-GG-001",
+				"sys-GG-004",
+			]);
+			expect(found?.hops).toHaveLength(1);
+			expect(found?.hops[0].kind).toBe("gate");
+			expect(found?.parsecs).toBeCloseTo(30, 10);
+			expect(found?.hopParsecs).toStrictEqual([found!.parsecs]);
+			// 30 pc x 20.1 min + 20.3 min of TRA, LOCK and DCAY
+			expect(found?.minutes).toBeCloseTo(30 * 20.1 + 20.3, 10);
+		});
+
+		it("reports the per hop gate attributes", () => {
+			const found: IRaukkMultiModalPath | null = index.fastestPath!(
+				"sys-GG-001",
+				"sys-GG-004"
+			);
+
+			expect(found?.hops[0]).toStrictEqual({
+				kind: "gate",
+				fromSystemId: "sys-GG-001",
+				toSystemId: "sys-GG-004",
+				parsecs: 30,
+				minutes: 30 * 20.1 + 20.3,
+				gateId: "GTW-AAA-001",
+				fee: 1234,
+				feeCurrency: "NCC",
+				stlFuel: RAUKK_GATE_TRAVERSAL.stlFuel,
+				volumeCapM3: 3000,
+				damagePercent: RAUKK_GATE_TRAVERSAL.damagePercent,
+			});
+		});
+
+		it("charges the fee of the gate actually entered", () => {
+			const back: IRaukkMultiModalPath | null = index.fastestPath!(
+				"sys-GG-004",
+				"sys-GG-001"
+			);
+
+			expect(back?.hops[0].gateId).toBe("GTW-BBB-002");
+			expect(back?.hops[0].fee).toBe(4321);
+			expect(back?.hops[0].feeCurrency).toBe("AIC");
+		});
+
+		it("routes FTL only when gates are turned off", () => {
+			const found: IRaukkMultiModalPath | null = index.fastestPath!(
+				"sys-GG-001",
+				"sys-GG-004",
+				{ useGates: false }
+			);
+
+			expect(found?.gateHops).toBe(0);
+			expect(found?.jumps).toBe(3);
+			expect(found?.hops.map((hop) => hop.kind)).toStrictEqual([
+				"ftl",
+				"ftl",
+				"ftl",
+			]);
+			// 30 pc at 2.8 pc/h plus three reactor charges
+			expect(found?.minutes).toBeCloseTo((30 / 2.8) * 60 + 3 * 6.1, 10);
+			expect(found!.minutes).toBeGreaterThan(
+				index.fastestPath!("sys-GG-001", "sys-GG-004")!.minutes
+			);
+		});
+
+		it("skips links whose sides do not resolve to two systems", () => {
+			// the one sided link and the in-system link of the fixture
+			// leave no gate edge behind: every other pair stays pure FTL
+			const legs: IRaukkMultiModalPath | null = index.fastestPath!(
+				"sys-GG-001",
+				"sys-GG-003"
+			);
+
+			expect(legs?.gateHops).toBe(0);
+			expect(legs?.jumps).toBe(2);
+			expect(
+				index.fastestPath!("sys-GG-002", "sys-GG-002")
+			).toStrictEqual({
+				parsecs: 0,
+				jumps: 0,
+				sameSystem: true,
+				systemIds: ["sys-GG-002"],
+				hopParsecs: [],
+				minutes: 0,
+				hops: [],
+				gateHops: 0,
+			});
+		});
+
+		it("skips links too narrow for the hull", () => {
+			const wide: IRaukkMultiModalPath | null = index.fastestPath!(
+				"sys-GG-001",
+				"sys-GG-004",
+				{ shipVolumeM3: 5000 }
+			);
+			const narrow: IRaukkMultiModalPath | null = index.fastestPath!(
+				"sys-GG-001",
+				"sys-GG-004",
+				{ shipVolumeM3: 1000 }
+			);
+
+			expect(wide?.gateHops).toBe(0);
+			expect(wide?.jumps).toBe(3);
+			expect(narrow?.gateHops).toBe(1);
+		});
+
+		it("is null for unknown and unreachable systems", () => {
+			expect(index.fastestPath!("nope", "sys-GG-001")).toBeNull();
+
+			const split: IRaukkRouteDistance = createRouteDistance(
+				[
+					system("GG-001", [0, 0, 0], []),
+					system("GG-004", [360, 0, 0], []),
+				],
+				RAUKK_CX_SYSTEM_IDS,
+				[]
+			);
+
+			expect(split.fastestPath!("sys-GG-001", "sys-GG-004")).toBeNull();
+		});
+
+		it("memoizes both metrics apart from each other", () => {
+			const fresh: IRaukkRouteDistance = createRouteDistance(
+				gateGraph,
+				RAUKK_CX_SYSTEM_IDS,
+				gateLinks
+			);
+
+			// query the gate metric first, the parsec metric must not
+			// inherit its tree, and neither must the option sets
+			const gated: IRaukkMultiModalPath | null = fresh.fastestPath!(
+				"sys-GG-001",
+				"sys-GG-004"
+			);
+			const ftlOnly: IRaukkMultiModalPath | null = fresh.fastestPath!(
+				"sys-GG-001",
+				"sys-GG-004",
+				{ useGates: false }
+			);
+
+			expect(fresh.route("sys-GG-001", "sys-GG-004")?.jumps).toBe(3);
+			expect(fresh.path!("sys-GG-001", "sys-GG-004")?.jumps).toBe(3);
+			expect(gated?.gateHops).toBe(1);
+			expect(ftlOnly?.gateHops).toBe(0);
+
+			// repeated lookups stay on their own memoized tree
+			expect(
+				fresh.fastestPath!("sys-GG-001", "sys-GG-004")?.minutes
+			).toBe(gated?.minutes);
+			expect(
+				fresh.fastestPath!("sys-GG-001", "sys-GG-004", {
+					useGates: false,
+				})?.minutes
+			).toBe(ftlOnly?.minutes);
+		});
+	});
+
+	describe("gate edges on the static game data", () => {
+		/** Amethyst b, the far end of the calibrated Antares I gate */
+		const SYSTEM_IA158: string | null = resolveSystemId("IA-158b");
+
+		it("carries the transcribed links only", () => {
+			expect(RAUKK_GATE_LINKS).toHaveLength(17);
+			expect(RAUKK_DEFAULT_ROUTE_TIME.useGates).toBe(true);
+			expect(RAUKK_GATE_TRAVERSAL.minutesPerParsec).toBe(20.1);
+		});
+
+		it("beats FTL on the calibrated ZV-307c to IA-158b run", () => {
+			// BTF head to head (WCB, empty): gate 6h11m against FTL
+			// 1d02h23m — those totals include the STL legs to and from
+			// the planets, which are not part of the system graph, so
+			// only the inter system parts are compared here
+			const gated: IRaukkMultiModalPath | null = fastestRoutePath(
+				SYSTEM_ZV307,
+				SYSTEM_IA158!
+			);
+			const ftlOnly: IRaukkMultiModalPath | null = fastestRoutePath(
+				SYSTEM_ZV307,
+				SYSTEM_IA158!,
+				{ useGates: false }
+			);
+
+			expect(gated).not.toBeNull();
+			expect(gated!.gateHops).toBe(1);
+			expect(gated!.hops).toHaveLength(1);
+			expect(gated!.minutes).toBeLessThan(ftlOnly!.minutes);
+
+			// the gate spans 17 pc in game, 5h41m of pure traversal
+			expect(gated!.hops[0].parsecs).toBeCloseTo(17.083, 3);
+			expect(
+				gated!.hops[0].minutes - RAUKK_GATE_TRAVERSAL.overheadMinutes
+			).toBeGreaterThan(335);
+			expect(
+				gated!.hops[0].minutes - RAUKK_GATE_TRAVERSAL.overheadMinutes
+			).toBeLessThan(350);
+
+			// FTL is 36.24 pc over six jumps on the same pair
+			expect(ftlOnly!.gateHops).toBe(0);
+			expect(ftlOnly!.parsecs).toBeGreaterThan(36);
+			expect(ftlOnly!.minutes).toBeGreaterThan(2 * gated!.minutes);
+		});
+
+		it("reports the fee, cap and damage of the Antares I gate", () => {
+			const gated: IRaukkMultiModalPath | null = fastestRoutePath(
+				SYSTEM_ZV307,
+				SYSTEM_IA158!
+			);
+
+			expect(gated!.hops[0]).toMatchObject({
+				kind: "gate",
+				gateId: "GTW-BYP-857",
+				fee: 6000,
+				feeCurrency: "AIC",
+				stlFuel: 25,
+				volumeCapM3: 6000,
+				damagePercent: 0.006,
+			});
+		});
+
+		it("caps the Hortus corridor at the narrower link", () => {
+			// Promitor to Amethyst admits 3,000 m³: a WCB sized hull gets
+			// the two gate hops, an HCB sized one is sent back onto FTL
+			const hortus: string | null = resolveSystemId("VH-331a");
+
+			const small: IRaukkMultiModalPath | null = fastestRoutePath(
+				SYSTEM_ZV307,
+				hortus!,
+				{ shipVolumeM3: 1000 }
+			);
+			const large: IRaukkMultiModalPath | null = fastestRoutePath(
+				SYSTEM_ZV307,
+				hortus!,
+				{ shipVolumeM3: 5825 }
+			);
+
+			expect(small!.gateHops).toBe(2);
+			expect(small!.hops.map((hop) => hop.volumeCapM3)).toStrictEqual([
+				6000, 3000,
+			]);
+
+			// the big hull keeps the 6,000 m³ links it fits through, but
+			// no hop of its path is narrower than the hull itself and
+			// none of them reaches Hortus
+			expect(
+				large!.hops.every(
+					(hop) => hop.kind === "ftl" || hop.volumeCapM3! >= 5825
+				)
+			).toBe(true);
+			expect(large!.hops[large!.hops.length - 1].kind).toBe("ftl");
+			expect(large!.minutes).toBeGreaterThan(small!.minutes);
+		});
+
+		it("never routes over an unlinked gate", () => {
+			// Dolzena - Kinza holds a gate whose counterpart was never
+			// transcribed; it must not appear as a hop anywhere
+			const kinza: string | null = resolveSystemId("LG-418b");
+
+			const found: IRaukkMultiModalPath | null = fastestRoutePath(
+				SYSTEM_NC1,
+				kinza!
+			);
+
+			expect(found).not.toBeNull();
+			expect(found!.hops.some((hop) => hop.toSystemId === kinza)).toBe(
+				true
+			);
+			expect(
+				found!.hops.filter((hop) => hop.toSystemId === kinza)[0].kind
+			).toBe("ftl");
+		});
+
+		it("leaves the FTL only module functions unchanged", () => {
+			const found: IRaukkRoutePath | null = routePath(
+				SYSTEM_ZV307,
+				SYSTEM_IA158!
+			);
+
+			expect(found).not.toHaveProperty("hops");
+			expect(found!.jumps).toBe(6);
+			expect(parsecDistance(SYSTEM_ZV307, SYSTEM_IA158!)).toBeCloseTo(
+				36.23995286363064,
+				10
+			);
+			expect(jumpCount(SYSTEM_ZV307, SYSTEM_IA158!)).toBe(6);
 		});
 	});
 });
