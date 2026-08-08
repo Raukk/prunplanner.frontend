@@ -354,6 +354,33 @@ LM rate and ship assignment are pair-keyed.
    (`useRaukkDepotCosts`) and shown as its own line rather than
    folded into any chain. An unused depot costs nothing.
 
+## Round 12 (local transfers: same-planet draws)
+
+1. **The rule**: a draw whose SOURCE PLAN sits on the consuming plans
+   own planet is a local transfer. The units change hands over a
+   same-location contract, no ship flies, and the draw therefore rides
+   NO pair — neither a sourcing lane nor the hub/spoke detour through
+   the two exchanges. This generalizes the self-sourcing exemption of
+   round 7 from "same plan" to "same planet": self sourcing is now just
+   the case where the two plans happen to be one.
+2. **Both sides**: the consumer zeroes the origins `share` in
+   `withoutLocalFreight` (the origin is kept, an emptied origin list
+   would fall through to the market lane and charge freight on cargo
+   that never moved) and the producer skips the counterpart in
+   `planHubSpokeRouting`, so the units `subscribedOf` took off its
+   exchange sells are never added back by `viaCxSoldOf`.
+3. **Freight only**: the draw is still recorded, the input is still
+   priced at the producers `costPerUnit`, the source still counts
+   towards the base fraction and staleness is unchanged. Per ORIGIN, so
+   a mixed aggregate exempts its local producer and freights the remote
+   ones.
+4. **Automatic**, gated behind no configuration: the geometry decides,
+   the same way distance decides everything else in the model. A base
+   leased on a planet the account already sits on and a clone-compare
+   pair of plans on one planet both get it for free. Delegation and the
+   lease link itself are a separate upcoming phase; nothing here needs
+   them.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration, and

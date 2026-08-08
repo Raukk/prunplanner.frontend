@@ -473,7 +473,11 @@ function chainClaimedUnits(
  * minus whatever a chain really does carry — which the drawing plan
  * subtracts on its own side as well and must not be shipped twice.
  *
- * Self sourcing is skipped whole: those units never leave the planet.
+ * A counterpart on the OWN PLANET is skipped whole, own plan included:
+ * those units never leave the planet, a same-location contract hands
+ * them over. `subscribedOf` took them off this plans exchange sells when
+ * the draw was recorded and nothing puts them back, which is the whole
+ * of the local transfer rule on the producers side.
  *
  * @author raukk
  *
@@ -497,6 +501,10 @@ function planHubSpokeRouting(
 			const counterpart: IRaukkSnapshot = sourcingStore.snapshots[
 				counterpartUuid
 			] as IRaukkSnapshot;
+
+			// local transfer: a counterpart on this very planet takes its
+			// draw over a same-location contract, it never rides a lane
+			if (counterpart.planetNaturalId === input.planetNaturalId) return;
 
 			const outbound: Record<string, number> | undefined =
 				counterpart.draws[input.planUuid];
@@ -549,21 +557,39 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 	const cxSystemId: string | undefined =
 		cxCode === undefined ? undefined : RAUKK_CX_SYSTEM_ID_BY_CODE[cxCode];
 
-	/*
-	 * Supply loops are allowed since main's loop change, the plan itself
-	 * included: own output may feed own repairs. Such units never leave
-	 * the planet, so they ride NO pair — their share is zeroed rather
-	 * than the origin dropped, an emptied origin list would fall through
-	 * to the market lane and charge freight on cargo that never moved.
-	 * The self drawn units are removed from the plans CX outbound by
-	 * `subscribedOf` on the very same snapshot, so nothing is double
-	 * booked either.
+	/**
+	 * Planet a source plan sits on, own plan included.
+	 *
+	 * The snapshot of the plan is the answer, exactly as the `planetOf`
+	 * lookup below reads it — the two must agree or the local exemption
+	 * and the pair construction would disagree on what a lane is. The own
+	 * plan is answered from the input instead: its snapshot is written by
+	 * the very computation asking here and a first pass has none yet.
 	 */
-	function withoutSelfFreight(
+	function sourcePlanetOf(planUuid: string): string | undefined {
+		if (planUuid === input.planUuid) return input.planetNaturalId;
+
+		return sourcingStore.snapshots[planUuid]?.planetNaturalId;
+	}
+
+	/*
+	 * A draw from a plan on the SAME PLANET is a local transfer: a
+	 * same-location contract moves the units, no ship flies. Supply loops
+	 * are the special case of it — since main's loop change a plan may
+	 * feed its own demand — and a leased or cloned base on the own planet
+	 * is the general one. Such units ride NO pair; their share is zeroed
+	 * rather than the origin dropped, an emptied origin list would fall
+	 * through to the market lane and charge freight on cargo that never
+	 * moved. The drawn units are removed from the producers CX outbound by
+	 * `subscribedOf` and never added back by {@link planHubSpokeRouting},
+	 * so nothing is double booked either. Per ORIGIN, so a mixed aggregate
+	 * exempts its local producer and freights the remote ones.
+	 */
+	function withoutLocalFreight(
 		origins: IRaukkTickerOrigin[]
 	): IRaukkTickerOrigin[] {
 		return origins.map((origin) =>
-			origin.planUuid === input.planUuid
+			sourcePlanetOf(origin.planUuid) === input.planetNaturalId
 				? { ...origin, share: 0 }
 				: origin
 		);
@@ -631,7 +657,7 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 			if (fromPlanUuid === undefined) return [];
 
 			if (!isAggregateSource(fromPlanUuid))
-				return withoutSelfFreight([
+				return withoutLocalFreight([
 					{ planUuid: fromPlanUuid, share: 1 },
 				]);
 
@@ -644,7 +670,7 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 				0
 			);
 
-			return withoutSelfFreight(
+			return withoutLocalFreight(
 				producers.map((producer) => ({
 					planUuid: producer.planUuid,
 					share:
@@ -654,8 +680,7 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 				}))
 			);
 		},
-		planetOf: (planUuid: string): string | undefined =>
-			sourcingStore.snapshots[planUuid]?.planetNaturalId,
+		planetOf: sourcePlanetOf,
 		subscribedOf: (ticker: string): number =>
 			sourcingStore.subscription(input.planUuid, ticker).totalDrawnPerDay,
 		/*
