@@ -10,6 +10,12 @@ import {
 	RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
 } from "@/features/raukk_sourcing/calculations/shippingCadence";
 import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
+import {
+	RAUKK_REFERENCE_METEOROID_DENSITY,
+	RAUKK_REFERENCE_STL_LEG_KM,
+	raukkFtlDamagePerParsec,
+	raukkStlDamage,
+} from "@/features/raukk_sourcing/calculations/shippingPhysics";
 
 // Types & Interfaces
 import {
@@ -70,48 +76,59 @@ export const RAUKK_FUEL_TICKERS: { ftl: string; stl: string } = {
 };
 
 /**
- * Hull damage of the reference flights: 0.088% over a 4 parsec leg.
+ * Hull damage, split into its two physical terms.
  *
- * The logs cannot separate the per parsec from the per sublight block
- * term — every recorded run flew exactly one block per leg — so the
- * whole observed damage is attributed to the distance term and the
- * block term starts at zero. Both are user editable.
+ * The round 5 logs could not separate them — every recorded run flew
+ * exactly one block per leg — and so attributed the whole observed
+ * damage to the distance term and started the block term at zero. The
+ * calibration campaign measures the two independently
+ * (docs/raukk_sourcing/shipping-calibration.md §6) and they turn out to
+ * be nothing alike: a jump costs a flat 0.0011 % per parsec whatever
+ * the reactor does, while the sublight block carries the meteoroid law
+ * and dominates every FTL trip. Both stay user editable.
  */
-const DEFAULT_DAMAGE_PER_PARSEC: number = 0.00088 / 4;
-const DEFAULT_DAMAGE_PER_STL_BLOCK: number = 0;
+const DEFAULT_DAMAGE_PER_PARSEC: number = raukkFtlDamagePerParsec();
+const DEFAULT_DAMAGE_PER_STL_BLOCK: number = raukkStlDamage(
+	RAUKK_REFERENCE_STL_LEG_KM,
+	RAUKK_REFERENCE_METEOROID_DENSITY
+);
 
 /** One ship available per profile, per the implementer default */
 const DEFAULT_SHIPS_AVAILABLE: number = 1;
 
 /**
- * The two profiles the reference flights actually cover, basis fuel MIN
- * and a practical reactor setting of roughly two thirds.
+ * The two hull classes the reference flights cover, restated on the
+ * calibration campaign's numbers.
  *
- * 3000t class, standard reactor: 4 pc in 1h50m at 69% reactor, CHRG 52s,
- * sublight block ~70 min empty and roughly six times that loaded.
- * 5000/5000 quick-charge: ~33 min per parsec at 60% reactor, CHRG 1m14s,
- * block ~150 min empty and ~2.4 times that loaded.
+ * A one way flight is exactly ONE sublight block in this model: a
+ * takeoff, a transit leg and a landing. Where the campaign
+ * (docs/raukk_sourcing/shipping-calibration.md) and the round 5 logs
+ * disagree the campaign wins, because it flew the Blueprint Test Flight
+ * simulator and read exact per-leg tables instead of timing a real trip.
  *
- * Fuel burn, derived from the very same flights (a one way flight is
- * exactly ONE sublight block in this model — the block is its whole
- * DEP/APP/LND portion, which is how the block MINUTES above were read
- * off as well):
+ * - 5000/5000, the HCB of batch 1 (§7, FSE at 1,672 t, VH-331a → HRT at
+ *   MIN): TO 6m59s / 24 u and TRA 53m48s / 38 u empty, TO 13m20s / 46 u
+ *   and TRA 2h24m / 49 u with 5,000 t aboard. The observed leg ended at
+ *   a station and so had no landing; the block adds one at the takeoff's
+ *   own cost, since §1.3 covers TO and LND with one mechanism. That
+ *   gives 67.8 min / 86 u empty and 170.7 min / 141 u loaded. The jump
+ *   speed of 33 min per parsec survives round 5 — batch 7 flies 14 pc in
+ *   7h44m — and so does the 5.83 units per parsec, which batch 7
+ *   reproduces at 268 u over 46 pc.
+ * - 3000/1000, the WCB the campaign flew as BP-EXRX-5540 (§ intro: ENG,
+ *   931 t, acceleration capped at 98.1 m/s²). The campaign has no
+ *   in-system leg for this hull, so its block is DERIVED from that build
+ *   through the §1.2/§1.3 laws rather than read off — 28.9 min / 89 u
+ *   empty and 50.8 min / 157 u loaded. Batch 3 corroborates the empty
+ *   figure: the same WCB spent 98 sublight units on a one way trip. Its
+ *   FTL burn is batch 3's own, 168 units over 36 parsecs.
  *
- * - 3000t class, standard (BP-TLRI-1286, 18 pc empty): 73 FTL units,
- *   4.06 per parsec. Block fuel from the ANT → ZV-759c pair of the same
- *   class: 108 STL units loaded with 3000 t, 72 empty, so 90 per block
- *   as the mean of the pair — the same empty/loaded average the
- *   calibration solver produces from two observed flights, and the lower
- *   bound the round 5 decision quotes. The 211 STL units of the BP-TLRI
- *   flight itself come from its much higher reactor setting and are not
- *   used.
- * - 5000/5000, quick-charge (18 pc): 105 FTL units either way, 5.83 per
- *   parsec — FTL burn is load independent, exactly as its jump times
- *   are. Block fuel 285 STL units loaded and 237 empty, mean 261.
+ * Charge times stay at the round 5 readings: the campaign measures CHRG
+ * only on a standard reactor in a 5,831 m³ hull (§3), which is neither
+ * of these two rows, and copying it across would be an extrapolation.
  *
  * The uncovered ten profiles copy the nearest of these two, see
- * {@link raukkNearestCalibration}. No burn rate is inter- or
- * extrapolated, no physics is invented.
+ * {@link raukkNearestCalibration}.
  */
 const TIME_CALIBRATIONS: IRaukkTimeCalibration[] = [
 	{
@@ -119,20 +136,20 @@ const TIME_CALIBRATIONS: IRaukkTimeCalibration[] = [
 		ftlReactor: "standard",
 		minutesPerParsec: 27.5,
 		chargeMinutes: 52 / 60,
-		stlBlockMinutesEmpty: 70,
-		stlBlockMinutesLoaded: 70 * 6,
-		ftlFuelPerParsec: 73 / 18,
-		stlFuelPerBlock: (72 + 108) / 2,
+		stlBlockMinutesEmpty: 28.9,
+		stlBlockMinutesLoaded: 50.8,
+		ftlFuelPerParsec: 168 / 36,
+		stlFuelPerBlock: (89 + 157) / 2,
 	},
 	{
 		hull: { cargoWeight: 5000, cargoVolume: 5000 },
 		ftlReactor: "quick-charge",
 		minutesPerParsec: 33,
 		chargeMinutes: 74 / 60,
-		stlBlockMinutesEmpty: 150,
-		stlBlockMinutesLoaded: 150 * 2.4,
+		stlBlockMinutesEmpty: 2 * (6 + 59 / 60) + 53.8,
+		stlBlockMinutesLoaded: 2 * (13 + 20 / 60) + 144,
 		ftlFuelPerParsec: 105 / 18,
-		stlFuelPerBlock: (237 + 285) / 2,
+		stlFuelPerBlock: (2 * 24 + 38 + (2 * 46 + 49)) / 2,
 	},
 ];
 
@@ -217,6 +234,14 @@ export function raukkShipProfilePreset(
 		cargoWeight: hull.cargoWeight,
 		cargoVolume: hull.cargoVolume,
 		ftlReactor,
+		/*
+		 * Every preset is an FTL ship: the reference flights are FTL
+		 * flights, and no STL-only run is calibrated. Dropping the drive
+		 * is a user decision per profile, not a shipped hull class —
+		 * the hold is what a preset describes, and an STL-only build
+		 * has the very same hold.
+		 */
+		stlOnly: false,
 		costPerParsec: DEFAULT_COST_PER_PARSEC,
 		stlBlockCost: DEFAULT_STL_BLOCK_COST,
 		ftlFuelPerParsec: calibration.ftlFuelPerParsec,
@@ -259,13 +284,18 @@ export function raukkShipProfilePresets(): IRaukkShipProfile[] {
 /**
  * A ship profile as older payloads and local storage blobs carry it:
  * everything of {@link IRaukkShipProfile}, but the two fuel burn rates
- * of round 5 may still be missing.
+ * of round 5 and the STL-only flag may still be missing.
  */
 export type RAUKK_STORED_SHIP_PROFILE = Omit<
 	IRaukkShipProfile,
-	"ftlFuelPerParsec" | "stlFuelPerBlock"
+	"ftlFuelPerParsec" | "stlFuelPerBlock" | "stlOnly"
 > &
-	Partial<Pick<IRaukkShipProfile, "ftlFuelPerParsec" | "stlFuelPerBlock">>;
+	Partial<
+		Pick<
+			IRaukkShipProfile,
+			"ftlFuelPerParsec" | "stlFuelPerBlock" | "stlOnly"
+		>
+	>;
 
 /**
  * Fills the fuel burn rates a pre round 5 profile does not carry.
@@ -274,6 +304,9 @@ export type RAUKK_STORED_SHIP_PROFILE = Omit<
  * profiles own hull and reactor — the same pre-fill a fresh preset gets,
  * so an old override keeps deriving from real numbers instead of burning
  * nothing. Present rates, zero included, are left alone.
+ *
+ * An absent `stlOnly` is an FTL ship, which is what every profile
+ * written before the flag existed was.
  *
  * @author raukk
  *
@@ -293,6 +326,7 @@ export function raukkCompleteShipProfile(
 		ftlFuelPerParsec:
 			profile.ftlFuelPerParsec ?? calibration.ftlFuelPerParsec,
 		stlFuelPerBlock: profile.stlFuelPerBlock ?? calibration.stlFuelPerBlock,
+		stlOnly: profile.stlOnly ?? false,
 	};
 }
 

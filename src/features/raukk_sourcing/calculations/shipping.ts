@@ -13,6 +13,10 @@ import {
 	raukkHullLoads,
 	raukkPickHull,
 } from "@/features/raukk_sourcing/calculations/shippingHull";
+import {
+	raukkGateOnlyPath,
+	raukkStlOnlyCandidates,
+} from "@/features/raukk_sourcing/calculations/shippingStl";
 
 // Types & Interfaces
 import { IRaukkRoute } from "@/features/raukk_sourcing/calculations/routeDistance";
@@ -336,6 +340,42 @@ interface IRaukkLegHull {
 }
 
 /**
+ * Whether an STL-only hull can fly this lane at all.
+ *
+ * A same system lane always can — it never leaves the system, which is
+ * exactly what an STL-only ship is built for. An inter-system lane needs
+ * a path whose every hop is a gate traversal; without the system ids and
+ * the route lookups nothing can be established and the answer is no,
+ * which keeps an unverifiable assignment out of the automatic pick.
+ *
+ * SEAM: the gate search runs WITHOUT a volume cap. Establishing the cap
+ * needs a hull, and the hull is what this answer selects; a link too
+ * narrow for the chosen hull is therefore not caught here. The chain
+ * model, which knows its profile up front, does pass the hull volume.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingPair} pair Route pair the plan owns
+ * @returns {boolean} Whether an STL-only hull may fly the lane
+ */
+function stlOnlyServes(pair: IRaukkShippingPair): boolean {
+	if (pair.route.sameSystem) return true;
+
+	if (
+		pair.routes === undefined ||
+		pair.fromSystemId === undefined ||
+		pair.toSystemId === undefined
+	) {
+		return false;
+	}
+
+	return (
+		raukkGateOnlyPath(pair.routes, pair.fromSystemId, pair.toSystemId) !==
+		null
+	);
+}
+
+/**
  * Picks the hull of one leg.
  *
  * A MANUAL assignment wins outright and is never argued with — "Auto" is
@@ -357,7 +397,8 @@ function legHull(
 	pair: IRaukkShippingPair,
 	bucket: RAUKK_CARGO_BUCKET,
 	demand: IRaukkLegDemand,
-	capDays: number
+	capDays: number,
+	gateServable: boolean
 ): IRaukkLegHull {
 	const fallback: IRaukkHullCandidate = {
 		shipTypeId: pair.profile.id,
@@ -369,15 +410,18 @@ function legHull(
 	if (pair.hulls.manual !== undefined)
 		return { candidate: pair.hulls.manual, advisory: null };
 
+	// raukk: an STL-only hull is never picked for a lane it cannot fly,
+	// neither as an assignment nor as an advisory — advising a ship that
+	// would fail validation is worse than advising nothing
 	const owned: IRaukkHullPick | null = raukkPickHull(
-		pair.hulls.owned,
+		raukkStlOnlyCandidates(pair.hulls.owned, gateServable),
 		demand,
 		capDays
 	);
 	const candidate: IRaukkHullCandidate = owned?.candidate ?? fallback;
 
 	const ideal: IRaukkHullPick | null = raukkPickHull(
-		pair.hulls.all,
+		raukkStlOnlyCandidates(pair.hulls.all, gateServable),
 		demand,
 		capDays
 	);
@@ -423,6 +467,13 @@ export function raukkLaneLegs(
 ): IRaukkLaneLeg[] {
 	const legs: IRaukkLaneLeg[] = [];
 
+	/*
+	 * Resolved ONCE per lane, not per leg: the answer is a property of
+	 * the lane and of the gate network, never of the cargo riding it,
+	 * and the gate search is the expensive part.
+	 */
+	const gateServable: boolean = stlOnlyServes(pair);
+
 	function cargoOf(
 		tickers: IRaukkShippedTicker[],
 		bucket: RAUKK_CARGO_BUCKET
@@ -444,7 +495,13 @@ export function raukkLaneLegs(
 
 		const capDays: number = caps[bucket];
 		const demand: IRaukkLegDemand = legDemand(out, back);
-		const hull: IRaukkLegHull = legHull(pair, bucket, demand, capDays);
+		const hull: IRaukkLegHull = legHull(
+			pair,
+			bucket,
+			demand,
+			capDays,
+			gateServable
+		);
 
 		const loadOut: IRaukkDirectionLoad = calculateDirectionLoad(
 			out,
@@ -476,6 +533,16 @@ export function raukkLaneLegs(
 			loadOut,
 			loadBack,
 			advisory: hull.advisory,
+			/*
+			 * A MANUAL assignment reaches this point unfiltered, and so
+			 * does the pairs own profile when no fleet is known: an
+			 * STL-only ship on a lane with no gate route is exactly the
+			 * validation error the user has to see.
+			 */
+			unservableReason:
+				hull.candidate.profile.stlOnly && !gateServable
+					? "stl-only-no-gate"
+					: null,
 		});
 	});
 
@@ -488,6 +555,7 @@ function emptyPairShipping(pairKey: string): IRaukkPairShipping {
 		pairKey,
 		hired: false,
 		legs: [],
+		unservable: false,
 		tripsPerDay: 0,
 		costPerTrip: 0,
 		repairCostPerTrip: 0,
@@ -755,6 +823,7 @@ export function calculatePairShipping(
 			roundTripMinutes,
 			shippingFraction: legFraction,
 			advisory: leg.advisory,
+			unservableReason: leg.unservableReason,
 		});
 	});
 
@@ -762,6 +831,7 @@ export function calculatePairShipping(
 		pairKey: pair.pairKey,
 		hired,
 		legs: costed,
+		unservable: costed.some((leg) => leg.unservableReason !== null),
 		tripsPerDay,
 		costPerTrip: tripsPerDay > 0 ? dailyCost / tripsPerDay : 0,
 		repairCostPerTrip: tripsPerDay > 0 ? repairCost / tripsPerDay : 0,

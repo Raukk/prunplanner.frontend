@@ -299,6 +299,11 @@ Points the phase left open, decided while building it:
 
 ## Deferred — NOT in this round of work
 
+- **Open item — chain-level ship fuel stays market-priced.** A plan now
+  sources the FF/SF its own lanes burn (the "Ship fuel" rows of the
+  inputs table) from a producing refinery plan. Chains have no owning
+  plan, so `raukkLoadChainPrices` in `useRaukkChainCompute.ts` keeps
+  pricing their fuel off the market. Not redesigned in this round.
 - Self-sustained-cycle zero cost (the "ours −8,955.29" rule) and the
   base-fraction denominator change (output minus CX-shipped).
   Waiting on a worked multi-base example from the user. Do not

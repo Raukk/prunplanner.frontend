@@ -64,7 +64,7 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 	});
 
 	describe("calibration defaults", () => {
-		it("uses the measured 3000t class standard reactor flight", () => {
+		it("derives the 3000t class block from the campaign WCB", () => {
 			const preset: IRaukkShipProfile = raukkShipProfilePreset(
 				{ cargoWeight: 3000, cargoVolume: 1000 },
 				"standard"
@@ -72,11 +72,12 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 
 			expect(preset.minutesPerParsec).toBe(27.5);
 			expect(preset.chargeMinutes).toBeCloseTo(52 / 60, 10);
-			expect(preset.stlBlockMinutesEmpty).toBe(70);
-			expect(preset.stlBlockMinutesLoaded).toBe(420);
+			// ENG at 931 t, acceleration capped at 98.1 m/s²
+			expect(preset.stlBlockMinutesEmpty).toBe(28.9);
+			expect(preset.stlBlockMinutesLoaded).toBe(50.8);
 		});
 
-		it("uses the measured 5000/5000 quick-charge flight", () => {
+		it("uses the batch 1 HCB legs for the 5000/5000 block", () => {
 			const preset: IRaukkShipProfile = raukkShipProfilePreset(
 				{ cargoWeight: 5000, cargoVolume: 5000 },
 				"quick-charge"
@@ -84,8 +85,10 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 
 			expect(preset.minutesPerParsec).toBe(33);
 			expect(preset.chargeMinutes).toBeCloseTo(74 / 60, 10);
-			expect(preset.stlBlockMinutesEmpty).toBe(150);
-			expect(preset.stlBlockMinutesLoaded).toBe(360);
+			// TO 6m59s + TRA 53m48s + a landing at the takeoff's cost
+			expect(preset.stlBlockMinutesEmpty).toBeCloseTo(67.767, 3);
+			// TO 13m20s + TRA 2h24m + landing, with 5,000 t aboard
+			expect(preset.stlBlockMinutesLoaded).toBeCloseTo(170.667, 3);
 		});
 
 		it("copies the nearest covered profile by hull volume", () => {
@@ -139,12 +142,13 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 				"quick-charge"
 			);
 
-			// 73 FTL units over 18 pc, block fuel the mean of 72 and 108
-			expect(standard.ftlFuelPerParsec).toBeCloseTo(73 / 18, 10);
-			expect(standard.stlFuelPerBlock).toBe(90);
-			// 105 FTL units over 18 pc, block fuel the mean of 237 and 285
+			// calibration batch 3: 168 FTL units over 36 pc
+			expect(standard.ftlFuelPerParsec).toBeCloseTo(168 / 36, 10);
+			expect(standard.stlFuelPerBlock).toBe(123);
+			// 105 FTL units over 18 pc, batch 7 reproduces it at 268 / 46
 			expect(quick.ftlFuelPerParsec).toBeCloseTo(105 / 18, 10);
-			expect(quick.stlFuelPerBlock).toBe(261);
+			// batch 1: TO 24 u + TRA 38 u + LND, and 46 + 49 + 46 loaded
+			expect(quick.stlFuelPerBlock).toBe((86 + 141) / 2);
 		});
 
 		it("copies the fuel burn of the nearest covered profile", () => {
@@ -153,8 +157,8 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 				"standard"
 			);
 
-			expect(small.ftlFuelPerParsec).toBeCloseTo(73 / 18, 10);
-			expect(small.stlFuelPerBlock).toBe(90);
+			expect(small.ftlFuelPerParsec).toBeCloseTo(168 / 36, 10);
+			expect(small.stlFuelPerBlock).toBe(123);
 		});
 	});
 
@@ -167,11 +171,11 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 		it("prices the burn rates with FF and SF", () => {
 			expect(RAUKK_FUEL_TICKERS).toStrictEqual({ ftl: "FF", stl: "SF" });
 			expect(raukkDerivedCostPerParsec(preset, resolvePrice)).toBeCloseTo(
-				(73 / 18) * 100,
+				(168 / 36) * 100,
 				10
 			);
 			expect(raukkDerivedStlBlockCost(preset, resolvePrice)).toBeCloseTo(
-				90 * 10,
+				123 * 10,
 				10
 			);
 		});
@@ -182,8 +186,8 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 				resolvePrice
 			);
 
-			expect(resolved.costPerParsec).toBeCloseTo((73 / 18) * 100, 10);
-			expect(resolved.stlBlockCost).toBe(900);
+			expect(resolved.costPerParsec).toBeCloseTo((168 / 36) * 100, 10);
+			expect(resolved.stlBlockCost).toBe(1230);
 		});
 
 		it("lets a manual value win, a manual zero included", () => {
@@ -216,8 +220,8 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			const completed: IRaukkShipProfile =
 				raukkCompleteShipProfile(stored);
 
-			expect(completed.ftlFuelPerParsec).toBeCloseTo(73 / 18, 10);
-			expect(completed.stlFuelPerBlock).toBe(90);
+			expect(completed.ftlFuelPerParsec).toBeCloseTo(168 / 36, 10);
+			expect(completed.stlFuelPerBlock).toBe(123);
 		});
 
 		it("leaves burn rates the profile carries alone, zero included", () => {
@@ -231,11 +235,30 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			expect(completed.stlFuelPerBlock).toBe(7);
 		});
 
-		it("pre-fills the damage per parsec of the reference flights", () => {
+		it("presets an FTL ship, never an STL-only one", () => {
 			raukkShipProfilePresets().forEach((preset) => {
-				// 0.088% over a 4 parsec leg
-				expect(preset.damagePerParsec).toBeCloseTo(0.00022, 10);
-				expect(preset.damagePerStlBlock).toBe(0);
+				expect(preset.stlOnly).toBe(false);
+			});
+		});
+
+		it("reads an absent STL-only flag as the FTL ship it was", () => {
+			const stored = { ...preset, stlOnly: undefined };
+
+			expect(raukkCompleteShipProfile(stored).stlOnly).toBe(false);
+			expect(
+				raukkCompleteShipProfile({ ...preset, stlOnly: true }).stlOnly
+			).toBe(true);
+		});
+
+		it("splits damage into the calibrated jump and block terms", () => {
+			raukkShipProfilePresets().forEach((preset) => {
+				// calibration §6: a flat 0.0011 % per parsec, reactor blind
+				expect(preset.damagePerParsec).toBeCloseTo(0.000011, 12);
+				// and the meteoroid law over the reference sublight leg
+				expect(preset.damagePerStlBlock).toBeCloseTo(
+					(25_000_000 * (2.2e-10 + 5.5e-10 * 3.28)) / 100,
+					12
+				);
 			});
 		});
 	});

@@ -53,6 +53,8 @@ export const RAUKK_CALIBRATION_WARNING_KEYS: Record<string, string> = {
 	"not-solvable": "not_solvable",
 	"charge-minutes-seeded": "charge_minutes_seeded",
 	"stl-block-minutes-empty-seeded": "stl_block_minutes_empty_seeded",
+	"damage-per-stl-block-seeded": "damage_per_stl_block_seeded",
+	"damage-below-block-seed": "damage_below_block_seed",
 	"loaded-flight-empty": "loaded_flight_empty",
 	"cargo-exceeds-hull": "cargo_exceeds_hull",
 	"negative-solved-time": "negative_solved_time",

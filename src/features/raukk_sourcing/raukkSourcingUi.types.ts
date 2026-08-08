@@ -20,6 +20,10 @@ export interface IRaukkInputBuckets {
 	production: boolean;
 	workforce: boolean;
 	repair: boolean;
+	/** Ship fuel of the plans own lanes. Sourcable like any other
+	 * ticker, but INFORMATIONAL as a row: its cost is already inside the
+	 * shipping daily cost, so it never joins the input total */
+	shipFuel: boolean;
 }
 
 /** One row of the tools input table */

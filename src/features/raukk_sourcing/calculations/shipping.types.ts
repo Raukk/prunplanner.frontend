@@ -3,7 +3,11 @@
 // persisted store slice of Phase 3 reuses these shapes.
 
 // Types & Interfaces
-import { IRaukkRoute } from "@/features/raukk_sourcing/calculations/routeDistance";
+import {
+	IRaukkRoute,
+	IRaukkRouteDistance,
+} from "@/features/raukk_sourcing/calculations/routeDistance";
+import { RAUKK_LEG_UNROUTABLE } from "@/features/raukk_sourcing/calculations/shippingStl";
 
 /** Slower standard reactor versus the quick-charge one */
 export type RAUKK_FTL_REACTOR = "standard" | "quick-charge";
@@ -33,6 +37,22 @@ export interface IRaukkShipProfile extends IRaukkShipHull {
 	id: string;
 	name: string;
 	ftlReactor: RAUKK_FTL_REACTOR;
+	/**
+	 * True for a hull built WITHOUT an FTL drive and reactor.
+	 *
+	 * Such a ship is roughly a quarter cheaper and can still reach any
+	 * planet a GATE leads to — gates drop a ship straight into the
+	 * destination orbit — but it cannot jump. It therefore serves
+	 * same-system legs and legs whose every inter-system hop is a gate
+	 * traversal, and NOTHING else: a leg without such a route is a
+	 * validation error, never a silent fallback onto the FTL network.
+	 *
+	 * The FTL constants below (`minutesPerParsec`, `chargeMinutes`,
+	 * `ftlFuelPerParsec`, `ftlReactor`, `damagePerParsec`) are then
+	 * meaningless. They are kept in the stored shape all the same, so
+	 * turning the flag off restores the profile exactly as it was.
+	 */
+	stlOnly: boolean;
 	/**
 	 * ȼ per parsec flown, one way. `null` means DERIVE: the effective
 	 * value is `ftlFuelPerParsec` times the current FF market price. Any
@@ -209,6 +229,19 @@ export interface IRaukkShippingPair {
 	profile: IRaukkResolvedShipProfile;
 	/** One way route, already hub substituted where applicable */
 	route: IRaukkRoute;
+	/**
+	 * Systems the lane connects, and the lookups to route between them.
+	 *
+	 * All three are optional and carried for ONE purpose: an STL-only
+	 * hull has to be checked against the gate network, which `route`
+	 * alone cannot answer. Absent — every caller predating STL-only
+	 * hulls, the test literals included — an STL-only profile on an
+	 * inter-system lane simply cannot be validated and is reported
+	 * unservable, which is the safe reading of "no gate route known".
+	 */
+	fromSystemId?: string;
+	toSystemId?: string;
+	routes?: IRaukkRouteDistance;
 	out: IRaukkShippedTicker[];
 	back: IRaukkShippedTicker[];
 	/**
@@ -314,6 +347,8 @@ export interface IRaukkLaneLeg {
 	loadBack: IRaukkDirectionLoad;
 	/** Unowned hull that would serve this leg better, null when none */
 	advisory: IRaukkFleetAdvisory | null;
+	/** Why the assigned ship cannot fly this leg, null when it can */
+	unservableReason: RAUKK_LEG_UNROUTABLE | null;
 }
 
 /** Costed leg of a route pair, see {@link IRaukkLaneLeg} */
@@ -331,6 +366,15 @@ export interface IRaukkLegShipping {
 	/** Ship time share of this leg, `null` without a ship count */
 	shippingFraction: number | null;
 	advisory: IRaukkFleetAdvisory | null;
+	/**
+	 * Why the assigned ship cannot fly this leg, `null` when it can.
+	 *
+	 * Only ever `"stl-only-no-gate"` today: an STL-only hull was
+	 * assigned to an inter-system lane with no gate route. The leg is
+	 * still costed — the cargo does have to move — so the number stays
+	 * comparable, and the reason says the assignment is wrong.
+	 */
+	unservableReason: RAUKK_LEG_UNROUTABLE | null;
 }
 
 /** Shipping result of one route pair */
@@ -340,6 +384,11 @@ export interface IRaukkPairShipping {
 	hired: boolean;
 	/** The legs of the pair, one per cargo bucket riding it */
 	legs: IRaukkLegShipping[];
+	/**
+	 * True when at least one leg carries an `unservableReason`: the lane
+	 * is priced, but the ship assigned to it cannot fly it.
+	 */
+	unservable: boolean;
 	/** Trips of ALL legs summed, each leg on its own cadence */
 	tripsPerDay: number;
 	/** Trip weighted mean over the legs: `dailyCost / tripsPerDay` */

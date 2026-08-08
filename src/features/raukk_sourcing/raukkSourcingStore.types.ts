@@ -7,6 +7,7 @@ import {
 	IRaukkChain,
 	IRaukkChainConfig,
 	IRaukkChainResult,
+	IRaukkDepot,
 	IRaukkFleetShip,
 	IRaukkPlanConfig,
 	IRaukkShipProfile,
@@ -57,4 +58,6 @@ export interface IRaukkExportPayload {
 	/** Key: lane pair key or chain key, value: ship type id */
 	assignments: Record<string, string>;
 	chainConfig: IRaukkChainConfig;
+	/** raukk: depot planets by natural id, absent before depots existed */
+	depots: Record<string, IRaukkDepot>;
 }

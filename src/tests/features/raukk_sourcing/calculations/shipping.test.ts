@@ -726,6 +726,117 @@ describe("Raukk Sourcing: Shipping", () => {
 			expect(leg.advisory).toBeNull();
 		});
 
+		describe("STL-only hulls", () => {
+			/** The heavy hull, built without an FTL drive */
+			function stlHull(shipTypeId: string): IRaukkHullCandidate {
+				const candidate: IRaukkHullCandidate = hull(
+					shipTypeId,
+					5000,
+					5000
+				);
+
+				return {
+					...candidate,
+					profile: { ...candidate.profile, stlOnly: true },
+				};
+			}
+
+			it("is never picked for a lane it cannot fly", () => {
+				const [leg] = raukkLaneLegs(
+					{
+						...fleetPair(
+							[ticker("ORE", 5000, 1, 1)],
+							[hull("small", 500, 500), stlHull("stl")]
+						),
+						// no system ids and no gate lookups: nothing
+						// establishes a gate route, so nothing may assume
+						// one
+					},
+					caps
+				);
+
+				expect(leg.shipTypeId).toBe("small");
+				expect(leg.unservableReason).toBeNull();
+			});
+
+			it("is not advised for such a lane either", () => {
+				const [leg] = raukkLaneLegs(
+					{
+						...fleetPair(
+							[ticker("ORE", 5000, 1, 1)],
+							[hull("small", 500, 500)]
+						),
+						hulls: {
+							owned: [hull("small", 500, 500)],
+							all: [hull("small", 500, 500), stlHull("stl")],
+						},
+					},
+					caps
+				);
+
+				expect(leg.shipTypeId).toBe("small");
+				expect(leg.advisory).toBeNull();
+			});
+
+			it("flies a same system lane like any other hull", () => {
+				const [leg] = raukkLaneLegs(
+					{
+						...fleetPair(
+							[ticker("ORE", 5000, 1, 1)],
+							[hull("small", 500, 500), stlHull("stl")]
+						),
+						route: { parsecs: 0, jumps: 0, sameSystem: true },
+					},
+					caps
+				);
+
+				expect(leg.shipTypeId).toBe("stl");
+				expect(leg.unservableReason).toBeNull();
+			});
+
+			it("reports a manual assignment it cannot serve", () => {
+				const [leg] = raukkLaneLegs(
+					fleetPair(
+						[ticker("ORE", 5000, 1, 1)],
+						[hull("small", 500, 500)],
+						stlHull("stl")
+					),
+					caps
+				);
+
+				// the user assigned it, so it is assigned — and flagged
+				expect(leg.shipTypeId).toBe("stl");
+				expect(leg.unservableReason).toBe("stl-only-no-gate");
+			});
+
+			it("carries the flag up onto the pair result", () => {
+				const result: IRaukkPairShipping = calculatePairShipping(
+					fleetPair(
+						[ticker("ORE", 5000, 1, 1)],
+						[hull("small", 500, 500)],
+						stlHull("stl")
+					),
+					config,
+					REPAIR_BILL_COST,
+					caps
+				);
+
+				expect(result.unservable).toBe(true);
+				expect(result.legs[0].unservableReason).toBe(
+					"stl-only-no-gate"
+				);
+
+				expect(
+					calculatePairShipping(
+						pair([], [ticker("ORE", 500, 1, 1)]),
+						config,
+						REPAIR_BILL_COST,
+						caps
+					).unservable
+				).toBe(false);
+			});
+		});
+
 		it("collects the advisories of every pair", () => {
 			const result: IRaukkShippingResult = calculateShipping(
 				[

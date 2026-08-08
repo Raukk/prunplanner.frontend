@@ -13,6 +13,7 @@ import {
 	resolveCxExchangeCode,
 	snapshotMateriallyChanged,
 	splitAggregateDraws,
+	withFuelDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
 import { RAUKK_EPSILON_SETTLE } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
@@ -492,11 +493,13 @@ describe("Raukk Sourcing Pricing", () => {
 				production: false,
 				workforce: true,
 				repair: true,
+				shipFuel: false,
 			});
 			expect(h2o?.buckets).toStrictEqual({
 				production: true,
 				workforce: true,
 				repair: false,
+				shipFuel: false,
 			});
 		});
 
@@ -578,6 +581,132 @@ describe("Raukk Sourcing Pricing", () => {
 
 			expect(bse?.shippedUnitsPerDay).toBe(4);
 			expect(bse?.costPerDay).toBe(4 * 500 + 4 * 99);
+		});
+
+		describe("ship fuel rows", () => {
+			const fuelResolve = (ticker: string) =>
+				ticker === "FF"
+					? { price: 60, fromPlanUuid: "refinery" }
+					: ticker === "SF"
+						? { price: 5 }
+						: resolve(ticker);
+
+			it("adds no row without a fuel burn", () => {
+				const rows = buildInputRows(planResult, {}, {}, fuelResolve);
+
+				expect(rows.map((r) => r.ticker)).not.toContain("FF");
+				expect(rows.every((r) => r.buckets.shipFuel === false)).toBe(
+					true
+				);
+			});
+
+			it("adds one row per burnt fuel, badged and last", () => {
+				const rows = buildInputRows(
+					planResult,
+					{},
+					{},
+					fuelResolve,
+					{},
+					undefined,
+					{ FF: 80, SF: 120, MFK: 0 }
+				);
+
+				expect(rows.slice(-2).map((r) => r.ticker)).toStrictEqual([
+					"FF",
+					"SF",
+				]);
+				// a fuel that is not burnt at all is no row
+				expect(rows.map((r) => r.ticker)).not.toContain("MFK");
+
+				expect(rows.at(-2)?.buckets).toStrictEqual({
+					production: false,
+					workforce: false,
+					repair: false,
+					shipFuel: true,
+				});
+			});
+
+			it("prices the burn without any freight of its own", () => {
+				const rows = buildInputRows(
+					planResult,
+					{},
+					{},
+					fuelResolve,
+					{ FF: 7 },
+					undefined,
+					{ FF: 80 }
+				);
+				const ff = rows.find((r) => r.buckets.shipFuel);
+
+				expect(ff?.unitsPerDay).toBe(80);
+				expect(ff?.price).toBe(60);
+				// hauled to the exchange by the player, no freight leg
+				expect(ff?.shippedUnitsPerDay).toBe(0);
+				expect(ff?.shippingPerUnit).toBe(0);
+				expect(ff?.effectivePrice).toBe(60);
+				expect(ff?.costPerDay).toBe(4800);
+				expect(ff?.fromPlanUuid).toBe("refinery");
+			});
+
+			it("keeps the burn apart from the same tickers input row", () => {
+				const rows = buildInputRows(
+					planResult,
+					{},
+					{},
+					(ticker: string) =>
+						ticker === "RAT"
+							? { price: 100, fromPlanUuid: "refinery" }
+							: fuelResolve(ticker),
+					{},
+					undefined,
+					{ RAT: 80 }
+				);
+				const input = rows.find(
+					(r) => r.ticker === "RAT" && !r.buckets.shipFuel
+				);
+				const burn = rows.find(
+					(r) => r.ticker === "RAT" && r.buckets.shipFuel
+				);
+
+				expect(input?.unitsPerDay).toBe(10);
+				expect(burn?.unitsPerDay).toBe(80);
+			});
+		});
+	});
+
+	describe("withFuelDraws", () => {
+		const resolve = (ticker: string) =>
+			ticker === "FF"
+				? { price: 60, fromPlanUuid: "refinery" }
+				: ticker === "SF"
+					? { price: 5, fromPlanUuid: "AGG_AVG" }
+					: { price: 1 };
+
+		it("books a plan sourced fuel onto its producer", () => {
+			expect(withFuelDraws({}, { FF: 80 }, resolve)).toStrictEqual({
+				refinery: { FF: 80 },
+			});
+		});
+
+		it("adds onto the existing draws without mutating them", () => {
+			const draws = { refinery: { ORE: 5 } };
+
+			expect(withFuelDraws(draws, { FF: 80 }, resolve)).toStrictEqual({
+				refinery: { ORE: 5, FF: 80 },
+			});
+			expect(draws).toStrictEqual({ refinery: { ORE: 5 } });
+		});
+
+		it("keeps aggregate keys for the aggregate splitter", () => {
+			expect(withFuelDraws({}, { SF: 12 }, resolve)).toStrictEqual({
+				AGG_AVG: { SF: 12 },
+			});
+		});
+
+		it("books nothing for a market priced or unburnt fuel", () => {
+			expect(
+				withFuelDraws({}, { MFK: 10, FF: 0 }, resolve)
+			).toStrictEqual({});
 		});
 	});
 

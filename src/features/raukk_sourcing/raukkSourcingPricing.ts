@@ -219,6 +219,52 @@ export function splitAggregateDraws(
 }
 
 /**
+ * Adds the ship fuel draws to a plans raw draws.
+ *
+ * A fuel sourced from a producing plan is drawn from it exactly like a
+ * recipe input: the refinery ships the units, and a change to its price
+ * has to cascade staleness onto everything burning that fuel. The ship
+ * REPAIR bill deliberately books no draw — its quantities are tiny and
+ * take part in neither cycle guard nor base fraction — fuel does, its
+ * daily burn is real tonnage off a producers output.
+ *
+ * Keys may be aggregate sentinels, {@link splitAggregateDraws} resolves
+ * them alongside the material ones. The input is never mutated.
+ *
+ * @author raukk
+ *
+ * @param {Record<string, IRaukkMaterialUnits>} draws Raw draws
+ * @param {IRaukkMaterialUnits} fuelUnitsPerDay Fuel burnt per day
+ * @param {IRaukkPriceResolver} resolve Price Resolver
+ * @returns {Record<string, IRaukkMaterialUnits>} Draws including fuel
+ */
+export function withFuelDraws(
+	draws: Record<string, IRaukkMaterialUnits>,
+	fuelUnitsPerDay: IRaukkMaterialUnits,
+	resolve: IRaukkPriceResolver
+): Record<string, IRaukkMaterialUnits> {
+	const result: Record<string, IRaukkMaterialUnits> = {};
+
+	Object.entries(draws).forEach(([planUuid, tickers]) => {
+		result[planUuid] = { ...tickers };
+	});
+
+	Object.entries(fuelUnitsPerDay).forEach(([ticker, unitsPerDay]) => {
+		if (!(unitsPerDay > 0)) return;
+
+		const resolved: IRaukkResolvedPrice = resolve(ticker);
+		if (resolved.fromPlanUuid === undefined) return;
+
+		const planDraws: IRaukkMaterialUnits =
+			result[resolved.fromPlanUuid] ?? {};
+		planDraws[ticker] = (planDraws[ticker] ?? 0) + unitsPerDay;
+		result[resolved.fromPlanUuid] = planDraws;
+	});
+
+	return result;
+}
+
+/**
  * Builds the source dropdown entries of one ticker.
  *
  * Every plan whose snapshot holds the ticker as an output becomes an
@@ -598,6 +644,13 @@ export function formatSourceOptionLabel(
  * and pay freight like anything else. Without a shipping map every row is
  * priced exactly as before.
  *
+ * `fuelUnitsPerDay` adds the SHIP FUEL rows, the daily burn of the plans
+ * own lanes. They are sourcable like any other ticker — a refinery plan
+ * prices the fuel its fleet burns — but their ȼ is INFORMATIONAL: the
+ * shipping model already charges that fuel through the resolved profile,
+ * so the input total has to leave them out. They carry no freight of
+ * their own either, fuel is hauled to the exchange by the player.
+ *
  * With `getDefaultPrice` given, rows sort by their daily cost at that
  * price — the CX preference price — instead of the effective one, so
  * configuring a plan source does not reorder the table under the users
@@ -613,6 +666,7 @@ export function formatSourceOptionLabel(
  * @param {IRaukkPriceResolver} resolve Price Resolver
  * @param {Record<string, number>} shippingPerUnitIn Inbound freight ȼ/u
  * @param {(ticker: string) => number} [getDefaultPrice] Stable sort price
+ * @param {IRaukkMaterialUnits} fuelUnitsPerDay Ship fuel burnt per day
  * @returns {IRaukkInputRow[]} Priced input rows
  */
 export function buildInputRows(
@@ -621,7 +675,8 @@ export function buildInputRows(
 	sources: Record<string, IRaukkTickerSource>,
 	resolve: IRaukkPriceResolver,
 	shippingPerUnitIn: Record<string, number> = {},
-	getDefaultPrice?: (ticker: string) => number
+	getDefaultPrice?: (ticker: string) => number,
+	fuelUnitsPerDay: IRaukkMaterialUnits = {}
 ): IRaukkInputRow[] {
 	const units: IRaukkMaterialUnits = {};
 	/** Units riding a route pair, the material I/O ones only */
@@ -633,6 +688,7 @@ export function buildInputRows(
 			production: false,
 			workforce: false,
 			repair: false,
+			shipFuel: false,
 		};
 		buckets[ticker] = current;
 		return current;
@@ -672,7 +728,41 @@ export function buildInputRows(
 			: row.costPerDay;
 	}
 
-	return Object.entries(units)
+	/*
+	 * Ship fuel rows stand APART from the material ones, deliberately as
+	 * their own row objects rather than another bucket flag on a shared
+	 * one: a fuel that is also a recipe input must keep its production
+	 * need and its burn separate, and only the burn is the row whose
+	 * cost the shipping model already charges.
+	 */
+	const fuelRows: IRaukkInputRow[] = Object.entries(fuelUnitsPerDay)
+		.filter(([, unitsPerDay]) => unitsPerDay > 0)
+		.map(([ticker, unitsPerDay]) => {
+			const resolved: IRaukkResolvedPrice = resolve(ticker);
+
+			return {
+				ticker,
+				buckets: {
+					production: false,
+					workforce: false,
+					repair: false,
+					shipFuel: true,
+				},
+				unitsPerDay,
+				source: sources[ticker],
+				price: resolved.price,
+				// fuel is hauled to the exchange by the player, it rides
+				// no route pair and pays no freight of its own
+				shippedUnitsPerDay: 0,
+				shippingPerUnit: 0,
+				effectivePrice: resolved.price,
+				costPerDay: unitsPerDay * resolved.price,
+				fromPlanUuid: resolved.fromPlanUuid,
+			};
+		})
+		.sort((a, b) => b.costPerDay - a.costPerDay);
+
+	const materialRows: IRaukkInputRow[] = Object.entries(units)
 		.map(([ticker, unitsPerDay]) => {
 			const resolved: IRaukkResolvedPrice = resolve(ticker);
 
@@ -695,6 +785,8 @@ export function buildInputRows(
 			};
 		})
 		.sort((a, b) => sortCost(b) - sortCost(a));
+
+	return [...materialRows, ...fuelRows];
 }
 
 /**
