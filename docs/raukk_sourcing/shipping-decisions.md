@@ -250,6 +250,22 @@ gate, traverse for credits, STL out — enables STL-only ships and
 possibly cheaper routes for FTL ships), gated by the unknown
 upgrade/cost fields defaulting conservatively.
 
+Round 8 addenda (USER):
+
+- Per-gate details (fees w/ currency, max ship volume, upgrade
+  levels, jumps/24h) transcribed into the asset 2026-08-08. Only 7
+  of 17 links pass an HCB (6,000 m³ needed for the 5,825 m³ hull);
+  most links are 3,000 m³ (≤ WCB class).
+- **Currencies trade ≈1:1** — treat all gate fees as one unit in
+  cost math; the currency label is flair (though running out of the
+  needed one is a real-life nuisance, not a model concern).
+- **Natural hubs**: Montem, Promitor, Hephaestus, and Katoa are
+  starting planets adjacent to the exchanges — expect them as gate
+  and chain hubs; routing heuristics may prefer them.
+- Gate upgrades are capped (capacity 0–5, volume 0–3, distance 0–3)
+  and expensive, so operators upgrade sparingly — treat transcribed
+  volume limits as fairly static rather than transient.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up, and
 shipping-fleet.md for fleet & calibration.
