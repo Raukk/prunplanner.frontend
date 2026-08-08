@@ -158,4 +158,24 @@ These supersede the matching decisions above.
   editable table in the config UI, pre-filled from the reference
   flights above; user-measured overrides always win.
 
-See shipping-plan.md for the implementation plan.
+## Round 5 (during chains v2 build)
+
+1. **Same-system sync-up: single point, no ranges downstream.**
+   Orbital periods make planets sync up (some twice a week real
+   time), so same-system cost AND damage have a best and worst case.
+   Decision: price a single point — `sameSystemPricing: "average" |
+   "worst"` config, DEFAULT "average" (band midpoint). Never
+   propagate a range into the cost pipeline.
+2. **Fuel use enters the defaults (refines round 1 item 2).** The
+   manual ȼ/parsec stays authoritative when set, but instead of
+   defaulting to 0, profiles gain `ftlFuelPerParsec` and
+   `stlFuelPerBlock` burn rates (pre-filled from the round 2/3
+   reference flights: ≈4 FTL units/parsec; STL block ≈90–170 units
+   by hull/load) and the derived default is
+   `costPerParsec = ftlFuelPerParsec × FF market price`,
+   `stlBlockCost = stlFuelPerBlock × SF market price`, using the
+   snapshot's price resolver (FF/SF join the relevant-tickers set
+   when shipping is enabled). Manual override wins per profile.
+
+See shipping-plan.md for the implementation plan and
+shipping-chains-v2.md for the chains follow-up.
