@@ -48,6 +48,7 @@
 		AccountBalanceSharp,
 		RssFeedSharp,
 		ExtensionSharp,
+		RocketLaunchSharp,
 	} from "@vicons/material";
 
 	const userStore = useUserStore();
@@ -111,6 +112,12 @@
 					display: true,
 					routerLink: "/exchanges",
 					icon: ShoppingBasketSharp,
+				},
+				{
+					label: t("common.navigation.shipping"),
+					display: true,
+					routerLink: "/shipping",
+					icon: RocketLaunchSharp,
 				},
 				// {
 				// 	label: "Projects",

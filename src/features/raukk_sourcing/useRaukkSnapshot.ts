@@ -49,6 +49,11 @@ import {
 	withFuelDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
 import { raukkFuelUnitsPerDay } from "@/features/raukk_sourcing/calculations/shippingFuel";
+import { raukkStorageFilledDays } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+import {
+	getVolumeOfAllStorages,
+	getWeightOfAllStorages,
+} from "@/features/planning/calculations/infrastructureCalculations";
 
 // Util
 import { inertClone } from "@/util/data";
@@ -1116,6 +1121,21 @@ export async function computePlanSnapshot(
 						lanes: buildPlanLanes(shipping),
 						advisories: shipping.advisories,
 						shippingFraction: shipping.shippingFraction,
+						// guarded: a minimal plan result of another caller
+						// may carry no storage block at all
+						storageFilledDays:
+							context.planResult.storage !== undefined &&
+							context.planResult.materialio !== undefined
+								? raukkStorageFilledDays(
+										getWeightOfAllStorages(
+											context.planResult.storage
+										),
+										getVolumeOfAllStorages(
+											context.planResult.storage
+										),
+										context.planResult.materialio
+									)
+								: null,
 					}
 				: {}),
 		};
@@ -1308,16 +1328,6 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 	const shippingPairs: ComputedRef<IRaukkShippingPair[]> = computed(() =>
 		buildPlanShippingPairs(shippingInput.value)
 	);
-
-	/**
-	 * Current unit price of both shipping fuels, at the plans configured
-	 * sources. Backs the derived ȼ placeholders of the profile editor;
-	 * the shipping math resolves them again through `profileOf`.
-	 */
-	const fuelPrices: ComputedRef<Record<string, number>> = computed(() => ({
-		[RAUKK_FUEL_TICKERS.ftl]: resolver.value(RAUKK_FUEL_TICKERS.ftl).price,
-		[RAUKK_FUEL_TICKERS.stl]: resolver.value(RAUKK_FUEL_TICKERS.stl).price,
-	}));
 
 	/** ȼ of one full ship repair bill at the plans configured sources */
 	const repairBillCost: ComputedRef<number> = computed(() =>
@@ -1545,7 +1555,6 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		shipping,
 		shippingPairs,
 		repairBillCost,
-		fuelPrices,
 		inputRows,
 		outputRows,
 		repairCost,

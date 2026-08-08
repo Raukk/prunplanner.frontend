@@ -179,6 +179,11 @@ export interface IRaukkSnapshot {
 	 * claims no ship at all: the fraction has no denominator then and is
 	 * displayed as an em-dash rather than as a reassuring zero. */
 	shippingFraction?: number | null;
+	/** Days the plans own storage bridges at its throughput, the chain
+	 * storage cross-check's input on the account level shipping page.
+	 * `null` when nothing moves, absent on pre cross-check snapshots.
+	 * Only written while shipping is enabled. */
+	storageFilledDays?: number | null;
 }
 
 /**
