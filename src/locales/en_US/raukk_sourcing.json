@@ -55,13 +55,15 @@
 		"groups": {
 			"workforce": "Workforce Consumables",
 			"repair": "Repair Materials",
-			"production": "Production Inputs"
+			"production": "Production Inputs",
+			"shipFuel": "Ship Fuel (already in the shipping cost)"
 		}
 	},
 	"buckets": {
 		"production": "Production",
 		"workforce": "Workforce",
-		"repair": "Repair"
+		"repair": "Repair",
+		"shipFuel": "Ship Fuel"
 	},
 	"cadence": {
 		"visit": "{days} days/visit ({trips}/day)",
@@ -101,10 +103,12 @@
 		"hide_calibration": "Hide Calibration",
 		"calibration_info": "Calibration constants per hull and FTL reactor, pre-filled from recorded test flights. Cost per parsec and per sublight block are left empty on purpose: an empty field follows the profile's fuel burn at the current FF and SF price. Type a number to override one, empty it again to go back to the derived value. Edited profiles override the preset until reset.",
 		"derived_tooltip": "Empty: derived from this profile's fuel burn times the current FF (per parsec) or SF (per sublight block) price. Any number you enter — zero included — wins.",
+		"stl_only_tooltip": "A hull built without an FTL drive and reactor — roughly a quarter cheaper. It can only leave its system through a GATE, which drops it straight into the destination orbit, so it serves same-system lanes and lanes whose every inter-system hop is a gate. A lane without such a route is an error, not a slower route: the ship cannot fly it. The FTL constants are greyed out for such a profile and kept as they are.",
 		"profile": "Profile",
 		"overridden": "Edited",
 		"reset_profile": "Reset",
 		"fields": {
+			"stlOnly": "STL-only",
 			"costPerParsec": "ȼ/Parsec",
 			"stlBlockCost": "ȼ/STL Block",
 			"ftlFuelPerParsec": "FF/Parsec",
@@ -219,6 +223,8 @@
 				"not_solvable": "Neither flight was usable, so nothing was solved: the values below are the seed, not a measurement.",
 				"charge_minutes_seeded": "Charge time stays at its reactor seed — two flights cannot separate it from the jump speed.",
 				"stl_block_minutes_empty_seeded": "The empty sublight block stays seeded (from the blueprint if you entered its stats, otherwise from the nearest reference ship): one of the four time constants has to be, or the system is underdetermined.",
+				"damage_per_stl_block_seeded": "Sublight block damage stays seeded from the meteoroid-density law: each flight flies exactly one block, so the block and the jump term cannot be told apart. The jump damage below is what is left over.",
+				"damage_below_block_seed": "A flight took less damage than its sublight block alone should cost, so jump damage was floored at zero. The path's meteoroid density is probably lower than the reference.",
 				"loaded_flight_empty": "The \"loaded\" flight carries no cargo, so the loaded block time couldn't be scaled. Enter its cargo tonnage.",
 				"cargo_exceeds_hull": "A flight carries more than the hull holds — the load factor was clamped to a full hold.",
 				"negative_solved_time": "A solved time came out negative: the entered durations contradict the model, most likely a typo.",
@@ -294,6 +300,8 @@
 			"binding": "Weakest link",
 			"same_system": "Same system",
 			"unroutable": "No route",
+			"no_gate_route": "STL-only ship: no gate route",
+			"gated": "Gate",
 			"split_comparison": "CX split at {cx} (detour {detour} pc): unsplit {unsplit} ȼ/day vs split {splitCost} ȼ/day — {applied}.",
 			"applied_split": "the split is what these numbers use",
 			"applied_unsplit": "the authored loop is what these numbers use",
@@ -302,7 +310,11 @@
 			"drops": "Low-use stops:",
 			"drop_chip": "{stop} at {utilization}% — dropping it onto its own run saves {saving} ȼ/day",
 			"storage_warning": "{stop}: the chain visits every {visit} d but its storage fills in {fill} d."
-		}
+		},
+		"depot_stop": "Depot {planet}",
+		"side_profile_a": "Split Side A Ship",
+		"side_profile_b": "Split Side B Ship",
+		"side_profile_default": "Chain ship"
 	},
 	"auto_chains": {
 		"title": "Automatic Chains",
@@ -338,5 +350,24 @@
 		"plan_label": "Plan CX Anchor",
 		"nearest": "Nearest",
 		"tooltip": "Exchange a base ships through. Bases sharing an anchor form the region an automatic chain is built over; a plan may override the account wide setting."
+	},
+	"depots": {
+		"title": "Depots",
+		"info": "Planets you hand cargo over at. A depot anchors ROUTING and nothing else: a chain passing close to one may be cut there exactly as it is cut at an exchange, so a gate-side ship and an FTL hauler meet at the depot instead of both flying to the exchange. Each half of such a split can be flown by its own ship type — set them in the chain editor. A depot is not a market: nothing is priced, sourced or sold there, and keeping the warehouse stocked stays your problem. Depots are account-global and can be added for planets no plan of yours sits on.",
+		"planet": "Planet",
+		"weekly_cost": "Warehouse ȼ / Week",
+		"daily_cost": "ȼ / Day",
+		"chains": "Chains",
+		"unused": "Unused",
+		"remove": "Remove",
+		"add": "Add Depot",
+		"add_placeholder": "Planet id, e.g. ZV-307c",
+		"empty": "No depots yet. Mark a gate hub or a warehouse planet as one when two ships should meet there instead of flying to the exchange.",
+		"rollup": {
+			"chains": "Chains ȼ / Day",
+			"rent": "Depot Rent ȼ / Day",
+			"rent_tooltip": "Warehouse rent of every depot a chain calls at, weekly rent divided by seven. Charged ONCE per depot and day however many chains visit it — it is the warehouse standing there, not a docking fee.",
+			"total": "Shipping ȼ / Day"
+		}
 	}
 }

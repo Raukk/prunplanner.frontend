@@ -177,6 +177,7 @@
 			empty: observed(flightEmpty),
 			loaded: observed(flightLoaded),
 			stlBlockMinutesEmpty: seed.value?.stlBlockMinutesEmpty,
+			damagePerStlBlock: seed.value?.damagePerStlBlock,
 		});
 
 		refResult.value = result;

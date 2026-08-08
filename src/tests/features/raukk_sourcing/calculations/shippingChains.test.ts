@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
 	IRaukkRouteDistance,
 	IRaukkSystemNode,
+	RAUKK_CX_SYSTEM_IDS,
 	RAUKK_POSITION_UNITS_PER_PARSEC,
 	createRouteDistance,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
@@ -29,6 +30,7 @@ import {
 	claimChainFlows,
 	detectCxSplit,
 	evaluateChainDrops,
+	raukkChainGateServable,
 	raukkDefaultChainConfig,
 	reverseChainStops,
 } from "@/features/raukk_sourcing/calculations/shippingChains";
@@ -309,6 +311,181 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 
 		it("is empty below two stops", () => {
 			expect(buildChainLegs(["AA-001a"], routes, {})).toStrictEqual([]);
+		});
+	});
+
+	describe("STL-only legs", () => {
+		/** The very same line, with a gate spanning AA-001 to AA-003 */
+		const gatedRoutes: IRaukkRouteDistance = createRouteDistance(
+			lineGraph,
+			RAUKK_CX_SYSTEM_IDS,
+			[
+				{
+					a: "AA-001a",
+					aName: "A - a",
+					b: "AA-003c",
+					bName: "C - c",
+					aGate: {
+						id: "GTW-AAA-001",
+						fee: 1000,
+						cur: "NCC",
+						maxM3: 3000,
+						jumps24h: 250,
+						up: "0/5 c",
+						est: "100d",
+					},
+					bGate: {
+						id: "GTW-CCC-002",
+						fee: 1000,
+						cur: "NCC",
+						maxM3: 3000,
+						jumps24h: 250,
+						up: "0/5 c",
+						est: "100d",
+					},
+					maxTraversalM3: 3000,
+					hcbCapable: false,
+				},
+			]
+		);
+
+		const stlProfile: IRaukkResolvedShipProfile = {
+			...profile,
+			stlOnly: true,
+			stlFuelPerBlock: 100,
+		};
+
+		const ship = { stlOnly: true, shipVolumeM3: 1000 };
+
+		it("refuses an inter system leg with no gate route", () => {
+			const legs: IRaukkChainLeg[] = buildChainLegs(
+				["AA-001a", "AA-002b"],
+				routes,
+				{},
+				ship
+			);
+
+			expect(legs[0].routable).toBe(false);
+			expect(legs[0].reason).toBe("stl-only-no-gate");
+			// the route itself resolves, it is simply not flyable
+			expect(legs[0].route).not.toBeNull();
+		});
+
+		it("keeps an FTL profile on the very same leg", () => {
+			const legs: IRaukkChainLeg[] = buildChainLegs(
+				["AA-001a", "AA-002b"],
+				routes,
+				{}
+			);
+
+			expect(legs[0].routable).toBe(true);
+			expect(legs[0].reason).toBeUndefined();
+			expect(legs[0].gatePath).toBeUndefined();
+		});
+
+		it("serves a same system leg without any gate", () => {
+			const legs: IRaukkChainLeg[] = buildChainLegs(
+				["AA-001a", "AA-001b"],
+				routes,
+				{},
+				ship
+			);
+
+			expect(legs.every((leg) => leg.routable)).toBe(true);
+			expect(legs[0].gatePath).toBeUndefined();
+		});
+
+		it("takes the gate where one exists", () => {
+			const legs: IRaukkChainLeg[] = buildChainLegs(
+				["AA-001a", "AA-003c"],
+				gatedRoutes,
+				{},
+				ship
+			);
+
+			expect(legs[0].routable).toBe(true);
+			expect(legs[0].gatePath?.gateHops).toBe(1);
+			// still unroutable the other way round, that leg has none
+			expect(
+				buildChainLegs(["AA-001a", "AA-002b"], gatedRoutes, {}, ship)[0]
+					.routable
+			).toBe(false);
+		});
+
+		it("refuses a link the hull does not fit through", () => {
+			const legs: IRaukkChainLeg[] = buildChainLegs(
+				["AA-001a", "AA-003c"],
+				gatedRoutes,
+				{},
+				{ stlOnly: true, shipVolumeM3: 5000 }
+			);
+
+			expect(legs[0].reason).toBe("stl-only-no-gate");
+		});
+
+		it("answers whether a whole loop is gate servable", () => {
+			expect(
+				raukkChainGateServable(
+					["AA-001a", "AA-003c"],
+					gatedRoutes,
+					{},
+					1000
+				)
+			).toBe(true);
+			expect(
+				raukkChainGateServable(
+					["AA-001a", "AA-002b", "AA-003c"],
+					gatedRoutes,
+					{},
+					1000
+				)
+			).toBe(false);
+			expect(raukkChainGateServable([], gatedRoutes, {})).toBe(false);
+		});
+
+		it("prices a gate leg by fee, gate fuel, minutes and damage", () => {
+			const shipping: IRaukkChainShipping = calculateChainShipping(
+				chainInput(
+					["AA-001a", "AA-003c"],
+					[flow("RAT", "AA-001a", "AA-003c", 1000)],
+					{ profile: stlProfile, routes: gatedRoutes }
+				)
+			);
+
+			const leg = shipping.legs[0];
+
+			expect(leg.routable).toBe(true);
+			expect(leg.gate).not.toBeNull();
+			expect(leg.gate!.hops).toBe(1);
+			expect(leg.gate!.fees).toBe(1000);
+			// 25 units of traversal overhead at the profiles own SF
+			// price, which its resolved block implies as 5/100
+			expect(leg.gate!.fuelCost).toBeCloseTo(25 * (5 / 100), 10);
+			// no FTL jump is charged and no per parsec cost applies
+			expect(leg.effectiveJumps).toBe(0);
+			expect(leg.costPerTrip).toBeCloseTo(
+				leg.gate!.fees +
+					leg.gate!.fuelCost +
+					stlProfile.stlBlockCost +
+					leg.repairCostPerTrip,
+				10
+			);
+			// gate minutes, not the hulls own FTL speed
+			expect(leg.roundTripMinutes).toBeGreaterThan(leg.gate!.minutes);
+		});
+
+		it("flags the leg it cannot fly instead of pricing an FTL trip", () => {
+			const shipping: IRaukkChainShipping = calculateChainShipping(
+				chainInput(
+					["AA-001a", "AA-002b"],
+					[flow("RAT", "AA-001a", "AA-002b", 1000)],
+					{ profile: stlProfile }
+				)
+			);
+
+			expect(shipping.legs[0].routable).toBe(false);
+			expect(shipping.legs[0].reason).toBe("stl-only-no-gate");
+			expect(shipping.legs[0].gate).toBeNull();
 		});
 	});
 

@@ -695,6 +695,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			store.$reset();
 			expect(store.chains).toStrictEqual({});
 			expect(store.chainConfig).toStrictEqual(raukkDefaultChainConfig());
+			expect(store.depots).toStrictEqual({});
 
 			store.importJSON(exported);
 
@@ -737,6 +738,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.fleet).toStrictEqual({});
 			expect(store.assignments).toStrictEqual({});
 			expect(store.chainConfig).toStrictEqual(raukkDefaultChainConfig());
+			expect(store.depots).toStrictEqual({});
 		});
 
 		it("defaults the phase 2 fields of an older payload", () => {
@@ -926,6 +928,75 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		});
 	});
 
+	describe("depots", () => {
+		it("marks a planet, keyed case blind and displayed as typed", () => {
+			store.setDepot("ZV-307c", { weeklyCostAic: 2850 });
+
+			expect(store.depots["ZV-307C"]).toStrictEqual({
+				planetNaturalId: "ZV-307c",
+				weeklyCostAic: 2850,
+			});
+			expect(store.depotStopRefs()).toStrictEqual(["ZV-307c"]);
+		});
+
+		it("patches the rent of a depot it already knows", () => {
+			store.setDepot("ZV-307c", { weeklyCostAic: 2850 });
+			store.setDepot("zv-307c", { weeklyCostAic: 1000 });
+
+			expect(Object.keys(store.depots)).toHaveLength(1);
+			expect(store.depots["ZV-307C"].weeklyCostAic).toBe(1000);
+		});
+
+		it("clears a non positive or non finite rent to free", () => {
+			store.setDepot("ZV-307c", { weeklyCostAic: 2850 });
+			store.setDepot("ZV-307c", { weeklyCostAic: 0 });
+
+			expect(store.depots["ZV-307C"].weeklyCostAic).toBeUndefined();
+
+			store.setDepot("ZV-307c", { weeklyCostAic: Number.NaN });
+
+			expect(store.depots["ZV-307C"].weeklyCostAic).toBeUndefined();
+		});
+
+		it("stales every chain, marking and un-marking alike", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setChainResult("c1", makeChainResult("c1", []));
+
+			store.setDepot("ZV-307c");
+
+			expect(store.chainResults["c1"].stale).toBe(true);
+
+			store.setChainResult("c1", makeChainResult("c1", []));
+			store.deleteDepot("zv-307c");
+
+			expect(store.chainResults["c1"].stale).toBe(true);
+			expect(store.depots).toStrictEqual({});
+		});
+
+		it("round trips through the export", () => {
+			store.setDepot("ZV-307c", { weeklyCostAic: 2850 });
+
+			const payload: string = store.exportJSON();
+			store.$reset();
+			store.importJSON(payload);
+
+			expect(store.depots["ZV-307C"]).toStrictEqual({
+				planetNaturalId: "ZV-307c",
+				weeklyCostAic: 2850,
+			});
+		});
+
+		it("imports a payload written before depots existed", () => {
+			store.setDepot("ZV-307c", { weeklyCostAic: 2850 });
+
+			store.importJSON(
+				JSON.stringify({ version: 1, configs: {}, snapshots: {} })
+			);
+
+			expect(store.depots).toStrictEqual({});
+		});
+	});
+
 	describe("$reset", () => {
 		it("clears the chain and fleet slices", () => {
 			store.setChain({ chainId: "c1", stops: ["A", "B"] });
@@ -933,6 +1004,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			store.setFleetShip("WCB", { count: 2 });
 			store.setAssignment("a>CX", "WCB");
 			store.setChainConfig({ autoCxSplit: false });
+			store.setDepot("ZV-307c", { weeklyCostAic: 2850 });
 
 			store.$reset();
 
@@ -941,6 +1013,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.fleet).toStrictEqual({});
 			expect(store.assignments).toStrictEqual({});
 			expect(store.chainConfig).toStrictEqual(raukkDefaultChainConfig());
+			expect(store.depots).toStrictEqual({});
 		});
 	});
 });

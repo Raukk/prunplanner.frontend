@@ -13,6 +13,7 @@
 	import RaukkLmRatesTable from "@/features/raukk_sourcing/components/RaukkLmRatesTable.vue";
 	import RaukkFleetSection from "@/features/raukk_sourcing/components/RaukkFleetSection.vue";
 	import RaukkChainSection from "@/features/raukk_sourcing/components/RaukkChainSection.vue";
+	import RaukkDepotSection from "@/features/raukk_sourcing/components/RaukkDepotSection.vue";
 
 	// Calculations
 	import { buildLmComparison } from "@/features/raukk_sourcing/calculations/shippingDisplay";
@@ -431,5 +432,7 @@
 			:repair-bill-cost="repairBillCost"
 			:ship-type-options="shipTypeOptions"
 			:storage-days="storageDays" />
+
+		<RaukkDepotSection />
 	</template>
 </template>

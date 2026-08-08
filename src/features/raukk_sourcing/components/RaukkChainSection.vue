@@ -94,12 +94,24 @@
 		)
 	);
 
-	/** Every stop the account can address: known planets and the four CXs */
+	/**
+	 * Every stop the account can address: known planets, the four CXs and
+	 * the marked depots — a depot planet usually carries no plan of its
+	 * own, so nothing else would offer it as a stop.
+	 */
 	const stopOptions: ComputedRef<PSelectOption[]> = computed(() => [
 		...Object.keys(RAUKK_CX_SYSTEM_ID_BY_CODE).map((code) => ({
 			label: t("raukk_sourcing.chains.cx_stop", { code }),
 			value: code,
 		})),
+		...Object.values(sourcingStore.depots)
+			.filter((depot) => !(depot.planetNaturalId in stopNames.value))
+			.map((depot) => ({
+				label: t("raukk_sourcing.chains.depot_stop", {
+					planet: depot.planetNaturalId,
+				}),
+				value: depot.planetNaturalId,
+			})),
 		...Object.entries(stopNames.value)
 			.map(([planet, name]) => ({
 				label: `${name} (${planet})`,

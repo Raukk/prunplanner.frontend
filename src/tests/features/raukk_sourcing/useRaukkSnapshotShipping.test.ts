@@ -1206,4 +1206,99 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			).toStrictEqual(["production"]);
 		});
 	});
+
+	describe("ship fuel", () => {
+		/** A refinery one jump away, selling FF far above the market */
+		function withRefinery(): void {
+			store.setSnapshot("refinery", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Refinery",
+				planetNaturalId: SOURCE_PLANET,
+				outputs: {
+					FF: {
+						ticker: "FF",
+						unitsPerDay: 1000,
+						costPerUnit: 500,
+						breakdown: {
+							workforce: 0,
+							repair: 0,
+							inputs: 500,
+							shipping: 0,
+						},
+					},
+				},
+				draws: {},
+			});
+		}
+
+		beforeEach(() => {
+			// the ȼ constants DERIVE, so the fuel price is what a parsec
+			// and a sublight block cost
+			store.setShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
+				...flatProfile,
+				costPerParsec: null,
+				stlBlockCost: null,
+				ftlFuelPerParsec: 2,
+				stlFuelPerBlock: 10,
+			});
+			store.setShippingConfig({ enabled: true });
+			withRefinery();
+		});
+
+		it("prices the profile from the plans FF source", async () => {
+			const { snapshot: market } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			store.setTickerSource("consumer", "FF", {
+				mode: "plan",
+				sourcePlanUuid: "refinery",
+			});
+
+			const { snapshot: sourced } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			// FF at 50 on the market against 500 at the refinery: the
+			// distance term of every trip is ten times as expensive
+			expect(sourced.outputs.ALO.breakdown.shipping).toBeGreaterThan(
+				market.outputs.ALO.breakdown.shipping
+			);
+		});
+
+		it("draws the burnt fuel from the producing plan", async () => {
+			store.setTickerSource("consumer", "FF", {
+				mode: "plan",
+				sourcePlanUuid: "refinery",
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			// 100 t of ORE a day on a 1000 t hull: 0.1 trips, each
+			// burning 2 × CX_TO_CONSUMER parsecs at 2 FF a parsec
+			expect(snapshot.draws.refinery?.FF).toBeCloseTo(
+				0.1 * 2 * CX_TO_CONSUMER * 2,
+				10
+			);
+			// SF stays on the market and books no draw
+			expect(snapshot.draws.refinery?.SF).toBeUndefined();
+		});
+
+		it("books no fuel draw while shipping is disabled", async () => {
+			store.setShippingConfig({ enabled: false });
+			store.setTickerSource("consumer", "FF", {
+				mode: "plan",
+				sourcePlanUuid: "refinery",
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(snapshot.draws).toStrictEqual({});
+		});
+	});
 });

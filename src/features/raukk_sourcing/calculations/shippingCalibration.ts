@@ -11,6 +11,11 @@
 import { RAUKK_DEFAULT_CHAIN_ROUTES } from "@/features/raukk_sourcing/calculations/shippingChains";
 import { RAUKK_DEFAULT_CHAIN_DATA } from "@/features/raukk_sourcing/calculations/shippingChainData";
 import { raukkNearestCalibration } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import {
+	RAUKK_REFERENCE_METEOROID_DENSITY,
+	RAUKK_REFERENCE_STL_LEG_KM,
+	raukkStlDamage,
+} from "@/features/raukk_sourcing/calculations/shippingPhysics";
 
 // Types & Interfaces
 import {
@@ -33,7 +38,8 @@ import { IRaukkChainStaticData } from "@/features/raukk_sourcing/calculations/sh
  *
  * @author raukk
  */
-export const RAUKK_CALIBRATION_DENSITY_REF: number = 3.28;
+export const RAUKK_CALIBRATION_DENSITY_REF: number =
+	RAUKK_REFERENCE_METEOROID_DENSITY;
 
 /** One flight the user read off the game, as it is entered */
 export interface IRaukkObservedFlight {
@@ -76,6 +82,16 @@ export interface IRaukkCalibrationInput {
 	 * the seed.
 	 */
 	stlBlockMinutesEmpty?: number;
+	/**
+	 * Overrides the seeded hull damage of one sublight block.
+	 *
+	 * Two flights that each fly exactly one block cannot separate the
+	 * block's damage from the jump's, so the block term is SEEDED and the
+	 * jump term solved as the remainder. The seed is the meteoroid law of
+	 * the calibration campaign over its reference leg; a blueprint that
+	 * knows the density of the systems it flies hands in a better one.
+	 */
+	damagePerStlBlock?: number;
 }
 
 /** Geometry one observed flight resolves to */
@@ -122,7 +138,7 @@ export interface IRaukkCalibrationConstants {
 	ftlFuelPerParsec: number;
 	stlFuelPerBlock: number;
 	damagePerParsec: number;
-	/** Never identifiable from two single block flights, always 0 */
+	/** Not identifiable from two single block flights, always seeded */
 	damagePerStlBlock: number;
 }
 
@@ -156,6 +172,10 @@ export const RAUKK_CALIBRATION_WARNINGS: Record<string, string> = {
 	chargeMinutesSeeded: "charge-minutes-seeded",
 	/** The empty block time stays at its seed, see the solver notes */
 	stlBlockMinutesEmptySeeded: "stl-block-minutes-empty-seeded",
+	/** The block damage stays at its seed, see the solver notes */
+	damagePerStlBlockSeeded: "damage-per-stl-block-seeded",
+	/** The flights damage is under the seeded block term, jumps read 0 */
+	damageBelowBlockSeed: "damage-below-block-seed",
 	/** The "loaded" flight carries nothing, its block cannot be scaled */
 	loadedFlightEmpty: "loaded-flight-empty",
 	/** More cargo than the hull holds, the load factor was clamped */
@@ -334,8 +354,19 @@ function residualOf(
  *  - `stlFuelPerBlock` as the mean of both flights block burn, which is
  *    what the flat per block cost of the model charges.
  *
- * Damage is density normalized exactly as the chain math applies it:
- * `damagePerParsec = damage / (parsecs × pathMeanDensity / densityRef)`.
+ * DAMAGE has the same shape as time: two terms, one block per flight,
+ * so the block term has to be seeded and the jump term is what is left
+ * over. The seed is the meteoroid law of the calibration campaign
+ * (docs/raukk_sourcing/shipping-calibration.md §6) over its reference
+ * leg — a real physical figure rather than the zero the solver used
+ * while the block term was thought unidentifiable, which forced every
+ * bit of sublight damage into the per parsec term and inflated it by
+ * more than an order of magnitude. What remains is density normalized
+ * exactly as the chain math applies it:
+ * `damagePerParsec = (damage − damagePerStlBlock)
+ *                    / (parsecs × pathMeanDensity / densityRef)`,
+ * floored at zero — a flight whose whole damage the block already
+ * explains says nothing about jumps except that they are cheap.
  *
  * Nothing here writes anywhere: the result is a plain struct the caller
  * copies into a profile after showing the residuals.
@@ -362,6 +393,7 @@ export function calibrateShipProfile(
 	const warnings: Set<string> = new Set([
 		RAUKK_CALIBRATION_WARNINGS.chargeMinutesSeeded,
 		RAUKK_CALIBRATION_WARNINGS.stlBlockMinutesEmptySeeded,
+		RAUKK_CALIBRATION_WARNINGS.damagePerStlBlockSeeded,
 	]);
 
 	const empty: IRaukkCalibrationGeometry = geometryOf(
@@ -384,6 +416,9 @@ export function calibrateShipProfile(
 	const chargeMinutes: number = input.chargeMinutes ?? seed.chargeMinutes;
 	const stlBlockMinutesEmpty: number =
 		input.stlBlockMinutesEmpty ?? seed.stlBlockMinutesEmpty;
+	const damagePerStlBlock: number =
+		input.damagePerStlBlock ??
+		raukkStlDamage(RAUKK_REFERENCE_STL_LEG_KM, densityRef);
 
 	const constants: IRaukkCalibrationConstants = {
 		minutesPerParsec: seed.minutesPerParsec,
@@ -393,7 +428,7 @@ export function calibrateShipProfile(
 		ftlFuelPerParsec: seed.ftlFuelPerParsec,
 		stlFuelPerBlock: seed.stlFuelPerBlock,
 		damagePerParsec: 0,
-		damagePerStlBlock: 0,
+		damagePerStlBlock,
 	};
 
 	const residuals: IRaukkCalibrationResidual[] = [];
@@ -445,13 +480,19 @@ export function calibrateShipProfile(
 	residuals.push(stlResidual);
 	constants.stlFuelPerBlock = stlResidual.mean;
 
-	// damage, density normalized towards the reference density
-	const damageEstimates: number[] = usable.map(
-		(entry) =>
-			entry.flight.damagePercent /
-			100 /
+	// damage, block term removed and the rest density normalized
+	const damageEstimates: number[] = usable.map((entry) => {
+		const jumpDamage: number =
+			entry.flight.damagePercent / 100 - damagePerStlBlock;
+
+		if (jumpDamage < 0)
+			warnings.add(RAUKK_CALIBRATION_WARNINGS.damageBelowBlockSeed);
+
+		return (
+			Math.max(jumpDamage, 0) /
 			(entry.geometry.parsecs * entry.geometry.densityFactor)
-	);
+		);
+	});
 	const damageResidual: IRaukkCalibrationResidual = residualOf(
 		"damagePerParsec",
 		damageEstimates

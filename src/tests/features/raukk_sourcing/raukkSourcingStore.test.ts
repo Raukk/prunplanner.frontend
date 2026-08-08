@@ -765,6 +765,30 @@ describe("Raukk Sourcing Store", () => {
 			expect(imported.ftlFuelPerParsec).toBe(preset.ftlFuelPerParsec);
 			expect(imported.stlFuelPerBlock).toBe(preset.stlFuelPerBlock);
 			expect(imported.shipsAvailable).toBe(2);
+			// a payload written before STL-only hulls existed is an FTL
+			// ship, and the schema default has to say so
+			expect(imported.stlOnly).toBe(false);
+		});
+
+		it("keeps a stored STL-only flag", () => {
+			const preset = JSON.parse(
+				JSON.stringify(store.getShipProfile("2000x2000-standard"))
+			);
+
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: {},
+					snapshots: {},
+					shipProfiles: {
+						"2000x2000-standard": { ...preset, stlOnly: true },
+					},
+				})
+			);
+
+			expect(store.getShipProfile("2000x2000-standard").stlOnly).toBe(
+				true
+			);
 		});
 
 		it("imports an absent ȼ constant as derive", () => {

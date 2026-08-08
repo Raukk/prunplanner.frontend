@@ -11,6 +11,7 @@ import {
 import {
 	IRaukkChainConfig,
 	IRaukkChainFlow,
+	RAUKK_CHAIN_ANCHOR_KIND,
 	RAUKK_STOP_REF,
 } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 
@@ -42,6 +43,12 @@ export type {
 	IRaukkChainFlow,
 } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 export type { IRaukkFleetShip } from "@/features/raukk_sourcing/calculations/shippingFleet";
+/**
+ * The depot shape the store persists, defined next to the depot math.
+ *
+ * @author raukk
+ */
+export type { IRaukkDepot } from "@/features/raukk_sourcing/calculations/shippingDepots";
 
 export type RAUKK_PRICE_MODE = "BID" | "ASK" | "MID" | "AVG7D" | "AVG30D";
 
@@ -249,11 +256,14 @@ export interface IRaukkChainResult {
 	unsplit: IRaukkChainCosting;
 	/** Sub chains of the split, empty when no trigger fired */
 	split: IRaukkChainCosting[];
-	/** Leg and exchange that triggered the split, null when none did */
+	/** Leg and anchor that triggered the split, null when none did */
 	splitTrigger: {
 		legIndex: number;
+		/** Exchange code, or — raukk — the anchoring depots planet id */
 		cxCode: string;
 		detourParsecs: number;
+		/** raukk: anchor kind, absent on results written before depots */
+		anchorKind?: RAUKK_CHAIN_ANCHOR_KIND;
 	} | null;
 	/** Trips of the busiest applied costing */
 	tripsPerDay: number;

@@ -38,6 +38,8 @@ import {
 	raukkChainIdOfAssignmentKey,
 } from "@/features/raukk_sourcing/calculations/shippingFleet";
 import { raukkIsAutoChainId } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
+// raukk: depot ids are normalized exactly as the chain math compares them
+import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippingDepots";
 
 // Types & Interfaces
 import {
@@ -45,6 +47,7 @@ import {
 	IRaukkChain,
 	IRaukkChainConfig,
 	IRaukkChainResult,
+	IRaukkDepot,
 	IRaukkFleetShip,
 	IRaukkLocalPrice,
 	IRaukkPlanConfig,
@@ -101,6 +104,13 @@ export const useRaukkSourcingStore = defineStore(
 		const chainConfig: Ref<IRaukkChainConfig> = ref(
 			raukkDefaultChainConfig()
 		);
+		/**
+		 * raukk: planets the user hands cargo over at, keyed by their
+		 * NORMALIZED natural id. Account global like the fleet — a depot is
+		 * a place, not a property of any one plan — and a routing anchor
+		 * only: no price, no hub, no storage.
+		 */
+		const depots: Ref<Record<string, IRaukkDepot>> = ref({});
 
 		/**
 		 * Resets all store variables to their initial values
@@ -116,6 +126,7 @@ export const useRaukkSourcingStore = defineStore(
 			fleet.value = {};
 			assignments.value = {};
 			chainConfig.value = raukkDefaultChainConfig();
+			depots.value = {};
 		}
 
 		// getters
@@ -754,6 +765,83 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Marks one planet as a DEPOT, or patches the depot it already is.
+		 *
+		 * A depot is a routing anchor: chains may be cut at it exactly as
+		 * they are cut at an exchange, so every chain result is computed
+		 * with different anchors from here on and goes stale. It is NOT a
+		 * market — nothing is priced, sourced or stored there — so nothing
+		 * outside the chains moves.
+		 *
+		 * A non finite weekly rent is refused rather than stored, the rule
+		 * every numeric knob of this store follows: `NaN` travels into the
+		 * export, where JSON writes it as `null`, and the users own backup
+		 * then fails to re-import.
+		 * @author raukk
+		 *
+		 * @param {string} planetNaturalId Planet Natural Id
+		 * @param {Partial<IRaukkDepot>} patch Depot Patch
+		 */
+		function setDepot(
+			planetNaturalId: string,
+			patch: Partial<IRaukkDepot> = {}
+		): void {
+			const key: string = raukkDepotStopKey(planetNaturalId);
+			if (key === "") return;
+
+			const known: IRaukkDepot | undefined = depots.value[key];
+
+			const weeklyCostAic: number | undefined =
+				patch.weeklyCostAic ?? known?.weeklyCostAic;
+
+			depots.value[key] = {
+				// keyed normalized, displayed as the user typed it: planet
+				// ids read `ZV-307c`, and only the comparison is case blind
+				planetNaturalId:
+					known?.planetNaturalId ?? planetNaturalId.trim(),
+				weeklyCostAic:
+					weeklyCostAic !== undefined &&
+					Number.isFinite(weeklyCostAic) &&
+					weeklyCostAic > 0
+						? weeklyCostAic
+						: undefined,
+			};
+
+			markAllChainsStale();
+		}
+
+		/**
+		 * Un-marks one planet as a depot. Chains keep their stops — the
+		 * planet is still a place a ship may fly to — they only lose it as
+		 * a split anchor, which is why they go stale.
+		 * @author raukk
+		 *
+		 * @param {string} planetNaturalId Planet Natural Id
+		 */
+		function deleteDepot(planetNaturalId: string): void {
+			const key: string = raukkDepotStopKey(planetNaturalId);
+
+			if (depots.value[key] === undefined) return;
+
+			delete depots.value[key];
+
+			markAllChainsStale();
+		}
+
+		/**
+		 * Planet natural ids of every marked depot, the anchor list the
+		 * chain math takes.
+		 * @author raukk
+		 *
+		 * @returns {string[]} Depot Planet Natural Ids
+		 */
+		function depotStopRefs(): string[] {
+			return Object.values(depots.value).map(
+				(depot) => depot.planetNaturalId
+			);
+		}
+
+		/**
 		 * Removes one ship type from the fleet. Assignments naming it
 		 * stay: an assigned type without a single hull is exactly the
 		 * over-ration the utilization display exists to show.
@@ -1133,6 +1221,7 @@ export const useRaukkSourcingStore = defineStore(
 				fleet: inertClone(fleet.value),
 				assignments: inertClone(assignments.value),
 				chainConfig: inertClone(chainConfig.value),
+				depots: inertClone(depots.value),
 			};
 
 			return JSON.stringify(payload);
@@ -1181,6 +1270,8 @@ export const useRaukkSourcingStore = defineStore(
 			fleet.value = validated.fleet;
 			assignments.value = validated.assignments;
 			chainConfig.value = validated.chainConfig;
+			// raukk: absent in every payload written before depots existed
+			depots.value = validated.depots;
 		}
 
 		return {
@@ -1194,6 +1285,7 @@ export const useRaukkSourcingStore = defineStore(
 			fleet,
 			assignments,
 			chainConfig,
+			depots,
 			// reset
 			$reset,
 			// getters
@@ -1208,6 +1300,7 @@ export const useRaukkSourcingStore = defineStore(
 			chainMemberPlans,
 			chainConflictOf,
 			assignedShipTypeId,
+			depotStopRefs,
 			// setters
 			setTickerSource,
 			clearTickerSource,
@@ -1233,6 +1326,8 @@ export const useRaukkSourcingStore = defineStore(
 			setChainConfig,
 			setFleetShip,
 			deleteFleetShip,
+			setDepot,
+			deleteDepot,
 			setAssignment,
 			// import & export
 			exportJSON,
@@ -1252,6 +1347,7 @@ export const useRaukkSourcingStore = defineStore(
 				"fleet",
 				"assignments",
 				"chainConfig",
+				"depots",
 			],
 		},
 	}

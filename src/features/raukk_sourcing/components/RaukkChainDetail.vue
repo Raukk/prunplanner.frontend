@@ -216,12 +216,22 @@
 									}}
 								</PTag>
 								<PTag
+									v-if="row.gated"
+									size="sm"
+									type="secondary">
+									{{
+										$t("raukk_sourcing.chains.detail.gated")
+									}}
+								</PTag>
+								<PTag
 									v-if="!row.routable"
 									size="sm"
 									type="error">
 									{{
 										$t(
-											"raukk_sourcing.chains.detail.unroutable"
+											row.reason === "stl-only-no-gate"
+												? "raukk_sourcing.chains.detail.no_gate_route"
+												: "raukk_sourcing.chains.detail.unroutable"
 										)
 									}}
 								</PTag>

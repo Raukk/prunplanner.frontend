@@ -10,8 +10,10 @@ import { usePrice } from "@/features/cx/usePrice";
 import {
 	calculateChainCxSplit,
 	calculateChainShipping,
+	raukkChainGateServable,
 	RAUKK_CX_SYSTEM_ID_BY_CODE,
 } from "@/features/raukk_sourcing/calculations/shippingChains";
+import { raukkStlOnlyCandidates } from "@/features/raukk_sourcing/calculations/shippingStl";
 import {
 	raukkAutoChainDemand,
 	raukkBuildAutoChains,
@@ -50,6 +52,7 @@ import {
 	IRaukkHullPick,
 	IRaukkLegDemand,
 	IRaukkShippingConfig,
+	IRaukkResolvedShipProfile,
 	IRaukkShippingPriceResolver,
 	RAUKK_CARGO_BUCKET,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
@@ -602,13 +605,25 @@ async function computeOneAutoChain(
 		autoChain.flows
 	);
 
+	/*
+	 * raukk: an STL-only hull is only ever OFFERED for a loop it can
+	 * actually fly — every leg same system or gate served. The check is
+	 * hull independent (no volume cap), so it never depends on the very
+	 * pick it gates; a link too narrow for the chosen hull is caught
+	 * afterwards, by the per leg validation of `buildChainLegs`.
+	 */
+	const gateServable: boolean = raukkChainGateServable(autoChain.stops);
+
 	const owned: IRaukkHullPick | null =
 		manual !== undefined
 			? null
 			: raukkPickHull(
-					Object.entries(sourcingStore.fleet)
-						.filter(([, ship]) => ship.count > 0)
-						.map(([shipTypeId]) => candidateOf(shipTypeId)),
+					raukkStlOnlyCandidates(
+						Object.entries(sourcingStore.fleet)
+							.filter(([, ship]) => ship.count > 0)
+							.map(([shipTypeId]) => candidateOf(shipTypeId)),
+						gateServable
+					),
 					demand,
 					autoChain.capDays
 				);
@@ -622,9 +637,12 @@ async function computeOneAutoChain(
 		manual !== undefined
 			? null
 			: raukkPickHull(
-					sourcingStore
-						.listShipProfiles()
-						.map((profile) => candidateOf(profile.id)),
+					raukkStlOnlyCandidates(
+						sourcingStore
+							.listShipProfiles()
+							.map((profile) => candidateOf(profile.id)),
+						gateServable
+					),
 					demand,
 					autoChain.capDays
 				);
@@ -773,6 +791,24 @@ async function computeOneChain(
 		chain.profileId ??
 		shippingConfig.defaultProfileId;
 
+	/*
+	 * raukk: a loop cut at an anchor is flown by two ships. Each side
+	 * resolves its own hull where the user named one — the gate side
+	 * hopper and the FTL hauler of the depot case — and falls back to the
+	 * chains own profile, which is what a chain without sides has always
+	 * flown.
+	 */
+	const sideProfiles: Record<string, IRaukkResolvedShipProfile> =
+		Object.fromEntries(
+			Object.entries(chain.sideProfiles ?? {}).map(([side, sideId]) => [
+				side,
+				raukkResolveShipProfile(
+					sourcingStore.getShipProfile(sideId),
+					resolvePrice
+				),
+			])
+		);
+
 	const input: IRaukkChainInput = {
 		chain,
 		profile: raukkResolveShipProfile(
@@ -783,6 +819,9 @@ async function computeOneChain(
 		config: shippingConfig,
 		chainConfig,
 		repairBillCost: calculateRepairBillCost(resolvePrice),
+		// raukk: marked depots anchor a split exactly as an exchange does
+		depots: sourcingStore.depotStopRefs(),
+		sideProfiles,
 	};
 
 	const comparison: IRaukkCxSplitResult = calculateChainCxSplit(input);
@@ -833,6 +872,8 @@ async function computeOneChain(
 						legIndex: comparison.trigger.legIndex,
 						cxCode: comparison.trigger.cxCode,
 						detourParsecs: comparison.trigger.detourParsecs,
+						// raukk: which kind of anchor cut here
+						anchorKind: comparison.trigger.anchorKind ?? "cx",
 					}
 				: null,
 		tripsPerDay: busiest.tripsPerDay,
