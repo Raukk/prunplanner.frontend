@@ -212,6 +212,8 @@
 				"not_solvable": "Neither flight was usable, so nothing was solved: the values below are the seed, not a measurement.",
 				"charge_minutes_seeded": "Charge time stays at its reactor seed — two flights cannot separate it from the jump speed.",
 				"stl_block_minutes_empty_seeded": "The empty sublight block stays seeded (from the blueprint if you entered its stats, otherwise from the nearest reference ship): one of the four time constants has to be, or the system is underdetermined.",
+				"damage_per_stl_block_seeded": "Sublight block damage stays seeded from the meteoroid-density law: each flight flies exactly one block, so the block and the jump term cannot be told apart. The jump damage below is what is left over.",
+				"damage_below_block_seed": "A flight took less damage than its sublight block alone should cost, so jump damage was floored at zero. The path's meteoroid density is probably lower than the reference.",
 				"loaded_flight_empty": "The \"loaded\" flight carries no cargo, so the loaded block time couldn't be scaled. Enter its cargo tonnage.",
 				"cargo_exceeds_hull": "A flight carries more than the hull holds — the load factor was clamped to a full hold.",
 				"negative_solved_time": "A solved time came out negative: the entered durations contradict the model, most likely a typo.",

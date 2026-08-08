@@ -19,6 +19,7 @@ import {
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import { IRaukkChainStaticData } from "@/features/raukk_sourcing/calculations/shippingChainData";
 import {
+	IRaukkCalibrationInput,
 	IRaukkCalibrationResidual,
 	IRaukkCalibrationResult,
 	IRaukkObservedFlight,
@@ -114,7 +115,8 @@ const loadedFlight: IRaukkObservedFlight = {
 function calibrate(
 	empty: IRaukkObservedFlight = emptyFlight,
 	loaded: IRaukkObservedFlight = loadedFlight,
-	data: IRaukkChainStaticData = flatData
+	data: IRaukkChainStaticData = flatData,
+	overrides: Partial<IRaukkCalibrationInput> = {}
 ): IRaukkCalibrationResult {
 	return calibrateShipProfile({
 		hull,
@@ -123,6 +125,7 @@ function calibrate(
 		loaded,
 		routes,
 		data,
+		...overrides,
 	});
 }
 
@@ -213,15 +216,50 @@ describe("Raukk Sourcing: Shipping Calibration", () => {
 		it("recovers the density normalized damage per parsec", () => {
 			const result: IRaukkCalibrationResult = calibrate();
 
-			// 0.088% and 0.099% over 4 parsecs at the reference density
+			/*
+			 * 0.088% and 0.099% over 4 parsecs at the reference density,
+			 * each MINUS the seeded sublight block of the meteoroid law:
+			 * one block per flight, so what a jump costs is the remainder.
+			 */
+			const block: number = result.constants.damagePerStlBlock;
+
+			expect(block).toBeCloseTo(
+				(25_000_000 * (2.2e-10 + 5.5e-10 * 3.28)) / 100,
+				12
+			);
 			expect(
 				residual(result, "damagePerParsec").estimates[0]
-			).toBeCloseTo(0.00088 / 4, 12);
+			).toBeCloseTo((0.00088 - block) / 4, 12);
+			expect(result.constants.damagePerParsec).toBeCloseTo(
+				((0.00088 - block) / 4 + (0.00099 - block) / 4) / 2,
+				12
+			);
+			expect(result.warnings).toContain("damage-per-stl-block-seeded");
+		});
+
+		it("takes a caller supplied block damage over the law", () => {
+			const result: IRaukkCalibrationResult = calibrate(
+				emptyFlight,
+				loadedFlight,
+				undefined,
+				{ damagePerStlBlock: 0 }
+			);
+
+			expect(result.constants.damagePerStlBlock).toBe(0);
 			expect(result.constants.damagePerParsec).toBeCloseTo(
 				(0.00088 / 4 + 0.00099 / 4) / 2,
 				12
 			);
-			expect(result.constants.damagePerStlBlock).toBe(0);
+		});
+
+		it("floors the jump term when the block alone explains it", () => {
+			const result: IRaukkCalibrationResult = calibrate(
+				{ ...emptyFlight, damagePercent: 0.001 },
+				{ ...loadedFlight, damagePercent: 0.001 }
+			);
+
+			expect(result.constants.damagePerParsec).toBe(0);
+			expect(result.warnings).toContain("damage-below-block-seed");
 		});
 
 		it("halves the rate on a path of twice the density", () => {

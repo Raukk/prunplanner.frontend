@@ -303,3 +303,81 @@ Batch 7 — reactor sweep (KI-840c -> ANT, 46pc, HCB-FTL, 5000t):
 - Fold this file into shipping-decisions.md as round 9 + link from
   shipping-chains-v2/fleet docs when those files are next touched
   (kept separate here to avoid conflicts with the parallel branch).
+
+## 9. As implemented
+
+The derivation layer now runs on this document.
+`src/features/raukk_sourcing/calculations/shippingPhysics.ts` holds
+every constant and law below, cited back to its section here;
+`shippingBlueprint.ts` turns a blueprint panel into profile constants
+through them, `shippingProfiles.ts` carries the reference fallbacks and
+`shippingCalibration.ts` inverts the same model. The STORED profile
+shape is unchanged — `IRaukkShipProfile` keeps its flat
+`stlBlockMinutes*` / `stlFuelPerBlock` / `damagePer*` fields — so the
+chain math, the cadence math and the UI were not touched. What changed
+is how those numbers are arrived at.
+
+LANDED:
+
+- `accelMax = min(thrust / grossMass, gCap × 9.81)` (§2.1, §2.2), with
+  the five engine thrusts and burn rates. The engine is inferred from
+  the panel's fuel rate, and where GEN and ENG share 0.015 u/s the
+  design's own acceleration separates them exactly as §2.1 does by
+  hand. Cargo now slows a block only through `accelMax`, so a g-capped
+  hull correctly loses nothing until the cap is left behind — the old
+  unconditional `√(gross / empty)` charged for it.
+- Transit and TO/LND time `∝ 1/√accelMax` with the §1.2 and §1.3
+  constants (10,800 and 3,200, the midpoints of the stated ranges), and
+  the FSE cap-speed exception. That exception is implemented as a FLOOR
+  on the transit leg rather than the multiplier §1.2's wording
+  suggests: a multiplier contradicts batch 1, which flew the same
+  43m47s empty and with 5,000 t aboard. A floor reproduces both.
+- TO/LND fuel `= 7.55 × rated burn × seconds`, slider-blind (§1.3).
+- The fuel slider as a fraction of the STL TANK per transit leg, with
+  the two operating points of §1.1 — MIN at roughly the rated rate,
+  any slider setting at `fraction × tank` — clamped at the 0.25 the
+  user never exceeds. Tank capacities from §2.3.
+- Damage split into its two real terms (§6): a flat 0.0011 % per
+  parsec for jumps and the meteoroid law `km × (2.2e-10 + 5.5e-10 ×
+  density)` for the block. The block term was previously hard zero,
+  which forced all sublight damage into the per-parsec term and
+  inflated it about twentyfold.
+- The two-flight solver seeds the block damage from that law and solves
+  the jump term as the remainder, floored at zero, with two new warning
+  codes (`damage-per-stl-block-seeded`, `damage-below-block-seed`)
+  alongside the existing seeded-field warnings. Precedence is
+  unchanged: flight beats blueprint beats reference.
+- `TIME_CALIBRATIONS` restated on this document: the 5000/5000 row from
+  the batch 1 legs directly, the 3000/1000 row derived from the
+  campaign's own BP-EXRX-5540 build through the laws above (§7
+  corroborates it at 98 sublight units for a one-way trip). Charge
+  times stay at the round 5 readings — §3 measures CHRG only on a
+  standard reactor in a 5,831 m³ hull, which is neither row.
+
+DEFERRED, and why:
+
+- ARC-FACTOR PATH CORRECTION (§1.4). Nothing in the code computes a
+  chord in km: `routeDistance.ts` is a parsec jump graph, and in-system
+  distances are not modelled at all. The correction has no consumer to
+  attach to and would ship dead. It belongs with the in-system
+  distance layer that `raukk_orbits.json` and the §5 station elements
+  are waiting for.
+- DISTANCE-AWARE BLOCKS. The block is one fixed reference leg
+  (25 M km, batch 1). §3 shows FTL DEP/APP legs running 59-75 M km and
+  dominating an FTL trip, so a single flat block under- prices them
+  badly. Fixing it means giving the block a distance, which changes the
+  stored profile shape and every consumer — a model change, not a
+  derivation change.
+- MIN-REGIME TIME. §1.2 states the 1/√accel law and then says it does
+  NOT hold at MIN, where mass dominates: batch 1 runs 20 % (empty) to
+  3× (loaded) longer than the law predicts. The document supplies a
+  constant only for the fast regime, so the seeded times are the fast
+  ones. Fitting the MIN exponent from the batch 1 triple would be a new
+  law this document does not state.
+- JUMP DAMAGE IS DENSITY-SCALED BY THE CONSUMERS. §6 finds jump damage
+  reactor- AND density-independent, but `shippingChains.ts` scales
+  `damagePerParsec` by path density. Correcting it is chain-math work.
+- GATE CONSTANTS (§4) — owned by the route-graph work.
+- Everything already listed in §8: the Antares near-star term, CHRG
+  damage by ship size, per-planet LND damage, the HCB gate run and the
+  FIO gateway pull.
