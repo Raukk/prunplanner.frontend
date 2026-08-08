@@ -13,6 +13,7 @@ import { calculateTrueCosts } from "@/features/raukk_sourcing/calculations/trueC
 import { calculateRepairCostPerDay } from "@/features/raukk_sourcing/calculations/repairCapitalCost";
 import { calculateBaseFraction } from "@/features/raukk_sourcing/calculations/baseFraction";
 import {
+	calculateRepairBillCost,
 	calculateShipping,
 	RAUKK_REPAIR_BILL,
 } from "@/features/raukk_sourcing/calculations/shipping";
@@ -155,9 +156,11 @@ interface IRaukkShippingInput {
  * @author raukk
  *
  * @param {IRaukkShippingInput} input Plan flows, resolver and config
- * @returns {IRaukkShippingResult} Per pair and per ticker shipping
+ * @returns {IRaukkShippingPair[]} Route pairs the plan owns
  */
-function computePlanShipping(input: IRaukkShippingInput): IRaukkShippingResult {
+function buildPlanShippingPairs(
+	input: IRaukkShippingInput
+): IRaukkShippingPair[] {
 	const sourcingStore = useRaukkSourcingStore();
 
 	const inputs: IRaukkShippedTicker[] = [];
@@ -177,7 +180,7 @@ function computePlanShipping(input: IRaukkShippingInput): IRaukkShippingResult {
 		else outputs.push(cargo);
 	});
 
-	const pairs: IRaukkShippingPair[] = buildShippingPairs(
+	return buildShippingPairs(
 		{
 			planUuid: input.planUuid,
 			planetNaturalId: input.planetNaturalId,
@@ -224,9 +227,19 @@ function computePlanShipping(input: IRaukkShippingInput): IRaukkShippingResult {
 		},
 		input.shippingConfig
 	);
+}
 
+/**
+ * Shipping cost of every route pair one plan owns.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingInput} input Plan flows, resolver and config
+ * @returns {IRaukkShippingResult} Per pair and per ticker shipping
+ */
+function computePlanShipping(input: IRaukkShippingInput): IRaukkShippingResult {
 	return calculateShipping(
-		pairs,
+		buildPlanShippingPairs(input),
 		input.shippingConfig,
 		(ticker: string) => input.resolver(ticker).price
 	);
@@ -506,16 +519,30 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		() => sourcingStore.shippingConfig
 	);
 
+	const shippingInput: ComputedRef<IRaukkShippingInput> = computed(() => ({
+		planUuid: context.planUuid.value ?? "",
+		planetNaturalId: context.planetNaturalId.value ?? "",
+		planResult: context.planResult.value,
+		resolver: resolver.value,
+		getProducers,
+		shippingConfig: shippingConfig.value,
+	}));
+
 	/** Live shipping of the pairs this plan owns, empty while disabled */
 	const shipping: ComputedRef<IRaukkShippingResult> = computed(() =>
-		computePlanShipping({
-			planUuid: context.planUuid.value ?? "",
-			planetNaturalId: context.planetNaturalId.value ?? "",
-			planResult: context.planResult.value,
-			resolver: resolver.value,
-			getProducers,
-			shippingConfig: shippingConfig.value,
-		})
+		computePlanShipping(shippingInput.value)
+	);
+
+	/** The pairs themselves, the LM rate comparison prices them again */
+	const shippingPairs: ComputedRef<IRaukkShippingPair[]> = computed(() =>
+		buildPlanShippingPairs(shippingInput.value)
+	);
+
+	/** ȼ of one full ship repair bill at the plans configured sources */
+	const repairBillCost: ComputedRef<number> = computed(() =>
+		calculateRepairBillCost(
+			(ticker: string) => resolver.value(ticker).price
+		)
 	);
 
 	const trueCost: ComputedRef<IRaukkTrueCostResult> = computed(() =>
@@ -534,7 +561,8 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 			context.planResult.value,
 			repairCost.value.materialUnitsPerDay,
 			config.value.sources,
-			resolver.value
+			resolver.value,
+			shipping.value.inbound
 		)
 	);
 
@@ -715,6 +743,8 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		config,
 		shippingConfig,
 		shipping,
+		shippingPairs,
+		repairBillCost,
 		inputRows,
 		outputRows,
 		repairCost,

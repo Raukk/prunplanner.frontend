@@ -15,6 +15,7 @@
 	// Components
 	import RaukkInputsTable from "@/features/raukk_sourcing/components/RaukkInputsTable.vue";
 	import RaukkOutputsTable from "@/features/raukk_sourcing/components/RaukkOutputsTable.vue";
+	import RaukkShippingSection from "@/features/raukk_sourcing/components/RaukkShippingSection.vue";
 
 	// Util
 	import { formatDate } from "@/util/date";
@@ -64,6 +65,9 @@
 
 	const {
 		config,
+		shippingConfig,
+		shippingPairs,
+		repairBillCost,
 		inputRows,
 		outputRows,
 		repairCost,
@@ -82,6 +86,16 @@
 	/** Configuration is read only without a stored plan uuid as well */
 	const readOnly: ComputedRef<boolean> = computed(
 		() => props.disabled || props.planUuid === undefined
+	);
+
+	/** Plan names of every stored snapshot, labels the shipping lanes */
+	const planNames: ComputedRef<Record<string, string>> = computed(() =>
+		Object.fromEntries(
+			Object.entries(sourcingStore.snapshots).map(([uuid, stored]) => [
+				uuid,
+				stored.planName,
+			])
+		)
 	);
 
 	const repairDayOptions: ComputedRef<PSelectOption[]> = computed(() =>
@@ -361,6 +375,18 @@
 				</template>
 				{{ $t("raukk_sourcing.snapshot.base_fraction_tooltip") }}
 			</PTooltip>
+			<PTooltip v-if="snapshot.shippingFraction !== undefined">
+				<template #trigger>
+					<span class="text-white/60 hover:cursor-help">
+						{{
+							$t("raukk_sourcing.snapshot.shipping_fraction", {
+								value: formatNumber(snapshot.shippingFraction),
+							})
+						}}
+					</span>
+				</template>
+				{{ $t("raukk_sourcing.snapshot.shipping_fraction_tooltip") }}
+			</PTooltip>
 		</template>
 		<span v-else class="text-white/60">
 			{{ $t("raukk_sourcing.snapshot.never") }}
@@ -382,6 +408,12 @@
 		{{ $t("raukk_sourcing.read_only") }}
 	</div>
 
+	<RaukkShippingSection
+		:pairs="shippingPairs"
+		:repair-bill-cost="repairBillCost"
+		:plan-names="planNames"
+		:disabled="readOnly" />
+
 	<h3 class="font-bold py-3">
 		{{ $t("raukk_sourcing.inputs_title") }}
 	</h3>
@@ -389,6 +421,7 @@
 		:rows="inputRows"
 		:source-options="sourceOptions"
 		:repair-cost-per-day="repairCost.total"
+		:shipping-enabled="shippingConfig.enabled"
 		:disabled="readOnly"
 		@update:source="changeSource" />
 

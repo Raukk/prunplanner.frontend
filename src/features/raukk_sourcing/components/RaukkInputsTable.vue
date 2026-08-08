@@ -43,6 +43,13 @@
 			type: Number,
 			required: true,
 		},
+		/** Shows the freight column; while off every row ships for 0 and
+		 * the table renders exactly as it did before shipping existed */
+		shippingEnabled: {
+			type: Boolean,
+			required: false,
+			default: false,
+		},
 		disabled: {
 			type: Boolean,
 			required: false,
@@ -88,6 +95,18 @@
 	const totalCostPerDay: ComputedRef<number> = computed(() =>
 		props.rows.reduce((sum, row) => sum + row.costPerDay, 0)
 	);
+
+	const totalShippingPerDay: ComputedRef<number> = computed(() =>
+		props.rows.reduce(
+			(sum, row) => sum + row.shippedUnitsPerDay * row.shippingPerUnit,
+			0
+		)
+	);
+
+	/** Columns left of the value column, drives the footer colspans */
+	const labelColumns: ComputedRef<number> = computed(() =>
+		props.shippingEnabled ? 7 : 6
+	);
 </script>
 
 <template>
@@ -101,6 +120,9 @@
 				</th>
 				<th>{{ $t("raukk_sourcing.inputs.price_mode") }}</th>
 				<th>{{ $t("raukk_sourcing.inputs.source") }}</th>
+				<th v-if="shippingEnabled" class="text-right!">
+					{{ $t("raukk_sourcing.inputs.shipping_price") }}
+				</th>
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.inputs.effective_price") }}
 				</th>
@@ -159,30 +181,43 @@
 								emit('update:source', row.ticker, source)
 						" />
 				</td>
+				<td v-if="shippingEnabled" class="text-right text-white/60">
+					{{ formatNumber(row.shippingPerUnit) }}
+				</td>
 				<td class="text-right">
-					{{ formatNumber(row.price) }}
+					{{ formatNumber(row.effectivePrice) }}
 				</td>
 				<td class="text-right">
 					{{ formatNumber(row.costPerDay) }}
 				</td>
 			</tr>
 			<tr v-if="rows.length === 0">
-				<td colspan="7" class="text-center text-white/50">
+				<td
+					:colspan="labelColumns + 1"
+					class="text-center text-white/50">
 					{{ $t("raukk_sourcing.inputs.empty") }}
 				</td>
 			</tr>
 		</tbody>
 		<tfoot v-if="rows.length > 0">
 			<tr class="font-bold">
-				<td colspan="6">
+				<td :colspan="labelColumns">
 					{{ $t("raukk_sourcing.inputs.total_cost") }}
 				</td>
 				<td class="text-right">
 					{{ formatNumber(totalCostPerDay) }}
 				</td>
 			</tr>
+			<tr v-if="shippingEnabled">
+				<td :colspan="labelColumns">
+					{{ $t("raukk_sourcing.inputs.shipping_cost") }}
+				</td>
+				<td class="text-right">
+					{{ formatNumber(totalShippingPerDay) }}
+				</td>
+			</tr>
 			<tr>
-				<td colspan="6">
+				<td :colspan="labelColumns">
 					{{ $t("raukk_sourcing.inputs.repair_cost") }}
 				</td>
 				<td class="text-right">

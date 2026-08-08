@@ -27,7 +27,9 @@
 		"current": "Current",
 		"stale_sources": "{count} upstream snapshot(s) used here are stale",
 		"base_fraction": "Base fraction: {value}",
-		"base_fraction_tooltip": "Base permits this product chain occupies: the plan's own base plus, per source plan, the cost-weighted share of that source's output drawn here, times the source's own base fraction. Fully using this base and half of another one gives 1.50. High values mean the chain ties up several bases — often cheaper to buy than to build."
+		"base_fraction_tooltip": "Base permits this product chain occupies: the plan's own base plus, per source plan, the cost-weighted share of that source's output drawn here, times the source's own base fraction. Fully using this base and half of another one gives 1.50. High values mean the chain ties up several bases — often cheaper to buy than to build.",
+		"shipping_fraction": "Shipping fraction: {value}",
+		"shipping_fraction_tooltip": "Ship time this plan's own route pairs occupy: trips per day times round-trip time, divided by a full day of the ships available on the profile. 1.00 means one ship flies for this plan around the clock; lanes flown by a hired LM carrier count as 0."
 	},
 	"inputs_title": "Inputs",
 	"inputs": {
@@ -37,9 +39,11 @@
 		"price_mode": "Price Mode",
 		"use_source": "Plan",
 		"source": "Source",
+		"shipping_price": "Shipping ȼ/u",
 		"effective_price": "Effective ȼ/u",
 		"line_cost": "ȼ/Day",
 		"total_cost": "Total Input Cost / Day",
+		"shipping_cost": "…of which Shipping / Day",
 		"repair_cost": "Repair Capital Cost / Day",
 		"no_producers": "No plan produces this ticker",
 		"market": "Market",
@@ -65,6 +69,50 @@
 		"agg_max": "Highest-cost producer",
 		"cycle": "would create a supply loop",
 		"stale": "stale snapshot"
+	},
+	"shipping": {
+		"title": "Shipping",
+		"enabled": "Charge Shipping",
+		"disabled_info": "Shipping is off: freight costs nothing and no snapshot changes. Turning it on marks every stored snapshot stale — the fleet is account-global, so it moves the numbers of every plan.",
+		"default_profile": "Default Profile",
+		"routing_mode": "Routing",
+		"routing_modes": {
+			"direct": "Direct",
+			"cx-hub": "Via nearest CX"
+		},
+		"same_system_cost": "Same-System ȼ/Trip",
+		"show_calibration": "Show Calibration",
+		"hide_calibration": "Hide Calibration",
+		"calibration_info": "Calibration constants per hull and FTL reactor, pre-filled from recorded test flights. Cost per parsec and per sublight block start at zero — no ȼ figure can be derived from the game data, measure your own. Edited profiles override the preset until reset.",
+		"profile": "Profile",
+		"overridden": "Edited",
+		"reset_profile": "Reset",
+		"fields": {
+			"costPerParsec": "ȼ/Parsec",
+			"stlBlockCost": "ȼ/STL Block",
+			"minutesPerParsec": "Min/Parsec",
+			"stlBlockMinutesEmpty": "STL Min Empty",
+			"stlBlockMinutesLoaded": "STL Min Loaded",
+			"chargeMinutes": "Charge Min",
+			"damagePerParsec": "Damage/Parsec",
+			"damagePerStlBlock": "Damage/STL Block",
+			"shipsAvailable": "Ships"
+		},
+		"lm": {
+			"title": "Hired Transport",
+			"info": "Enter the ȼ per trip an LM transport ad asks for a lane and compare it against flying it yourself. A hired lane pays the entered rate instead of the own fleet cost and drops out of the shipping fraction. ȼ/u figures are lane averages over everything moving on it, in both directions.",
+			"lane": "Lane",
+			"cx_lane": "Exchange",
+			"trips_per_day": "Trips / Day",
+			"units_per_day": "Units / Day",
+			"own_per_trip": "Own ȼ/Trip",
+			"rate_per_trip": "LM ȼ/Trip",
+			"rate_placeholder": "not hired",
+			"own_per_unit": "Own ȼ/u",
+			"hired_per_unit": "Hired ȼ/u",
+			"saving": "Saving ȼ/u",
+			"empty": "This plan owns no route pairs yet — compute a snapshot, or check that its inputs and outputs actually move."
+		}
 	},
 	"outputs_title": "Outputs",
 	"outputs": {

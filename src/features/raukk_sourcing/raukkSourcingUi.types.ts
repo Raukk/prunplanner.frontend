@@ -33,7 +33,17 @@ export interface IRaukkInputRow {
 	source: IRaukkTickerSource | undefined;
 	/** Effective price of one unit at the configured source */
 	price: number;
-	/** `unitsPerDay * price` */
+	/** Units of this row that actually ride a route pair and pay
+	 * freight. Equal to `unitsPerDay` for a pure production or workforce
+	 * input; ship repair materials of the plans own buildings are a
+	 * deliberate v1 gap — they are priced and drawn but appear in no
+	 * material I/O, so they ride no pair (see `computePlanShipping`). */
+	shippedUnitsPerDay: number;
+	/** Freight of one shipped unit, 0 while shipping is disabled */
+	shippingPerUnit: number;
+	/** `price + shippingPerUnit`, the ȼ/u the plan really pays */
+	effectivePrice: number;
+	/** `unitsPerDay * price + shippedUnitsPerDay * shippingPerUnit` */
 	costPerDay: number;
 	/** Set when the units are drawn from another plan */
 	fromPlanUuid: string | undefined;
