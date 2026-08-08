@@ -267,8 +267,13 @@ export function calculateRoundTripMinutes(
  * the consumer.
  *
  * Pure distance substitution, the pair stays a single consumer owned
- * pair on the consumers profile. Known v1 approximation: the same lane
- * is not pooled with the plans own CX pair and can be charged twice.
+ * pair on the consumers profile.
+ *
+ * UNREACHED by the snapshot pipeline since the hub/spoke rewrite: every
+ * source now routes through the exchanges (`viaCxSourceOf` is true for
+ * all of them), so no sourcing pair is ever built from a combined route
+ * and the `routingMode` switch that selected this never fires. Kept with
+ * its unit tests for the pairing layer alone.
  *
  * @author raukk
  *

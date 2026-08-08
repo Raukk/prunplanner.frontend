@@ -161,6 +161,9 @@ describe("Raukk Shipping: Plan flows", () => {
 						"own"
 					),
 					ownerPlanUuid: "own",
+					// a plan to plan lane names its producing plan, the
+					// planet alone cannot tell two of them apart
+					sourcePlanUuid: "source",
 					ticker: "ORE",
 					bucket: "production",
 					fromStop: SOURCE_PLANET,

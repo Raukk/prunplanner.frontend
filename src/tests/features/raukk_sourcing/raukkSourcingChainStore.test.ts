@@ -466,6 +466,96 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 
 			expect(store.chainResults).toStrictEqual({});
 		});
+
+		/*
+		 * A derived id is POSITIONAL: a pin left behind by a loop that no
+		 * longer exists would sit in the store forever and re-apply to
+		 * whatever loop takes that id on a later pass.
+		 */
+		it("drops the hull pins of derived chains that vanished", () => {
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+				makeChainResult("auto:production:AI1:2", ["source"]),
+			]);
+			store.setAssignment(
+				raukkChainAssignmentKey("auto:production:AI1:1"),
+				"WCB"
+			);
+			store.setAssignment(
+				raukkChainAssignmentKey("auto:production:AI1:2"),
+				"WCB"
+			);
+			store.setAssignment(raukkChainAssignmentKey("c1"), "WCB");
+			store.setAssignment("source>CX", "WCB");
+
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+			]);
+
+			expect(Object.keys(store.assignments).sort()).toStrictEqual([
+				raukkChainAssignmentKey("auto:production:AI1:1"),
+				raukkChainAssignmentKey("c1"),
+				"source>CX",
+			]);
+		});
+
+		it("keeps the pins of a purge it cannot vouch for", () => {
+			store.setAutoChainResults([
+				makeChainResult("auto:production:AI1:1", ["source"]),
+			]);
+			store.setAssignment(
+				raukkChainAssignmentKey("auto:production:AI1:1"),
+				"WCB"
+			);
+
+			// shipping off, or a failed pass: the derived set is unknown
+			store.setAutoChainResults([], false);
+
+			expect(store.chainResults).toStrictEqual({});
+			expect(
+				store.assignments[
+					raukkChainAssignmentKey("auto:production:AI1:1")
+				]
+			).toBe("WCB");
+		});
+
+		it("flags one result stale without staling its member plans", () => {
+			withMembers();
+			store.setChainResult("c1", makeChainResult("c1", ["source"]));
+
+			store.markChainResultStale("c1");
+			store.markChainResultStale("nope");
+
+			expect(store.chainResults.c1.stale).toBe(true);
+			expect(store.snapshots.source.stale).toBe(false);
+		});
+	});
+
+	describe("chain configuration", () => {
+		/*
+		 * A numeric input emits NaN for a lone "-" or ".". Stored, it
+		 * exports as null and the users own backup no longer re-imports —
+		 * and a NaN minimum share disables every automatic chain, since
+		 * NaN compares false against any threshold.
+		 */
+		it("refuses a non finite chain knob and keeps the rest", () => {
+			const detour: number = store.chainConfig.cxSplitDetourParsecs;
+
+			store.setChainConfig({
+				cxSplitDetourParsecs: Number.NaN,
+				autoChainMinShare: Number.POSITIVE_INFINITY,
+				densityRef: 4,
+			});
+
+			expect(store.chainConfig.cxSplitDetourParsecs).toBe(detour);
+			expect(store.chainConfig.autoChainMinShare).toBe(
+				raukkDefaultChainConfig().autoChainMinShare
+			);
+			expect(store.chainConfig.densityRef).toBe(4);
+			expect(store.chainConfig.autoCxSplit).toBe(
+				raukkDefaultChainConfig().autoCxSplit
+			);
+		});
 	});
 
 	describe("cx anchor", () => {

@@ -14,7 +14,12 @@
 	import RaukkVisitCadence from "@/features/raukk_sourcing/components/RaukkVisitCadence.vue";
 
 	// Calculations
-	import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
+	import {
+		RAUKK_CX_SYSTEM_ID_BY_CODE,
+		RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS,
+		RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS,
+		RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE,
+	} from "@/features/raukk_sourcing/calculations/shippingChains";
 	import {
 		raukkAutoChainListRows,
 		raukkChainListRows,
@@ -281,7 +286,10 @@
 			decimals
 			:min="0"
 			:max="1"
-			:value="chainConfig.autoChainMinShare ?? 0.05"
+			:value="
+				chainConfig.autoChainMinShare ??
+				RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE
+			"
 			@update:value="
 				(v) => changeConfig({ autoChainMinShare: v ?? 0 })
 			" />
@@ -298,7 +306,10 @@
 			class="min-w-25"
 			decimals
 			:min="0"
-			:value="chainConfig.autoChainDetourInOutParsecs ?? 2"
+			:value="
+				chainConfig.autoChainDetourInOutParsecs ??
+				RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS
+			"
 			@update:value="
 				(v) => changeConfig({ autoChainDetourInOutParsecs: v ?? 0 })
 			" />
@@ -315,7 +326,10 @@
 			class="min-w-25"
 			decimals
 			:min="0"
-			:value="chainConfig.autoChainDetourLooseParsecs ?? 6"
+			:value="
+				chainConfig.autoChainDetourLooseParsecs ??
+				RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS
+			"
 			@update:value="
 				(v) => changeConfig({ autoChainDetourLooseParsecs: v ?? 0 })
 			" />

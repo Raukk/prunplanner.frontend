@@ -18,7 +18,11 @@
 	import RaukkShippingSection from "@/features/raukk_sourcing/components/RaukkShippingSection.vue";
 
 	// Calculations
-	import { raukkStorageFilledDays } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+	import {
+		raukkShipTimeOver,
+		raukkShipTimePercent,
+		raukkStorageFilledDays,
+	} from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 	import {
 		getVolumeOfAllStorages,
 		getWeightOfAllStorages,
@@ -136,6 +140,22 @@
 			),
 		},
 	]);
+
+	/**
+	 * Ship time of this plan as the percentage every other shipping
+	 * surface reads it in — the chain tables and the fleet table both show
+	 * this share as a percentage, and one quantity gets one unit.
+	 *
+	 * @author raukk
+	 *
+	 * @param {number | null} shippingFraction Ship time share
+	 * @returns {string} Percentage label, an em-dash where unknown
+	 */
+	function shipTimeLabel(shippingFraction: number | null): string {
+		const percent: number | null = raukkShipTimePercent(shippingFraction);
+
+		return percent === null ? "—" : `${formatNumber(percent)} %`;
+	}
 
 	const repairDayOptions: ComputedRef<PSelectOption[]> = computed(() =>
 		[30, 60, 90, 120].map((day) => ({ label: `${day}`, value: day }))
@@ -465,15 +485,16 @@
 			</PTooltip>
 			<PTooltip v-if="snapshot.shippingFraction !== undefined">
 				<template #trigger>
-					<span class="text-white/60 hover:cursor-help">
+					<span
+						class="hover:cursor-help"
+						:class="
+							raukkShipTimeOver(snapshot.shippingFraction)
+								? 'text-negative font-bold'
+								: 'text-white/60'
+						">
 						{{
 							$t("raukk_sourcing.snapshot.shipping_fraction", {
-								value:
-									snapshot.shippingFraction === null
-										? "—"
-										: formatNumber(
-												snapshot.shippingFraction
-											),
+								value: shipTimeLabel(snapshot.shippingFraction),
 							})
 						}}
 					</span>

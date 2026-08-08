@@ -332,6 +332,17 @@ function planCargo(input: IRaukkShippingInput): IRaukkPairPlanFlows {
  * pairs, never double bill it. The next chain pass rewrites the result
  * with owners and the fallback stops applying.
  *
+ * STALENESS is deliberately not read here, and the invariant that makes
+ * that safe is: a stored chain result claims, whatever its flag says.
+ * `stale` means "the numbers are one pass old", the documented
+ * convergence lag of the whole model — it never means "invalid". Both
+ * sides of the claim read this same function, so a claimed lane is
+ * subtracted from the pairs and paid from the chain, or from neither;
+ * skipping stale results in ONE of them is what would double bill.
+ * Results that must not claim are removed instead of flagged: the chain
+ * pass purges the derived set when shipping is off or the automatic pass
+ * failed, and `deleteChain` drops an authored one outright.
+ *
  * @author raukk
  *
  * @param {string} planUuid Own plan uuid
@@ -378,16 +389,27 @@ interface IRaukkHubSpokeRouting {
  * level, so both sides again see the same numbers. A result frozen
  * before ownership was carried falls back to the endpoint heuristic of
  * {@link planClaimedFlows}: the plan the cargo arrives at authored it.
+ * Staleness is not read, for the reason stated there.
+ *
+ * The PRODUCING plan is named as well, and endpoints alone cannot say
+ * it: `fromStop` is a planet, and two plans on one planet author two
+ * flows that are identical in every endpoint. Keyed by the planet alone,
+ * both producers would subtract the whole claim of both and one of them
+ * would ship its cargo for free. A claim frozen before `sourcePlanUuid`
+ * existed names no producer and still counts for every plan on its
+ * origin planet, which is exactly the old behaviour.
  *
  * @author raukk
  *
  * @param {string} ownerPlanUuid Plan whose flows count
+ * @param {string} sourcePlanUuid Producing plan whose flows count
  * @param {string} fromStop Origin stop
  * @param {string} toStop Destination stop
  * @returns {Record<string, number>} Claimed units per ticker
  */
 function chainClaimedUnits(
 	ownerPlanUuid: string,
+	sourcePlanUuid: string,
 	fromStop: string,
 	toStop: string
 ): Record<string, number> {
@@ -401,6 +423,12 @@ function chainClaimedUnits(
 				if (
 					flow.ownerPlanUuid !== undefined &&
 					flow.ownerPlanUuid !== ownerPlanUuid
+				)
+					return;
+
+				if (
+					flow.sourcePlanUuid !== undefined &&
+					flow.sourcePlanUuid !== sourcePlanUuid
 				)
 					return;
 
@@ -465,8 +493,12 @@ function planHubSpokeRouting(
 				counterpart.draws[input.planUuid];
 			if (outbound === undefined) return;
 
+			// the counterpart authored the lane, THIS plan produced on it:
+			// a sibling plan on the same planet has its own claim and must
+			// not have it subtracted here as well
 			const claimed: Record<string, number> = chainClaimedUnits(
 				counterpartUuid,
+				input.planUuid,
 				input.planetNaturalId,
 				counterpart.planetNaturalId
 			);

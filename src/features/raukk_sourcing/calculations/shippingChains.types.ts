@@ -128,6 +128,18 @@ export interface IRaukkChainFlow {
 	 * this field existed know no owner.
 	 */
 	ownerPlanUuid?: string;
+	/**
+	 * Plan the cargo is drawn FROM, on a plan to plan lane.
+	 *
+	 * `fromStop` names the producing PLANET, and a planet may carry
+	 * several plans: two producers on one planet author two flows that
+	 * are identical in every endpoint. Both of them would then see the
+	 * whole claim of both subtracted from their own exchange sells, and
+	 * one of them would ship its cargo for free. Absent on a market lane,
+	 * which has no producing plan, and on flows frozen before the field
+	 * existed — those degrade to the old per planet behaviour.
+	 */
+	sourcePlanUuid?: string;
 	ticker: string;
 	/**
 	 * Cargo class of the flow, see {@link RAUKK_CARGO_BUCKET}.

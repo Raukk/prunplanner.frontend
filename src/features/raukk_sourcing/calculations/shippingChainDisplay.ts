@@ -82,6 +82,8 @@ export interface IRaukkChainLegRow {
 	durationHours: number;
 	/** ȼ of fuel burnt on this leg, null when no price is known */
 	fuelCost: number | null;
+	/** True when `fuelCost` rests on a manual ȼ override, not on a burn */
+	fuelOverridden: boolean;
 }
 
 /**
@@ -92,6 +94,10 @@ export interface IRaukkChainLegRow {
  * thing the display adds is a price — and a price it may not have. An
  * absent FF or SF price is not a zero, it is an unknown, and the row says
  * so with an em-dash rather than with free freight.
+ *
+ * A profile carrying a manual `costPerParsec` or `stlBlockCost` needs no
+ * price for that term at all: round 5 says the override wins, and it wins
+ * here exactly as it wins in the cost math.
  */
 export interface IRaukkChainLegFuel {
 	profile: IRaukkShipProfile;
@@ -141,18 +147,41 @@ export interface IRaukkChainStorageWarning {
 	filledDays: number;
 }
 
-/** A ship time share as the percentage the table reads, null carried */
-function percentOf(shippingFraction: number | null | undefined): number | null {
+/**
+ * A ship time share as the percentage every surface reads it in, null
+ * carried through.
+ *
+ * Ship time is a SHARE of a full day of flying, and one presentation of
+ * it — the percentage — is used everywhere it shows: the chain tables,
+ * the derived chain tables and the plan's own shipping fraction. A bare
+ * fraction next to a percentage is the same quantity in two units.
+ *
+ * @author raukk
+ *
+ * @param {(number | null | undefined)} shippingFraction Ship time share
+ * @returns {(number | null)} Percentage, null carried through
+ */
+export function raukkShipTimePercent(
+	shippingFraction: number | null | undefined
+): number | null {
 	return shippingFraction === null || shippingFraction === undefined
 		? null
 		: shippingFraction * 100;
 }
 
 /**
- * Whether a loop books more ship time than its type has, deadbanded by
- * {@link RAUKK_EPSILON_EQUAL}: a hundredth over full is not over.
+ * Whether a share books more ship time than the hulls behind it have,
+ * deadbanded by {@link RAUKK_EPSILON_EQUAL}: a hundredth over full is not
+ * over.
+ *
+ * @author raukk
+ *
+ * @param {(number | null | undefined)} shippingFraction Ship time share
+ * @returns {boolean} True when over-booked
  */
-function isOver(shippingFraction: number | null | undefined): boolean {
+export function raukkShipTimeOver(
+	shippingFraction: number | null | undefined
+): boolean {
 	return (
 		shippingFraction !== null &&
 		shippingFraction !== undefined &&
@@ -248,8 +277,10 @@ export function raukkChainListRows(
 				tripsPerDay: result?.tripsPerDay ?? null,
 				dailyCost: result?.dailyCost ?? null,
 				shippingFraction: result?.shippingFraction ?? null,
-				shippingFractionPercent: percentOf(result?.shippingFraction),
-				over: isOver(result?.shippingFraction),
+				shippingFractionPercent: raukkShipTimePercent(
+					result?.shippingFraction
+				),
+				over: raukkShipTimeOver(result?.shippingFraction),
 				shipDaysPerDay:
 					result === undefined
 						? null
@@ -297,8 +328,10 @@ export function raukkAutoChainListRows(
 			tripsPerDay: result.tripsPerDay,
 			dailyCost: result.dailyCost,
 			shippingFraction: result.shippingFraction,
-			shippingFractionPercent: percentOf(result.shippingFraction),
-			over: isOver(result.shippingFraction),
+			shippingFractionPercent: raukkShipTimePercent(
+				result.shippingFraction
+			),
+			over: raukkShipTimeOver(result.shippingFraction),
 			shipDaysPerDay: result.shipMinutesPerDay / MINUTES_PER_DAY,
 			auto: true,
 			capDays: result.capDays ?? null,
@@ -321,6 +354,14 @@ export function raukkAutoChainListRows(
  * a `fuel` argument, or without a price for FF or SF, the fuel estimate
  * is simply not stated.
  *
+ * Each of the two terms follows the SAME rule the cost math follows
+ * (`raukkResolveShipProfile`, round 5): a manually entered ȼ per parsec
+ * or ȼ per sublight block wins over the burn, zero included, and needs no
+ * market price. Deriving a burn the costing does not charge would print a
+ * fuel bill nothing in the ȼ/trip next to it pays for. A row resting on
+ * such an override sets `fuelOverridden`, so the surface can say that the
+ * figure is a cost basis rather than a measured burn.
+ *
  * @author raukk
  *
  * @param {IRaukkChainShipping} shipping Computed chain
@@ -338,17 +379,37 @@ export function raukkChainLegRows(
 	const ftlPrice: number | undefined = fuel?.prices[RAUKK_FUEL_TICKERS.ftl];
 	const stlPrice: number | undefined = fuel?.prices[RAUKK_FUEL_TICKERS.stl];
 
+	/** True while either ȼ constant of the profile is manually set */
+	const overridden: boolean =
+		fuel !== undefined &&
+		(fuel.profile.costPerParsec !== null ||
+			fuel.profile.stlBlockCost !== null);
+
 	/** ȼ of fuel one trip through a leg burns, null without a price */
 	function fuelCostOf(leg: IRaukkChainLegResult): number | null {
 		if (fuel === undefined) return null;
-		if (ftlPrice === undefined || stlPrice === undefined) return null;
 
-		return (
-			Math.max(fuel.profile.ftlFuelPerParsec, 0) *
-				Math.max(leg.effectiveParsecs, 0) *
-				ftlPrice +
-			Math.max(fuel.profile.stlFuelPerBlock, 0) * stlPrice
-		);
+		const parsecs: number = Math.max(leg.effectiveParsecs, 0);
+
+		const ftlCost: number | null =
+			fuel.profile.costPerParsec !== null
+				? fuel.profile.costPerParsec * parsecs
+				: ftlPrice === undefined
+					? null
+					: Math.max(fuel.profile.ftlFuelPerParsec, 0) *
+						parsecs *
+						ftlPrice;
+
+		const stlCost: number | null =
+			fuel.profile.stlBlockCost !== null
+				? fuel.profile.stlBlockCost
+				: stlPrice === undefined
+					? null
+					: Math.max(fuel.profile.stlFuelPerBlock, 0) * stlPrice;
+
+		if (ftlCost === null || stlCost === null) return null;
+
+		return ftlCost + stlCost;
 	}
 
 	return shipping.legs.map((leg: IRaukkChainLegResult) => ({
@@ -368,6 +429,7 @@ export function raukkChainLegRows(
 		dailyCost: leg.dailyCost,
 		durationHours: leg.roundTripMinutes / MINUTES_PER_HOUR,
 		fuelCost: fuelCostOf(leg),
+		fuelOverridden: overridden,
 	}));
 }
 

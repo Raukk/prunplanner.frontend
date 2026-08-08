@@ -37,6 +37,7 @@ import {
 	raukkChainAssignmentKey,
 	raukkChainIdOfAssignmentKey,
 } from "@/features/raukk_sourcing/calculations/shippingFleet";
+import { raukkIsAutoChainId } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 
 // Types & Interfaces
 import {
@@ -587,11 +588,30 @@ export const useRaukkSourcingStore = defineStore(
 		 * {@link setChainResult} does not flag them — the chain pass
 		 * recomputes them itself and the one round convergence lag is
 		 * documented rather than fought.
+		 *
+		 * Hull pins follow the set: an assignment naming a derived chain
+		 * the new set no longer contains is dropped, or it would sit in the
+		 * store forever and re-apply to whatever loop takes that id later.
+		 * Derived ids are POSITIONAL (`auto:<class>:<cx>:<n>`, see
+		 * `raukkAutoChainId`), so a pin that survives re-clustering may
+		 * well be flying a different loop than the one it was set on — an
+		 * accepted caveat of a set that is rebuilt from scratch every pass,
+		 * and the reason an id that vanished must not linger.
+		 *
+		 * `pruneAssignments` says whether the given set really IS the
+		 * derived set: only a pass that computed it may prune. A purge
+		 * (shipping off, failed pass) hands over an empty set it cannot
+		 * vouch for and keeps the pins, so switching shipping back on
+		 * restores the users hulls rather than silently unassigning them.
 		 * @author raukk
 		 *
 		 * @param {IRaukkChainResult[]} results Derived chain results
+		 * @param {boolean} pruneAssignments Drop pins of vanished chains
 		 */
-		function setAutoChainResults(results: IRaukkChainResult[]): void {
+		function setAutoChainResults(
+			results: IRaukkChainResult[],
+			pruneAssignments: boolean = true
+		): void {
 			Object.entries(chainResults.value).forEach(([chainId, result]) => {
 				if (result.auto === true) delete chainResults.value[chainId];
 			});
@@ -603,6 +623,43 @@ export const useRaukkSourcingStore = defineStore(
 					auto: true,
 				};
 			});
+
+			if (!pruneAssignments) return;
+
+			const live: Set<string> = new Set(
+				results.map((result) => result.chainId)
+			);
+
+			Object.keys(assignments.value).forEach((key) => {
+				const chainId: string | undefined =
+					raukkChainIdOfAssignmentKey(key);
+
+				if (chainId === undefined || !raukkIsAutoChainId(chainId))
+					return;
+				if (live.has(chainId)) return;
+
+				delete assignments.value[key];
+			});
+		}
+
+		/**
+		 * Marks one stored chain result stale WITHOUT touching its member
+		 * plans, the flag a failed chain pass leaves behind.
+		 *
+		 * Deliberately not {@link markChainStale}: that one stales the
+		 * member plans as well, which the automatic snapshot upkeep answers
+		 * with a recompute — the self feeding loop {@link cascadeChainStale}
+		 * exists to avoid. A failed chain is a chain whose numbers are old,
+		 * not a chain whose members changed.
+		 * @author raukk
+		 *
+		 * @param {string} chainId Chain Id
+		 */
+		function markChainResultStale(chainId: string): void {
+			const result: IRaukkChainResult | undefined =
+				chainResults.value[chainId];
+
+			if (result) result.stale = true;
 		}
 
 		/**
@@ -637,14 +694,28 @@ export const useRaukkSourcingStore = defineStore(
 		 * and every plan they serve goes stale. Plans no chain touches
 		 * stay untouched — unlike the shipping configuration, the chain
 		 * knobs cannot move a plan that ships nothing on a chain.
+		 *
+		 * A non finite number is refused rather than stored: a numeric
+		 * input emits `NaN` for a lone `-` or `.`, and every one of these
+		 * knobs poisons something on its way through — a `NaN` minimum
+		 * share disables the automatic chains outright, and the export
+		 * writes `NaN` as `null`, which the users own backup then fails to
+		 * re-import. The remaining fields of the patch still apply.
 		 * @author raukk
 		 *
 		 * @param {Partial<IRaukkChainConfig>} patch Configuration Patch
 		 */
 		function setChainConfig(patch: Partial<IRaukkChainConfig>): void {
+			const finite: Partial<IRaukkChainConfig> = Object.fromEntries(
+				Object.entries(inertClone(patch)).filter(
+					([, value]) =>
+						typeof value !== "number" || Number.isFinite(value)
+				)
+			);
+
 			chainConfig.value = {
 				...chainConfig.value,
-				...inertClone(patch),
+				...finite,
 			};
 
 			markAllChainsStale();
@@ -798,7 +869,11 @@ export const useRaukkSourcingStore = defineStore(
 		 * on, so the plan and everything downstream of it go stale —
 		 * exactly like a source or repair day change. Non positive day
 		 * counts are refused rather than stored: a cap of zero would mean
-		 * "visit infinitely often".
+		 * "visit infinitely often". `NaN` is refused with them — a numeric
+		 * input emits it for a lone `-` or `.`, it compares false against
+		 * every bound, and it would travel all the way into the export,
+		 * where JSON writes it as `null` and the users own backup no longer
+		 * re-imports.
 		 * @author raukk
 		 *
 		 * @param {string} planUuid Plan Uuid
@@ -813,7 +888,8 @@ export const useRaukkSourcingStore = defineStore(
 			const config: IRaukkPlanConfig = ensureConfig(planUuid);
 			const cadence: IRaukkCadenceOverrides = { ...config.cadence };
 
-			if (days === undefined || days <= 0) delete cadence[bucket];
+			if (days === undefined || !Number.isFinite(days) || days <= 0)
+				delete cadence[bucket];
 			else cadence[bucket] = days;
 
 			config.cadence = cadence;
@@ -1097,6 +1173,7 @@ export const useRaukkSourcingStore = defineStore(
 			setAutoChainResults,
 			setPlanCxAnchor,
 			markChainStale,
+			markChainResultStale,
 			markAllChainsStale,
 			setChainConfig,
 			setFleetShip,

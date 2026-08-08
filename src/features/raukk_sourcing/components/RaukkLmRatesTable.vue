@@ -11,7 +11,7 @@
 	import RaukkVisitCadence from "@/features/raukk_sourcing/components/RaukkVisitCadence.vue";
 
 	// UI
-	import { PInputNumber, PSelect, PTable, PTag } from "@/ui";
+	import { PInputNumber, PSelect, PTable, PTag, PTooltip } from "@/ui";
 	import { ColorKey, PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -174,7 +174,28 @@
 				</td>
 				<td class="text-right">{{ formatNumber(row.unitsPerDay) }}</td>
 				<td class="text-right text-white/60">
-					{{ formatNumber(row.ownCostPerTrip) }}
+					<PTooltip v-if="row.legs.length > 0">
+						<template #trigger>
+							<span class="hover:cursor-help">
+								{{ formatNumber(row.ownCostPerTrip) }}
+							</span>
+						</template>
+						{{
+							$t(
+								"raukk_sourcing.shipping.lm.own_per_trip_tooltip",
+								{
+									legs: row.legs.length,
+									trips: formatNumber(row.tripsPerDay),
+									daily: formatNumber(
+										row.tripsPerDay * row.ownCostPerTrip
+									),
+								}
+							)
+						}}
+					</PTooltip>
+					<template v-else>
+						{{ formatNumber(row.ownCostPerTrip) }}
+					</template>
 				</td>
 				<td class="text-right">
 					<PInputNumber

@@ -177,6 +177,7 @@ export const RaukkCargoBucketSchema = z.enum([
 export const RaukkChainFlowSchema = z.object({
 	flowId: z.string().optional(),
 	ownerPlanUuid: z.string().optional(),
+	sourcePlanUuid: z.string().optional(),
 	ticker: z.string(),
 	bucket: RaukkCargoBucketSchema.optional(),
 	fromStop: z.string(),
@@ -186,8 +187,15 @@ export const RaukkChainFlowSchema = z.object({
 	volumePerUnit: z.number(),
 });
 
+/**
+ * ȼ per unit one chain charged one claimed flow. `sourcePlanUuid` is
+ * additive and optional for the same reason `ownerPlanUuid` is: a result
+ * frozen before it existed names no producing plan and degrades to the
+ * old per PLANET claim, see `RaukkChainFlowSchema`.
+ */
 export const RaukkChainFlowCostSchema = z.object({
 	ownerPlanUuid: z.string().optional(),
+	sourcePlanUuid: z.string().optional(),
 	ticker: z.string(),
 	fromStop: z.string(),
 	toStop: z.string(),

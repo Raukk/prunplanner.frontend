@@ -137,6 +137,23 @@ describe("Raukk Sourcing Store", () => {
 			expect(store.getConfig("a").cadence).toStrictEqual({});
 		});
 
+		/*
+		 * A numeric input emits NaN for a lone "-" or ".", and NaN passes
+		 * every `<= 0` guard. Stored, it exports as null and the users own
+		 * backup no longer re-imports.
+		 */
+		it("setPlanCadence refuses a day count that is not a number", () => {
+			store.setPlanCadence("a", "workforce", 30);
+			store.setPlanCadence("a", "workforce", Number.NaN);
+
+			expect(store.getConfig("a").cadence).toStrictEqual({});
+
+			store.setPlanCadence("a", "repair", 30);
+			store.setPlanCadence("a", "repair", Number.POSITIVE_INFINITY);
+
+			expect(store.getConfig("a").cadence).toStrictEqual({});
+		});
+
 		it("cadence changes mark the plan and dependents stale", () => {
 			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
 			store.setSnapshot(

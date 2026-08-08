@@ -178,6 +178,10 @@ export interface IRaukkChainFlowCost {
 	 * Absent on results computed before ownership was carried; those fall
 	 * back to the old endpoint heuristic, INBOUND only. */
 	ownerPlanUuid?: string;
+	/** Plan the cargo is drawn from, see {@link IRaukkChainFlow}. Absent
+	 * on a market lane and on results computed before the field existed;
+	 * those degrade to the old per PLANET behaviour. */
+	sourcePlanUuid?: string;
 	ticker: string;
 	fromStop: RAUKK_STOP_REF;
 	toStop: RAUKK_STOP_REF;

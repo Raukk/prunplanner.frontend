@@ -18,7 +18,23 @@ export interface IRaukkVisitCadence {
 	tripsPerDay: number;
 	/** `1 / tripsPerDay`, null when no interval can be stated */
 	visitDays: number | null;
+	/** Whether the trip RATE is worth stating next to the interval */
+	showRate: boolean;
 }
+
+/**
+ * Slowest trip rate the parenthetical rate is still stated at, trips per
+ * day — one visit every twenty days.
+ *
+ * Everything Raukk-side prints at two decimals, so a rate below this
+ * rounds to `0.01` or to `0.00` — and a zero rate is precisely what the
+ * cadence display reserves for "nothing is shipped here". A quarterly
+ * repair run reading "(0.01/day)" is therefore not a small number, it is
+ * a wrong one, and the rule below drops it rather than rounds it.
+ *
+ * @author raukk
+ */
+export const RAUKK_CADENCE_RATE_MIN_TRIPS: number = 0.05;
 
 /**
  * Turns a trip rate into the days per visit reading.
@@ -27,6 +43,11 @@ export interface IRaukkVisitCadence {
  * is served every four days, it does not "receive 0.25 trips" — so this
  * is the single place the inversion happens. Callers hand the result to
  * the shared cadence display and never format the pair themselves.
+ *
+ * `showRate` carries the ONE presentation rule of the pair: the trip rate
+ * is stated only from {@link RAUKK_CADENCE_RATE_MIN_TRIPS} upwards, and a
+ * slower lane states its interval alone ("90.00 days/visit"). Callers pick
+ * the sentence, they never re-derive the threshold.
  *
  * @author raukk
  *
@@ -48,8 +69,13 @@ export function raukkVisitCadence(
 					? tripsPerDay
 					: 0,
 			visitDays: null,
+			showRate: false,
 		};
 	}
 
-	return { tripsPerDay, visitDays: 1 / tripsPerDay };
+	return {
+		tripsPerDay,
+		visitDays: 1 / tripsPerDay,
+		showRate: tripsPerDay >= RAUKK_CADENCE_RATE_MIN_TRIPS,
+	};
 }

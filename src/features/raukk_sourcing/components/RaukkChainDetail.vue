@@ -24,7 +24,7 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PTable, PTag } from "@/ui";
+	import { PTable, PTag, PTooltip } from "@/ui";
 
 	// Types & Interfaces
 	import { IRaukkChainResult } from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -255,11 +255,29 @@
 							{{ formatNumber(row.durationHours) }}
 						</td>
 						<td class="text-right text-white/60">
-							{{
-								row.fuelCost === null
-									? "—"
-									: formatNumber(row.fuelCost)
-							}}
+							<PTooltip v-if="row.fuelOverridden">
+								<template #trigger>
+									<span class="hover:cursor-help">
+										{{
+											row.fuelCost === null
+												? "—"
+												: formatNumber(row.fuelCost)
+										}}*
+									</span>
+								</template>
+								{{
+									$t(
+										"raukk_sourcing.chains.detail.fuel_overridden"
+									)
+								}}
+							</PTooltip>
+							<template v-else>
+								{{
+									row.fuelCost === null
+										? "—"
+										: formatNumber(row.fuelCost)
+								}}
+							</template>
 						</td>
 						<td class="text-right text-white/60">
 							{{ formatNumber(row.costPerTrip) }}

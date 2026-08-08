@@ -125,8 +125,8 @@ Two points the phase left open, decided while building it:
     single short extra jump is fine on 30/90-day runs, not on the
     frequent ones).
   - Max 5 bases per chain, hard cap. Loop order solved exactly by
-    brute force (≤ 12 permutations at 5 stops), scored by round-trip
-    parsecs. More than 5 qualifying → proximity-cluster into
+    brute force (5!/2 = 60 distinct loops at 5 stops, the orderings
+    modulo direction), scored by round-trip parsecs. More than 5 qualifying → proximity-cluster into
     multiple chains, then order each exactly.
 - Everything below the cutoff is hub/spoke via the exchange: the
   consumer buys at the CX (freight on its own CX lane), the
@@ -196,9 +196,17 @@ Points the phase left open, decided while building it:
 - **One helper, one sentence.** `raukkVisitCadence` (calculations/
   `shippingCadenceDisplay.ts`) inverts a trip rate into days per visit and
   answers `null` wherever no interval can be stated — zero, negative,
-  infinite or missing trips. The sentence itself lives in exactly one
-  locale key (`cadence.visit`) rendered by one component,
+  infinite or missing trips. The sentence itself lives in two locale keys
+  (`cadence.visit`, `cadence.visit_days`) rendered by one component,
   `RaukkVisitCadence.vue`; no table formats the pair itself.
+- **The trip rate is dropped below one visit per twenty days.** Everything
+  Raukk-side prints at two decimals, so a rate under
+  `RAUKK_CADENCE_RATE_MIN_TRIPS = 0.05` reads as `0.01` or `0.00` — and a
+  zero rate is what the cadence display reserves for "nothing shipped". The
+  helper answers `showRate: false` there and the component states the
+  interval alone ("90.00 days/visit"). Same rule wherever cadence shows,
+  including the fleet advisory, which compares two INTERVALS rather than two
+  rates for exactly this reason.
 - **The Hired Transport lane stays one table row.** The rate and the ship
   type assignment are keyed by PAIR, not by leg, so splitting the lane
   into one row per leg would duplicate both inputs. The row lists its legs
@@ -207,7 +215,10 @@ Points the phase left open, decided while building it:
 - **The chain "Ship Time" column is the percentage.** It is the figure
   that read like a ship count, and it now carries the same red-and-bold
   over-marking as the fleet table, deadbanded by `RAUKK_EPSILON_EQUAL`.
-  `shipDaysPerDay` stays on the row untouched, unrendered.
+  `shipDaysPerDay` stays on the row untouched, unrendered. The plan's own
+  shipping fraction reads the same way, through the same two exported
+  helpers (`raukkShipTimePercent`, `raukkShipTimeOver`): one quantity, one
+  unit, everywhere it shows.
 - **Advisories roll up twice**: an identical advisory on the same
   assignment and bucket collapses to one, and everything advising the same
   swap collapses to one line stating how many assignments raised it. Its
@@ -216,7 +227,14 @@ Points the phase left open, decided while building it:
 - **Leg fuel is priced, never re-derived**: `ftlFuelPerParsec` over the
   parsecs actually flown plus one sublight block per leg — the same terms
   the chain cost math uses — times the current FF and SF price. A missing
-  price for either fuel is an em-dash, never a free trip.
+  price for either fuel is an em-dash, never a free trip. Each of the two
+  terms obeys the round 5 override rule the cost math obeys: a manual
+  `costPerParsec` or `stlBlockCost` wins, zero included, and needs no price
+  at all. Such a row is marked (`fuelOverridden`, an asterisk and a
+  tooltip) because the figure is then a cost basis, not a measured burn.
+- **`routingMode` left the UI.** Hub/spoke is universal, so the picker
+  chose between one live setting and one dead one. The schema field and the
+  store state stay for payload compatibility; nothing renders them.
 
 ## Deferred — NOT in this round of work
 

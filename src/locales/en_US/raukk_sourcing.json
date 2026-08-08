@@ -30,8 +30,8 @@
 		"stale_sources": "{count} upstream snapshot(s) used here are stale",
 		"base_fraction": "Base fraction: {value}",
 		"base_fraction_tooltip": "Base permits this product chain occupies: the plan's own base plus, per source plan, the cost-weighted share of that source's output drawn here, times the source's own base fraction. Fully using this base and half of another one gives 1.50. High values mean the chain ties up several bases — often cheaper to buy than to build.",
-		"shipping_fraction": "Shipping fraction: {value}",
-		"shipping_fraction_tooltip": "Ship time this plan's own route pairs occupy: trips per day times round-trip time, divided by a full day of the ships available on the profile. 1.00 means one ship flies for this plan around the clock; lanes flown by a hired LM carrier count as 0."
+		"shipping_fraction": "Ship time: {value}",
+		"shipping_fraction_tooltip": "Ship time this plan's own route pairs occupy: trips per day times round-trip time, divided by a full day of the ships available on the profile. 100 % means one ship flies for this plan around the clock, and a figure past it — shown in red — means the lanes need more ships. Lanes flown by a hired LM carrier count as 0 %."
 	},
 	"inputs_title": "Inputs",
 	"inputs": {
@@ -62,7 +62,8 @@
 		"repair": "Repair"
 	},
 	"cadence": {
-		"visit": "{days} days/visit ({trips}/day)"
+		"visit": "{days} days/visit ({trips}/day)",
+		"visit_days": "{days} days/visit"
 	},
 	"price_modes": {
 		"BID": "Bid",
@@ -85,11 +86,6 @@
 		"enabled": "Charge Shipping",
 		"disabled_info": "Shipping is off: freight costs nothing and no snapshot changes. Turning it on marks every stored snapshot stale — the fleet is account-global, so it moves the numbers of every plan.",
 		"default_profile": "Default Profile",
-		"routing_mode": "Routing",
-		"routing_modes": {
-			"direct": "Direct",
-			"cx-hub": "Via nearest CX"
-		},
 		"same_system_cost": "Same-System ȼ/Trip",
 		"cadence_in_out": "Days/Visit In-Out",
 		"cadence_workforce": "Days/Visit Workforce",
@@ -122,6 +118,7 @@
 			"visits": "Days / Visit",
 			"units_per_day": "Units / Day",
 			"own_per_trip": "Own ȼ/Trip",
+			"own_per_trip_tooltip": "Trip-weighted mean over this lane's {legs} leg(s), which may fly different hulls: the lane costs {daily} ȼ/day in total at {trips} trips/day, ȼ/day being the sum of each leg's trips times that leg's ȼ/trip. Days per visit of each leg are in the Days / Visit column.",
 			"rate_per_trip": "LM ȼ/Trip",
 			"rate_placeholder": "not hired",
 			"own_per_unit": "Own ȼ/u",
@@ -164,7 +161,7 @@
 		"empty": "No ships in the fleet yet — add a type below, then assign lanes and chains to it.",
 		"advisories": {
 			"title": "Fleet Advice",
-			"row": "Adding a {suggested} would improve shipping: {assignments} assignment(s) fly a {current} at up to {trips} trips/day, a {suggested} would fly the same work at {suggestedTrips} trips/day."
+			"row": "Adding a {suggested} would improve shipping: {assignments} assignment(s) fly a {current} as often as every {visit} days, a {suggested} would serve the same work every {suggestedVisit} days."
 		},
 		"reactors": {
 			"standard": "Standard Reactor",
@@ -283,6 +280,7 @@
 			"utilization": "Load",
 			"duration": "Hours",
 			"fuel": "Fuel ȼ / Trip",
+			"fuel_overridden": "This ship profile carries a manual ȼ/parsec or ȼ/STL block, which wins over its fuel burn — so this is the cost basis the ȼ/trip next to it is charged from, not a measured burn.",
 			"cost_trip": "ȼ / Trip",
 			"binding": "Weakest link",
 			"same_system": "Same system",

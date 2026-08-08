@@ -68,6 +68,21 @@
 		} · ${profile.name}`;
 	}
 
+	/**
+	 * Days per visit as the advice states them. The advisory compares two
+	 * INTERVALS rather than two trip rates: at a 90 day repair cadence both
+	 * rates print as "0.01 trips/day" and the sentence compares a number
+	 * with itself.
+	 *
+	 * @author raukk
+	 *
+	 * @param {number | null} visitDays Days per visit, null where none
+	 * @returns {string} Days per visit label
+	 */
+	function visitLabel(visitDays: number | null): string {
+		return visitDays === null ? "—" : formatNumber(visitDays);
+	}
+
 	const shipTypes: IRaukkShipTypeOption[] = raukkShipTypeOptions();
 
 	/** Ship types the fleet does not carry a row for yet */
@@ -282,8 +297,8 @@
 					suggested: typeLabel(advisory.suggestedShipTypeId),
 					current: typeLabel(advisory.shipTypeId),
 					assignments: advisory.assignmentCount,
-					trips: formatNumber(advisory.tripsPerDay),
-					suggestedTrips: formatNumber(advisory.suggestedTripsPerDay),
+					visit: visitLabel(advisory.visitDays),
+					suggestedVisit: visitLabel(advisory.suggestedVisitDays),
 				})
 			}}
 		</div>

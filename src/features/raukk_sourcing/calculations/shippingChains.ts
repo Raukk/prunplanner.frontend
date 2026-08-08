@@ -104,6 +104,38 @@ export const RAUKK_CX_SYSTEM_ID_BY_CODE: Record<string, string> = {
 };
 
 /**
+ * Share of a shipments weight or volume a base carries before an
+ * automatic loop stops there.
+ *
+ * The three `RAUKK_DEFAULT_AUTO_CHAIN_*` constants are the ONE home of
+ * the automatic chain knob defaults: {@link raukkDefaultChainConfig}, the
+ * `?? fallback` of every reader and the picker defaults of the chain
+ * section all take them from here. The zod defaults in
+ * `raukkSourcingStore.schemas.ts` must MIRROR these three literals — a
+ * schema cannot import from the calculations layer without a cycle — so a
+ * change here is a change there.
+ *
+ * @author raukk
+ */
+export const RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE: number = 0.05;
+
+/**
+ * Parsecs a stop may add to the round trip of an in/out loop, the
+ * fortnightly class that pays every parsec often.
+ *
+ * @author raukk
+ */
+export const RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS: number = 2;
+
+/**
+ * Parsecs a stop may add to the round trip of a workforce or repair
+ * loop, the 30 and 90 day classes that can afford a short extra jump.
+ *
+ * @author raukk
+ */
+export const RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS: number = 6;
+
+/**
  * Defaults of the chain knobs, every one of them from
  * shipping-chains-v2.md.
  *
@@ -129,9 +161,11 @@ export function raukkDefaultChainConfig(): IRaukkChainConfig {
 		stlCostPerMegameter: 0,
 		autoCxSplit: true,
 		sameSystemPricing: "average",
-		autoChainMinShare: 0.05,
-		autoChainDetourInOutParsecs: 2,
-		autoChainDetourLooseParsecs: 6,
+		autoChainMinShare: RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE,
+		autoChainDetourInOutParsecs:
+			RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS,
+		autoChainDetourLooseParsecs:
+			RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS,
 	};
 }
 

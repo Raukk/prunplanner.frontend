@@ -170,6 +170,34 @@ describe("Raukk Shipping: Fleet Display", () => {
 			expect(row.assignmentCount).toBe(1);
 		});
 
+		it("states both rates as days per visit, the readable comparison", () => {
+			const [row] = raukkFleetAdvisoryRows([advisory()]);
+
+			expect(row.visitDays).toBe(0.5);
+			expect(row.suggestedVisitDays).toBe(2.5);
+		});
+
+		it("separates the two intervals at a quarterly repair cadence", () => {
+			const [row] = raukkFleetAdvisoryRows([
+				advisory({
+					tripsPerDay: 1 / 90,
+					suggestedTripsPerDay: 1 / 143,
+				}),
+			]);
+
+			expect(row.visitDays).toBeCloseTo(90, 10);
+			expect(row.suggestedVisitDays).toBeCloseTo(143, 10);
+		});
+
+		it("has no interval where a rate states none", () => {
+			const [row] = raukkFleetAdvisoryRows([
+				advisory({ tripsPerDay: 0, suggestedTripsPerDay: 0 }),
+			]);
+
+			expect(row.visitDays).toBeNull();
+			expect(row.suggestedVisitDays).toBeNull();
+		});
+
 		it("counts the very same advisory only once", () => {
 			const rows = raukkFleetAdvisoryRows([advisory(), advisory()]);
 
@@ -205,6 +233,8 @@ describe("Raukk Shipping: Fleet Display", () => {
 
 			expect(row.tripsPerDay).toBe(6);
 			expect(row.suggestedTripsPerDay).toBe(1.2);
+			expect(row.visitDays).toBeCloseTo(1 / 6, 10);
+			expect(row.suggestedVisitDays).toBeCloseTo(1 / 1.2, 10);
 		});
 
 		it("keeps two different swaps apart, ordered by ship type", () => {

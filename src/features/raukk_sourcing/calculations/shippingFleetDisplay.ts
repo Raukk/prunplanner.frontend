@@ -11,6 +11,7 @@ import {
 	raukkShipProfileId,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+import { raukkVisitCadence } from "@/features/raukk_sourcing/calculations/shippingCadenceDisplay";
 
 // Types & Interfaces
 import {
@@ -72,6 +73,10 @@ export interface IRaukkFleetAdvisoryRow {
 	tripsPerDay: number;
 	/** Trips per day the suggested hull would fly the same work */
 	suggestedTripsPerDay: number;
+	/** Days per visit of the worst affected assignment, null where none */
+	visitDays: number | null;
+	/** Days per visit the suggested hull would serve it at */
+	suggestedVisitDays: number | null;
 	/** Lanes and chains this advice was raised on */
 	assignmentCount: number;
 }
@@ -177,7 +182,10 @@ export function raukkFleetRows(
  * one flying most often today, together with the rate the suggested hull
  * would fly the very same work at: averaging over assignments would
  * describe none of them, and the strongest case is the one worth buying a
- * hull for.
+ * hull for. Both rates are inverted into days per visit through
+ * `raukkVisitCadence`, because that is the pair the sentence compares —
+ * two rates of "0.01 trips/day" are the same sentence twice, "every 90
+ * days" against "every 143 days" is an argument.
  *
  * @author raukk
  *
@@ -210,6 +218,10 @@ export function raukkFleetAdvisoryRows(
 				suggestedShipTypeId: advisory.suggestedShipTypeId,
 				tripsPerDay: advisory.tripsPerDay,
 				suggestedTripsPerDay: advisory.suggestedTripsPerDay,
+				visitDays: raukkVisitCadence(advisory.tripsPerDay).visitDays,
+				suggestedVisitDays: raukkVisitCadence(
+					advisory.suggestedTripsPerDay
+				).visitDays,
 				assignmentCount: 1,
 			});
 
@@ -221,6 +233,10 @@ export function raukkFleetAdvisoryRows(
 		if (advisory.tripsPerDay > known.tripsPerDay) {
 			known.tripsPerDay = advisory.tripsPerDay;
 			known.suggestedTripsPerDay = advisory.suggestedTripsPerDay;
+			known.visitDays = raukkVisitCadence(advisory.tripsPerDay).visitDays;
+			known.suggestedVisitDays = raukkVisitCadence(
+				advisory.suggestedTripsPerDay
+			).visitDays;
 		}
 	});
 

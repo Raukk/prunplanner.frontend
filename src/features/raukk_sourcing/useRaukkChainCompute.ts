@@ -125,6 +125,14 @@ interface IRaukkAppliedCosting {
 	splitApplied: boolean;
 }
 
+/** The lane identity a claim and a plan flow have in common */
+interface IRaukkChainLane {
+	ownerPlanUuid?: string;
+	ticker: string;
+	fromStop: string;
+	toStop: string;
+}
+
 /** One computed chain plus the flow ids it took off the account */
 interface IRaukkComputedChain {
 	result: IRaukkChainResult;
@@ -205,6 +213,7 @@ function claimedFlowCosts(
 
 		costs.push({
 			ownerPlanUuid: flow.ownerPlanUuid,
+			sourcePlanUuid: flow.sourcePlanUuid,
 			ticker: flow.ticker,
 			fromStop: flow.fromStop,
 			toStop: flow.toStop,
@@ -258,9 +267,13 @@ function mergedPerUnit(costs: IRaukkChainFlowCost[]): Record<string, number> {
  * computed and stored; which one is APPLIED follows the per chain
  * `autoCxSplit` override and, absent it, the account default.
  *
- * With shipping disabled nothing is computed and nothing is written:
- * chains are inert and snapshots stay byte identical to the pre shipping
- * ones.
+ * With shipping disabled nothing is computed and the AUTHORED results
+ * stay untouched — they are inert while shipping is off and are the
+ * users own data. The DERIVED ones are purged instead: they are rebuilt
+ * from scratch on every pass anyway, and a set left behind would keep
+ * claiming freight the moment shipping is switched back on, before any
+ * pass had a chance to rebuild it. Snapshots stay byte identical to the
+ * pre shipping ones either way.
  *
  * ORDER, the rule of phase 2: the user authored chains claim their flows
  * FIRST and the automatic builder runs on what is left. An authored loop
@@ -280,12 +293,21 @@ export async function computeChainResults(
 	const shippingConfig: IRaukkShippingConfig = sourcingStore.shippingConfig;
 	const errors: IRaukkChainComputeError[] = [];
 
-	if (!shippingConfig.enabled) return errors;
+	if (!shippingConfig.enabled) {
+		// nothing may be left claiming that this pass did not compute; the
+		// pins are kept, the derived set they name is rebuilt on the first
+		// pass after shipping comes back
+		sourcingStore.setAutoChainResults([], false);
+
+		return errors;
+	}
 
 	const chainConfig: IRaukkChainConfig = sourcingStore.chainConfig;
 
 	/** Flows the authored chains already took over */
 	const claimedFlowIds: Set<string> = new Set();
+	/** Lanes an OLD authored result still claims, its chain having failed */
+	const claimedLanes: Set<string> = new Set();
 
 	for (const chain of Object.values(sourcingStore.chains) as IRaukkChain[]) {
 		try {
@@ -306,6 +328,21 @@ export async function computeChainResults(
 				message:
 					error instanceof Error ? error.message : "unknown error",
 			});
+
+			/*
+			 * The stored result of a failed chain KEEPS claiming: the
+			 * member plans price their freight from it, and deleting it
+			 * would drop that freight until the next successful pass. It is
+			 * flagged stale so the user sees the numbers are old, and the
+			 * lanes it claims are withheld from the automatic pass — a
+			 * derived loop taking cargo the stored result still charges
+			 * would bill the very same freight twice.
+			 */
+			sourcingStore.markChainResultStale(chain.chainId);
+			(sourcingStore.chainResults[chain.chainId]?.flows ?? []).forEach(
+				(flow: IRaukkChainFlowCost) =>
+					claimedLanes.add(claimedLaneKey(flow))
+			);
 		}
 	}
 
@@ -313,6 +350,7 @@ export async function computeChainResults(
 		sourcingStore.setAutoChainResults(
 			await computeAutoChains(
 				claimedFlowIds,
+				claimedLanes,
 				shippingConfig,
 				chainConfig,
 				loadPrices
@@ -323,9 +361,40 @@ export async function computeChainResults(
 			chainId: "",
 			message: error instanceof Error ? error.message : "unknown error",
 		});
+
+		/*
+		 * Wholesale replacement holds on failure as well: the previous
+		 * derived set was built from flows this pass could not even read,
+		 * and leaving it live and fresh would let loops nothing vouches
+		 * for keep claiming. Purging costs the freight of one pass — the
+		 * plans fall back to their own lanes and the exchange hub/spoke,
+		 * which is exactly the state before any chain existed — while
+		 * keeping it costs correctness. The pins survive, see
+		 * `setAutoChainResults`.
+		 */
+		sourcingStore.setAutoChainResults([], false);
 	}
 
 	return errors;
+}
+
+/**
+ * Lane identity of one claimed flow: owner, ticker and both endpoints.
+ *
+ * Deliberately coarser than the flow id — several occurrences of one
+ * lane share a key — because it guards an ERROR path, where withholding
+ * one occurrence too many only sends that cargo through the exchange,
+ * while withholding one too few would claim it twice.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkChainLane} flow Claimed flow or plan flow
+ * @returns {string} Lane Key
+ */
+function claimedLaneKey(flow: IRaukkChainLane): string {
+	return `${flow.ownerPlanUuid ?? ""}|${flow.ticker}|${flow.fromStop}|${
+		flow.toStop
+	}`;
 }
 
 /**
@@ -338,9 +407,13 @@ export async function computeChainResults(
  * @author raukk
  *
  * @param {Set<string>} claimedFlowIds Flow ids the authored chains took
+ * @param {Set<string>} claimedLanes Lanes a failed chains result claims
  * @returns {IRaukkChainFlow[]} Unclaimed flows, account wide
  */
-function unclaimedAccountFlows(claimedFlowIds: Set<string>): IRaukkChainFlow[] {
+function unclaimedAccountFlows(
+	claimedFlowIds: Set<string>,
+	claimedLanes: Set<string>
+): IRaukkChainFlow[] {
 	const sourcingStore = useRaukkSourcingStore();
 
 	return Object.entries(sourcingStore.snapshots)
@@ -348,7 +421,9 @@ function unclaimedAccountFlows(claimedFlowIds: Set<string>): IRaukkChainFlow[] {
 		.flatMap(([planUuid, snapshot]: [string, IRaukkSnapshot]) =>
 			(snapshot.flows ?? []).filter(
 				(flow, index) =>
-					!claimedFlowIds.has(flow.flowId ?? `${planUuid}#${index}`)
+					!claimedFlowIds.has(
+						flow.flowId ?? `${planUuid}#${index}`
+					) && !claimedLanes.has(claimedLaneKey(flow))
 			)
 		);
 }
@@ -437,6 +512,7 @@ function planetAnchorLookup(
  * @author raukk
  *
  * @param {Set<string>} claimedFlowIds Flow ids the authored chains took
+ * @param {Set<string>} claimedLanes Lanes a failed chains result claims
  * @param {IRaukkShippingConfig} shippingConfig Shipping configuration
  * @param {IRaukkChainConfig} chainConfig Chain configuration
  * @param {IRaukkChainPriceLoader} loadPrices Freight price loader
@@ -444,12 +520,13 @@ function planetAnchorLookup(
  */
 async function computeAutoChains(
 	claimedFlowIds: Set<string>,
+	claimedLanes: Set<string>,
 	shippingConfig: IRaukkShippingConfig,
 	chainConfig: IRaukkChainConfig,
 	loadPrices: IRaukkChainPriceLoader
 ): Promise<IRaukkChainResult[]> {
 	const autoChains: IRaukkAutoChain[] = raukkBuildAutoChains({
-		flows: unclaimedAccountFlows(claimedFlowIds),
+		flows: unclaimedAccountFlows(claimedFlowIds, claimedLanes),
 		anchorOf: planetAnchorLookup(shippingConfig),
 		capDaysOf: (planUuid: string | undefined, bucket: RAUKK_CARGO_BUCKET) =>
 			planCapDays(planUuid, bucket, shippingConfig),

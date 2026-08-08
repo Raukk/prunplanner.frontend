@@ -202,7 +202,8 @@ export function buildPlanChainFlows(
 		entry: IRaukkShippedTicker,
 		fromStop: string,
 		toStop: string,
-		unitsPerDay: number
+		unitsPerDay: number,
+		sourcePlanUuid?: string
 	): void {
 		if (unitsPerDay <= 0 || fromStop === toStop) return;
 
@@ -219,6 +220,8 @@ export function buildPlanChainFlows(
 				occurrence
 			),
 			ownerPlanUuid: flows.planUuid,
+			// only a plan to plan lane has one; the market has no plan
+			...(sourcePlanUuid !== undefined ? { sourcePlanUuid } : {}),
 			ticker: entry.ticker,
 			bucket: entry.bucket,
 			fromStop,
@@ -248,7 +251,13 @@ export function buildPlanChainFlows(
 			);
 			if (planet === undefined) return;
 
-			push(entry, planet, own, entry.unitsPerDay * origin.share);
+			push(
+				entry,
+				planet,
+				own,
+				entry.unitsPerDay * origin.share,
+				origin.planUuid
+			);
 		});
 	});
 
@@ -270,6 +279,9 @@ export function buildPlanChainFlows(
 export interface IRaukkClaimedFlowCost {
 	/** Plan that authored the flow, absent on pre ownership results */
 	ownerPlanUuid?: string;
+	/** Plan the cargo is drawn FROM, absent on a market lane and on pre
+	 * ownership results, see {@link IRaukkChainFlow} */
+	sourcePlanUuid?: string;
 	ticker: string;
 	fromStop: string;
 	toStop: string;

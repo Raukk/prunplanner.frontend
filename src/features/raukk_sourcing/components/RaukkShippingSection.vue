@@ -36,7 +36,6 @@
 	import {
 		IRaukkCadenceCaps,
 		IRaukkShippingPair,
-		RAUKK_ROUTING_MODE,
 	} from "@/features/raukk_sourcing/calculations/shipping.types";
 	import { IRaukkLmComparisonRow } from "@/features/raukk_sourcing/calculations/shippingDisplay";
 
@@ -124,13 +123,6 @@
 		() => sourcingStore.assignments
 	);
 
-	const routingOptions: ComputedRef<PSelectOption[]> = computed(() =>
-		(["direct", "cx-hub"] as RAUKK_ROUTING_MODE[]).map((mode) => ({
-			label: t(`raukk_sourcing.shipping.routing_modes.${mode}`),
-			value: mode,
-		}))
-	);
-
 	/** "Nearest" plus the four exchanges, the anchor choices */
 	const anchorOptions: ComputedRef<PSelectOption[]> = computed(() => [
 		{
@@ -142,6 +134,20 @@
 			value: code,
 		})),
 	]);
+
+	/**
+	 * Account wide anchor as the plan picker's placeholder states it: the
+	 * exchange code, or the translated "nearest" label. `RAUKK_CX_ANCHOR_
+	 * NEAREST` is a stored SENTINEL, never a string to show a user.
+	 */
+	const anchorModeLabel: ComputedRef<string> = computed(() => {
+		const mode: string =
+			config.value.cxAnchorMode ?? RAUKK_CX_ANCHOR_NEAREST;
+
+		return mode === RAUKK_CX_ANCHOR_NEAREST
+			? t("raukk_sourcing.cx_anchor.nearest")
+			: mode;
+	});
 
 	/** Anchor override of the open plan, null while it follows the account */
 	const planAnchor: ComputedRef<string | null> = computed(() =>
@@ -187,10 +193,6 @@
 
 	function changeDefaultProfile(profileId: string): void {
 		sourcingStore.setShippingConfig({ defaultProfileId: profileId });
-	}
-
-	function changeRoutingMode(mode: RAUKK_ROUTING_MODE): void {
-		sourcingStore.setShippingConfig({ routingMode: mode });
 	}
 
 	function changeSameSystemFlatCost(value: number | null | undefined): void {
@@ -306,17 +308,6 @@
 				@update:value="(v) => changeDefaultProfile(String(v))" />
 
 			<div class="font-bold pl-3">
-				{{ $t("raukk_sourcing.shipping.routing_mode") }}
-			</div>
-			<PSelect
-				class="w-40!"
-				:value="config.routingMode"
-				:options="routingOptions"
-				@update:value="
-					(v) => changeRoutingMode(String(v) as RAUKK_ROUTING_MODE)
-				" />
-
-			<div class="font-bold pl-3">
 				{{ $t("raukk_sourcing.shipping.same_system_cost") }}
 			</div>
 			<PInputNumber
@@ -383,7 +374,7 @@
 				:disabled="disabled"
 				:value="planAnchor"
 				:options="anchorOptions"
-				:placeholder="config.cxAnchorMode ?? RAUKK_CX_ANCHOR_NEAREST"
+				:placeholder="anchorModeLabel"
 				@update:value="
 					(v) => changePlanAnchor((v as string) ?? null)
 				" />

@@ -365,6 +365,13 @@ export function raukkAutoChainCandidates(
 		});
 }
 
+/** One loop under construction, its bases kept alongside the order */
+interface IRaukkStopCluster {
+	/** Bases of the loop, the anchor exchange NOT among them */
+	members: RAUKK_STOP_REF[];
+	loop: IRaukkOrderedLoop;
+}
+
 /**
  * Clusters qualifying bases into loops nobody has to detour for.
  *
@@ -376,6 +383,19 @@ export function raukkAutoChainCandidates(
  * {@link RAUKK_AUTO_CHAIN_MAX_STOPS}. What is left over seeds the next
  * loop, so more than five qualifying bases become several chains rather
  * than one bad one.
+ *
+ * A seed that grows by nothing would leave a one base loop, which is no
+ * chain at all ({@link RAUKK_AUTO_CHAIN_MIN_STOPS}) and would drop a
+ * QUALIFYING base to the exchange hub/spoke without a word. Every such
+ * singleton is therefore offered to the finished loops once more, in
+ * order, and joins the one it costs the fewest parsecs to insert into —
+ * the same budget and the same stop cap as the growth step. What that
+ * catches is the loops seeded AFTER it: a loop only ever weighs the
+ * bases still unassigned while it grows, so a base that already seeded
+ * an earlier loop was never offered to a later one — however exactly it
+ * sits on a leg that loop ends up flying anyway. One that still fits
+ * nowhere stays a singleton and is legitimately hub/spoke; it is
+ * returned as such rather than silently dropped.
  *
  * Every returned loop is exactly ordered — the growth step orders each
  * candidate loop by brute force and keeps the winner.
@@ -397,7 +417,7 @@ export function raukkClusterChainStops(
 	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE
 ): IRaukkOrderedLoop[] {
 	const remaining: RAUKK_STOP_REF[] = [...stops];
-	const loops: IRaukkOrderedLoop[] = [];
+	const clusters: IRaukkStopCluster[] = [];
 
 	while (remaining.length > 0) {
 		const seed: RAUKK_STOP_REF = remaining.shift() as RAUKK_STOP_REF;
@@ -445,10 +465,98 @@ export function raukkClusterChainStops(
 			remaining.splice(remaining.indexOf(bestStop), 1);
 		}
 
-		loops.push(current);
+		clusters.push({ members, loop: current });
 	}
 
-	return loops;
+	return retryStrandedStops(
+		cxCode,
+		clusters,
+		budgetParsecs,
+		routes,
+		cxSystems
+	).map((cluster) => cluster.loop);
+}
+
+/**
+ * Offers every one base cluster to the loops that did grow.
+ *
+ * The second chance of {@link raukkClusterChainStops}: a singleton joins
+ * the loop it costs the fewest parsecs to insert into, ties going to the
+ * earlier loop — which is the one nearer the exchange, the clustering
+ * order. A singleton that fits nowhere is kept, in seed order behind the
+ * grown loops, so the caller sees it and refuses it as the hub/spoke
+ * base it really is.
+ *
+ * @author raukk
+ *
+ * @param {string} cxCode Anchor exchange code
+ * @param {IRaukkStopCluster[]} clusters Clusters of the greedy pass
+ * @param {number} budgetParsecs Parsecs one stop may add to the loop
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @returns {IRaukkStopCluster[]} Clusters, the singletons placed
+ */
+function retryStrandedStops(
+	cxCode: string,
+	clusters: IRaukkStopCluster[],
+	budgetParsecs: number,
+	routes: IRaukkRouteDistance,
+	cxSystems: Record<string, string>
+): IRaukkStopCluster[] {
+	const placed: IRaukkStopCluster[] = clusters.filter(
+		(cluster) => cluster.members.length >= RAUKK_AUTO_CHAIN_MIN_STOPS
+	);
+	const stranded: IRaukkStopCluster[] = clusters.filter(
+		(cluster) => cluster.members.length < RAUKK_AUTO_CHAIN_MIN_STOPS
+	);
+	/** Singletons no loop took, kept apart so they take no other one */
+	const leftover: IRaukkStopCluster[] = [];
+
+	stranded.forEach((single) => {
+		let bestIndex: number = -1;
+		let bestLoop: IRaukkOrderedLoop | null = null;
+		let bestDetour: number = Infinity;
+
+		placed.forEach((cluster, index) => {
+			if (
+				cluster.members.length + single.members.length >
+				RAUKK_AUTO_CHAIN_MAX_STOPS
+			)
+				return;
+
+			const grown: IRaukkOrderedLoop | null = raukkOrderChainStops(
+				cxCode,
+				[...cluster.members, ...single.members],
+				routes,
+				cxSystems
+			);
+			if (grown === null) return;
+
+			const detour: number = grown.parsecs - cluster.loop.parsecs;
+
+			if (detour > budgetParsecs || detour >= bestDetour) return;
+
+			bestIndex = index;
+			bestLoop = grown;
+			bestDetour = detour;
+		});
+
+		if (bestIndex < 0 || bestLoop === null) {
+			// nothing in budget: a legitimate hub/spoke base. Two bases
+			// that cannot reach a loop cannot reach each other either —
+			// the growth step already weighed exactly that pairing — so a
+			// leftover never becomes a target of its own
+			leftover.push(single);
+			return;
+		}
+
+		placed[bestIndex] = {
+			members: [...placed[bestIndex].members, ...single.members],
+			loop: bestLoop,
+		};
+	});
+
+	return [...placed, ...leftover];
 }
 
 /** Flows of one region and cadence class, keyed `<bucket>|<cxCode>` */

@@ -327,6 +327,75 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			]);
 			expect(loops[0].stops[0]).toBe("CX1");
 		});
+
+		/*
+		 * A base that seeds a loop is never offered to the loops seeded
+		 * after it. Left at that, a QUALIFYING base sitting right on a leg
+		 * a later loop flies anyway drops to the exchange hub/spoke
+		 * without a trace.
+		 */
+		it("inserts a stranded base into a loop seeded after it", () => {
+			/*
+			 *  CX ─5─ SS-100 ─5─ PP-200 ─1─ RR-300 ─10.05─ CX
+			 *   └────────────10────────────┘
+			 *
+			 * SS-100 is nearest and seeds first, but PP-200 is 10 pc of
+			 * detour away and RR-300 11 — it grows by nothing. PP-200 then
+			 * seeds a loop RR-300 joins for 1.05 pc, and SS-100 sits
+			 * exactly on that loops way out.
+			 */
+			const strandedGraph: IRaukkSystemNode[] = [
+				system("CX-000", [0, 0, 0], ["SS-100", "PP-200"]),
+				system("SS-100", [5 * PC, 0, 0], ["PP-200"]),
+				system("PP-200", [10 * PC, 0, 0], ["RR-300"]),
+				system("RR-300", [10 * PC, 1 * PC, 0], ["CX-000"]),
+			];
+
+			const strandedRoutes: IRaukkRouteDistance = createRouteDistance(
+				strandedGraph,
+				["sys-CX-000"]
+			);
+
+			const loops: IRaukkOrderedLoop[] = raukkClusterChainStops(
+				"CX1",
+				["SS-100a", "PP-200a", "RR-300a"],
+				2,
+				strandedRoutes,
+				{ CX1: "sys-CX-000" }
+			);
+
+			expect(loops).toHaveLength(1);
+			// the mirror image of CX → SS → PP → RR → CX, the one
+			// orientation `loopPermutations` keeps of the two
+			expect(loops[0].stops).toStrictEqual([
+				"CX1",
+				"RR-300a",
+				"PP-200a",
+				"SS-100a",
+			]);
+			// riding through the stranded base costs the loop nothing
+			expect(loops[0].parsecs).toBeCloseTo(
+				5 + 5 + 1 + Math.sqrt(10 * 10 + 1),
+				10
+			);
+		});
+
+		it("keeps a base no loop can reach as its own singleton", () => {
+			// BB-100 is 20 pc off the exchange: nothing to insert it into,
+			// which is legitimate hub/spoke rather than a loop
+			const loops: IRaukkOrderedLoop[] = raukkClusterChainStops(
+				"CX1",
+				["AA-001a", "AA-002b", "BB-100a"],
+				2,
+				routes,
+				cxSystems
+			);
+
+			expect(loops.map((loop) => loop.stops.length - 1)).toStrictEqual([
+				2, 1,
+			]);
+			expect(loops[1].stops).toStrictEqual(["CX1", "BB-100a"]);
+		});
 	});
 
 	describe("building the chains", () => {

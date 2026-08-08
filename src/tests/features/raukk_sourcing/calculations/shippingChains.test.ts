@@ -16,6 +16,9 @@ import {
 } from "@/features/raukk_sourcing/calculations/shippingChainData";
 import {
 	RAUKK_CX_SYSTEM_ID_BY_CODE,
+	RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS,
+	RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS,
+	RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE,
 	RAUKK_DEFAULT_CHAIN_ROUTES,
 	buildChainLegs,
 	buildCxSplitChains,
@@ -29,6 +32,9 @@ import {
 	raukkDefaultChainConfig,
 	reverseChainStops,
 } from "@/features/raukk_sourcing/calculations/shippingChains";
+
+// Schemas
+import { RaukkChainConfigSchema } from "@/features/raukk_sourcing/raukkSourcingStore.schemas";
 
 // Types & Interfaces
 import {
@@ -195,6 +201,34 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 				autoChainDetourInOutParsecs: 2,
 				autoChainDetourLooseParsecs: 6,
 			});
+		});
+
+		it("takes its automatic chain knobs from the named constants", () => {
+			const config = raukkDefaultChainConfig();
+
+			expect(config.autoChainMinShare).toBe(
+				RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE
+			);
+			expect(config.autoChainDetourInOutParsecs).toBe(
+				RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS
+			);
+			expect(config.autoChainDetourLooseParsecs).toBe(
+				RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS
+			);
+		});
+
+		it("is mirrored by the zod defaults the persisted payload parses", () => {
+			const parsed = RaukkChainConfigSchema.parse({});
+
+			expect(parsed.autoChainMinShare).toBe(
+				RAUKK_DEFAULT_AUTO_CHAIN_MIN_SHARE
+			);
+			expect(parsed.autoChainDetourInOutParsecs).toBe(
+				RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS
+			);
+			expect(parsed.autoChainDetourLooseParsecs).toBe(
+				RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS
+			);
 		});
 
 		it("knows the four exchange codes and the real routes", () => {
