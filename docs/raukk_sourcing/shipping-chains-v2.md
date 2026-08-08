@@ -116,21 +116,28 @@ full orbital elements (`OrbitSemiMajorAxis` in meters,
   distance band, 2-jump out-and-back via the nearest connected
   system) — computed, replacing v1's manual `sameSystemFlatCost`
   (kept as an override).
-- Ship the orbital data as a slim build-time static asset (precedent:
-  fio_systemstars.json); only naturalId → {a, e} needed.
-- OPEN (user feedback wanted): which point of the best/worst band to
-  price — midpoint, worst-case, or a time-averaged expectation.
+- Distance priced at the band MIDPOINT (a1+a2 and |a1−a2| average =
+  max(a1,a2)); UI may show the band. (DEFAULT — veto welcome.)
+- Static asset SHIPPED at
+  `src/features/raukk_sourcing/assets/raukk_orbits.json`:
+  `{ planetNaturalId: [semiMajorAxisMegameters, eccentricity] }`,
+  4576 planets, from rest.fnar.net/planet/allplanets/full
+  (2026-08-08).
 
-## Per-system damage — now data-backed (upgrade path)
+## Per-system damage — data-backed, part of C1
 
-VERIFIED: `rest.fnar.net/systemstars/star/{id}` includes
-`MeteoroidDensity` per system (e.g. Hortus 0.0284) — the exact field
-the v1 decisions said was unavailable (our static
-fio_systemstars.json predates it; a refresh adds it). v2 may weight
-`damagePerParsec` by the mean meteoroid density of the systems a
-route passes through, normalized so the calibrated flight-log damage
-stays the anchor. Optional refinement — keep the flat constant as
-fallback.
+VERIFIED and FETCHED: per-star `MeteoroidDensity` for all 698
+systems, shipped at
+`src/features/raukk_sourcing/assets/raukk_meteoroid.json`
+(`{ systemId: density }`, from rest.fnar.net/systemstars/star/*,
+2026-08-08). The spread is decisive — min 0.028 (Hortus/IC1), max
+4.99, median 3.28: a 175× range, far too large to flatten. C1 damage
+math: `damagePerParsec_leg = damagePerParsec × pathMeanDensity /
+DENSITY_REF`, where pathMeanDensity is the parsec-weighted mean
+density of systems along the jump path and `DENSITY_REF` (config,
+DEFAULT 3.28 = the median) anchors the user-calibrated
+damagePerParsec. Flat fallback when a system id is missing from the
+asset.
 
 ## Architecture (unchanged from review learnings)
 
