@@ -120,6 +120,12 @@ export function raukkFlowId(
  * plans inbound flows and would otherwise be counted twice — the same
  * ownership rule the v1 pairs follow.
  *
+ * A lane the mutual verdict of round 7 rerouted keeps its DIRECT flow
+ * here: chains are authored over the physical plan to plan edges and are
+ * untouched by the pair level rerouting. A chain claiming such a flow
+ * takes its units off the rerouted cargo on BOTH sides before it reaches
+ * either exchange lane, so nothing is shipped twice.
+ *
  * @author raukk
  *
  * @param {IRaukkPairPlanFlows} flows Own daily flows of the plan

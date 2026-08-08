@@ -19,6 +19,10 @@ Two pair kinds:
    consumer. Because the cycle guard forbids reverse edges, the
    backhaul is structurally empty: the consumer's import loads pay
    the FULL round trip. No load-share split, no counterpart data.
+   [upstream later allowed supply loops — see shipping-decisions.md
+   round 7: mutual A⇄B edges keep only the heavier direction's direct
+   lane, the lighter one routes via both plans' CX pairs, so a
+   sourcing pair's backhaul stays empty either way]
 2. **CX pair** (plan ↔ its nearest CX by parsecs): owned by the
    plan. Loads out = CX sells (the plan's outputs not drawn by
    subscribers, clamped ≥ 0 — oversubscription > 100% exists by

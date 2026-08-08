@@ -52,7 +52,11 @@ A chain automatically claims every flow whose BOTH endpoints are
 stops of the chain; claimed flows leave their v1 pairs (those pairs
 drop the flow from their loads — recompute handles it since pair
 construction is derived, not stored). Unclaimed flows stay on v1
-pairs. Validation rule instead of precedence logic: two chains may
+pairs. [upstream later allowed supply loops — see
+shipping-decisions.md round 7: an unclaimed flow on the lighter
+direction of a mutual A⇄B relationship rides both plans' CX pairs
+instead of a direct one; claimed flows are unaffected] Validation
+rule instead of precedence logic: two chains may
 share AT MOST ONE stop — the chain editor refuses a second chain
 reaching two of the same stops. (revised after review) The rule was
 originally stated over adjacent stop PAIRS, which did not match

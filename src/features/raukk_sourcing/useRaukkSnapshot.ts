@@ -17,7 +17,12 @@ import {
 	calculateShipping,
 	RAUKK_REPAIR_BILL,
 } from "@/features/raukk_sourcing/calculations/shipping";
-import { buildShippingPairs } from "@/features/raukk_sourcing/calculations/shippingPairs";
+import {
+	buildShippingPairs,
+	raukkLaneCargo,
+	raukkSourcingPairKey,
+	resolveMutualLanes,
+} from "@/features/raukk_sourcing/calculations/shippingPairs";
 import {
 	buildPlanChainFlows,
 	mergeClaimedShipping,
@@ -53,13 +58,17 @@ import {
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
 	IRaukkSnapshotLane,
+	IRaukkTickerSource,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import {
+	IRaukkResolvedShipProfile,
 	IRaukkShippedTicker,
 	IRaukkShippingPair,
 	IRaukkShippingResult,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 import {
+	IRaukkCargoDimension,
+	IRaukkMutualVerdict,
 	IRaukkPairLookups,
 	IRaukkPairPlanFlows,
 	IRaukkTickerOrigin,
@@ -277,6 +286,284 @@ function planClaimedFlows(
 	return claimed;
 }
 
+/** Outcome of every mutual A⇄B relationship one plan takes part in */
+interface IRaukkMutualRouting {
+	/** Source plans whose lane to this plan routes via both exchanges */
+	viaCxSources: Set<string>;
+	/** Own output units a rerouted counterpart takes off the exchange */
+	viaCxSold: Record<string, number>;
+}
+
+/**
+ * Units per day one plan draws from another: what its STORED snapshot
+ * froze, restricted to what its CURRENT sourcing configuration still
+ * asks for.
+ *
+ * Both are account level state, so the two plans of a mutual
+ * relationship read exactly the same numbers here — which is what makes
+ * the verdict of `resolveMutualLanes` agree on both sides. Draws are
+ * pre split onto concrete producer uuids, an aggregate source therefore
+ * only has to pass the configuration filter.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkSnapshot | undefined} consumer Consuming plans snapshot
+ * @param {IRaukkPlanConfig | undefined} config Its sourcing configuration
+ * @param {string} sourcePlanUuid Producing Plan Uuid
+ * @returns {Record<string, number>} Daily units per ticker
+ */
+function drawnFrom(
+	consumer: IRaukkSnapshot | undefined,
+	config: IRaukkPlanConfig | undefined,
+	sourcePlanUuid: string
+): Record<string, number> {
+	const drawn: Record<string, number> | undefined =
+		consumer?.draws[sourcePlanUuid];
+
+	if (drawn === undefined) return {};
+
+	const units: Record<string, number> = {};
+
+	Object.entries(drawn).forEach(([ticker, unitsPerDay]) => {
+		if (unitsPerDay <= 0) return;
+
+		const source: IRaukkTickerSource | undefined = config?.sources[ticker];
+
+		if (source === undefined || source.mode !== "plan") return;
+		if (
+			source.sourcePlanUuid !== sourcePlanUuid &&
+			!isAggregateSource(source.sourcePlanUuid)
+		)
+			return;
+
+		units[ticker] = unitsPerDay;
+	});
+
+	return units;
+}
+
+/**
+ * Cargo dimensions of every ticker a mutual verdict weighs.
+ *
+ * Weight and volume per unit are GAME data, identical wherever a ticker
+ * appears, so both plans of a relationship arrive at the same loads. The
+ * frozen flows of the two stored snapshots are read first and in plan
+ * uuid order — a map neither side can skew — and the plans own live
+ * cargo only fills what no snapshot carries, which is the case for a
+ * snapshot frozen while shipping was still off.
+ *
+ * @author raukk
+ *
+ * @param {(IRaukkSnapshot | undefined)[]} snapshots Snapshots, uuid ordered
+ * @param {IRaukkPairPlanFlows} own Own live cargo, the fallback
+ * @returns {Function} Cargo dimensions of a ticker
+ */
+function cargoDimensions(
+	snapshots: (IRaukkSnapshot | undefined)[],
+	own: IRaukkPairPlanFlows
+): (ticker: string) => IRaukkCargoDimension | undefined {
+	const known: Map<string, IRaukkCargoDimension> = new Map();
+
+	function remember(
+		ticker: string,
+		weightPerUnit: number,
+		volumePerUnit: number
+	): void {
+		if (known.has(ticker)) return;
+
+		known.set(ticker, { weightPerUnit, volumePerUnit });
+	}
+
+	snapshots.forEach((snapshot) =>
+		snapshot?.flows?.forEach((flow) =>
+			remember(flow.ticker, flow.weightPerUnit, flow.volumePerUnit)
+		)
+	);
+
+	[...own.inputs, ...own.outputs].forEach((entry) =>
+		remember(entry.ticker, entry.weightPerUnit, entry.volumePerUnit)
+	);
+
+	return (ticker: string): IRaukkCargoDimension | undefined =>
+		known.get(ticker);
+}
+
+/**
+ * Units per day a chain already hauls on one directed lane, over the
+ * flows ONE named plan authored.
+ *
+ * The counterpart of a rerouted lane subtracts its chain claimed units
+ * itself, through `claimedUnitsOf`; the source plan adding the same
+ * units back to its exchange sells has to subtract them as well, or a
+ * chain carried flow would be shipped twice. Chain results are account
+ * level, so both sides again see the same numbers. A result frozen
+ * before ownership was carried falls back to the endpoint heuristic of
+ * {@link planClaimedFlows}: the plan the cargo arrives at authored it.
+ *
+ * @author raukk
+ *
+ * @param {string} ownerPlanUuid Plan whose flows count
+ * @param {string} fromStop Origin stop
+ * @param {string} toStop Destination stop
+ * @returns {Record<string, number>} Claimed units per ticker
+ */
+function chainClaimedUnits(
+	ownerPlanUuid: string,
+	fromStop: string,
+	toStop: string
+): Record<string, number> {
+	const sourcingStore = useRaukkSourcingStore();
+
+	const claimed: Record<string, number> = {};
+
+	Object.values(sourcingStore.chainResults).forEach(
+		(result: IRaukkChainResult) =>
+			result.flows.forEach((flow: IRaukkChainFlowCost) => {
+				if (
+					flow.ownerPlanUuid !== undefined &&
+					flow.ownerPlanUuid !== ownerPlanUuid
+				)
+					return;
+
+				if (flow.fromStop !== fromStop || flow.toStop !== toStop)
+					return;
+
+				claimed[flow.ticker] =
+					(claimed[flow.ticker] ?? 0) + Math.max(flow.unitsPerDay, 0);
+			})
+	);
+
+	return claimed;
+}
+
+/**
+ * Resolves every mutual A⇄B relationship this plan takes part in
+ * (shipping-decisions.md round 7).
+ *
+ * Mutuality is read from FROZEN data only — the account level sourcing
+ * configurations plus the draws of both stored snapshots — exactly as
+ * `subscription()` reads its draws. That buys the property the whole
+ * rule stands on: plan A and plan B run this independently and reach the
+ * same verdict, so the lane one of them drops is the lane the other one
+ * flies. It costs the usual one round convergence lag: a relationship
+ * only becomes visible once both sides have a stored snapshot, and a
+ * verdict follows the previous rounds numbers.
+ *
+ * A counterpart without a stored snapshot is therefore not mutual this
+ * round, and neither is anything at all while this plan has no snapshot
+ * of its own: reading its LIVE draws instead would let the two sides
+ * disagree, which is the one outcome worse than a round of lag.
+ *
+ * Self sourcing is skipped whole: those units never leave the planet,
+ * the merge already zeroes their freight share.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingInput} input Plan flows, resolver and config
+ * @param {Function} profileOf Ship profile of one lane
+ * @returns {IRaukkMutualRouting} Rerouted lanes of this plan
+ */
+function planMutualRouting(
+	input: IRaukkShippingInput,
+	profileOf: (pairKey: string) => IRaukkResolvedShipProfile
+): IRaukkMutualRouting {
+	const sourcingStore = useRaukkSourcingStore();
+
+	const routing: IRaukkMutualRouting = {
+		viaCxSources: new Set(),
+		viaCxSold: {},
+	};
+
+	if (!input.shippingConfig.enabled) return routing;
+
+	const own: IRaukkSnapshot | undefined =
+		sourcingStore.snapshots[input.planUuid];
+	if (own === undefined) return routing;
+
+	const cargo: IRaukkPairPlanFlows = planCargo(input);
+
+	Object.keys(own.draws)
+		.sort()
+		.forEach((counterpartUuid) => {
+			if (counterpartUuid === input.planUuid) return;
+
+			const counterpart: IRaukkSnapshot | undefined =
+				sourcingStore.snapshots[counterpartUuid];
+			if (counterpart === undefined) return;
+
+			const inbound: Record<string, number> = drawnFrom(
+				own,
+				sourcingStore.configs[input.planUuid],
+				counterpartUuid
+			);
+			const outbound: Record<string, number> = drawnFrom(
+				counterpart,
+				sourcingStore.configs[counterpartUuid],
+				input.planUuid
+			);
+
+			if (
+				Object.keys(inbound).length === 0 ||
+				Object.keys(outbound).length === 0
+			)
+				return;
+
+			const dimensionOf = cargoDimensions(
+				input.planUuid <= counterpartUuid
+					? [own, counterpart]
+					: [counterpart, own],
+				cargo
+			);
+
+			const verdict: IRaukkMutualVerdict = resolveMutualLanes(
+				{
+					consumerPlanUuid: input.planUuid,
+					cargo: raukkLaneCargo(inbound, dimensionOf),
+					profile: profileOf(
+						raukkSourcingPairKey(input.planUuid, counterpartUuid)
+					),
+				},
+				{
+					consumerPlanUuid: counterpartUuid,
+					cargo: raukkLaneCargo(outbound, dimensionOf),
+					profile: profileOf(
+						raukkSourcingPairKey(counterpartUuid, input.planUuid)
+					),
+				}
+			);
+
+			if (verdict.cxConsumerPlanUuid === input.planUuid) {
+				routing.viaCxSources.add(counterpartUuid);
+				return;
+			}
+
+			/*
+			 * The opposite direction lost: nothing hauls those units off
+			 * this planet any more, so they are sold at this plans own
+			 * exchange after all — minus whatever a chain carries, which
+			 * the counterpart subtracts on its side as well.
+			 */
+			const claimed: Record<string, number> = chainClaimedUnits(
+				counterpartUuid,
+				input.planetNaturalId,
+				counterpart.planetNaturalId
+			);
+
+			Object.entries(outbound).forEach(([ticker, units]) => {
+				const sold: number = Math.max(
+					units - (claimed[ticker] ?? 0),
+					0
+				);
+				if (sold <= 0) return;
+
+				routing.viaCxSold[ticker] =
+					(routing.viaCxSold[ticker] ?? 0) + sold;
+			});
+		});
+
+	return routing;
+}
+
 /** Everything about other plans, chains and profiles a plan needs */
 function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 	const sourcingStore = useRaukkSourcingStore();
@@ -306,6 +593,27 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 				: origin
 		);
 	}
+
+	/*
+	 * The ȼ constants of a profile may be "derive": resolving them
+	 * against the plans own price resolver is the ONLY place a price
+	 * meets a profile, everything downstream is pure math over plain
+	 * numbers. Hull capacities are price free, which is why the mutual
+	 * verdict may weigh the counterparts lane with it as well.
+	 */
+	const profileOf = (pairKey: string): IRaukkResolvedShipProfile =>
+		raukkResolveShipProfile(
+			sourcingStore.getShipProfile(
+				raukkAssignedShipTypeId(
+					pairKey,
+					sourcingStore.assignments,
+					input.shippingConfig
+				)
+			),
+			(ticker: string) => input.resolver(ticker).price
+		);
+
+	const mutual: IRaukkMutualRouting = planMutualRouting(input, profileOf);
 
 	return {
 		originOf: (ticker: string): IRaukkTickerOrigin[] => {
@@ -357,23 +665,15 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 
 			return claimedUnits(ticker, stop, inbound);
 		},
+		profileOf,
 		/*
-		 * The ȼ constants of a profile may be "derive": resolving
-		 * them against the plans own price resolver is the ONLY
-		 * place a price meets a profile, everything downstream is
-		 * pure math over plain numbers.
+		 * Mutual A⇄B sourcing: the lighter direction keeps no direct
+		 * lane, its cargo joins both plans exchange pairs instead. Each
+		 * plan adds only its own half, see {@link planMutualRouting}.
 		 */
-		profileOf: (pairKey: string) =>
-			raukkResolveShipProfile(
-				sourcingStore.getShipProfile(
-					raukkAssignedShipTypeId(
-						pairKey,
-						sourcingStore.assignments,
-						input.shippingConfig
-					)
-				),
-				(ticker: string) => input.resolver(ticker).price
-			),
+		viaCxSourceOf: (sourcePlanUuid: string): boolean =>
+			mutual.viaCxSources.has(sourcePlanUuid),
+		viaCxSoldOf: (ticker: string): number => mutual.viaCxSold[ticker] ?? 0,
 	};
 }
 

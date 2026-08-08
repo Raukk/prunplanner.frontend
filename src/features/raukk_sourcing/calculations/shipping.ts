@@ -333,8 +333,9 @@ function allocateDirection(
  * Trips per day are driven by the busier direction, the round trip cost
  * is amortized between both directions by their load share, and an empty
  * backhaul therefore leaves the loaded direction paying the full round
- * trip — exactly the sourcing pair case, where the cycle guard forbids
- * any reverse flow.
+ * trip — exactly the sourcing pair case, where a reverse flow either
+ * lost the mutual verdict and routes via the exchanges, or won it and
+ * owns the only lane (shipping-decisions.md round 7).
  *
  * A hired LM rate replaces the own fleet cost per trip and takes the
  * pair out of the shipping fraction: someone elses ship is doing the

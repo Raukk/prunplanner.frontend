@@ -123,10 +123,11 @@ export interface IRaukkShippedTicker {
  * One route pair owned by a plan.
  *
  * `out` is cargo leaving the plan, `back` cargo arriving at it. A
- * sourcing pair only ever fills `back` — the cycle guard forbids the
- * reverse edge, so its backhaul is structurally empty and the imports
- * carry the full round trip. A CX pair fills `out` with the plans CX
- * sells and `back` with its market buys.
+ * sourcing pair only ever fills `back` — a mutual A⇄B relationship keeps
+ * at most one direct lane (shipping-decisions.md round 7), so its
+ * backhaul is structurally empty and the imports carry the full round
+ * trip. A CX pair fills `out` with the plans CX sells and `back` with
+ * its market buys.
  */
 export interface IRaukkShippingPair {
 	/** Stable key, also the lookup key of a hired LM rate */

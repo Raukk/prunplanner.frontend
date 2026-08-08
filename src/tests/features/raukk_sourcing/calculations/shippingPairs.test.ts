@@ -10,11 +10,15 @@ import {
 	RAUKK_DEFAULT_ROUTES,
 	buildShippingPairs,
 	raukkCxPairKey,
+	raukkLaneCargo,
 	raukkSourcingPairKey,
+	resolveMutualLanes,
 } from "@/features/raukk_sourcing/calculations/shippingPairs";
 
 // Types & Interfaces
 import {
+	IRaukkCargoDimension,
+	IRaukkMutualVerdict,
 	IRaukkPairLookups,
 	IRaukkPairPlanFlows,
 } from "@/features/raukk_sourcing/calculations/shippingPairs";
@@ -211,7 +215,7 @@ describe("Raukk Sourcing: Shipping Pairs", () => {
 		expect(sourcing.pairKey).toBe(
 			raukkSourcingPairKey("consumer", "source")
 		);
-		// the cycle guard forbids the reverse edge: nothing rides out
+		// a sourcing pair never carries a backhaul: nothing rides out
 		expect(sourcing.out).toStrictEqual([]);
 		expect(sourcing.back).toStrictEqual([cargo("ORE", 100)]);
 		expect(sourcing.route.jumps).toBe(1);
@@ -326,5 +330,240 @@ describe("Raukk Sourcing: Shipping Pairs", () => {
 		);
 
 		expect(pairs).toStrictEqual([]);
+	});
+
+	describe("mutual lanes", () => {
+		it("buys a rerouted source at the own exchange instead", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					originOf: (ticker: string) =>
+						ticker === "ORE"
+							? [{ planUuid: "source", share: 1 }]
+							: [],
+					planetOf: () => "AA-003a",
+					viaCxSourceOf: (planUuid: string) => planUuid === "source",
+				}),
+				config
+			);
+
+			// no sourcing pair at all, the ORE rides the exchange lane
+			expect(pairs.length).toBe(1);
+			expect(pairs[0].pairKey).toBe(raukkCxPairKey("consumer"));
+			expect(pairs[0].back).toStrictEqual([
+				cargo("ORE", 100),
+				cargo("RAT", 10),
+			]);
+		});
+
+		it("merges a ticker rerouted from several sources", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					originOf: (ticker: string) =>
+						ticker === "ORE"
+							? [
+									{ planUuid: "a", share: 0.25 },
+									{ planUuid: "b", share: 0.75 },
+								]
+							: [],
+					planetOf: () => "AA-003a",
+					viaCxSourceOf: () => true,
+				}),
+				config
+			);
+
+			// one entry, not two: a ticker charged over its own units
+			// twice would double its ȼ per unit
+			expect(pairs.length).toBe(1);
+			expect(pairs[0].back).toStrictEqual([
+				cargo("ORE", 100),
+				cargo("RAT", 10),
+			]);
+		});
+
+		it("leaves the chain claimed units off the rerouted cargo", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					originOf: (ticker: string) =>
+						ticker === "ORE"
+							? [{ planUuid: "source", share: 1 }]
+							: [],
+					planetOf: () => "AA-003a",
+					viaCxSourceOf: () => true,
+					// the chain still hauls the DIRECT lane, its units
+					// must not ride the exchange lane on top
+					claimedUnitsOf: (
+						ticker: string,
+						counterpart: string | undefined,
+						inbound: boolean
+					) =>
+						ticker === "ORE" && counterpart === "AA-003a" && inbound
+							? 40
+							: 0,
+				}),
+				config
+			);
+
+			expect(pairs[0].back).toStrictEqual([
+				cargo("ORE", 60),
+				cargo("RAT", 10),
+			]);
+		});
+
+		it("sells what a rerouted counterpart no longer collects", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					subscribedOf: () => 50,
+					viaCxSoldOf: (ticker: string) =>
+						ticker === "MET" ? 20 : 0,
+				}),
+				config
+			);
+
+			// 50 produced, all 50 subscribed, 20 of them by a counterpart
+			// whose lane was rerouted: those 20 leave through the exchange
+			expect(pairs[0].out).toStrictEqual([cargo("MET", 20)]);
+		});
+	});
+});
+
+const heavy: IRaukkShippedTicker[] = [cargo("ORE", 300, 1, 1)];
+const light: IRaukkShippedTicker[] = [cargo("RAT", 100, 1, 1)];
+
+describe("Raukk Sourcing: Mutual Lane Verdict", () => {
+	it("lets the heavier direction keep its direct lane", () => {
+		const verdict: IRaukkMutualVerdict = resolveMutualLanes(
+			{ consumerPlanUuid: "a", cargo: light, profile },
+			{ consumerPlanUuid: "b", cargo: heavy, profile }
+		);
+
+		expect(verdict.directConsumerPlanUuid).toBe("b");
+		expect(verdict.cxConsumerPlanUuid).toBe("a");
+		expect(verdict.directLoads).toBeCloseTo(0.3, 10);
+		expect(verdict.cxLoads).toBeCloseTo(0.1, 10);
+	});
+
+	it("reaches the same verdict from either side", () => {
+		// plan a and plan b run this independently over the same frozen
+		// data, only the argument order differs
+		const fromA: IRaukkMutualVerdict = resolveMutualLanes(
+			{ consumerPlanUuid: "a", cargo: light, profile },
+			{ consumerPlanUuid: "b", cargo: heavy, profile }
+		);
+		const fromB: IRaukkMutualVerdict = resolveMutualLanes(
+			{ consumerPlanUuid: "b", cargo: heavy, profile },
+			{ consumerPlanUuid: "a", cargo: light, profile }
+		);
+
+		expect(fromA).toStrictEqual(fromB);
+	});
+
+	it("weighs each direction with its own hull and dimension", () => {
+		// 100 units of 1 m³ on a volume hull of 10 beat 300 units of
+		// 1 t on a weight hull of 10000
+		const verdict: IRaukkMutualVerdict = resolveMutualLanes(
+			{
+				consumerPlanUuid: "a",
+				cargo: light,
+				profile: { ...profile, cargoWeight: 10000, cargoVolume: 10 },
+			},
+			{
+				consumerPlanUuid: "b",
+				cargo: heavy,
+				profile: { ...profile, cargoWeight: 10000, cargoVolume: 10000 },
+			}
+		);
+
+		expect(verdict.directConsumerPlanUuid).toBe("a");
+		expect(verdict.directLoads).toBeCloseTo(10, 10);
+	});
+
+	it("gives a tie to the lower consumer plan uuid", () => {
+		const verdict: IRaukkMutualVerdict = resolveMutualLanes(
+			{ consumerPlanUuid: "zulu", cargo: heavy, profile },
+			{ consumerPlanUuid: "alpha", cargo: [...heavy], profile }
+		);
+
+		expect(verdict.directConsumerPlanUuid).toBe("alpha");
+		expect(verdict.cxConsumerPlanUuid).toBe("zulu");
+		expect(
+			resolveMutualLanes(
+				{ consumerPlanUuid: "alpha", cargo: [...heavy], profile },
+				{ consumerPlanUuid: "zulu", cargo: heavy, profile }
+			)
+		).toStrictEqual(verdict);
+	});
+
+	it("ties an empty relationship to the lower uuid as well", () => {
+		const verdict: IRaukkMutualVerdict = resolveMutualLanes(
+			{ consumerPlanUuid: "b", cargo: [], profile },
+			{ consumerPlanUuid: "a", cargo: [], profile }
+		);
+
+		expect(verdict.directConsumerPlanUuid).toBe("a");
+		expect(verdict.directLoads).toBe(0);
+	});
+
+	it("does not depend on the ticker order of a direction", () => {
+		const one: IRaukkShippedTicker[] = [
+			cargo("ORE", 0.1, 0.1, 0),
+			cargo("RAT", 0.2, 0.2, 0),
+			cargo("MET", 0.3, 0.3, 0),
+		];
+
+		expect(
+			resolveMutualLanes(
+				{ consumerPlanUuid: "a", cargo: one, profile },
+				{ consumerPlanUuid: "b", cargo: light, profile }
+			)
+		).toStrictEqual(
+			resolveMutualLanes(
+				{ consumerPlanUuid: "a", cargo: [...one].reverse(), profile },
+				{ consumerPlanUuid: "b", cargo: light, profile }
+			)
+		);
+	});
+});
+
+describe("Raukk Sourcing: Lane Cargo", () => {
+	const dimensions: Record<string, IRaukkCargoDimension> = {
+		ORE: { weightPerUnit: 1, volumePerUnit: 2 },
+		RAT: { weightPerUnit: 3, volumePerUnit: 4 },
+	};
+
+	it("normalises the ticker order and drops empty entries", () => {
+		expect(
+			raukkLaneCargo(
+				{ RAT: 10, ORE: 100, MET: 0 },
+				(ticker: string) => dimensions[ticker]
+			)
+		).toStrictEqual([
+			{
+				ticker: "ORE",
+				unitsPerDay: 100,
+				weightPerUnit: 1,
+				volumePerUnit: 2,
+			},
+			{
+				ticker: "RAT",
+				unitsPerDay: 10,
+				weightPerUnit: 3,
+				volumePerUnit: 4,
+			},
+		]);
+	});
+
+	it("rides an unknown ticker along weightless", () => {
+		expect(raukkLaneCargo({ XXX: 5 }, () => undefined)).toStrictEqual([
+			{
+				ticker: "XXX",
+				unitsPerDay: 5,
+				weightPerUnit: 0,
+				volumePerUnit: 0,
+			},
+		]);
 	});
 });
