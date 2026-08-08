@@ -52,6 +52,11 @@ import {
 	withFuelDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
 import { raukkFuelUnitsPerDay } from "@/features/raukk_sourcing/calculations/shippingFuel";
+import { raukkStorageFilledDays } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+import {
+	getVolumeOfAllStorages,
+	getWeightOfAllStorages,
+} from "@/features/planning/calculations/infrastructureCalculations";
 
 // Util
 import { inertClone } from "@/util/data";
@@ -1212,6 +1217,27 @@ export async function computePlanSnapshot(
 					: (prices.sellPrices[ticker] ?? 0);
 		});
 
+		/**
+		 * Days the plans own storage bridges at its throughput. A LEASE
+		 * stores it too: its storage still buffers its cargo between the
+		 * hosts visits, only the flying is delegated.
+		 */
+		function planStorageFilledDays(): number | null {
+			// guarded: a minimal plan result of another caller may carry
+			// no storage block at all
+			if (
+				context.planResult.storage === undefined ||
+				context.planResult.materialio === undefined
+			)
+				return null;
+
+			return raukkStorageFilledDays(
+				getWeightOfAllStorages(context.planResult.storage),
+				getVolumeOfAllStorages(context.planResult.storage),
+				context.planResult.materialio
+			);
+		}
+
 		/*
 		 * Shipping is account global: the configuration it was frozen
 		 * with is embedded, and only while it is enabled. A snapshot
@@ -1250,12 +1276,14 @@ export async function computePlanSnapshot(
 							advisories: [],
 							shippingFraction: null,
 							leaseCargo: buildPlanLeaseCargo(shippingInput),
+							storageFilledDays: planStorageFilledDays(),
 						}
 					: {
 							flows: buildPlanFlows(shippingInput),
 							lanes: buildPlanLanes(shipping),
 							advisories: shipping.advisories,
 							shippingFraction: shipping.shippingFraction,
+							storageFilledDays: planStorageFilledDays(),
 						}
 				: {}),
 		};
@@ -1465,16 +1493,6 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 	const shippingPairs: ComputedRef<IRaukkShippingPair[]> = computed(() =>
 		buildPlanShippingPairs(shippingInput.value)
 	);
-
-	/**
-	 * Current unit price of both shipping fuels, at the plans configured
-	 * sources. Backs the derived ȼ placeholders of the profile editor;
-	 * the shipping math resolves them again through `profileOf`.
-	 */
-	const fuelPrices: ComputedRef<Record<string, number>> = computed(() => ({
-		[RAUKK_FUEL_TICKERS.ftl]: resolver.value(RAUKK_FUEL_TICKERS.ftl).price,
-		[RAUKK_FUEL_TICKERS.stl]: resolver.value(RAUKK_FUEL_TICKERS.stl).price,
-	}));
 
 	/** ȼ of one full ship repair bill at the plans configured sources */
 	const repairBillCost: ComputedRef<number> = computed(() =>
@@ -1702,7 +1720,6 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		shipping,
 		shippingPairs,
 		repairBillCost,
-		fuelPrices,
 		inputRows,
 		outputRows,
 		repairCost,

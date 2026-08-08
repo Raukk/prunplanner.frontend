@@ -69,6 +69,12 @@ const router = createRouter({
 			props: true,
 		},
 		{
+			name: "shipping",
+			path: "/shipping",
+			meta: { requiresAuth: true },
+			component: () => import("@/views/ShippingView.vue"),
+		},
+		{
 			name: "fio-repair",
 			path: "/fio/repair",
 			meta: { requiresAuth: true },

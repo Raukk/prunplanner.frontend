@@ -90,6 +90,15 @@
 		"self": "Own output",
 		"stale": "stale snapshot"
 	},
+	"shipping_page": {
+		"view_title": "Shipping",
+		"info": "Fleet, routes and depots of the whole account. Everything here is account-global; the per-plan pieces — sources, local market rates and the plan CX anchor — stay on each plan's Sourcing tool.",
+		"manage_link": "Manage fleet & routes",
+		"recompute": "Recompute Chains",
+		"recompute_tooltip": "Re-costs every chain from the stored snapshot flows. To refresh the snapshots themselves, use the sourcing tool of a plan.",
+		"chain_error": "Chain '{name}': {message}",
+		"auto_chain_error": "Automatic chains: {message}"
+	},
 	"shipping": {
 		"title": "Shipping",
 		"enabled": "Charge Shipping",

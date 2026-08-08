@@ -189,6 +189,11 @@ export interface IRaukkSnapshot {
 	 * claims no ship at all: the fraction has no denominator then and is
 	 * displayed as an em-dash rather than as a reassuring zero. */
 	shippingFraction?: number | null;
+	/** Days the plans own storage bridges at its throughput, the chain
+	 * storage cross-check's input on the account level shipping page.
+	 * `null` when nothing moves, absent on pre cross-check snapshots.
+	 * Only written while shipping is enabled. */
+	storageFilledDays?: number | null;
 	/** Residual cargo this plan DELEGATES to its lease host, frozen for
 	 * the host to fold into its own lanes. Only a lease plan — one whose
 	 * config names a `leaseHostPlanUuid` — writes it, and only while
