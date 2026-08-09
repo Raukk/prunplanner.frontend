@@ -94,6 +94,20 @@ anywhere in the repo. Not retroactive.
   `GetFIOPlanetFees` caches per planet; its fetchFn returns null on
   failure so plan calculation never depends on FIO uptime (fees then
   cost 0). vitest.setup.ts mocks the FIO client with a global 404.
+- 2026-08-09: Production fees showed 0.00 for every plan in the browser
+  while tests, curl and the calculations were all correct (bug). Cause:
+  `ApiService` sets `this.client = axios` — the global instance — and
+  writes Cache-Control/Pragma/Expires into `axios.defaults.headers.get`.
+  `axios.create()` snapshots the defaults, so the FIO client inherited
+  them; they are not CORS-safelisted, so every FIO GET became a
+  preflight that rest.fnar.net rejects (its Access-Control-Allow-Headers
+  lists only Origin, X-Requested-With, X-FIO-Application, Content-Type,
+  Accept, Authorization, Age). `fetchFn` swallowed the failure as null,
+  which reads as "fees cost 0". FIOApiService now assigns fresh `get`
+  and `common` header buckets. Order-dependent: in vitest the FIO
+  singleton is built before ApiService's constructor runs, so it never
+  reproduced — the regression test builds a client while the globals are
+  polluted. No cache involvement; the query cache is memory-only.
 - 2026-08-09: Production fee model (verified against in-game orders):
   fee = Σ over tiers (building workers × per-worker daily rate) ×
   nominal recipe time, charged at order start. Efficiency shortens
