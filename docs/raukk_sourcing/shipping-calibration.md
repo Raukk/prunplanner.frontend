@@ -509,3 +509,183 @@ Ordered by how much of the model each unblocks:
    jump. Section 3's 4pc-vs-14pc points come from different reactor
    settings, so per-jump overhead and per-parsec time are still
    confounded.
+
+## 11. Batch 9 — the STL model, solved (2026-08-09)
+
+Source: fifteen BTF runs across five user screenshots, transcribed
+verbatim into `docs/raukk_sourcing/btf_flights.json` (leg sums check
+against every printed total: 15/15 on km, STL and FTL). Three SCB
+500t/500m3 blueprints — BP-JCLJ-8517 (panel captured: ENG 0.015 u/s,
+SSL 1,500u, RCT standard, SFL 300u, BASIC hull plate, no shielding),
+BP-UOXO-2500, BP-OCON-3635 — flown between Antares Station and nine
+planets in eight systems, both directions on the Antares pairs. All
+fifteen at 0t inventory, fuel slider low but not MIN (~3-5% of its
+travel, the panel prints no number), reactor 65%.
+
+The three blueprints behave identically on every law below, so they are
+one build up to naming.
+
+### 11.1 TO and LND are plain kinematics — SOLVED
+
+    legSeconds = sqrt(2 x legMetres / accelMax)
+
+equivalently `d = 1/2 a t^2`. Inverting all fifteen TO/LND legs for
+`accelMax` returns 77.94 to 78.47 m/s2 — against 8 g x 9.81 = 78.48,
+which is exactly the BASIC hull plate cap the panel shows. Legs span
+679 km to 34,044 km and 132 s to 932 s, and TO and LND on the same
+planet return the same acceleration to three digits (Nike 78.12 /
+78.13, Vulcan 78.19 / 78.02, Ashyn 78.39 / 78.47).
+
+This RETIRES the 3,130-3,300 constant of section 1.3: that number was
+`sqrt(2 x d)` for VH-331a's own surface-to-orbit distance, which is why
+it drifted with mass — mass moves `accelMax`, and the campaign was
+reading the product. Section 10's single ZV-759b landing was not a
+coincidence.
+
+TO/LND fuel `= 7.55 x ratedBurn x seconds` reproduces all fifteen legs
+to a mean absolute error of 0.32 units (max 1). Both halves of section
+1.3 are now closed.
+
+### 11.2 A transit leg cruises at a fixed speed — MOSTLY SOLVED
+
+Every DEP and APP leg is `time = distance / V` for a per-leg constant
+V, and the fuel follows from V and nothing else:
+
+    transitFuel = C x ratedBurn x V / accelMax,   C = 34.0 (33.4-35.2)
+
+over all thirty transit legs of batch 9 — 18 M to 105 M km, V from
+5,479 to 7,723 km/s — and it also reproduces batch 1, batch 4 and
+section 10 (two more ships, three masses, two engines). Fuel tracks the
+Dv the leg buys; distance never enters it, which is why the section 7
+MIN legs of 148 M, 416 M and 832 M km all cost 37-46 units.
+
+What sets V is now half-known. The tank is the lever, exactly as
+section 1.1 said: at the same slider the SSL (1,500u) ships burn 37 u
+per outbound leg and section 10's MSL (3,500u) ship burned 75 — a 2.03
+ratio against the 2.33 of the tanks — and V follows the burn through
+the C law. So
+
+    budget = slider x tank,   V = budget x accelMax / (C x ratedBurn)
+
+is the shape of it, and `t = distance / V` closes the leg. What is NOT
+explained is a systematic DEP/APP asymmetry: outbound legs run
+5,773-5,797 km/s from a planet (37 u) while inbound legs run 6,537 to
+7,723 (42-51 u), same ship, same slider, same trip. Ranked:
+
+| leg | V (km/s) | fuel |
+|---|---|---|
+| DEP from any planet | 5,773 - 5,797 | 37 |
+| DEP from Antares Station | 5,582 - 5,688 | 37 |
+| DEP from Roshar (outlier) | 5,479 | 35 |
+| APP into a planet | 6,537 - 7,131 | 42 - 46 |
+| APP into Antares Station | 7,389 - 7,723 | 49 - 51 |
+
+The obvious reading is that a ship exits warp with speed and enters it
+from rest, so an inbound leg is a fall and an outbound one a climb. One
+slider sweep on a single pair settles it.
+
+### 11.3 A jump is exactly proportional to REAL parsecs — SOLVED
+
+Eight distinct hops, 3.13 to 9.91 real parsecs:
+
+    jumpSeconds = 1350.4 x realParsecs   (22.51 min/pc), intercept -17 s
+    ftlFuel     = 4.687 x realParsecs,   intercept -0.38 u
+    jumpDamage  = 0.0010 % per real parsec
+
+Max residual 27 s on a leg of up to 3h43m — that is the panel's own
+minute rounding. Against the SHOWN (rounded) parsec count the same fit
+needs a 479 s intercept and leaves 505 s residuals, so ROUTE MATH MUST
+USE REAL PARSECS; `routeDistance.ts` already computes them.
+
+22.51 min/pc is this hull volume at reactor 65%. Section 10's WCB flew
+26.5, section 3's HCB 33 — the volume scaling of section 3 stands, the
+per-profile constant stays per profile.
+
+CHRG is 293 s and 0.017 % on every one of the seven charge legs
+(standard reactor, 65%, SCB hull) — flat, which the section 6 caveat
+suspected.
+
+### 11.4 The meteoroid law is right — CONFIRMED ON SIX SYSTEMS
+
+Eleven transit legs outside the two Antares systems, densities 1.786
+(Scorpius) to 2.928 (Romulan), against `km x (2.2e-10 + 5.5e-10 x
+density)`: ratios 0.91 to 1.19, mean 1.04. Refitting both constants on
+those legs returns `2.67e-10 + 5.47e-10` — the shipped values, within
+the noise. No change needed.
+
+The residual structure is a DEP/APP split, not a density error: DEP
+legs run 1.11x the law and APP legs 0.93x, consistently. Same 19% that
+splits the two in speed.
+
+### 11.5 The Antares excess is DIRECTIONAL
+
+- ZV-759 (Antares II, density 0.323): APP legs 0.93-0.99x the law —
+  exact. DEP legs 1.67-1.69x.
+- ZV-307 (Antares I, density 0.203): 5.0x to 12.2x, and which figure
+  you get depends on WHERE THE LEG POINTS, not how long it is. Out of
+  the station: 3.26e-3 %/Mkm toward Antares II, 2.61e-3 toward
+  Acetares, 3.90e-3 toward Roshar. Into the station: 3.2-4.1e-3 from
+  the Antares II warp point, 1.7-2.0e-3 from the Acetares one.
+
+A per-system scalar cannot produce that. A term that grows towards the
+star can, since different warp points sit at different angles and
+different closest approaches — which is the section 6 hypothesis, now
+with the direction dependence to fit it against. Still not modelled;
+lanes anchored on ANT stay priced off observed flights.
+
+### 11.6 DEP/APP distance: a fixed warp point and a moving body
+
+The user's question — is the in-system distance a per-planet constant,
+maybe planet radius? No, and the data says exactly what it is instead.
+
+- It depends on the DIRECTION of the jump. Out of Antares Station:
+  18,411,320 / 18,411,422 / 18,411,562 km toward the Antares II warp
+  point (three different blueprints, three different flights, a 242 km
+  spread), 20,334,248 / 20,334,627 toward Acetares, 21,770,226 toward
+  Roshar. One warp point per neighbour, fixed in the system frame.
+- It depends on WHEN the ship gets there. The five flights arriving at
+  Antares Station through the Acetares warp point fit
+
+      appKm = 15.38 M + 0.878 M x (hours elapsed in the trip)
+
+  to a maximum residual of 105,000 km over trips of 6.3 to 13.7 hours.
+  The station orbits away from the warp point while the ship is in
+  flight; a 13.7 h trip lands 6.4 M km further out than a 6.3 h one.
+  This is the section 1.4 arc/motion correction showing up as a clean
+  linear drift.
+
+So the pair (origin body, jump direction) sets a base distance and the
+elapsed time adds the body's orbital motion — planet radius has nothing
+to do with it. TO/LND distance is the surface-to-orbit hop and IS
+planet-scale, but it is not constant either (Aceland 679 km on takeoff
+and 2,010 km on landing; Ashyn 34,044 / 26,898), because the orbit
+point it connects to is the one aligned with the departure direction.
+
+### 11.7 Where the model stands against batch 9
+
+Fifteen one-way trips, the app's 500x500-standard profile against the
+panel:
+
+| | app / observed |
+|---|---|
+| time | 0.59x |
+| damage | 0.39x |
+| STL fuel | 0.97x |
+
+The fuel is only right by luck — the flat 123 u per block happens to
+sit inside the 103-189 u the fifteen flights actually spent, and it is
+uncorrelated with any of them. Time and damage are both dominated by
+the missing distance term. Every input needed to fix that now exists:
+11.1, 11.2 and 11.3 give closed forms for a leg of known length, and
+11.6 says where the length comes from.
+
+### 11.8 What is left
+
+1. The slider-to-speed constant. One sweep — same ship, same pair, MIN
+   / 5% / 10% / 25% — turns `budget = slider x tank` from a shape into
+   a number, and the DEP/APP asymmetry of 11.2 falls out of the same
+   runs.
+2. The Antares term (11.5), now with a direction to fit.
+3. LND damage per planet — the user has planetary data in PRUNplanner
+   and offers examples once the above lands.
+4. Repair bill from the BOM (section 6, last bullet).
