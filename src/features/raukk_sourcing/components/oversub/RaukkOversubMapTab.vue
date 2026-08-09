@@ -7,6 +7,13 @@
 	// Composables
 	import { useRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { useRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	import {
+		IRaukkOversubNavTargets,
+		raukkOversubConsumerNavByUuid,
+		raukkOversubNavHintKey,
+		raukkOversubNavPath,
+		useRaukkOversubNav,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
 
 	// Components
 	import RaukkOversubEmpty from "@/features/raukk_sourcing/components/oversub/RaukkOversubEmpty.vue";
@@ -99,9 +106,48 @@
 	const selection = useRaukkOversubSelection();
 	const selectedKey = selection.selected;
 	const tooltip = useRaukkOversubTooltip();
+	const nav = useRaukkOversubNav();
 
 	/** i18n root of the report */
 	const I18N: string = "raukk_sourcing.oversub_report";
+
+	/** Consumer plan nav path per consumer uuid, the node lookup */
+	const consumerNavByUuid: ComputedRef<Record<string, string>> = computed(
+		() => raukkOversubConsumerNavByUuid(props.tickerRows)
+	);
+
+	/** Nav targets of one consumer node — the node IS the plan */
+	function consumerTargets(
+		consumer: IRaukkOversubMapConsumer
+	): IRaukkOversubNavTargets {
+		return {
+			producer: null,
+			consumer:
+				consumer.kind === "plan"
+					? raukkOversubNavPath(
+							consumerNavByUuid.value[consumer.key] ?? null
+						)
+					: null,
+		};
+	}
+
+	/** Modifier-click nav hint line of one target pair, null = none */
+	function navHintLine(
+		targets: IRaukkOversubNavTargets
+	): IRaukkOversubTooltipLine | null {
+		const key: string | null = raukkOversubNavHintKey(targets);
+
+		return key === null
+			? null
+			: { text: t(`${I18N}.nav.${key}`), tone: "muted" };
+	}
+
+	/** The producer row behind one ribbon */
+	function ribbonRow(ribbon: IRaukkOversubMapRibbon): IRaukkOversubTickerRow {
+		return layout.value.producers.find(
+			(producer) => producer.key === ribbon.producerKey
+		)!.row;
+	}
 
 	/** Selection namespace of the map-local producer trace mode */
 	const TRACE_PREFIX: string = "RAUKKMAPTRACE#";
@@ -139,7 +185,11 @@
 			: null
 	);
 
-	function onProducerClick(producer: IRaukkOversubMapProducer): void {
+	function onProducerClick(
+		event: MouseEvent,
+		producer: IRaukkOversubMapProducer
+	): void {
+		if (nav.handleClick(event, producer.row)) return;
 		selection.toggle(TRACE_PREFIX + producer.key);
 	}
 
@@ -250,6 +300,11 @@
 			tone: "muted",
 		});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			nav.resolveTarget(row)
+		);
+		if (hint !== null) lines.push(hint);
+
 		return {
 			title: `${row.ticker} — ${row.producerPlanName}`,
 			lines,
@@ -302,6 +357,11 @@
 				tone: "muted",
 			});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			nav.resolveTarget(row, segment)
+		);
+		if (hint !== null) lines.push(hint);
+
 		const title: string =
 			segment.key === "other" && segment.memberCount !== undefined
 				? t(`${I18N}.legend.other`, { count: segment.memberCount })
@@ -333,6 +393,11 @@
 				tone: "muted",
 			});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			consumerTargets(consumer)
+		);
+		if (hint !== null) lines.push(hint);
+
 		return { title: consumerLabel(consumer), lines };
 	}
 
@@ -347,11 +412,19 @@
 		tooltip.hide();
 	}
 
-	function onRibbonClick(ribbon: IRaukkOversubMapRibbon): void {
+	function onRibbonClick(
+		event: MouseEvent,
+		ribbon: IRaukkOversubMapRibbon
+	): void {
+		if (nav.handleClick(event, ribbonRow(ribbon), ribbon.segment)) return;
 		if (ribbon.segment.selectable) selection.toggle(ribbon.segment.key);
 	}
 
-	function onConsumerClick(consumer: IRaukkOversubMapConsumer): void {
+	function onConsumerClick(
+		event: MouseEvent,
+		consumer: IRaukkOversubMapConsumer
+	): void {
+		if (nav.handleClickTargets(event, consumerTargets(consumer))) return;
 		if (consumer.selectable) selection.toggle(consumer.key);
 	}
 
@@ -427,7 +500,14 @@
 					:stroke-width="ribbon.segment.stale ? 1 : 0"
 					:stroke-dasharray="ribbon.segment.stale ? '5 4' : 'none'"
 					:stroke-opacity="ribbonOpacity(ribbon) < 0.3 ? 0.15 : 0.8"
-					@click="onRibbonClick(ribbon)"
+					@click="onRibbonClick($event, ribbon)"
+					@dblclick="
+						nav.handleDblClick(
+							$event,
+							ribbonRow(ribbon),
+							ribbon.segment
+						)
+					"
 					@mouseenter="onEnter(ribbonTooltip(ribbon), $event)"
 					@mouseleave="onLeave" />
 
@@ -438,7 +518,8 @@
 					:key="producer.key"
 					class="mnode"
 					:opacity="producerDimmed(producer) ? 0.3 : 1"
-					@click="onProducerClick(producer)"
+					@click="onProducerClick($event, producer)"
+					@dblclick="nav.handleDblClick($event, producer.row)"
 					@mouseenter="onEnter(producerTooltip(producer), $event)"
 					@mouseleave="onLeave">
 					<template v-if="producer.overflow !== null">
@@ -520,7 +601,13 @@
 					:key="consumer.key"
 					class="mnode"
 					:opacity="consumerDimmed(consumer) ? 0.3 : 1"
-					@click="onConsumerClick(consumer)"
+					@click="onConsumerClick($event, consumer)"
+					@dblclick="
+						nav.handleDblClickTargets(
+							$event,
+							consumerTargets(consumer)
+						)
+					"
 					@mouseenter="onEnter(consumerTooltip(consumer), $event)"
 					@mouseleave="onLeave">
 					<rect
@@ -552,6 +639,7 @@
 
 		<div class="pt-3 text-xs text-white/40">
 			{{ $t(`${I18N}.map.footnote`) }}
+			{{ $t(`${I18N}.nav.footnote`) }}
 		</div>
 	</div>
 </template>

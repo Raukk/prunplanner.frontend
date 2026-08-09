@@ -10,6 +10,10 @@
 	// Composables
 	import { useRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { useRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	import {
+		raukkOversubNavHintKey,
+		useRaukkOversubNav,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
 
 	// Components
 	import RaukkOversubEmpty from "@/features/raukk_sourcing/components/oversub/RaukkOversubEmpty.vue";
@@ -87,6 +91,7 @@
 	const selection = useRaukkOversubSelection();
 	const selectedKey = selection.selected;
 	const tooltip = useRaukkOversubTooltip();
+	const nav = useRaukkOversubNav();
 
 	/** Tooltip segments shown before the "+n more" fold */
 	const TOOLTIP_SEGMENT_LIMIT: number = 4;
@@ -291,6 +296,12 @@
 
 		lines.push({ text: t(`${D}.tooltip_click`), tone: "muted" });
 
+		const hintKey: string | null = raukkOversubNavHintKey(
+			nav.resolveTarget(row)
+		);
+		if (hintKey !== null)
+			lines.push({ text: t(`${I18N}.nav.${hintKey}`), tone: "muted" });
+
 		return { title: rowTitle(row), lines };
 	}
 
@@ -322,8 +333,11 @@
 		tooltip.hide();
 	}
 
-	/** Row click navigates to the producer plan / the Shipping page */
-	function onRowClick(row: IRaukkOversubRow): void {
+	/** Row click: modifier nav first, else the plain-click navigation
+	 * to the producer plan / the Shipping page */
+	function onRowClick(event: MouseEvent, row: IRaukkOversubRow): void {
+		if (nav.handleClick(event, row)) return;
+
 		tooltip.hide();
 		router.push(rowNav(row));
 	}
@@ -370,6 +384,8 @@
 						:class="{ 'opacity-30': isRowDimmed(row) }">
 						<div
 							class="llabel"
+							@click="nav.handleClick($event, row)"
+							@dblclick="nav.handleDblClick($event, row)"
 							@mouseenter="onRowEnter(row, $event)"
 							@mouseleave="onLeave">
 							<span class="font-bold">
@@ -414,7 +430,8 @@
 
 						<div
 							class="dbar"
-							@click="onRowClick(row)"
+							@click="onRowClick($event, row)"
+							@dblclick="nav.handleDblClick($event, row)"
 							@mouseenter="onRowEnter(row, $event)"
 							@mouseleave="onLeave">
 							<div class="dtrack"></div>
@@ -535,6 +552,7 @@
 
 			<div class="pt-3 text-xs text-white/40">
 				{{ $t(`${D}.footnote`) }}
+				{{ $t(`${I18N}.nav.footnote`) }}
 			</div>
 		</div>
 	</div>

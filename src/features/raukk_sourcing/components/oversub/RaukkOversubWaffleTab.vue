@@ -7,6 +7,10 @@
 	// Composables
 	import { useRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { useRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	import {
+		raukkOversubNavHintKey,
+		useRaukkOversubNav,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
 
 	// Components
 	import RaukkOversubEmpty from "@/features/raukk_sourcing/components/oversub/RaukkOversubEmpty.vue";
@@ -88,6 +92,7 @@
 	const selection = useRaukkOversubSelection();
 	const selectedKey = selection.selected;
 	const tooltip = useRaukkOversubTooltip();
+	const nav = useRaukkOversubNav();
 
 	/** Rows across both groups before the show-all fold */
 	const ROW_LIMIT: number = 8;
@@ -321,6 +326,20 @@
 		return segment.label;
 	}
 
+	/** Modifier-click nav hint line of one element, null = no hint */
+	function navHintLine(
+		row: IRaukkOversubRow,
+		segment?: IRaukkOversubDisplaySegment
+	): IRaukkOversubTooltipLine | null {
+		const key: string | null = raukkOversubNavHintKey(
+			nav.resolveTarget(row, segment)
+		);
+
+		return key === null
+			? null
+			: { text: t(`${I18N}.nav.${key}`), tone: "muted" };
+	}
+
 	/** Tooltip title of one row */
 	function rowTitle(row: IRaukkOversubRow): string {
 		if (row.kind === "ticker")
@@ -384,6 +403,9 @@
 				tone: row.producerStale ? "warning" : "muted",
 			});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(row);
+		if (hint !== null) lines.push(hint);
+
 		return { title: rowTitle(row), lines };
 	}
 
@@ -444,6 +466,9 @@
 				text: t(`${I18N}.tooltip.segment_select_hint`),
 				tone: "muted",
 			});
+
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(row, segment);
+		if (hint !== null) lines.push(hint);
 
 		return { title: segmentLabel(segment), lines };
 	}
@@ -520,10 +545,36 @@
 		tooltip.hide();
 	}
 
-	/** Square-run click: toggle that consumer's selection everywhere */
-	function onCellClick(cell: IWaffleCell): void {
+	/** Square click: modifier nav first, else the consumer selection */
+	function onCellClick(
+		event: MouseEvent,
+		cell: IWaffleCell,
+		layout: IWaffleLayout
+	): void {
+		if (
+			nav.handleClick(
+				event,
+				layout.row,
+				cell.type === "seg" ? cell.segment : undefined
+			)
+		)
+			return;
+
 		if (cell.type !== "seg") return;
 		if (cell.segment!.selectable) selection.toggle(cell.segment!.key);
+	}
+
+	/** Square double-click: the destination, per the uniform scheme */
+	function onCellDblClick(
+		event: MouseEvent,
+		cell: IWaffleCell,
+		layout: IWaffleLayout
+	): void {
+		nav.handleDblClick(
+			event,
+			layout.row,
+			cell.type === "seg" ? cell.segment : undefined
+		);
 	}
 
 	/** Dimmed ~30% while another consumer holds the selection */
@@ -561,6 +612,8 @@
 					class="wrow">
 					<div
 						class="whead"
+						@click="nav.handleClick($event, layout.row)"
+						@dblclick="nav.handleDblClick($event, layout.row)"
 						@mouseenter="onRowEnter(layout.row, $event)"
 						@mouseleave="onLeave">
 						<RouterLink
@@ -695,7 +748,8 @@
 										? { background: cell.segment!.color }
 										: undefined
 								"
-								@click="onCellClick(cell)"
+								@click="onCellClick($event, cell, layout)"
+								@dblclick="onCellDblClick($event, cell, layout)"
 								@mouseenter="onCellEnter(cell, layout, $event)"
 								@mouseleave="onLeave"></span>
 						</template>
@@ -724,6 +778,7 @@
 
 		<div class="pt-3 text-xs text-white/40">
 			{{ $t(`${WF}.footnote`) }}
+			{{ $t(`${I18N}.nav.footnote`) }}
 		</div>
 	</div>
 </template>

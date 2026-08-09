@@ -468,6 +468,12 @@
 			"self_reserve_body": "{amount} {unit} of own output drawn by {producer} itself — off the top, never a consumer segment",
 			"self_reserve_clipped": "notch clipped — {share} % of net on this scale"
 		},
+		"nav": {
+			"hint_consumer": "Shift+click: open source · Alt+click / double-click: open destination · +Ctrl/Cmd: new tab",
+			"hint_producer": "Alt+click / double-click: open this plan · +Ctrl/Cmd: new tab",
+			"hint_chain": "Alt+click / double-click: open /shipping · +Ctrl/Cmd: new tab",
+			"footnote": "Shift+click any element opens its source plan; Alt+click or double-click opens its destination (producer elements open themselves); hold Ctrl/Cmd to open in a new tab."
+		},
 		"filters": {
 			"problems_only": "Problems only",
 			"stale_only": "Stale only",

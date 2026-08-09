@@ -16,6 +16,12 @@
 	// Composables
 	import { useRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { useRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	import {
+		IRaukkOversubNavTargets,
+		raukkOversubNavHintKey,
+		raukkOversubNavPath,
+		useRaukkOversubNav,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
 
 	// Components
 	import RaukkOversubEmpty from "@/features/raukk_sourcing/components/oversub/RaukkOversubEmpty.vue";
@@ -103,6 +109,7 @@
 	const selection = useRaukkOversubSelection();
 	const selectedKey = selection.selected;
 	const tooltip = useRaukkOversubTooltip();
+	const nav = useRaukkOversubNav();
 
 	/** i18n root of the report */
 	const I18N: string = "raukk_sourcing.oversub_report";
@@ -510,6 +517,25 @@
 	// tooltips
 	// ------------------------------------------------------------------
 
+	/** Nav targets of one branch box; the fleet branch has no plan */
+	function branchTargets(branch: IBlocksBranch): IRaukkOversubNavTargets {
+		return {
+			producer: branch.fleet ? null : raukkOversubNavPath(branch.nav),
+			consumer: null,
+		};
+	}
+
+	/** Modifier-click nav hint line of one target pair, null = none */
+	function navHintLine(
+		targets: IRaukkOversubNavTargets
+	): IRaukkOversubTooltipLine | null {
+		const key: string | null = raukkOversubNavHintKey(targets);
+
+		return key === null
+			? null
+			: { text: t(`${I18N}.nav.${key}`), tone: "muted" };
+	}
+
 	/** Tooltip title of one row */
 	function rowTitle(row: IRaukkOversubRow): string {
 		if (row.kind === "ticker")
@@ -595,6 +621,11 @@
 			tone: "muted",
 		});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			branchTargets(branch)
+		);
+		if (hint !== null) lines.push(hint);
+
 		tooltip.show(
 			{ title: branch.label, lines },
 			event.currentTarget as Element
@@ -628,6 +659,12 @@
 		}
 
 		lines.push({ text: t(`${I18NB}.tooltip_zoom_row`), tone: "muted" });
+
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			nav.resolveTarget(box.row)
+		);
+		if (hint !== null) lines.push(hint);
+
 		tooltip.show(
 			{ title: rowTitle(box.row), lines },
 			event.currentTarget as Element
@@ -678,6 +715,11 @@
 				tone: "muted",
 			});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			nav.resolveTarget(row, segment)
+		);
+		if (hint !== null) lines.push(hint);
+
 		tooltip.show(
 			{ title: segmentLabel(segment), lines },
 			event.currentTarget as Element
@@ -722,6 +764,18 @@
 		tooltip.hide();
 	}
 
+	/** Branch header click: modifier nav first, else the drill */
+	function onBranchClick(event: MouseEvent, branch: IBlocksBranch): void {
+		if (nav.handleClickTargets(event, branchTargets(branch))) return;
+		zoomToBranch(branch);
+	}
+
+	/** Row box click: modifier nav first, else the drill */
+	function onBoxClick(event: MouseEvent, row: IRaukkOversubRow): void {
+		if (nav.handleClick(event, row)) return;
+		zoomToRow(row);
+	}
+
 	function zoomOut(levels: number): void {
 		refZoom.value = refZoom.value.slice(
 			0,
@@ -730,8 +784,15 @@
 		tooltip.hide();
 	}
 
-	/** Full-zoom strip click: select a consumer, or follow a chain */
-	function onStripClick(strip: IBlocksStrip, box: IBlocksBox): void {
+	/** Full-zoom strip click: modifier nav first, then select a
+	 * consumer, or follow a chain */
+	function onStripClick(
+		event: MouseEvent,
+		strip: IBlocksStrip,
+		box: IBlocksBox
+	): void {
+		if (nav.handleClick(event, box.row, strip.segment)) return;
+
 		if (box.level !== "full") {
 			zoomToRow(box.row);
 			return;
@@ -929,7 +990,13 @@
 							fill="rgba(255,255,255,0.03)"
 							rx="3"
 							class="hover:cursor-zoom-in"
-							@click="zoomToBranch(placed.branch)"
+							@click="onBranchClick($event, placed.branch)"
+							@dblclick="
+								nav.handleDblClickTargets(
+									$event,
+									branchTargets(placed.branch)
+								)
+							"
 							@mouseenter="onBranchEnter(placed.branch, $event)"
 							@mouseleave="onLeave" />
 						<template v-for="box in placed.boxes" :key="box.key">
@@ -1023,7 +1090,10 @@
 									:height="box.h"
 									fill="rgba(0,0,0,0)"
 									class="hover:cursor-zoom-in"
-									@click="zoomToRow(box.row)"
+									@click="onBoxClick($event, box.row)"
+									@dblclick="
+										nav.handleDblClick($event, box.row)
+									"
 									@mouseenter="onBoxEnter(box, $event)"
 									@mouseleave="onLeave" />
 							</g>
@@ -1158,7 +1228,8 @@
 							:height="box.h"
 							fill="rgba(0,0,0,0)"
 							class="hover:cursor-zoom-in"
-							@click="zoomToRow(box.row)"
+							@click="onBoxClick($event, box.row)"
+							@dblclick="nav.handleDblClick($event, box.row)"
 							@mouseenter="onBoxEnter(box, $event)"
 							@mouseleave="onLeave" />
 					</g>
@@ -1201,7 +1272,14 @@
 										? ''
 										: 'hover:cursor-pointer'
 								"
-								@click="onStripClick(strip, fullBox)"
+								@click="onStripClick($event, strip, fullBox)"
+								@dblclick="
+									nav.handleDblClick(
+										$event,
+										fullBox.row,
+										strip.segment
+									)
+								"
 								@mouseenter="
 									onStripEnter(strip, fullBox, $event)
 								"
@@ -1279,6 +1357,7 @@
 
 		<div class="pt-3 text-xs text-white/40">
 			{{ $t(`${I18NB}.footnote`) }}
+			{{ $t(`${I18N}.nav.footnote`) }}
 		</div>
 	</div>
 </template>

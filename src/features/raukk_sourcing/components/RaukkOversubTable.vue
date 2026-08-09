@@ -5,6 +5,12 @@
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
 
+	// Composables
+	import {
+		raukkOversubNavPath,
+		useRaukkOversubNav,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
+
 	// Calculations
 	import { raukkUtilizationBarWidth } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 
@@ -58,6 +64,10 @@
 		(e: "recompute-fleet"): void;
 	}>();
 
+	// modifier-click navigation on the row surfaces; the RouterLinks
+	// keep their own native semantics
+	const nav = useRaukkOversubNav();
+
 	/** Keys of the rows whose subscriber breakdown is open */
 	const refExpanded: Ref<Set<string>> = ref(new Set());
 
@@ -102,8 +112,8 @@
 
 	/**
 	 * Router target of one plan link, opening the sourcing tool via the
-	 * PlanView `?tool=` deep link. Non-plan paths (fleet → /shipping)
-	 * pass through untouched.
+	 * PlanView `?tool=` deep link — the shared `raukkOversubNavPath`,
+	 * narrowed to the non-null paths the RouterLinks hold.
 	 *
 	 * @author raukk
 	 *
@@ -111,9 +121,7 @@
 	 * @returns {RouteLocationRaw} Target the RouterLink navigates to
 	 */
 	function planLinkTarget(path: string): RouteLocationRaw {
-		return path.startsWith("/plan/")
-			? { path, query: { tool: "raukk-sourcing" } }
-			: path;
+		return raukkOversubNavPath(path)!;
 	}
 
 	/** Share of one claim against the row's net, "—" without one */
@@ -164,12 +172,16 @@
 		</thead>
 		<tbody>
 			<template v-for="row in tickerRows" :key="rowKey(row)">
-				<tr>
+				<tr
+					@click="nav.handleClick($event, row)"
+					@dblclick="nav.handleDblClick($event, row)">
 					<td>
 						<span
 							v-if="row.segments.length > 0"
 							class="hover:cursor-pointer select-none text-white/50"
-							@click="toggle(row)">
+							@click="
+								nav.handleClick($event, row) || toggle(row)
+							">
 							{{ refExpanded.has(rowKey(row)) ? "▾" : "▸" }}
 						</span>
 					</td>
@@ -293,7 +305,9 @@
 				<template v-if="refExpanded.has(rowKey(row))">
 					<tr
 						v-for="(segment, index) in row.segments"
-						:key="`${rowKey(row)}#SEG#${index}`">
+						:key="`${rowKey(row)}#SEG#${index}`"
+						@click="nav.handleClick($event, row, segment)"
+						@dblclick="nav.handleDblClick($event, row, segment)">
 						<td></td>
 						<td colspan="2">
 							<RouterLink
@@ -411,12 +425,16 @@
 			</thead>
 			<tbody>
 				<template v-for="row in fleetRows" :key="rowKey(row)">
-					<tr>
+					<tr
+						@click="nav.handleClick($event, row)"
+						@dblclick="nav.handleDblClick($event, row)">
 						<td>
 							<span
 								v-if="row.segments.length > 0"
 								class="hover:cursor-pointer select-none text-white/50"
-								@click="toggle(row)">
+								@click="
+									nav.handleClick($event, row) || toggle(row)
+								">
 								{{ refExpanded.has(rowKey(row)) ? "▾" : "▸" }}
 							</span>
 						</td>
@@ -506,7 +524,11 @@
 					<template v-if="refExpanded.has(rowKey(row))">
 						<tr
 							v-for="(segment, index) in row.segments"
-							:key="`${rowKey(row)}#SEG#${index}`">
+							:key="`${rowKey(row)}#SEG#${index}`"
+							@click="nav.handleClick($event, row, segment)"
+							@dblclick="
+								nav.handleDblClick($event, row, segment)
+							">
 							<td></td>
 							<td colspan="2">
 								<RouterLink

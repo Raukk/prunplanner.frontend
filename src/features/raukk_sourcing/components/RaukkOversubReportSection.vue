@@ -28,6 +28,7 @@
 	} from "@/features/raukk_sourcing/useRaukkChainCompute";
 	import { provideRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { provideRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	import { provideRaukkOversubNav } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
 
 	// Components
 	import ComputingProgress from "@/layout/components/ComputingProgress.vue";
@@ -329,10 +330,12 @@
 		])
 	);
 
-	// component-scoped cross-highlight and the one tooltip host, both
-	// provided to every tab — never store state
+	// component-scoped cross-highlight, the one tooltip host and the
+	// modifier-click navigation, all provided to every tab — never
+	// store state
 	const selection = provideRaukkOversubSelection();
 	provideRaukkOversubTooltip();
+	provideRaukkOversubNav();
 
 	/** Esc anywhere clears the cross-highlight selection */
 	function onKeydown(event: KeyboardEvent): void {

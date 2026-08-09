@@ -7,6 +7,10 @@
 	// Composables
 	import { useRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { useRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	import {
+		raukkOversubNavHintKey,
+		useRaukkOversubNav,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
 
 	// Components
 	import RaukkOversubEmpty from "@/features/raukk_sourcing/components/oversub/RaukkOversubEmpty.vue";
@@ -82,6 +86,7 @@
 	const selection = useRaukkOversubSelection();
 	const selectedKey = selection.selected;
 	const tooltip = useRaukkOversubTooltip();
+	const nav = useRaukkOversubNav();
 
 	/** Overflow tolerance of the graphics, never a verdict */
 	const OVER_TOLERANCE: number = 1e-9;
@@ -244,6 +249,20 @@
 		return segment.label;
 	}
 
+	/** Modifier-click nav hint line of one element, null = no hint */
+	function navHintLine(
+		row: IRaukkOversubRow,
+		segment?: IRaukkOversubDisplaySegment
+	): IRaukkOversubTooltipLine | null {
+		const key: string | null = raukkOversubNavHintKey(
+			nav.resolveTarget(row, segment)
+		);
+
+		return key === null
+			? null
+			: { text: t(`${I18N}.nav.${key}`), tone: "muted" };
+	}
+
 	/** Tooltip title of one row */
 	function rowTitle(row: IRaukkOversubRow): string {
 		if (row.kind === "ticker")
@@ -307,6 +326,9 @@
 				tone: row.producerStale ? "warning" : "muted",
 			});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(row);
+		if (hint !== null) lines.push(hint);
+
 		return { title: rowTitle(row), lines };
 	}
 
@@ -351,6 +373,9 @@
 				text: t(`${I18N}.tooltip.segment_select_hint`),
 				tone: "muted",
 			});
+
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(row, segment);
+		if (hint !== null) lines.push(hint);
 
 		return { title: segmentLabel(segment), lines };
 	}
@@ -413,8 +438,13 @@
 		tooltip.hide();
 	}
 
-	/** Segment click toggles the cross-highlight selection */
-	function onSegmentClick(segment: IRaukkOversubDisplaySegment): void {
+	/** Segment click: modifier nav first, else the cross-highlight */
+	function onSegmentClick(
+		event: MouseEvent,
+		segment: IRaukkOversubDisplaySegment,
+		row: IRaukkOversubRow
+	): void {
+		if (nav.handleClick(event, row, segment)) return;
 		if (segment.selectable) selection.toggle(segment.key);
 	}
 
@@ -464,6 +494,8 @@
 						class="lrow">
 						<div
 							class="llabel"
+							@click="nav.handleClick($event, row)"
+							@dblclick="nav.handleDblClick($event, row)"
 							@mouseenter="onRowEnter(row, $event)"
 							@mouseleave="onLeave">
 							<span class="font-bold">
@@ -512,6 +544,8 @@
 								<div
 									class="lcollapsed"
 									:style="{ width: `${pctOfAxis(100)}%` }"
+									@click="nav.handleClick($event, row)"
+									@dblclick="nav.handleDblClick($event, row)"
 									@mouseenter="onRowEnter(row, $event)"
 									@mouseleave="onLeave"></div>
 								<span class="lbadge">
@@ -538,6 +572,10 @@
 										:style="{
 											width: `${pctOfAxis(100)}%`,
 										}"
+										@click="nav.handleClick($event, row)"
+										@dblclick="
+											nav.handleDblClick($event, row)
+										"
 										@mouseenter="onRowEnter(row, $event)"
 										@mouseleave="onLeave"></div>
 									<div
@@ -556,7 +594,20 @@
 												placed.segment.selectable,
 										}"
 										:style="segmentStyle(placed)"
-										@click="onSegmentClick(placed.segment)"
+										@click="
+											onSegmentClick(
+												$event,
+												placed.segment,
+												row
+											)
+										"
+										@dblclick="
+											nav.handleDblClick(
+												$event,
+												row,
+												placed.segment
+											)
+										"
 										@mouseenter="
 											onSegmentEnter(
 												placed.segment,
@@ -676,6 +727,7 @@
 
 			<div class="pt-3 text-xs text-white/40">
 				{{ $t(`${I18N}.ledger.footnote`) }}
+				{{ $t(`${I18N}.nav.footnote`) }}
 			</div>
 		</div>
 	</div>

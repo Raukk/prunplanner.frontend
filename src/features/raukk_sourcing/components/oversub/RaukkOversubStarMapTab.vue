@@ -12,6 +12,12 @@
 	// Composables
 	import { useRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { useRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	import {
+		IRaukkOversubNavTargets,
+		raukkOversubNavHintKey,
+		raukkOversubNavPath,
+		useRaukkOversubNav,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
 
 	// Components
 	import RaukkOversubEmpty from "@/features/raukk_sourcing/components/oversub/RaukkOversubEmpty.vue";
@@ -117,6 +123,7 @@
 	const selection = useRaukkOversubSelection();
 	const selectedKey = selection.selected;
 	const tooltip = useRaukkOversubTooltip();
+	const nav = useRaukkOversubNav();
 
 	/** i18n root of the report */
 	const I18N: string = "raukk_sourcing.oversub_report";
@@ -522,6 +529,54 @@
 	// tooltips and clicks
 	// ------------------------------------------------------------------
 
+	/** Nav targets of one plan node — the node IS the plan */
+	function nodeTargets(node: IRaukkOversubStarNode): IRaukkOversubNavTargets {
+		return {
+			producer: raukkOversubNavPath(node.navTarget),
+			consumer: null,
+		};
+	}
+
+	/** Nav targets of one edge: producer end and consumer end */
+	function edgeTargets(pair: IRaukkOversubPair): IRaukkOversubNavTargets {
+		return {
+			producer: raukkOversubNavPath(
+				nodeByUuid.value.get(pair.producerPlanUuid)?.navTarget ?? null
+			),
+			consumer: pair.external
+				? null
+				: raukkOversubNavPath(
+						nodeByUuid.value.get(pair.consumerKey)?.navTarget ??
+							null
+					),
+		};
+	}
+
+	/** Nav targets of one fleet mark: lane → its plan, chain → /shipping */
+	function markTargets(
+		mark: IRaukkOversubStarFleetMark
+	): IRaukkOversubNavTargets {
+		return {
+			producer: null,
+			consumer: raukkOversubNavPath(
+				(mark.anchorPlanUuid !== null
+					? nodeByUuid.value.get(mark.anchorPlanUuid)?.navTarget
+					: undefined) ?? "/shipping"
+			),
+		};
+	}
+
+	/** Modifier-click nav hint line of one target pair, null = none */
+	function navHintLine(
+		targets: IRaukkOversubNavTargets
+	): IRaukkOversubTooltipLine | null {
+		const key: string | null = raukkOversubNavHintKey(targets);
+
+		return key === null
+			? null
+			: { text: t(`${I18N}.nav.${key}`), tone: "muted" };
+	}
+
 	function utilizationLabel(utilization: number | null): string {
 		return utilization === null
 			? t(`${I18N}.starmap.utilization_na`)
@@ -579,6 +634,11 @@
 			tone: "muted",
 		});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			nodeTargets(node)
+		);
+		if (hint !== null) lines.push(hint);
+
 		return {
 			title:
 				node.planetNaturalId === null
@@ -632,6 +692,11 @@
 				tone: "muted",
 			});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			edgeTargets(pair)
+		);
+		if (hint !== null) lines.push(hint);
+
 		return { title: `${from} → ${to}`, lines };
 	}
 
@@ -678,6 +743,11 @@
 			tone: "muted",
 		});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			markTargets(mark)
+		);
+		if (hint !== null) lines.push(hint);
+
 		return { title: mark.label, lines };
 	}
 
@@ -709,15 +779,21 @@
 		tooltip.hide();
 	}
 
-	function onNodeClick(node: IRaukkOversubStarNode): void {
+	function onNodeClick(event: MouseEvent, node: IRaukkOversubStarNode): void {
+		if (nav.handleClickTargets(event, nodeTargets(node))) return;
 		if (node.navTarget !== null) router.push(node.navTarget);
 	}
 
-	function onEdgeClick(pair: IRaukkOversubPair): void {
+	function onEdgeClick(event: MouseEvent, pair: IRaukkOversubPair): void {
+		if (nav.handleClickTargets(event, edgeTargets(pair))) return;
 		if (!pair.external) selection.toggle(selectionKeyOf(pair.consumerKey));
 	}
 
-	function onMarkClick(): void {
+	function onMarkClick(
+		event: MouseEvent,
+		mark: IRaukkOversubStarFleetMark
+	): void {
+		if (nav.handleClickTargets(event, markTargets(mark))) return;
 		router.push("/shipping");
 	}
 </script>
@@ -857,7 +933,13 @@
 									? 'cursor: default'
 									: undefined
 							"
-							@click="onEdgeClick(edge.pair)"
+							@click="onEdgeClick($event, edge.pair)"
+							@dblclick="
+								nav.handleDblClickTargets(
+									$event,
+									edgeTargets(edge.pair)
+								)
+							"
 							@mouseenter="
 								onEnter(edgeTooltip(edge.pair), $event)
 							"
@@ -891,7 +973,13 @@
 							:key="anchored.mark.key"
 							class="sroute"
 							:opacity="markDimmed(anchored.mark) ? 0.22 : 0.8"
-							@click="onMarkClick"
+							@click="onMarkClick($event, anchored.mark)"
+							@dblclick="
+								nav.handleDblClickTargets(
+									$event,
+									markTargets(anchored.mark)
+								)
+							"
 							@mouseenter="
 								onEnter(markTooltip(anchored.mark), $event)
 							"
@@ -928,7 +1016,13 @@
 								v-for="(mark, index) in unlocatedMarks"
 								:key="mark.key"
 								:opacity="markDimmed(mark) ? 0.22 : 0.8"
-								@click="onMarkClick"
+								@click="onMarkClick($event, mark)"
+								@dblclick="
+									nav.handleDblClickTargets(
+										$event,
+										markTargets(mark)
+									)
+								"
 								@mouseenter="onEnter(markTooltip(mark), $event)"
 								@mouseleave="onLeave">
 								<line
@@ -1001,7 +1095,10 @@
 						:key="node.planUuid"
 						class="snode"
 						:opacity="nodeOpacity(node)"
-						@click="onNodeClick(node)"
+						@click="onNodeClick($event, node)"
+						@dblclick="
+							nav.handleDblClickTargets($event, nodeTargets(node))
+						"
 						@mouseenter="onEnter(nodeTooltip(node), $event)"
 						@mouseleave="onLeave">
 						<circle
@@ -1073,6 +1170,7 @@
 
 		<div class="pt-3 text-xs text-white/40">
 			{{ $t(`${I18N}.starmap.footnote`) }}
+			{{ $t(`${I18N}.nav.footnote`) }}
 		</div>
 	</div>
 </template>

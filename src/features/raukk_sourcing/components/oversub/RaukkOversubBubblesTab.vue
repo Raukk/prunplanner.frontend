@@ -16,6 +16,10 @@
 	// Composables
 	import { useRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { useRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	import {
+		raukkOversubNavHintKey,
+		useRaukkOversubNav,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
 
 	// Components
 	import RaukkOversubEmpty from "@/features/raukk_sourcing/components/oversub/RaukkOversubEmpty.vue";
@@ -100,6 +104,21 @@
 	const selection = useRaukkOversubSelection();
 	const selectedKey = selection.selected;
 	const tooltip = useRaukkOversubTooltip();
+	const nav = useRaukkOversubNav();
+
+	/** Modifier-click nav hint line of one element, null = no hint */
+	function navHintLine(
+		row: IRaukkOversubRow,
+		segment?: IRaukkOversubDisplaySegment
+	): IRaukkOversubTooltipLine | null {
+		const key: string | null = raukkOversubNavHintKey(
+			nav.resolveTarget(row, segment)
+		);
+
+		return key === null
+			? null
+			: { text: t(`${I18N}.nav.${key}`), tone: "muted" };
+	}
 
 	/** i18n root of the report */
 	const I18N: string = "raukk_sourcing.oversub_report";
@@ -426,6 +445,9 @@
 			tone: "muted",
 		});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(row);
+		if (hint !== null) lines.push(hint);
+
 		tooltip.show(
 			{ title: rowTitle(row), lines },
 			event.currentTarget as Element
@@ -474,6 +496,9 @@
 				tone: "muted",
 			});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(row, segment);
+		if (hint !== null) lines.push(hint);
+
 		tooltip.show(
 			{ title: segmentLabel(segment), lines },
 			event.currentTarget as Element
@@ -511,13 +536,26 @@
 		tooltip.hide();
 	}
 
+	/** Field bubble click: modifier nav first, else the drill-in */
+	function onBubbleClick(event: MouseEvent, row: IRaukkOversubRow): void {
+		if (nav.handleClick(event, row)) return;
+		toggleOpen(row);
+	}
+
 	function closeDetail(): void {
 		refOpenKey.value = null;
 		tooltip.hide();
 	}
 
-	/** Detail circle click: select a consumer, or follow a chain */
-	function onSegmentClick(segment: IRaukkOversubDisplaySegment): void {
+	/** Detail circle click: modifier nav first, then select a
+	 * consumer, or follow a chain */
+	function onSegmentClick(
+		event: MouseEvent,
+		segment: IRaukkOversubDisplaySegment,
+		row: IRaukkOversubRow
+	): void {
+		if (nav.handleClick(event, row, segment)) return;
+
 		if (segment.selectable) selection.toggle(segment.key);
 		else if (segment.key === "chain" && segment.navTarget !== null)
 			router.push(segment.navTarget);
@@ -616,7 +654,8 @@
 								? 0.3
 								: 1
 						"
-						@click.stop="toggleOpen(node.row)"
+						@click.stop="onBubbleClick($event, node.row)"
+						@dblclick.stop="nav.handleDblClick($event, node.row)"
 						@mouseenter="onBubbleEnter(node.row, $event)"
 						@mouseleave="onLeave">
 						<circle
@@ -784,7 +823,20 @@
 										? ''
 										: 'hover:cursor-pointer'
 								"
-								@click="onSegmentClick(circle.item)"
+								@click="
+									onSegmentClick(
+										$event,
+										circle.item,
+										detail.row
+									)
+								"
+								@dblclick="
+									nav.handleDblClick(
+										$event,
+										detail.row,
+										circle.item
+									)
+								"
 								@mouseenter="
 									onSegmentEnter(
 										circle.item,
@@ -846,6 +898,7 @@
 
 			<div class="pt-3 text-xs text-white/40">
 				{{ $t(`${I18NB}.footnote`) }}
+				{{ $t(`${I18N}.nav.footnote`) }}
 			</div>
 		</template>
 	</div>

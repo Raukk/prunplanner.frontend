@@ -7,6 +7,13 @@
 	// Composables
 	import { useRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { useRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	import {
+		IRaukkOversubNavTargets,
+		raukkOversubConsumerNavByUuid,
+		raukkOversubNavHintKey,
+		raukkOversubNavPath,
+		useRaukkOversubNav,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
 
 	// Components
 	import RaukkOversubEmpty from "@/features/raukk_sourcing/components/oversub/RaukkOversubEmpty.vue";
@@ -84,9 +91,38 @@
 	const selection = useRaukkOversubSelection();
 	const selectedKey = selection.selected;
 	const tooltip = useRaukkOversubTooltip();
+	const nav = useRaukkOversubNav();
 
 	/** i18n root of the report */
 	const I18N: string = "raukk_sourcing.oversub_report";
+
+	/** Consumer plan nav path per consumer uuid, the column lookup */
+	const consumerNavByUuid: ComputedRef<Record<string, string>> = computed(
+		() => raukkOversubConsumerNavByUuid(props.tickerRows)
+	);
+
+	/** Nav targets of one consumer column — the column IS the plan */
+	function columnTargets(
+		column: IRaukkOversubMatrixColumn
+	): IRaukkOversubNavTargets {
+		return {
+			producer: null,
+			consumer: raukkOversubNavPath(
+				consumerNavByUuid.value[column.planUuid] ?? null
+			),
+		};
+	}
+
+	/** Modifier-click nav hint line of one target pair, null = none */
+	function navHintLine(
+		targets: IRaukkOversubNavTargets
+	): IRaukkOversubTooltipLine | null {
+		const key: string | null = raukkOversubNavHintKey(targets);
+
+		return key === null
+			? null
+			: { text: t(`${I18N}.nav.${key}`), tone: "muted" };
+	}
 
 	/** Consumer plan columns, deterministic order — never appearance */
 	const matrixColumns: ComputedRef<IRaukkOversubMatrixColumns> = computed(
@@ -160,8 +196,28 @@
 		);
 	}
 
-	/** Cell / column header click toggles the cross-highlight */
-	function onColumnClick(column: IRaukkOversubMatrixColumn): void {
+	/** Column header click: modifier nav first, else cross-highlight */
+	function onColumnClick(
+		event: MouseEvent,
+		column: IRaukkOversubMatrixColumn
+	): void {
+		if (nav.handleClickTargets(event, columnTargets(column))) return;
+		selection.toggle(column.selectionKey);
+	}
+
+	/** Consumer cell click: modifier nav first, else cross-highlight */
+	function onCellClick(
+		event: MouseEvent,
+		row: IRaukkOversubTickerRow,
+		column: IRaukkOversubMatrixColumn
+	): void {
+		const segment: IRaukkOversubSegment | undefined = cellSegment(
+			row,
+			column
+		);
+		if (segment === undefined) return;
+
+		if (nav.handleClick(event, row, segment)) return;
 		selection.toggle(column.selectionKey);
 	}
 
@@ -228,6 +284,11 @@
 				tone: row.producerStale ? "warning" : "muted",
 			});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			nav.resolveTarget(row)
+		);
+		if (hint !== null) lines.push(hint);
+
 		return { title: rowTitle(row), lines };
 	}
 
@@ -277,6 +338,11 @@
 				tone: "muted",
 			});
 
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			nav.resolveTarget(row, segment)
+		);
+		if (hint !== null) lines.push(hint);
+
 		return { title, lines };
 	}
 
@@ -296,6 +362,11 @@
 			text: t(`${I18N}.tooltip.segment_select_hint`),
 			tone: "muted",
 		});
+
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			columnTargets(column)
+		);
+		if (hint !== null) lines.push(hint);
 
 		return { title: column.label, lines };
 	}
@@ -384,7 +455,13 @@
 							:key="column.planUuid"
 							class="cons"
 							:class="{ 'opacity-30': isColumnDimmed(column) }"
-							@click="onColumnClick(column)"
+							@click="onColumnClick($event, column)"
+							@dblclick="
+								nav.handleDblClickTargets(
+									$event,
+									columnTargets(column)
+								)
+							"
 							@mouseenter="onColumnEnter(column, $event)"
 							@mouseleave="onLeave">
 							<span
@@ -405,6 +482,8 @@
 						<td
 							class="rowh"
 							:class="{ overb: row.over }"
+							@click="nav.handleClick($event, row)"
+							@dblclick="nav.handleDblClick($event, row)"
 							@mouseenter="onRowEnter(row, $event)"
 							@mouseleave="onLeave">
 							<span class="font-bold">{{ row.ticker }}</span>
@@ -469,9 +548,14 @@
 										}
 									: {}
 							"
-							@click="
+							@click="onCellClick($event, row, column)"
+							@dblclick="
 								cellSegment(row, column) !== undefined
-									? onColumnClick(column)
+									? nav.handleDblClick(
+											$event,
+											row,
+											cellSegment(row, column)!
+										)
 									: undefined
 							"
 							@mouseenter="
@@ -604,6 +688,8 @@
 							<td
 								class="rowh"
 								:class="{ overb: row.over }"
+								@click="nav.handleClick($event, row)"
+								@dblclick="nav.handleDblClick($event, row)"
 								@mouseenter="onRowEnter(row, $event)"
 								@mouseleave="onLeave">
 								<span class="font-bold">
@@ -659,6 +745,24 @@
 												),
 											}
 										: {}
+								"
+								@click="
+									laneSegment(row, lane) !== undefined
+										? nav.handleClick(
+												$event,
+												row,
+												laneSegment(row, lane)!
+											)
+										: undefined
+								"
+								@dblclick="
+									laneSegment(row, lane) !== undefined
+										? nav.handleDblClick(
+												$event,
+												row,
+												laneSegment(row, lane)!
+											)
+										: undefined
 								"
 								@mouseenter="
 									laneSegment(row, lane) !== undefined
@@ -729,6 +833,7 @@
 
 		<div class="pt-3 text-xs text-white/40">
 			{{ $t(`${I18N}.matrix.footnote`) }}
+			{{ $t(`${I18N}.nav.footnote`) }}
 		</div>
 	</div>
 </template>

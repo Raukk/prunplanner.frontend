@@ -7,6 +7,14 @@
 	// Composables
 	import { useRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { useRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	import {
+		IRaukkOversubNavTargets,
+		raukkOversubConsumerNavByUuid,
+		raukkOversubNavHintKey,
+		raukkOversubNavPath,
+		raukkOversubPlanPath,
+		useRaukkOversubNav,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubNav";
 
 	// Components
 	import RaukkOversubEmpty from "@/features/raukk_sourcing/components/oversub/RaukkOversubEmpty.vue";
@@ -91,9 +99,64 @@
 	const selection = useRaukkOversubSelection();
 	const selectedKey = selection.selected;
 	const tooltip = useRaukkOversubTooltip();
+	const nav = useRaukkOversubNav();
 
 	/** i18n root of the report */
 	const I18N: string = "raukk_sourcing.oversub_report";
+
+	/** Consumer plan nav path per consumer uuid, the column lookup */
+	const consumerNavByUuid: ComputedRef<Record<string, string>> = computed(
+		() => raukkOversubConsumerNavByUuid(props.tickerRows)
+	);
+
+	/** Nav targets of one producer row — the row IS the plan */
+	function producerTargets(
+		producer: IRaukkOversubGridProducer
+	): IRaukkOversubNavTargets {
+		return {
+			producer: raukkOversubNavPath(
+				raukkOversubPlanPath(
+					producer.planetNaturalId,
+					producer.planUuid
+				)
+			),
+			consumer: null,
+		};
+	}
+
+	/** Nav targets of one consumer column — the column IS the plan */
+	function columnTargets(
+		column: IRaukkOversubGridColumn
+	): IRaukkOversubNavTargets {
+		return {
+			producer: null,
+			consumer: raukkOversubNavPath(
+				consumerNavByUuid.value[column.planUuid] ?? null
+			),
+		};
+	}
+
+	/** Nav targets of one producer → consumer cell */
+	function pairTargets(
+		producer: IRaukkOversubGridProducer,
+		column: IRaukkOversubGridColumn
+	): IRaukkOversubNavTargets {
+		return {
+			producer: producerTargets(producer).producer,
+			consumer: columnTargets(column).consumer,
+		};
+	}
+
+	/** Modifier-click nav hint line of one target pair, null = none */
+	function navHintLine(
+		targets: IRaukkOversubNavTargets
+	): IRaukkOversubTooltipLine | null {
+		const key: string | null = raukkOversubNavHintKey(targets);
+
+		return key === null
+			? null
+			: { text: t(`${I18N}.nav.${key}`), tone: "muted" };
+	}
 
 	// ------------------------------------------------------------------
 	// materials adjacency: pair aggregation, producers, columns, margins
@@ -179,8 +242,24 @@
 		);
 	}
 
-	/** Consumer column click toggles the cross-highlight */
-	function onColumnClick(column: IRaukkOversubGridColumn): void {
+	/** Column header click: modifier nav first, else cross-highlight */
+	function onColumnClick(
+		event: MouseEvent,
+		column: IRaukkOversubGridColumn
+	): void {
+		if (nav.handleClickTargets(event, columnTargets(column))) return;
+		selection.toggle(columnKey(column));
+	}
+
+	/** Pair cell click: modifier nav first, else cross-highlight */
+	function onPairClick(
+		event: MouseEvent,
+		producer: IRaukkOversubGridProducer,
+		column: IRaukkOversubGridColumn
+	): void {
+		if (pairOf(producer, column.planUuid) === undefined) return;
+		if (nav.handleClickTargets(event, pairTargets(producer, column)))
+			return;
 		selection.toggle(columnKey(column));
 	}
 
@@ -359,11 +438,20 @@
 				text: t(`${I18N}.tooltip.segment_external`),
 				tone: "muted",
 			});
-		else
+		else {
 			lines.push({
 				text: t(`${I18N}.tooltip.segment_select_hint`),
 				tone: "muted",
 			});
+
+			const hint: IRaukkOversubTooltipLine | null = navHintLine({
+				producer: producerTargets(producer).producer,
+				consumer: raukkOversubNavPath(
+					consumerNavByUuid.value[pair.consumerKey] ?? null
+				),
+			});
+			if (hint !== null) lines.push(hint);
+		}
 
 		return {
 			title: t(`${I18N}.grid.pair_title`, {
@@ -407,6 +495,11 @@
 			text: t(`${I18N}.grid.open_plan_hint`),
 			tone: "muted",
 		});
+
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			producerTargets(producer)
+		);
+		if (hint !== null) lines.push(hint);
 
 		return { title: producer.name, lines };
 	}
@@ -472,6 +565,11 @@
 				text: t(`${I18N}.tooltip.segment_stale`),
 				tone: "warning",
 			});
+
+		const hint: IRaukkOversubTooltipLine | null = navHintLine(
+			nav.resolveTarget(row, segment)
+		);
+		if (hint !== null) lines.push(hint);
 
 		return { title: lane.label, lines };
 	}
@@ -571,7 +669,13 @@
 							:key="column.planUuid"
 							class="cons"
 							:class="{ 'opacity-30': isColumnDimmed(column) }"
-							@click="onColumnClick(column)"
+							@click="onColumnClick($event, column)"
+							@dblclick="
+								nav.handleDblClickTargets(
+									$event,
+									columnTargets(column)
+								)
+							"
 							@mouseleave="onLeave">
 							<span
 								class="csw"
@@ -609,6 +713,18 @@
 						<td
 							class="rowh"
 							:class="{ overb: producer.anyOver }"
+							@click="
+								nav.handleClickTargets(
+									$event,
+									producerTargets(producer)
+								)
+							"
+							@dblclick="
+								nav.handleDblClickTargets(
+									$event,
+									producerTargets(producer)
+								)
+							"
 							@mouseenter="
 								onEnter(producerTooltip(producer), $event)
 							"
@@ -652,9 +768,13 @@
 									pairOf(producer, column.planUuid) !==
 									undefined,
 							}"
-							@click="
+							@click="onPairClick($event, producer, column)"
+							@dblclick="
 								pairOf(producer, column.planUuid) !== undefined
-									? onColumnClick(column)
+									? nav.handleDblClickTargets(
+											$event,
+											pairTargets(producer, column)
+										)
 									: undefined
 							"
 							@mouseenter="
@@ -853,6 +973,8 @@
 							<td
 								class="rowh"
 								:class="{ overb: row.over }"
+								@click="nav.handleClick($event, row)"
+								@dblclick="nav.handleDblClick($event, row)"
 								@mouseenter="
 									onEnter(fleetRowTooltip(row), $event)
 								"
@@ -893,6 +1015,24 @@
 								:class="{
 									gzero: laneSegment(row, lane) === undefined,
 								}"
+								@click="
+									laneSegment(row, lane) !== undefined
+										? nav.handleClick(
+												$event,
+												row,
+												laneSegment(row, lane)!
+											)
+										: undefined
+								"
+								@dblclick="
+									laneSegment(row, lane) !== undefined
+										? nav.handleDblClick(
+												$event,
+												row,
+												laneSegment(row, lane)!
+											)
+										: undefined
+								"
 								@mouseenter="
 									laneSegment(row, lane) !== undefined
 										? onEnter(
@@ -975,6 +1115,7 @@
 
 		<div class="pt-3 text-xs text-white/40">
 			{{ $t(`${I18N}.grid.footnote`) }}
+			{{ $t(`${I18N}.nav.footnote`) }}
 		</div>
 	</div>
 </template>
