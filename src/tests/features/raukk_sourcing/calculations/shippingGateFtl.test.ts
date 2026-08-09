@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
 	IRaukkChainLeg,
 	buildChainLegs,
+	calculateChainShipping,
 	raukkChainLegShip,
+	raukkDefaultChainConfig,
 	RAUKK_DEFAULT_CHAIN_ROUTES,
 } from "@/features/raukk_sourcing/calculations/shippingChains";
 import {
@@ -23,7 +25,19 @@ import {
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 
 // Types & Interfaces
-import { IRaukkResolvedShipProfile } from "@/features/raukk_sourcing/calculations/shipping.types";
+import {
+	IRaukkResolvedShipProfile,
+	IRaukkShippingConfig,
+} from "@/features/raukk_sourcing/calculations/shipping.types";
+import { IRaukkChainShipping } from "@/features/raukk_sourcing/calculations/shippingChains.types";
+
+/** Shipping on, everything else at its shipped default */
+const CONFIG: IRaukkShippingConfig = {
+	enabled: true,
+	defaultProfileId: "gate-test",
+	routingMode: "direct",
+	sameSystemFlatCost: 0,
+};
 
 /**
  * The corridor the gate calibration itself was measured on.
@@ -43,6 +57,16 @@ const AMETHYST: string = "IA-158b";
  */
 const REMOTE_A: string = "XU-753a";
 const REMOTE_B: string = "IV-102a";
+
+/**
+ * A corridor the network only partly covers.
+ *
+ * YK-024 to CH-131: 86.10 parsecs of pure FTL, against 84.56 parsecs
+ * that fly ~74.63 of them and cross one transcribed gate for the rest.
+ * The mixed case the wear model has to get right.
+ */
+const MIXED_A: string = "YK-024a";
+const MIXED_B: string = "CH-131a";
 
 function profileOf(
 	patch: Partial<IRaukkResolvedShipProfile> = {}
@@ -254,6 +278,175 @@ describe("Raukk Sourcing: gates on FTL routes", () => {
 			expect(leg.gatePath!.hops.every((hop) => hop.kind === "gate")).toBe(
 				true
 			);
+		});
+	});
+
+	describe("wear on a mixed path", () => {
+		/*
+		 * The trap this pins: a mixed leg carries a non-null gate cost,
+		 * and the chain wear model used to read "has a gate" as "flew no
+		 * parsecs". True for an STL-only hull, whose gate IS the whole
+		 * leg; false for an FTL hull, which flies its FTL hops for real.
+		 * Dropping that term understated repair cost on exactly the legs
+		 * a gate wins — the comparison this feature exists to make.
+		 */
+		it("carries both terms through the real chain pricing", () => {
+			/*
+			 * Goes through `calculateChainShipping` rather than the
+			 * helpers, because the bug was in the WIRING: the arithmetic
+			 * was right, the pricing branch simply never passed the flown
+			 * parsecs to the wear model. A test on the helpers alone
+			 * passes while the product is wrong.
+			 */
+			const profile: IRaukkResolvedShipProfile = profileOf({
+				damagePerParsec: 0.001,
+				damagePerStlBlock: 0,
+			});
+
+			const shipping: IRaukkChainShipping = calculateChainShipping({
+				chain: {
+					chainId: "gate-wear",
+					stops: [HEPHAESTUS, AMETHYST],
+				},
+				profile,
+				flows: [
+					{
+						ticker: "RAT",
+						fromStop: HEPHAESTUS,
+						toStop: AMETHYST,
+						unitsPerDay: 100,
+						bucket: "production",
+					},
+				],
+				config: { ...CONFIG },
+				chainConfig: raukkDefaultChainConfig(),
+				repairBillCost: 1000,
+			});
+
+			const leg = shipping.legs[0];
+
+			// the corridor is one pure gate hop, so the flown parsecs are
+			// zero and the wear is the traversal alone
+			expect(leg.gate).not.toBeNull();
+			expect(leg.damagePerTrip).toBeCloseTo(leg.gate!.damage, 12);
+			expect(leg.damagePerTrip).toBeGreaterThan(0);
+		});
+
+		it("charges the flown parsecs of a genuinely mixed corridor", () => {
+			/*
+			 * The case above is pure gate: its FTL term is zero, so it
+			 * cannot tell a wired term from a dropped one. This corridor
+			 * flies ~75 parsecs of FTL either side of a single traversal,
+			 * which is where the dropped term actually cost credits.
+			 *
+			 * Asserted as a difference between two profiles that vary in
+			 * `damagePerParsec` alone: the mean route density scales the
+			 * rate, so the absolute figure is not worth hard-coding, but
+			 * a term that never arrives cannot move at all.
+			 */
+			const chainOf = (damagePerParsec: number): IRaukkChainShipping =>
+				calculateChainShipping({
+					chain: {
+						chainId: "mixed-wear",
+						stops: [MIXED_A, MIXED_B],
+					},
+					profile: profileOf({
+						damagePerParsec,
+						damagePerStlBlock: 0,
+					}),
+					flows: [
+						{
+							ticker: "RAT",
+							fromStop: MIXED_A,
+							toStop: MIXED_B,
+							unitsPerDay: 100,
+							bucket: "production",
+						},
+					],
+					config: { ...CONFIG },
+					chainConfig: raukkDefaultChainConfig(),
+					repairBillCost: 1000,
+				});
+
+			const worn = chainOf(0.001).legs[0];
+			const free = chainOf(0).legs[0];
+
+			// the leg really is mixed, not one mode or the other
+			expect(worn.gate).not.toBeNull();
+			expect(raukkFtlParsecsOf(worn.mixedPath!)).toBeGreaterThan(70);
+			expect(worn.mixedPath!.gateHops).toBe(1);
+
+			// with no per-parsec wear only the traversal is charged
+			expect(free.damagePerTrip).toBeCloseTo(free.gate!.damage, 12);
+
+			// and turning it on adds wear on top of that same traversal
+			expect(worn.damagePerTrip).toBeGreaterThan(worn.gate!.damage);
+			expect(worn.damagePerTrip - worn.gate!.damage).toBeGreaterThan(
+				0.01
+			);
+		});
+
+		it("charges the FTL hops AND the traversals, never one or the other", () => {
+			const profile: IRaukkResolvedShipProfile = profileOf();
+
+			const mixed: IRaukkMultiModalPath = {
+				parsecs: 30,
+				jumps: 3,
+				sameSystem: false,
+				systemIds: ["a", "b", "c", "d"],
+				hopParsecs: [10, 12, 8],
+				minutes: 500,
+				gateHops: 1,
+				hops: [
+					{
+						kind: "ftl",
+						fromSystemId: "a",
+						toSystemId: "b",
+						parsecs: 10,
+						minutes: 120,
+					},
+					{
+						kind: "gate",
+						fromSystemId: "b",
+						toSystemId: "c",
+						parsecs: 12,
+						minutes: 260,
+						gateId: "GTW-TEST",
+						fee: 4000,
+						feeCurrency: "AIC",
+						stlFuel: 25,
+						volumeCapM3: 6000,
+						damagePercent: 0.006,
+					},
+					{
+						kind: "ftl",
+						fromSystemId: "c",
+						toSystemId: "d",
+						parsecs: 8,
+						minutes: 120,
+					},
+				],
+			};
+
+			const gate = raukkGateLegCost(mixed, profile);
+			const ftlParsecs: number = raukkFtlParsecsOf(mixed);
+
+			/*
+			 * What the leg must wear: 18 parsecs of flying plus one
+			 * traversal. Not the traversal alone — which is what reading
+			 * the gate cost as the whole story produced — and not the
+			 * whole 30 parsecs either, since 12 of them were not flown.
+			 */
+			const correct: number =
+				ftlParsecs * profile.damagePerParsec + gate.damage;
+			const gateOnly: number = gate.damage;
+			const wholePath: number = mixed.parsecs * profile.damagePerParsec;
+
+			expect(ftlParsecs).toBe(18);
+			expect(correct).toBeGreaterThan(gateOnly);
+			expect(correct).toBeLessThan(wholePath);
+			// the understatement the old reading produced, ~75% here
+			expect(gateOnly / correct).toBeLessThan(0.3);
 		});
 	});
 

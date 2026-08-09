@@ -9,6 +9,7 @@ import {
 	IRaukkMultiModalPath,
 	fastestRoutePath,
 	parsecDistance,
+	raukkHasGate,
 	raukkPlannedGateLinks,
 	resolveSystemId,
 	setRaukkPlannedGateLinks,
@@ -196,6 +197,33 @@ describe("Raukk Sourcing: planned gates reach the shipping math", () => {
 		});
 
 		expect(raukkPlannedGateLinks()).toHaveLength(0);
+	});
+
+	it("agrees with the router about which planets carry a gate", () => {
+		/*
+		 * The two surfaces must not contradict each other on one page:
+		 * the depot section asks `raukkHasGate` while the chain timings
+		 * beside it are already routed over the planned link.
+		 */
+		expect(raukkHasGate(FAR)).toBe(false);
+
+		store.setPlannedGate("g1", {
+			planetA: HEPHAESTUS,
+			planetB: FAR,
+			rangeUpgrades: 1,
+			enabled: true,
+		});
+
+		expect(raukkHasGate(FAR)).toBe(true);
+		expect(raukkHasGate(HEPHAESTUS)).toBe(true);
+		// case and whitespace, as every planet id lookup here is
+		expect(raukkHasGate(` ${FAR.toLowerCase()} `)).toBe(true);
+
+		store.setPlannedGate("g1", { enabled: false });
+
+		expect(raukkHasGate(FAR)).toBe(false);
+		// a transcribed gate planet is unaffected either way
+		expect(raukkHasGate(HEPHAESTUS)).toBe(true);
 	});
 
 	/*

@@ -506,6 +506,19 @@ export function claimChainFlows(
 /** Pricing of one legs distance term, damage included */
 interface ILegPricing {
 	effectiveParsecs: number;
+	/**
+	 * Parsecs the ship actually FLIES under its own drive.
+	 *
+	 * Split from `effectiveParsecs` because the two answer different
+	 * questions once a leg may mix both modes. `effectiveParsecs` is the
+	 * whole distance ridden and weights the per flow allocation; this is
+	 * the only figure a PER PARSEC rate — fuel, damage — may multiply,
+	 * because a gate hop covers its distance without flying it.
+	 *
+	 * Equal to `effectiveParsecs` on a plain FTL leg, and zero on a pure
+	 * gate leg and on every same system leg.
+	 */
+	ftlParsecs: number;
 	effectiveJumps: number;
 	distanceCost: number;
 	sameSystemMode: RAUKK_SAME_SYSTEM_MODE | null;
@@ -558,6 +571,43 @@ function pathMeanDensity(
 }
 
 /**
+ * Parsec weighted mean meteoroid density of the FTL hops of a path.
+ *
+ * The multi modal counterpart of {@link pathMeanDensity}: only the hops
+ * the ship actually flies contribute, because a gate traversal crosses
+ * no meteoroids and weighting its distance into the mean would dilute
+ * the rate the flown hops are charged at. `null` when the path flies no
+ * FTL hop at all, which the caller reads as "no adjustment".
+ *
+ * @author raukk
+ *
+ * @param {IRaukkMultiModalPath} path Multi modal path
+ * @param {IRaukkChainStaticData} data Static lookups
+ * @param {number} densityRef Reference density, the fallback per system
+ * @returns {(number | null)} Mean density, null without an FTL hop
+ */
+function mixedPathMeanDensity(
+	path: IRaukkMultiModalPath,
+	data: IRaukkChainStaticData,
+	densityRef: number
+): number | null {
+	let weighted: number = 0;
+	let parsecs: number = 0;
+
+	path.hops.forEach((hop) => {
+		if (hop.kind !== "ftl" || hop.parsecs <= 0) return;
+
+		const from: number = data.densityOf(hop.fromSystemId) ?? densityRef;
+		const to: number = data.densityOf(hop.toSystemId) ?? densityRef;
+
+		weighted += hop.parsecs * ((from + to) / 2);
+		parsecs += hop.parsecs;
+	});
+
+	return parsecs > 0 ? weighted / parsecs : null;
+}
+
+/**
  * Prices the distance term and the damage rate of one leg.
  *
  * Ordinary legs pay one way parsecs times the profiles ȼ per parsec.
@@ -598,6 +648,7 @@ function priceLeg(
 ): ILegPricing {
 	const flat: ILegPricing = {
 		effectiveParsecs: 0,
+		ftlParsecs: 0,
 		effectiveJumps: 0,
 		distanceCost: 0,
 		sameSystemMode: null,
@@ -650,14 +701,32 @@ function priceLeg(
 			profile
 		);
 
+		/*
+		 * Density of the hops the ship FLIES, gate hops excluded: a
+		 * traversal crosses no meteoroids, so weighting its distance into
+		 * the mean would dilute the rate the flown hops are charged at.
+		 */
+		const density: number | null = mixedPathMeanDensity(
+			leg.mixedPath,
+			data,
+			chainConfig.densityRef
+		);
+
 		return {
 			...flat,
 			effectiveParsecs: leg.mixedPath.parsecs,
+			ftlParsecs: raukkFtlParsecsOf(leg.mixedPath),
 			effectiveJumps: raukkFtlJumpsOf(leg.mixedPath),
 			distanceCost:
 				raukkFtlParsecsOf(leg.mixedPath) * profile.costPerParsec +
 				gate.fees +
 				gate.fuelCost,
+			pathMeanDensity: density,
+			damagePerParsec:
+				density !== null && chainConfig.densityRef > 0
+					? (profile.damagePerParsec * density) /
+						chainConfig.densityRef
+					: profile.damagePerParsec,
 			gate,
 		};
 	}
@@ -672,6 +741,7 @@ function priceLeg(
 
 		return {
 			effectiveParsecs: leg.route.parsecs,
+			ftlParsecs: leg.route.parsecs,
 			effectiveJumps: leg.route.jumps,
 			distanceCost: leg.route.parsecs * profile.costPerParsec,
 			sameSystemMode: null,
@@ -754,6 +824,8 @@ function priceLeg(
 
 	return {
 		effectiveParsecs: twoJumpParsecs!,
+		// the ship really flies out to the neighbour and back
+		ftlParsecs: twoJumpParsecs!,
 		effectiveJumps: 2,
 		distanceCost: twoJumpCost!,
 		sameSystemMode: "two-jump",
@@ -909,15 +981,19 @@ export function calculateChainShipping(
 		const gate: IRaukkGateLegCost | null = pricing[index].gate;
 
 		/*
-		 * A gate served leg takes the flat per traversal damage of
-		 * shipping-calibration.md section 4 and NO per parsec damage:
-		 * the ship never flies those parsecs, the gate does.
+		 * Both modes wear the hull for what each of them does, and a leg
+		 * may be either or BOTH. Every gate traversal takes the flat
+		 * damage of shipping-calibration.md section 4 and no per parsec
+		 * damage — the ship never flies those parsecs, the gate does —
+		 * while the parsecs it does fly are charged at the per parsec
+		 * rate. `ftlParsecs` is zero on a pure gate leg and equal to the
+		 * whole route on a leg with no gate in it, so the one expression
+		 * covers all three cases.
 		 */
 		return (
-			(gate !== null
-				? gate.damage
-				: pricing[index].effectiveParsecs *
-					pricing[index].damagePerParsec) + profile.damagePerStlBlock
+			pricing[index].ftlParsecs * pricing[index].damagePerParsec +
+			(gate !== null ? gate.damage : 0) +
+			profile.damagePerStlBlock
 		);
 	});
 

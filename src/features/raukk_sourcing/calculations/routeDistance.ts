@@ -181,15 +181,34 @@ export const RAUKK_GATE_PLANET_IDS: Set<string> = new Set([
 ]);
 
 /**
- * Whether a planet carries a gate, as far as the transcription knows.
+ * Whether a planet carries a gate the routing would fly.
+ *
+ * The transcription, PLUS the ends of any planned gate currently
+ * registered. Including the planned ones is the point: while a planned
+ * gate is switched on the whole account is routed over it, so a surface
+ * that answered "no gate here" for its endpoints would contradict the
+ * chain timings computed on the same page — a depot the router is
+ * already using, flagged as unreachable.
+ *
+ * It stays ADVISORY either way. The transcription is a snapshot and a
+ * gate built after it was taken is in neither set, so anything gating a
+ * user CHOICE on this has to leave a way past it.
  *
  * @author raukk
  *
  * @param {string} planetNaturalId Planet Natural Id
- * @returns {boolean} Whether a gate stands there
+ * @returns {boolean} Whether a gate stands there, or is planned to
  */
 export function raukkHasGate(planetNaturalId: string): boolean {
-	return RAUKK_GATE_PLANET_IDS.has(planetNaturalId.trim().toUpperCase());
+	const wanted: string = planetNaturalId.trim().toUpperCase();
+
+	if (RAUKK_GATE_PLANET_IDS.has(wanted)) return true;
+
+	return plannedGateLinks.some(
+		(link) =>
+			link.a.trim().toUpperCase() === wanted ||
+			link.b.trim().toUpperCase() === wanted
+	);
 }
 
 /**
