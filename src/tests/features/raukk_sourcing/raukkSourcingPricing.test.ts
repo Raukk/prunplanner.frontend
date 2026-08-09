@@ -2,11 +2,14 @@ import { describe, it, expect } from "vitest";
 
 // Functions
 import {
+	aggregateCoverage,
 	aggregateProducerPrice,
+	blendMarketTopUp,
 	buildInputRows,
 	buildSourceOptions,
 	createRaukkPriceResolver,
 	formatSourceOptionLabel,
+	inputDemandPerDay,
 	isAggregateSource,
 	maxAbsoluteOutputDelta,
 	outputsSettled,
@@ -76,7 +79,58 @@ describe("Raukk Sourcing Pricing", () => {
 		it("narrows the sentinels", () => {
 			expect(isAggregateSource("AGG_AVG")).toBe(true);
 			expect(isAggregateSource("AGG_MAX")).toBe(true);
+			expect(isAggregateSource("AGG_AVG_MKT")).toBe(true);
 			expect(isAggregateSource("uuid-1")).toBe(false);
+		});
+	});
+
+	describe("aggregateCoverage", () => {
+		it("covers the drawn share of the pools output", () => {
+			// 100 made, 90 needed here and 90 drawn elsewhere
+			expect(aggregateCoverage(100, 90, 90)).toBeCloseTo(0.5556, 4);
+		});
+
+		it("caps a pool bigger than its demand at full coverage", () => {
+			expect(aggregateCoverage(500, 90, 10)).toBe(1);
+		});
+
+		it("covers nothing without output", () => {
+			expect(aggregateCoverage(0, 90, 0)).toBe(0);
+		});
+
+		it("covers fully when nothing is drawn at all", () => {
+			expect(aggregateCoverage(100, 0, 0)).toBe(1);
+		});
+	});
+
+	describe("blendMarketTopUp", () => {
+		it("pays the average for the covered share and market for the rest", () => {
+			// two thirds at 12, one third at 30
+			expect(blendMarketTopUp(12, 30, 2 / 3)).toBeCloseTo(18, 10);
+		});
+
+		it("clamps the coverage into [0, 1]", () => {
+			expect(blendMarketTopUp(12, 30, 5)).toBe(12);
+			expect(blendMarketTopUp(12, 30, -1)).toBe(30);
+		});
+	});
+
+	describe("inputDemandPerDay", () => {
+		it("sums net inputs and the repair demand", () => {
+			const planResult: IRaukkInputRowSource = {
+				materialio: [
+					{ ticker: "RAT", delta: -12 },
+					{ ticker: "HE", delta: -2 },
+					// an output is no demand
+					{ ticker: "ALO", delta: 30 },
+				],
+				workforceMaterialIO: [{ ticker: "RAT", input: 12 }],
+				productionMaterialIO: [{ ticker: "HE", input: 2 }],
+			};
+
+			expect(
+				inputDemandPerDay(planResult, { HE: 0.5, BSE: 0.25 })
+			).toStrictEqual({ RAT: 12, HE: 2.5, BSE: 0.25 });
 		});
 	});
 
@@ -170,6 +224,49 @@ describe("Raukk Sourcing Pricing", () => {
 					RAT: { mode: "plan", sourcePlanUuid: "AGG_MAX" },
 				})("RAT")
 			).toStrictEqual({ price: 20, fromPlanUuid: "AGG_MAX" });
+		});
+
+		it("prices the CX mode like no configuration at all", () => {
+			expect(resolverFor({ RAT: { mode: "cx" } })("RAT")).toStrictEqual({
+				price: 42,
+			});
+		});
+
+		it("tops the market aggregate up at the market price", () => {
+			// pool of 400 against 800 drawn: half covered at 17.5, half at 42
+			const resolve = createRaukkPriceResolver({
+				sources: {
+					RAT: { mode: "plan", sourcePlanUuid: "AGG_AVG_MKT" },
+				},
+				getExchange: () => undefined,
+				getDefaultPrice: () => 42,
+				getProducers: (ticker: string) => producers[ticker] ?? [],
+				getDemand: () => 300,
+				getOthersDrawn: () => 500,
+			});
+
+			expect(resolve("RAT")).toStrictEqual({
+				price: 29.75,
+				fromPlanUuid: "AGG_AVG_MKT",
+			});
+		});
+
+		it("prices the market aggregate as a plain average when it covers", () => {
+			const resolve = createRaukkPriceResolver({
+				sources: {
+					RAT: { mode: "plan", sourcePlanUuid: "AGG_AVG_MKT" },
+				},
+				getExchange: () => undefined,
+				getDefaultPrice: () => 42,
+				getProducers: (ticker: string) => producers[ticker] ?? [],
+				getDemand: () => 50,
+				getOthersDrawn: () => 0,
+			});
+
+			expect(resolve("RAT")).toStrictEqual({
+				price: 17.5,
+				fromPlanUuid: "AGG_AVG_MKT",
+			});
 		});
 
 		it("falls back to market for aggregates without producers", () => {
@@ -314,6 +411,7 @@ describe("Raukk Sourcing Pricing", () => {
 				"b",
 				"AGG_AVG",
 				"AGG_MAX",
+				"AGG_AVG_MKT",
 			]);
 		});
 
@@ -396,10 +494,35 @@ describe("Raukk Sourcing Pricing", () => {
 				"b",
 				"AGG_AVG",
 				"AGG_MAX",
+				"AGG_AVG_MKT",
 			]);
 			expect(options[0].self).toBe(true);
 			expect(options[1].self).toBe(false);
 			expect(options[2].self).toBe(false);
+		});
+
+		it("blends the market top up option and states its coverage", () => {
+			// pool 400, drawn 50 here and 70 elsewhere: fully covered
+			expect(build({ marketPrice: 42 })[4].costPerUnit).toBe(17.5);
+			expect(build()[4].coverage).toBe(1);
+
+			// the same pool against a demand it cannot cover
+			const short: IRaukkSourceOption[] = build({
+				marketPrice: 42,
+				prospectiveDrawPerDay: 730,
+			});
+
+			// 400 / 800 covered at 17.5, the rest at 42
+			expect(short[4].coverage).toBe(0.5);
+			expect(short[4].costPerUnit).toBe(29.75);
+		});
+
+		it("leaves the market top up option unblended without a market price", () => {
+			const options: IRaukkSourceOption[] = build({
+				prospectiveDrawPerDay: 730,
+			});
+
+			expect(options[4].costPerUnit).toBe(17.5);
 		});
 
 		it("is empty without producers", () => {

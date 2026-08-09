@@ -292,6 +292,8 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				"baseFraction",
 				// frozen by the sourced cost notes, not by shipping
 				"inputPrices",
+				// frozen by the account wide bucket defaults, not by shipping
+				"inputBuckets",
 				"sellPrices",
 			]);
 			expect(snapshot.shippingFraction).toBeUndefined();
@@ -1342,6 +1344,94 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				context(planResult(1, 0))
 			);
 
+			expect(snapshot.draws).toStrictEqual({});
+		});
+	});
+	describe("account wide bucket defaults", () => {
+		beforeEach(() => {
+			store.setShippingConfig({ enabled: false });
+		});
+
+		/** A plan producing ORE at 5 ȼ/u, `unitsPerDay` a day */
+		function oreSource(unitsPerDay: number): void {
+			store.setSnapshot("source", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Source",
+				planetNaturalId: SOURCE_PLANET,
+				outputs: {
+					ORE: {
+						ticker: "ORE",
+						unitsPerDay,
+						costPerUnit: 5,
+						breakdown: {
+							workforce: 0,
+							repair: 0,
+							inputs: 5,
+							shipping: 0,
+						},
+					},
+				},
+				draws: {},
+			});
+		}
+
+		it("prices an unconfigured ticker from the bucket default", async () => {
+			oreSource(1000);
+			store.setSourcingDefault("production", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// the pool price, not the 100 ȼ market price
+			expect(snapshot.inputPrices?.ORE).toBe(5);
+			expect(snapshot.draws.source).toStrictEqual({ ORE: 100 });
+			// the effective source is frozen onto the snapshot
+			expect(snapshot.config?.sources.ORE).toStrictEqual({
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+			expect(snapshot.inputBuckets).toStrictEqual({
+				ORE: ["production"],
+			});
+		});
+
+		it("tops a short pool up at the market price", async () => {
+			// 50 a day against a need of 100: half covered
+			oreSource(50);
+			store.setSourcingDefault("production", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG_MKT",
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// 0.5 × 5 + 0.5 × 100
+			expect(snapshot.inputPrices?.ORE).toBe(52.5);
+			// the whole need stays booked, the pool IS oversubscribed
+			expect(snapshot.draws.source).toStrictEqual({ ORE: 100 });
+		});
+
+		it("lets a stored per plan entry win over the default", async () => {
+			oreSource(1000);
+			store.setSourcingDefault("production", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+			// the explicit opt out
+			store.setTickerSource("consumer", "ORE", { mode: "cx" });
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			expect(snapshot.inputPrices?.ORE).toBe(100);
 			expect(snapshot.draws).toStrictEqual({});
 		});
 	});

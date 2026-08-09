@@ -77,7 +77,8 @@
 		"AVG7D": "Average 7d",
 		"AVG30D": "Average 30d",
 		"MANUAL": "Manual",
-		"default": "CX Preference"
+		"default": "Default (account/CX)",
+		"cx": "CX Preference (pinned)"
 	},
 	"local_price": {
 		"absolute": "ȼ/u",
@@ -94,19 +95,23 @@
 		"agg_avg": "All producers (weighted avg)",
 		"agg_max": "Highest-cost producer",
 		"self": "Own output",
-		"stale": "stale snapshot"
+		"stale": "stale snapshot",
+		"agg_avg_mkt": "All producers (weighted avg + market top-up)",
+		"pooled": "from own bases"
 	},
 	"shipping_page": {
 		"view_title": "Shipping",
 		"info": "Fleet, routes and depots of the whole account, one section at a time. Everything here is account-global; the per-plan pieces — sources, local market rates and the plan CX anchor — stay on each plan's Sourcing tool.",
 		"sections": {
 			"settings": "Settings",
+			"defaults": "Defaults",
 			"fleet": "Fleet",
 			"chains": "Chains",
 			"depots": "Depots",
 			"visuals": "Visuals",
 			"calibration": "Calibration",
 			"settings_tooltip": "Account-wide shipping switches: whether shipping is charged at all, the default ship profile, cadences and the CX anchor rule.",
+			"defaults_tooltip": "Where every base sources each input group by default, set once instead of base by base. Independent of the shipping switch.",
 			"fleet_tooltip": "Every ship the account commits, its wear and its share of the repair bill.",
 			"chains_tooltip": "Routes the cargo actually flies — authored chains, the automatic ones and the hub/spoke rollup.",
 			"depots_tooltip": "Planets that act as ship homes and handover points.",
@@ -115,7 +120,11 @@
 		},
 		"manage_link": "Manage fleet & routes",
 		"recompute": "Recompute Chains",
-		"recompute_tooltip": "Re-costs every chain from the stored snapshot flows. To refresh the snapshots themselves, use the sourcing tool of a plan.",
+		"recompute_tooltip": "Re-costs every chain from the stored snapshot flows. It never touches the snapshots — use Recompute Snapshots for those.",
+		"recompute_snapshots": "Recompute Snapshots",
+		"recompute_snapshots_tooltip": "Recomputes every stored snapshot flagged stale, upstream first, then re-costs the chains. This is what moves lanes onto a changed fleet: a ship count crossing zero stales the stored results, but the assignment each lane was costed with only changes when its plan is recomputed.",
+		"recompute_snapshots_progress": "Recomputing snapshot {done}/{total}: {name}…",
+		"snapshot_error": "{name}: {message}",
 		"chain_error": "Chain '{name}': {message}",
 		"auto_chain_error": "Automatic chains: {message}"
 	},
@@ -225,6 +234,8 @@
 		"drydock_cost": "Wear over all hulls of the type costs {daily} ȼ/day, already included in the lane and chain costs.",
 		"drydock_unknown": "At least one stored result of this type predates wear tracking, so the wear is unknown rather than zero. Recompute the plan snapshots and chains to fill it in.",
 		"assigned": "Routes",
+		"stale": "stale",
+		"stale_tooltip": "{stale} of {total} routes on this type come from stored results flagged stale: the assignment is what the LAST compute chose, and a fleet change stales the stored results without moving anything. Recompute the plan snapshots and the chains and the automatic pick reruns over the fleet you own now.",
 		"calibrate": "Calibrate",
 		"remove": "Remove",
 		"add": "Add Type",
@@ -826,5 +837,19 @@
 		"legend_outside": "A ringed point overflows it and needs a bigger bay or a shorter cadence",
 		"legend_diagonal": "Above the diagonal the cargo is volume bound, below it weight bound",
 		"legend_clamped": "A point pinned to the plot edge reaches beyond the axis — its tooltip carries the real figure"
+	},
+	"defaults": {
+		"title": "Sourcing Defaults",
+		"tooltip": "Default source of every base at once, per input group: a ticker without its own setting on a base follows the default of its group. \"All producers (weighted avg + market top-up)\" charges the share your own bases actually cover at their weighted average and buys the rest at the market price — bases producing two thirds of your rations pay two thirds average and one third market. A per-base setting always wins; pick \"CX Preference (pinned)\" on a row to opt that one ticker out.",
+		"none": "No default (CX preference)",
+		"row_marker": "(default)",
+		"row_marker_tooltip": "Follows the account default of this input group, this base stores no setting of its own.",
+		"confirm_title": "Replace the settings on every base?",
+		"confirm_text": "{tickers} ticker setting(s) on {plans} base(s) override this default. Replacing drops them, so those bases follow the account default from here on.",
+		"confirm_apply": "Replace everywhere",
+		"confirm_keep": "Keep per-base settings",
+		"info": "Default source of every base at once, per input group. A ticker without its own setting on a base follows the default of its group — rations, drinking water and the repair materials are configured once here instead of base by base. Changing a default marks every stored snapshot stale.",
+		"note": "Account defaults —",
+		"note_link": "manage"
 	}
 }

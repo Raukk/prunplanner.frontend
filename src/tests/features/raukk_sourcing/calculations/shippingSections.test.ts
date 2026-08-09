@@ -16,9 +16,13 @@ describe("raukkShippingSections", () => {
 		]);
 	});
 
-	it("offers only Settings while shipping is off", () => {
-		// Settings carries the switch, so it is the only way back
-		expect(raukkShippingSections(false)).toStrictEqual(["settings"]);
+	it("keeps the switch-independent sections while shipping is off", () => {
+		// Settings carries the switch itself; the sourcing defaults only
+		// price inputs, they fly nothing, so shipping must not hide them
+		expect(raukkShippingSections(false)).toStrictEqual([
+			"settings",
+			"defaults",
+		]);
 	});
 
 	it("does not hand out the shared constant array", () => {
@@ -40,6 +44,10 @@ describe("raukkShippingResolveSection", () => {
 		// turning shipping off while standing on Depots must not strand
 		// the page on a tab that no longer renders
 		expect(raukkShippingResolveSection("depots", false)).toBe("settings");
+	});
+
+	it("leaves the sourcing defaults reachable with shipping off", () => {
+		expect(raukkShippingResolveSection("defaults", false)).toBe("defaults");
 	});
 
 	it("leaves Settings alone either way", () => {
@@ -70,6 +78,12 @@ describe("raukkShippingSectionFromQuery", () => {
 	it("will not deep link into a section shipping has closed off", () => {
 		expect(raukkShippingSectionFromQuery("visuals", false)).toBe(
 			"settings"
+		);
+	});
+
+	it("still deep links to the defaults with shipping off", () => {
+		expect(raukkShippingSectionFromQuery("defaults", false)).toBe(
+			"defaults"
 		);
 	});
 

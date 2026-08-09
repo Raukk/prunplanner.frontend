@@ -38,6 +38,7 @@ const i18n = createI18n({
 /** Every section stubbed to a marker — the strip is what is under test */
 const STUBS: Record<string, unknown> = {
 	RaukkShippingSettingsSection: { template: '<div id="s-settings" />' },
+	RaukkSourcingDefaultsSection: { template: '<div id="s-defaults" />' },
 	RaukkFleetSection: { template: '<div id="s-fleet" />' },
 	RaukkChainSection: { template: '<div id="s-chains" />' },
 	RaukkDepotSection: { template: '<div id="s-depots" />' },
@@ -77,7 +78,7 @@ function tabLabels(wrapper: VueWrapper): string[] {
 	return wrapper
 		.findAllComponents(PButton)
 		.map((button) => button.text())
-		.filter((label) => label !== "Recompute Chains");
+		.filter((label) => !label.startsWith("Recompute "));
 }
 
 async function clickTab(wrapper: VueWrapper, label: string): Promise<void> {
@@ -90,17 +91,22 @@ async function clickTab(wrapper: VueWrapper, label: string): Promise<void> {
 	await wrapper.vm.$nextTick();
 }
 
-/** Which section marker is currently in the DOM */
+/** Marker id of every stubbed section, by component name */
+const MARKERS: Record<string, string> = {
+	RaukkShippingSettingsSection: "#s-settings",
+	RaukkSourcingDefaultsSection: "#s-defaults",
+	RaukkFleetSection: "#s-fleet",
+	RaukkChainSection: "#s-chains",
+	RaukkDepotSection: "#s-depots",
+	RaukkShippingVisualsSection: "#s-visuals",
+	RaukkShippingCalibrationSection: "#s-calibration",
+};
+
+/** Which section markers are currently in the DOM */
 function shown(wrapper: VueWrapper): string[] {
-	return Object.keys(STUBS)
-		.map((name) => name)
-		.filter((name) => {
-			const id: string = `#s-${name
-				.replace(/^Raukk(Shipping)?/, "")
-				.replace(/Section$/, "")
-				.toLowerCase()}`;
-			return wrapper.find(id).exists();
-		});
+	return Object.entries(MARKERS)
+		.filter(([, id]) => wrapper.find(id).exists())
+		.map(([name]) => name);
 }
 
 describe("RaukkShippingPage section tabs", () => {
@@ -114,6 +120,7 @@ describe("RaukkShippingPage section tabs", () => {
 
 		expect(tabLabels(wrapper)).toStrictEqual([
 			"Settings",
+			"Defaults",
 			"Fleet",
 			"Chains",
 			"Depots",
@@ -139,13 +146,24 @@ describe("RaukkShippingPage section tabs", () => {
 		expect(wrapper.find("#s-visuals").exists()).toBe(true);
 	});
 
-	it("collapses to Settings while shipping is off", async () => {
+	it("collapses to the switch-independent sections while shipping is off", async () => {
 		useRaukkSourcingStore().setShippingConfig({ enabled: false });
 
 		const { wrapper } = await render();
 
-		expect(tabLabels(wrapper)).toStrictEqual(["Settings"]);
+		// the sourcing defaults price inputs, they fly nothing, so the
+		// shipping switch must not take them away
+		expect(tabLabels(wrapper)).toStrictEqual(["Settings", "Defaults"]);
 		expect(wrapper.find("#s-settings").exists()).toBe(true);
+	});
+
+	it("reaches the sourcing defaults with shipping off", async () => {
+		useRaukkSourcingStore().setShippingConfig({ enabled: false });
+
+		const { wrapper } = await render();
+		await clickTab(wrapper, "Defaults");
+
+		expect(shown(wrapper)).toStrictEqual(["RaukkSourcingDefaultsSection"]);
 	});
 
 	it("does not strand the page when shipping is switched off", async () => {
@@ -160,12 +178,20 @@ describe("RaukkShippingPage section tabs", () => {
 		expect(wrapper.find("#s-settings").exists()).toBe(true);
 	});
 
-	it("hides the recompute action while shipping is off", async () => {
+	it("hides the recompute actions while shipping is off", async () => {
 		useRaukkSourcingStore().setShippingConfig({ enabled: false });
 
 		const { wrapper } = await render();
 
 		expect(wrapper.text()).not.toContain("Recompute Chains");
+		expect(wrapper.text()).not.toContain("Recompute Snapshots");
+	});
+
+	it("offers both page-level recompute actions while shipping is on", async () => {
+		const { wrapper } = await render();
+
+		expect(wrapper.text()).toContain("Recompute Chains");
+		expect(wrapper.text()).toContain("Recompute Snapshots");
 	});
 });
 

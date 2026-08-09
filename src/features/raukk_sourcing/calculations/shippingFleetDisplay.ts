@@ -91,6 +91,13 @@ export interface IRaukkFleetRow {
 	/** Number of lanes and chains assigned to this type */
 	assignedCount: number;
 	/**
+	 * How many of those come from a stored result flagged stale. The
+	 * row then states the assignment of the LAST compute: a fleet change
+	 * stales every stored result, but nothing moves until the snapshots
+	 * and chains are recomputed.
+	 */
+	staleCount: number;
+	/**
 	 * True while at least one stored result of this type predates the
 	 * wear rollup: the wear is UNKNOWN then, never zero, and the row says
 	 * so instead of promising an eternity between repairs.
@@ -283,6 +290,7 @@ export function raukkFleetRows(
 				entry.utilization !== null &&
 				entry.utilization > 1 + RAUKK_EPSILON_EQUAL,
 			assignedCount: entry.keys.length,
+			staleCount: entry.staleKeys.length,
 			wearUnknown,
 			drydockDays,
 			damagePercentPerDay:

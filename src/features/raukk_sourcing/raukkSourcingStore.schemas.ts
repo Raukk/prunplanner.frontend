@@ -57,7 +57,24 @@ export const RaukkTickerSourceSchema = z.discriminatedUnion("mode", [
 		mode: z.literal("local"),
 		price: RaukkLocalPriceSchema,
 	}),
+	z.object({
+		// raukk: the plans CX preference price, stated explicitly so the
+		// ticker opts out of the account wide bucket default
+		mode: z.literal("cx"),
+	}),
 ]);
+
+/**
+ * raukk: account wide default source per input bucket. Every bucket is
+ * optional — an absent one means the bucket keeps following the CX
+ * preference price — and the whole object is absent in every payload
+ * written before the defaults existed.
+ */
+export const RaukkSourcingDefaultsSchema = z.object({
+	workforce: RaukkTickerSourceSchema.optional(),
+	repair: RaukkTickerSourceSchema.optional(),
+	production: RaukkTickerSourceSchema.optional(),
+});
 
 export const RaukkFtlReactorSchema = z.enum(["standard", "quick-charge"]);
 
@@ -384,6 +401,14 @@ export const RaukkSnapshotSchema = z.object({
 	draws: z.record(z.string(), z.record(z.string(), z.number())),
 	config: RaukkPlanConfigSchema.optional(),
 	baseFraction: z.number().optional(),
+	// raukk: frozen bucket classification of the sourcable tickers, absent
+	// on every snapshot written before the account wide defaults existed
+	inputBuckets: z
+		.record(
+			z.string(),
+			z.array(z.enum(["workforce", "repair", "production"]))
+		)
+		.optional(),
 	// frozen alongside the numbers they priced, they back the read only
 	// sourced cost notes; absent in payloads predating those notes
 	inputPrices: z.record(z.string(), z.number()).optional(),
@@ -431,6 +456,9 @@ export const RaukkSourcingExportSchema = z.object({
 	// same reason the five v2 slices are: every payload written before
 	// depots existed knows none.
 	depots: z.record(z.string(), RaukkDepotSchema).default({}),
+	// raukk: account wide bucket defaults, absent in every payload written
+	// before they existed — an empty object is the pre defaults behaviour
+	sourcingDefaults: RaukkSourcingDefaultsSchema.prefault({}),
 });
 
 export type RaukkSourcingExportType = z.infer<typeof RaukkSourcingExportSchema>;

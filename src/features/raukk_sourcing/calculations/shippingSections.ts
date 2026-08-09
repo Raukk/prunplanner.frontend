@@ -6,6 +6,7 @@
 /** Sections of the Shipping page, in tab strip order */
 export const RAUKK_SHIPPING_SECTIONS = [
 	"settings",
+	"defaults",
 	"fleet",
 	"chains",
 	"depots",
@@ -19,10 +20,18 @@ export type RaukkShippingSection = (typeof RAUKK_SHIPPING_SECTIONS)[number];
 export const RAUKK_SHIPPING_DEFAULT_SECTION: RaukkShippingSection = "fleet";
 
 /**
+ * Sections that do not depend on the shipping switch. Settings carries
+ * the switch itself, so it is always the way back; the sourcing
+ * defaults only price inputs, they fly nothing, so closing them off
+ * along with shipping would hide account-wide configuration for no
+ * reason.
+ */
+const RAUKK_SHIPPING_ALWAYS: RaukkShippingSection[] = ["settings", "defaults"];
+
+/**
  * Sections reachable right now. Charging shipping is what produces the
- * fleet, the chains and every number the other sections render, so with
- * it switched off there is nothing to tab through — Settings, which
- * carries the switch, is the only way back.
+ * fleet, the chains and every number the rest of the page renders, so
+ * with it switched off only {@link RAUKK_SHIPPING_ALWAYS} is left.
  *
  * @author raukk
  *
@@ -32,7 +41,7 @@ export const RAUKK_SHIPPING_DEFAULT_SECTION: RaukkShippingSection = "fleet";
 export function raukkShippingSections(
 	enabled: boolean
 ): RaukkShippingSection[] {
-	return enabled ? [...RAUKK_SHIPPING_SECTIONS] : ["settings"];
+	return enabled ? [...RAUKK_SHIPPING_SECTIONS] : [...RAUKK_SHIPPING_ALWAYS];
 }
 
 /**
