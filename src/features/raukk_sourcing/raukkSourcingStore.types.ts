@@ -14,6 +14,7 @@ import {
 	IRaukkShipProfile,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
+	IRaukkSourcingDefaults,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 
 /** A single plan offering `ticker` as an output of its snapshot */
@@ -65,4 +66,7 @@ export interface IRaukkExportPayload {
 	depots: Record<string, IRaukkDepot>;
 	/** raukk: planned gates by id, absent before the gate planning tool */
 	plannedGates: Record<string, IRaukkPlannedGate>;
+	/** raukk: account wide default source per input bucket, absent before
+	 * the defaults existed */
+	sourcingDefaults: IRaukkSourcingDefaults;
 }

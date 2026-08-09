@@ -221,7 +221,7 @@ anywhere in the repo. Not retroactive.
   Switching/moving/re-pricing an ENABLED gate stales chains (and
   snapshots while shipping is on); labels, notes and switched-off
   edits stale nothing. Full reasoning in
-  docs/raukk_sourcing/shipping-decisions.md round 23.
+  docs/raukk_sourcing/shipping-decisions.md round 24.
 - 2026-08-09: Gate build costs transcribed from the in-game GTWI panel
   (13 configurations, two gates) into `assets/raukk_gate_costs.json` —
   FIO serves none of this (`/sites/gateways` 401, `/infrastructure/
@@ -234,7 +234,7 @@ anywhere in the repo. Not retroactive.
   panel's Reachable Systems distances match it to three decimals, which
   validates that metric against the game. Planned-gate clearance is now
   derived from volume upgrades rather than typed. Full reasoning in
-  docs/raukk_sourcing/shipping-decisions.md round 24.
+  docs/raukk_sourcing/shipping-decisions.md round 25.
 - 2026-08-09: Plan tool tabs are sticky (user request — open/close a
   tool while working further down the plan). The toolbar and the tool
   view are now separate grid items of PlanView's header grid (rows 4
@@ -247,3 +247,89 @@ anywhere in the repo. Not retroactive.
   replaced the material i/o column's hardcoded `top-12`. Opening a
   tool while scrolled down scrolls the panel into view, it would
   otherwise render off-screen above.
+- 2026-08-09: Account wide sourcing defaults (user request — setting
+  rations, drinking water and repair materials per base was the chore).
+  `sourcingDefaults` sits next to `shippingConfig`, one optional source
+  per input bucket (workforce/repair/production), merged in at
+  RESOLUTION time by `resolveEffectiveSources`: a ticker without a per
+  plan entry follows its bucket default, nothing is written into the
+  configs, so a base keeps following a default that changes later. The
+  per plan entry always wins; new source mode `{ mode: "cx" }` is the
+  explicit "this ticker, this base, CX price" opt out (without it,
+  unchecking a defaulted row would clear nothing and the default would
+  re-tick it). Changing a default stales the whole store and, only when
+  per plan entries of that bucket exist, offers to DROP them so those
+  bases follow the default too. Buckets per ticker are frozen onto the
+  snapshot (`inputBuckets`) — the store must answer the replace
+  question without running a plan calculation. Third aggregate
+  `AGG_AVG_MKT`: coverage = pool output ÷ (own need + others' draws),
+  price = coverage × pool average + rest × CX preference. The FULL need
+  stays booked as a draw (the pool really is oversubscribed by the
+  market bought share, and capping it would drift upward over passes),
+  so the base fraction and the shipping routing of a topped up draw
+  overstate it slightly — accepted, see
+  docs/raukk_sourcing/sourcing-defaults.md. Edited on the account level
+  page (/shipping), NOT on a plan's sourcing panel (user correction: an
+  account wide value does not belong to whichever base is open); the
+  plan panel keeps a read-only line naming the defaults in force, so the
+  rows marked "(default)" explain themselves.
+- 2026-08-09: Visualization palette consolidated (user request — do the
+  new data viz match the app's tone, and are they easy to find). New
+  `calculations/raukkVizPalette.ts` owns every non-series color of both
+  the oversubscription report and the Shipping page's visualisations:
+  surfaces, the neutral warm-gray ink ramp, the alert pair (one red,
+  one amber), the ramp hue and the lime accent. Values come from the
+  app's Tailwind tokens where one exists. Notable changes, not pure
+  renames: the three map/plane canvases were a blue-black `#050a0d`
+  with blue-slate `#1b2530`/`#243040`/`#20242a` rules — they read as a
+  different app to the neutral report tabs, so the canvas is now a
+  neutral `#0a0b0b` and the rules `#2c2c2a`; the Beeswarm and Bubbles
+  tabs each carried their own utilization alpha curve (0.12+0.55u and
+  0.10+0.5u against the shared 0.08+0.8s), so a 100 % row rendered at
+  three intensities — all three now call `raukkOversubBlueRamp`; the
+  Dumbbell's headroom sage green `#8fce8f` became the app's `positive`
+  lime; the capacity plane's selected hull box was the SAME `#3987e5`
+  as its production-class dots and is now the lime accent; the viz
+  tooltip invented its own `#252525`/`white-10` surface and now mirrors
+  `tooltipConfig` (`bg-black/90`, `border-white/20`); three tabs set
+  `system-ui` on their SVG text while the app is Roboto. Drift pairs
+  merged: `#565650`/`#56554f`, `#2c2c2a`/`#2a2a28`, `#212529`/`#252525`.
+  NOT changed, offered: the ramp blue, consumer slot 0 and the
+  production cargo class are all `#3987e5` — documented as
+  "single-hue blue" and a real ambiguity, but re-hueing a series is a
+  design decision, not a consistency pass.
+  Discoverability side: the 11 oversub tab labels are chart-form names
+  (Beeswarm, Dumbbell, Waffle...) that name no question, so each got a
+  `tabs.<key>_tooltip` line shown both on hover and as prose under the
+  active tab; both tab strips gained `flex-wrap` (11 buttons in a
+  non-wrapping `inline-flex` overflowed narrow viewports); the Shipping
+  visuals section used an `h3 text-white/80` with no info line where
+  every sibling uses `h4 font-bold py-3` plus one; the capacity plane
+  colored its dots by cargo class with no key at all. `empire.md` and
+  the shipping page intro now point at both.
+- 2026-08-09: Shipping page split into sections (user request — the page
+  is overloaded, tab it like the plan tools). Was one scroll with every
+  section mounted and none collapsible: config bar, Fleet, Chains,
+  Automatic chains, Hub/spoke, Depots, Visualisations. Now a sticky
+  strip of six — Settings · Fleet · Chains · Depots · Visuals ·
+  Calibration — following the PlanView tool-tab shape, with a one-shot
+  `?section=` deep link stripped via `router.replace` exactly as
+  `?tool=` is. Rules live in `calculations/shippingSections.ts`, so the
+  gate and the fallbacks are testable without mounting the page.
+  KEPT ALIVE, not `v-if`: every section holds unsaved local state — the
+  chain editor's entire draft only reaches the store on save, plus the
+  add-ship / add-depot pickers, expanded rows and delete confirmations —
+  so remounting on a tab click would discard it silently. There is a
+  regression test that fails without the KeepAlive. KeepAlive caches
+  COMPONENT children with ONE root only, which is why Fleet, Chain and
+  Depot sections gained a wrapping div, and why the config bar and the
+  calibration editor were extracted into RaukkShippingSettingsSection /
+  RaukkShippingCalibrationSection instead of staying inline markup.
+  Cost is unchanged: the old page had every section mounted at once
+  anyway, and now only visited ones are.
+  Fleet is the DEFAULT section on purpose — every existing in-app link
+  to `/shipping` (oversub fleet rows and marks, the grid's ship link,
+  the sourcing tool's ship-time link, the two "Manage fleet & routes"
+  buttons) is fleet-oriented, so none of them needed retargeting.
+  Calibration stopped being a show/hide button in the config bar;
+  `shipping.show_calibration` / `hide_calibration` deleted.

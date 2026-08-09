@@ -864,7 +864,7 @@
 		color: rgba(255, 255, 255, 0.5);
 		font-weight: 600;
 		text-align: right;
-		background: #212529;
+		background: var(--rviz-chip);
 		vertical-align: bottom;
 		max-width: 92px;
 		overflow: hidden;
@@ -889,7 +889,7 @@
 	table.mx td.rowh {
 		position: sticky;
 		left: 0;
-		background: #212529;
+		background: var(--rviz-chip);
 		text-align: left;
 		z-index: 2;
 		border-right: 1px solid rgba(255, 255, 255, 0.09);
@@ -912,7 +912,7 @@
 	table.mx td.totc {
 		position: sticky;
 		right: 0;
-		background: #212529;
+		background: var(--rviz-chip);
 		z-index: 2;
 		border-left: 1px solid rgba(255, 255, 255, 0.09);
 		text-align: right;
@@ -929,12 +929,12 @@
 	table.mx td.cell.hatched {
 		background: repeating-linear-gradient(
 			45deg,
-			rgba(199, 0, 57, 0.28) 0 3px,
+			rgba(var(--rviz-alert-rgb), 0.28) 0 3px,
 			transparent 3px 7px
 		);
 	}
 	table.mx td.cell.extcell {
-		background: rgba(137, 135, 129, 0.14);
+		background: rgba(var(--rviz-ink-rgb), 0.14);
 	}
 	table.mx td.netc {
 		text-align: right;
@@ -957,7 +957,7 @@
 		left: 0;
 		top: 0;
 		bottom: 0;
-		background: rgba(57, 135, 229, 0.8);
+		background: rgba(var(--rviz-ramp-rgb), 0.8);
 	}
 	.mmeter i.mover {
 		background: var(--roversub-over);
@@ -965,7 +965,7 @@
 	.mmeter.mnull {
 		background: repeating-linear-gradient(
 			45deg,
-			rgba(137, 135, 129, 0.4) 0 3px,
+			rgba(var(--rviz-ink-rgb), 0.4) 0 3px,
 			transparent 3px 7px
 		);
 	}

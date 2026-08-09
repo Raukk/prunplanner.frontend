@@ -227,6 +227,19 @@ yet; the CVD/contrast validation ships with the scaffolding slice or
 the claim is dropped. Dark-first hardcoded classes per repo norm,
 tokens as CSS vars on the section root.
 
+Everything that is NOT a categorical series color — the surfaces, the
+neutral ink ramp, the alert pair, the ramp hue and the lime accent —
+now lives in `calculations/raukkVizPalette.ts` and is shared with the
+Shipping page's visualisations, so the two feature areas cannot drift
+into two different dark themes. `RAUKK_OVERSUB_STATUS_COLORS` keeps
+naming the MEANING (over / stale / other / external) but takes its
+VALUES from that module. Section roots spread `RAUKK_VIZ_CSS_VARS`;
+SVG presentation attributes bind the TS constants directly (a `var()`
+in a presentation attribute is not worth the browser risk). The
+utilization ramp is `raukkOversubBlueRamp` and nothing else — the
+Beeswarm and Bubbles tabs each had their own alpha curve, so the same
+reading rendered at three different intensities.
+
 Cap convention, all tabs: a capped graphic always co-displays the
 uncapped printed number and marks the clip visibly (jagged edge /
 "+N over" bracket) — `raukkUtilizationBarWidth` precedent.

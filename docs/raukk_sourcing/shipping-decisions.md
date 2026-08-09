@@ -706,7 +706,47 @@ built, and a rented warehouse runs a few thousand ȼ per week for ~10 kt.
 Cargo merely flowing through needs none. The field stays, defaulting to
 zero; it is not a number worth agonising over.
 
-## Round 23 (gate planning tool)
+## Round 23 (a zero-hull type keeps its routes)
+
+Bug report: SCB set to 0 ships kept 11 routes and "Recompute Chains"
+changed nothing (2026-08-09, user, fleet table).
+
+1. **The pick was right, the DISPLAY was stale**: the fleet rollup
+   reads stored snapshot lanes and stored chain results, and
+   `setFleetShip` stales them all when a count crosses zero — but
+   staling moves nothing. Lanes only change hull when their plan's
+   snapshot is recomputed, which happens on PlanView/EmpireView, not
+   on the Shipping page; "Recompute Chains" re-costs chains from the
+   stored snapshot flows and never touches a lane. So the table was
+   faithfully reporting the last compute.
+2. **The table says so now**: each fleet load entry carries the
+   `stale` flag of the result it came from, the rollup collects them
+   per type (`staleKeys`), and the Routes cell tags a row holding
+   any. A row nobody can explain is worse than a slow recompute.
+3. **The page carries its own recompute**: "Recompute Snapshots"
+   recomputes every stale snapshot of the operated plans upstream
+   first and then re-costs the chains, in that order because a chain
+   is costed FROM the snapshot flows. Scope is `scopedSnapshots()`,
+   the same set the fleet rolls up, and only the stale ones — a
+   current snapshot gains nothing from being recomputed. The pass
+   logic is the empire upkeep's, cap included.
+4. **The fallback stops naming an unowned hull**: a pick with nothing
+   to choose from — every owned hull filtered out as STL only on a
+   leg no gate serves — fell back to `defaultProfileId`, which is the
+   SCB starter, so work could be assigned to a hull the account owns
+   none of and draw a fleet row with zero capacity. Both the lane and
+   the chain path now fall back to the smallest OWNED hull
+   (`raukkSmallestCandidate`); only a fleet without a single hull
+   still reaches the default, which is the starter assumption and
+   deliberate. Smallest, not best-fitting: a fallback places work the
+   heuristic could not, and the cheapest hull to fly is the
+   conservative answer.
+5. **Manual assignments still win outright**: none of this touches
+   `assignments[key]`. A user who picked SCB by hand keeps SCB at
+   zero hulls — the assignment is an answer, not a guess, and the
+   utilization row states the consequence.
+
+## Round 24 (gate planning tool)
 
 User request: plan gates that do NOT exist — one seen going up
 in-game, or one the player thinks would be worth building. Delivered
@@ -763,7 +803,7 @@ is in the graph and priced by the chain math when routed, but the
 planning table itself compares TIME only), and no "which of my lanes
 would use it" column.
 
-## Round 24 (gate costs transcribed, and the range cap)
+## Round 25 (gate costs transcribed, and the range cap)
 
 The user transcribed the in-game GATEWAY INFORMATION (GTWI) panel across
 13 configurations on two gates (ZV-307c, SE-648c) into
@@ -816,9 +856,9 @@ The 13 panels are pinned as fixtures in
 change that breaks one of those rows is a change that no longer describes
 the game.
 
-## Round 25 (review fixes: a stranded gate must not route)
+## Round 26 (review fixes: a stranded gate must not route)
 
-Two reviews of the round 23/24 tool — a UI/UX pass and a player pass —
+Two reviews of the round 24/24 tool — a UI/UX pass and a player pass —
 found one blocker and one bug that contradicted the docs. Both are fixed;
 the rest of both reviews is triage, not yet actioned.
 
@@ -837,16 +877,16 @@ the rest of both reviews is triage, not yet actioned.
    to remember to switch it back on. The row says "Not Routed" while the
    two disagree.
 2. **The add form warned about an impossible gate and added it anyway.**
-   Round 24 point 4 claimed it "refuses the second outright"; it did not
+   Round 25 point 4 claimed it "refuses the second outright"; it did not
    — `canAdd` only checked that both fields were non-empty. It now
    refuses `unreachable_range` and `same_system`, and still permits an
    unknown planet id, which is the call the depot table makes for the
    same reason: the bundled systems JSON may not know a planet the user
    does.
 
-Round 24's point 4 wording is corrected by this round.
+Round 25's point 4 wording is corrected by this round.
 
-## Round 26 (gates on FTL routes)
+## Round 27 (gates on FTL routes)
 
 Closes the gap both reviews and the user landed on: an FTL hull's leg
 never consulted the gate network, so no gate — planned or transcribed —

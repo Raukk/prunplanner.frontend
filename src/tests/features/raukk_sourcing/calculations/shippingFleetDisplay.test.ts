@@ -96,6 +96,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 					utilization: 0.5,
 					damagePerDay: 0.004,
 					keys: ["a>CX", "chain:c1"],
+					staleKeys: [],
 				},
 			];
 
@@ -108,6 +109,28 @@ describe("Raukk Shipping: Fleet Display", () => {
 			expect(row.utilizationPercent).toBe(50);
 			expect(row.over).toBe(false);
 			expect(row.assignedCount).toBe(2);
+			expect(row.staleCount).toBe(0);
+		});
+
+		it("counts the routes still holding a stale assignment", () => {
+			const [row] = raukkFleetRows(
+				[
+					{
+						shipTypeId: "3000x1000-standard",
+						count: 2,
+						designName: undefined,
+						shipMinutesPerDay: 1440,
+						utilization: 0.5,
+						damagePerDay: 0.004,
+						keys: ["a>CX", "chain:c1"],
+						staleKeys: ["chain:c1"],
+					},
+				],
+				profileOf
+			);
+
+			expect(row.assignedCount).toBe(2);
+			expect(row.staleCount).toBe(1);
 		});
 
 		it("flags an over-rationed type without clamping it", () => {
@@ -121,6 +144,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						utilization: 1.34,
 						damagePerDay: 0,
 						keys: [],
+						staleKeys: [],
 					},
 				],
 				profileOf
@@ -142,6 +166,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						utilization: 1.005,
 						damagePerDay: 0,
 						keys: [],
+						staleKeys: [],
 					},
 				],
 				profileOf
@@ -163,6 +188,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						utilization: null,
 						damagePerDay: 0.004,
 						keys: ["a>CX"],
+						staleKeys: [],
 					},
 				],
 				profileOf
@@ -188,6 +214,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						// 0.4 % per day over both hulls, 0.2 % each
 						damagePerDay: 0.004,
 						keys: ["a>CX"],
+						staleKeys: [],
 					},
 				],
 				profileOf,
@@ -214,6 +241,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						// a stored result predating the wear rollup
 						damagePerDay: null,
 						keys: ["a>CX"],
+						staleKeys: [],
 					},
 				],
 				profileOf,
@@ -237,6 +265,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						utilization: 0.5,
 						damagePerDay: 0.004,
 						keys: ["a>CX"],
+						staleKeys: [],
 					},
 				],
 				profileOf
@@ -419,6 +448,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						? shipMinutesPerDay / (MINUTES_PER_DAY * count)
 						: null,
 				keys: [],
+				staleKeys: [],
 			};
 		}
 

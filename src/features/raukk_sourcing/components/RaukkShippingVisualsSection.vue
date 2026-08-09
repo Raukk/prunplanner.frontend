@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, ComputedRef, ref, Ref } from "vue";
+	import { computed, ComputedRef, CSSProperties, ref, Ref } from "vue";
 
 	// Stores
 	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
@@ -15,6 +15,7 @@
 		raukkMapLanes,
 	} from "@/features/raukk_sourcing/calculations/shippingMapDisplay";
 	import { RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS } from "@/features/raukk_sourcing/calculations/shippingCadence";
+	import { RAUKK_VIZ_CSS_VARS } from "@/features/raukk_sourcing/calculations/raukkVizPalette";
 
 	// UI
 	import { PButton, PButtonGroup } from "@/ui";
@@ -31,11 +32,22 @@
 	interface IRaukkVisualTab {
 		key: string;
 		labelKey: string;
+		/** Hover line saying what this view answers — the label alone
+		 * does not tell you which of the two to open */
+		tooltipKey: string;
 	}
 
 	const TABS: IRaukkVisualTab[] = [
-		{ key: "map", labelKey: "raukk_sourcing.visuals.tab_map" },
-		{ key: "plane", labelKey: "raukk_sourcing.visuals.tab_plane" },
+		{
+			key: "map",
+			labelKey: "raukk_sourcing.visuals.tab_map",
+			tooltipKey: "raukk_sourcing.visuals.tab_map_tooltip",
+		},
+		{
+			key: "plane",
+			labelKey: "raukk_sourcing.visuals.tab_plane",
+			tooltipKey: "raukk_sourcing.visuals.tab_plane_tooltip",
+		},
 	];
 
 	const refActiveTab: Ref<string> = ref("map");
@@ -80,21 +92,30 @@
 			sourcingStore.shippingConfig.cadenceInOutDays ??
 			RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS
 	);
+
+	/** The shared viz palette as CSS vars, for both child views */
+	const sectionStyle: CSSProperties = RAUKK_VIZ_CSS_VARS;
 </script>
 
 <template>
-	<div class="pt-6">
-		<h3 class="pb-3 text-white/80 font-bold">
+	<div :style="sectionStyle">
+		<!-- heading anatomy of every other section of this page: h4,
+		 font-bold py-3, muted info line -->
+		<h4 class="font-bold py-3">
 			{{ $t("raukk_sourcing.visuals.title") }}
-		</h3>
+		</h4>
+		<div class="text-white/50 pb-3">
+			{{ $t("raukk_sourcing.visuals.info") }}
+		</div>
 
 		<div class="pb-3">
-			<PButtonGroup>
+			<PButtonGroup class="flex-wrap">
 				<PButton
 					v-for="tab in TABS"
 					:key="`RAUKKVISUALTAB#${tab.key}`"
 					:type="refActiveTab === tab.key ? 'primary' : 'secondary'"
 					size="sm"
+					:title="$t(tab.tooltipKey)"
 					@click="() => (refActiveTab = tab.key)">
 					{{ $t(tab.labelKey) }}
 				</PButton>

@@ -292,6 +292,53 @@ describe("Raukk Oversubscription Report", () => {
 	});
 
 	describe("raukkFleetLoadEntries", () => {
+		it("marks the work of a stale snapshot and a stale chain", () => {
+			const entries = raukkFleetLoadEntries(
+				{
+					p1: makeSnapshot({
+						stale: true,
+						lanes: [
+							{
+								pairKey: "p1>CX",
+								shipTypeId: "WCB",
+								tripsPerDay: 1,
+								roundTripMinutes: 100,
+								hired: false,
+							},
+						],
+					}),
+					p2: makeSnapshot({
+						lanes: [
+							{
+								pairKey: "p2>CX",
+								shipTypeId: "WCB",
+								tripsPerDay: 1,
+								roundTripMinutes: 100,
+								hired: false,
+							},
+						],
+					}),
+				},
+				{
+					c1: makeChainResult({ stale: true }),
+					c2: makeChainResult({ chainId: "c2" }),
+				}
+			);
+
+			// the assignment of a stale result is what the LAST compute
+			// chose, which is exactly what the fleet table has to say
+			expect(
+				Object.fromEntries(
+					entries.map((entry) => [entry.key, entry.stale])
+				)
+			).toStrictEqual({
+				"p1>CX": true,
+				"p2>CX": false,
+				"chain:c1": true,
+				"chain:c2": false,
+			});
+		});
+
 		it("skips hired lanes and hired chains", () => {
 			const entries = raukkFleetLoadEntries(
 				{
@@ -331,6 +378,7 @@ describe("Raukk Oversubscription Report", () => {
 					tripsPerDay: 2,
 					roundTripMinutes: 100,
 					damagePerDay: undefined,
+					stale: false,
 				},
 				{
 					key: "chain:c1",
@@ -338,6 +386,7 @@ describe("Raukk Oversubscription Report", () => {
 					tripsPerDay: 1,
 					roundTripMinutes: 300,
 					damagePerDay: undefined,
+					stale: false,
 				},
 			]);
 		});

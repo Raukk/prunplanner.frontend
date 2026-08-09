@@ -6,6 +6,10 @@
 
 // Calculations
 import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+import {
+	RAUKK_VIZ_ALERT,
+	RAUKK_VIZ_INK,
+} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
 
 // Types & Interfaces
 import {
@@ -37,11 +41,14 @@ export const RAUKK_OVERSUB_SLOT_COLORS: readonly string[] = [
  * @author raukk
  */
 export const RAUKK_OVERSUB_STATUS_COLORS = {
-	over: "#c70039",
-	overText: "#ff5470",
-	stale: "#fab219",
-	other: "#6b6a64",
-	external: "#4a4a46",
+	/** These four name the MEANING; the shared palette owns the values,
+	 * so the report's red is the shipping views' red */
+	over: RAUKK_VIZ_ALERT.solid,
+	overText: RAUKK_VIZ_ALERT.text,
+	stale: RAUKK_VIZ_ALERT.warn,
+	/** Neutral ink, never a verdict — the shared ramp names the weight */
+	other: RAUKK_VIZ_INK.muted,
+	external: RAUKK_VIZ_INK.faint,
 } as const;
 
 /** Selection key of the folded gray "Other n plans" consumers */

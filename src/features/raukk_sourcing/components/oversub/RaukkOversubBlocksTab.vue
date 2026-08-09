@@ -36,6 +36,11 @@
 		raukkOversubSliceStrips,
 		raukkOversubSquarify,
 	} from "@/features/raukk_sourcing/calculations/oversubPack";
+	import {
+		RAUKK_VIZ_ALERT,
+		RAUKK_VIZ_INK,
+		RAUKK_VIZ_SURFACE,
+	} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
 
 	// Util
 	import { relativeFromDate } from "@/util/date";
@@ -58,6 +63,10 @@
 		IRaukkOversubTooltipLine,
 		IRaukkOversubTooltipPayload,
 	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+
+	/** Washes of the over hatch pattern this view declares */
+	const ALERT_HATCH_BACK: string = `rgba(${RAUKK_VIZ_ALERT.rgb}, 0.12)`;
+	const ALERT_HATCH_BAR: string = `rgba(${RAUKK_VIZ_ALERT.rgb}, 0.55)`;
 
 	const props = defineProps({
 		/** Materials rows, filtered and sorted by the section */
@@ -957,8 +966,8 @@
 						height="7"
 						patternUnits="userSpaceOnUse"
 						patternTransform="rotate(45)">
-						<rect width="7" height="7" fill="rgba(199,0,57,0.12)" />
-						<rect width="3" height="7" fill="rgba(199,0,57,0.55)" />
+						<rect width="7" height="7" :fill="ALERT_HATCH_BACK" />
+						<rect width="3" height="7" :fill="ALERT_HATCH_BAR" />
 					</pattern>
 				</defs>
 
@@ -973,7 +982,7 @@
 							:width="placed.w"
 							:height="placed.h"
 							fill="none"
-							stroke="#2c2c2a"
+							:stroke="RAUKK_VIZ_SURFACE.rule"
 							rx="3" />
 						<text
 							v-if="placed.w > 64"
@@ -1010,10 +1019,10 @@
 										box.headroom
 											? box.headroomShare === null
 												? 'url(#roversubBlocksHatchRed)'
-												: '#252525'
+												: RAUKK_VIZ_SURFACE.chip
 											: box.noDenom
 												? 'url(#roversubBlocksHatchRed)'
-												: '#252525'
+												: RAUKK_VIZ_SURFACE.chip
 									"
 									:stroke="
 										(
@@ -1023,7 +1032,7 @@
 										)
 											? 'var(--roversub-over)'
 											: box.headroom
-												? '#565650'
+												? RAUKK_VIZ_INK.dim
 												: 'none'
 									"
 									:stroke-width="
@@ -1116,7 +1125,7 @@
 										: box.noDenom
 								)
 									? 'url(#roversubBlocksHatchRed)'
-									: '#252525'
+									: RAUKK_VIZ_SURFACE.chip
 							"
 							:stroke="
 								(
@@ -1126,7 +1135,7 @@
 								)
 									? 'var(--roversub-over)'
 									: box.headroom
-										? '#565650'
+										? RAUKK_VIZ_INK.dim
 										: 'none'
 							"
 							:stroke-width="
@@ -1246,7 +1255,7 @@
 							:fill="
 								fullBox.noDenom
 									? 'url(#roversubBlocksHatchRed)'
-									: '#252525'
+									: RAUKK_VIZ_SURFACE.chip
 							"
 							:stroke="
 								fullBox.noDenom
