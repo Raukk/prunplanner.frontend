@@ -519,6 +519,19 @@ LM rate and ship assignment are pair-keyed.
    number with an "own X % + spilled Y %" note. Toggle off renders
    exactly as before. See shipping-fleet.md, "Utilization spillover".
 
+## Round 18 (hub/spoke: grouped rows actually group)
+
+1. **"Group by base" orders by base pair, not by global share**
+   (2026-08-08, user bug report): with the toggle on, the table showed
+   one row per (ticker, bucket, pair) but kept the ungrouped
+   share-descending sort, so pairs interleaved and nothing visually
+   grouped. Fixed in `raukkHubSpokeRows`: grouped rows are sorted pair
+   first — pairs by their summed share descending (heaviest lane
+   first, same spirit as the global sort), tiebreak on the
+   `from|to` stop labels — and by share descending inside a pair,
+   ticker as the final tiebreak. Ungrouped ordering is unchanged. Pure
+   ordering fix, no headers/rowspans, no table markup change.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,

@@ -660,5 +660,52 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			]);
 			expect(rows[0].share).toBeCloseTo(100 / 150, 10);
 		});
+
+		it("keeps a grouped base pair's rows contiguous", () => {
+			// a global share sort would interleave the pairs:
+			// RAT 90, ORE 80, COF 60, DW 40
+			const interleaved: IRaukkChainFlow[] = [
+				flow("ORE", "AA-001a", "AA-002b", 80, 1, 1),
+				flow("DW", "AA-001a", "AA-002b", 40, 1, 1),
+				flow("RAT", "AA-003c", "AA-002b", 90, 1, 1),
+				flow("COF", "AA-003c", "AA-002b", 60, 1, 1),
+			];
+
+			const rows: IRaukkHubSpokeRow[] = raukkHubSpokeRows(
+				interleaved,
+				true,
+				cxSystems
+			);
+
+			// heaviest pair (150 units) first, share descending inside
+			expect(
+				rows.map((row) => [row.fromStop, row.ticker])
+			).toStrictEqual([
+				["AA-003c", "RAT"],
+				["AA-003c", "COF"],
+				["AA-001a", "ORE"],
+				["AA-001a", "DW"],
+			]);
+		});
+
+		it("still sorts ungrouped rows by share alone", () => {
+			const interleaved: IRaukkChainFlow[] = [
+				flow("ORE", "AA-001a", "AA-002b", 80, 1, 1),
+				flow("RAT", "AA-003c", "AA-002b", 90, 1, 1),
+				flow("COF", "AA-003c", "AA-002b", 60, 1, 1),
+			];
+
+			const rows: IRaukkHubSpokeRow[] = raukkHubSpokeRows(
+				interleaved,
+				false,
+				cxSystems
+			);
+
+			expect(rows.map((row) => row.ticker)).toStrictEqual([
+				"RAT",
+				"ORE",
+				"COF",
+			]);
+		});
 	});
 });
