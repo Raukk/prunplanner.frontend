@@ -240,4 +240,8 @@ anywhere in the repo. Not retroactive.
   market bought share, and capping it would drift upward over passes),
   so the base fraction and the shipping routing of a topped up draw
   overstate it slightly — accepted, see
-  docs/raukk_sourcing/sourcing-defaults.md.
+  docs/raukk_sourcing/sourcing-defaults.md. Edited on the account level
+  page (/shipping), NOT on a plan's sourcing panel (user correction: an
+  account wide value does not belong to whichever base is open); the
+  plan panel keeps a read-only line naming the defaults in force, so the
+  rows marked "(default)" explain themselves.

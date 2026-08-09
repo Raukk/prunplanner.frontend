@@ -21,6 +21,7 @@
 	import RaukkFleetSection from "@/features/raukk_sourcing/components/RaukkFleetSection.vue";
 	import RaukkChainSection from "@/features/raukk_sourcing/components/RaukkChainSection.vue";
 	import RaukkDepotSection from "@/features/raukk_sourcing/components/RaukkDepotSection.vue";
+	import RaukkSourcingDefaults from "@/features/raukk_sourcing/components/RaukkSourcingDefaults.vue";
 
 	// Calculations
 	import { calculateRepairBillCost } from "@/features/raukk_sourcing/calculations/shipping";
@@ -331,6 +332,18 @@
 				{{ $t("raukk_sourcing.shipping_page.recompute_tooltip") }}
 			</PTooltip>
 		</template>
+	</div>
+
+	<!-- account wide like everything on this page, and independent of the
+	shipping switch: the defaults price inputs, they fly nothing -->
+	<h3 class="font-bold py-3">
+		{{ $t("raukk_sourcing.defaults.title") }}
+	</h3>
+	<div class="text-white/50 pb-3">
+		{{ $t("raukk_sourcing.defaults.info") }}
+	</div>
+	<div class="border rounded-[3px] border-white/20 p-3">
+		<RaukkSourcingDefaults />
 	</div>
 
 	<div v-if="refChainErrors.length > 0" class="pt-3 flex flex-col">

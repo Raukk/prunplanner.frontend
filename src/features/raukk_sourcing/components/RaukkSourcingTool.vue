@@ -16,7 +16,7 @@
 	import RaukkBaseTransportSection from "@/features/raukk_sourcing/components/RaukkBaseTransportSection.vue";
 	import RaukkInputsTable from "@/features/raukk_sourcing/components/RaukkInputsTable.vue";
 	import RaukkOutputsTable from "@/features/raukk_sourcing/components/RaukkOutputsTable.vue";
-	import RaukkSourcingDefaults from "@/features/raukk_sourcing/components/RaukkSourcingDefaults.vue";
+	import RaukkSourcingDefaultsNote from "@/features/raukk_sourcing/components/RaukkSourcingDefaultsNote.vue";
 	import RaukkShippingSection from "@/features/raukk_sourcing/components/RaukkShippingSection.vue";
 
 	// Calculations
@@ -412,12 +412,6 @@
 		</div>
 	</div>
 
-	<!-- account wide and therefore always editable: the defaults belong to
-	the users own account, not to the plan that happens to be open -->
-	<div class="mt-3 border rounded-[3px] border-white/20 p-3">
-		<RaukkSourcingDefaults />
-	</div>
-
 	<div v-if="refShowImport" class="pt-3 flex flex-col gap-3">
 		<PInput
 			v-model:value="refImportPayload"
@@ -564,6 +558,9 @@
 	<h3 class="font-bold py-3">
 		{{ $t("raukk_sourcing.inputs_title") }}
 	</h3>
+	<!-- read only: the defaults are account wide and edited on the
+	shipping page, the rows marked "(default)" follow them -->
+	<RaukkSourcingDefaultsNote />
 	<RaukkInputsTable
 		:rows="inputRows"
 		:source-options="sourceOptions"

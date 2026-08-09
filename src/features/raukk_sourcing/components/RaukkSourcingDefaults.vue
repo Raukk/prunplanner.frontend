@@ -129,17 +129,8 @@
 
 <template>
 	<div class="flex flex-row flex-wrap gap-3 child:my-auto">
-		<PTooltip>
-			<template #trigger>
-				<div class="font-bold hover:cursor-help">
-					{{ $t("raukk_sourcing.defaults.title") }}
-				</div>
-			</template>
-			{{ $t("raukk_sourcing.defaults.tooltip") }}
-		</PTooltip>
-
 		<template v-for="bucket in BUCKETS" :key="`RAUKKDEFAULT#${bucket}`">
-			<div class="text-white/60">
+			<div class="font-bold">
 				{{ $t(`raukk_sourcing.inputs.groups.${bucket}`) }}
 			</div>
 			<PSelect
@@ -150,6 +141,13 @@
 					(v) => change(bucket, String(v ?? NO_DEFAULT))
 				" />
 		</template>
+
+		<PTooltip>
+			<template #trigger>
+				<span class="text-white/40 hover:cursor-help">(i)</span>
+			</template>
+			{{ $t("raukk_sourcing.defaults.tooltip") }}
+		</PTooltip>
 	</div>
 
 	<n-modal
