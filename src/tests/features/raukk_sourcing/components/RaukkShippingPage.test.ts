@@ -42,6 +42,7 @@ const STUBS: Record<string, unknown> = {
 	RaukkFleetSection: { template: '<div id="s-fleet" />' },
 	RaukkChainSection: { template: '<div id="s-chains" />' },
 	RaukkDepotSection: { template: '<div id="s-depots" />' },
+	RaukkGateSection: { template: '<div id="s-gates" />' },
 	RaukkShippingVisualsSection: { template: '<div id="s-visuals" />' },
 	RaukkShippingCalibrationSection: { template: '<div id="s-calibration" />' },
 };
@@ -98,6 +99,7 @@ const MARKERS: Record<string, string> = {
 	RaukkFleetSection: "#s-fleet",
 	RaukkChainSection: "#s-chains",
 	RaukkDepotSection: "#s-depots",
+	RaukkGateSection: "#s-gates",
 	RaukkShippingVisualsSection: "#s-visuals",
 	RaukkShippingCalibrationSection: "#s-calibration",
 };
@@ -124,6 +126,7 @@ describe("RaukkShippingPage section tabs", () => {
 			"Fleet",
 			"Chains",
 			"Depots",
+			"Gates",
 			"Visuals",
 			"Calibration",
 		]);
@@ -144,6 +147,18 @@ describe("RaukkShippingPage section tabs", () => {
 		expect(wrapper.find("#s-visuals").exists()).toBe(false);
 		await clickTab(wrapper, "Visuals");
 		expect(wrapper.find("#s-visuals").exists()).toBe(true);
+	});
+
+	it("gives the gate planning tool a tab of its own", async () => {
+		// the tool was a section appended below the page before the strip
+		// existed; the merge had to make it a tab or it would render on
+		// every one of them
+		const { wrapper } = await render();
+
+		expect(wrapper.find("#s-gates").exists()).toBe(false);
+		await clickTab(wrapper, "Gates");
+
+		expect(shown(wrapper)).toStrictEqual(["RaukkGateSection"]);
 	});
 
 	it("collapses to the switch-independent sections while shipping is off", async () => {

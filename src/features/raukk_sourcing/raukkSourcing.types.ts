@@ -50,6 +50,16 @@ export type { IRaukkFleetShip } from "@/features/raukk_sourcing/calculations/shi
  * @author raukk
  */
 export type { IRaukkDepot } from "@/features/raukk_sourcing/calculations/shippingDepots";
+/**
+ * The planned gate shape the store persists, defined next to the gate
+ * planning math.
+ *
+ * @author raukk
+ */
+export type {
+	IRaukkPlannedGate,
+	RAUKK_PLANNED_GATE_STATUS,
+} from "@/features/raukk_sourcing/calculations/gatePlanning";
 
 export type RAUKK_PRICE_MODE = "BID" | "ASK" | "MID" | "AVG7D" | "AVG30D";
 

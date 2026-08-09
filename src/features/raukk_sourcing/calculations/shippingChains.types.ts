@@ -220,10 +220,21 @@ export interface IRaukkChainLeg {
 	reason?: RAUKK_LEG_UNROUTABLE;
 	/**
 	 * Gate-only path this leg is flown on, set for an STL-only profile
-	 * on an inter-system leg. Absent for every FTL profile, which flies
-	 * `route` as it always did.
+	 * on an inter-system leg. Absent for every FTL profile, which has a
+	 * drive and is offered {@link mixedPath} instead.
 	 */
 	gatePath?: IRaukkMultiModalPath;
+	/**
+	 * Multi modal path an FTL hull flies this leg on, set ONLY when it
+	 * uses at least one gate AND beats flying the FTL network alone.
+	 *
+	 * The whole-route optimum, not a per-hop choice: a path may jump
+	 * three times, traverse a gate and jump twice more, and the search
+	 * finds that. Absent means the FTL route in `route` won, which is
+	 * every leg with no gate near it — so a leg that gains nothing from
+	 * the gate network is costed exactly as it was before gates existed.
+	 */
+	mixedPath?: IRaukkMultiModalPath;
 }
 
 /** One leg of a chain loop, priced and loaded */

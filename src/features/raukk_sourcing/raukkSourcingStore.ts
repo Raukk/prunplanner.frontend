@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref, Ref } from "vue";
+import { ref, Ref, watch } from "vue";
 
 // Stores
 import { usePlanningStore } from "@/stores/planningStore";
@@ -49,6 +49,17 @@ import {
 import { raukkIsAutoChainId } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 // raukk: depot ids are normalized exactly as the chain math compares them
 import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippingDepots";
+// raukk: planned gates are edges of the route graph while switched on
+import {
+	RAUKK_PLANNED_GATE_DEFAULT_FEE,
+	raukkPlannedGateLinks,
+} from "@/features/raukk_sourcing/calculations/gatePlanning";
+import {
+	IRaukkGateUpgrades,
+	RAUKK_GATE_UPGRADE,
+	raukkGateUpgradesFit,
+} from "@/features/raukk_sourcing/calculations/gateCosts";
+import { setRaukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations/routeDistance";
 // raukk: only plans assigned to an empire take part account wide
 import {
 	raukkEmpirePlanUuids,
@@ -65,6 +76,7 @@ import {
 	IRaukkFleetShip,
 	IRaukkLocalPrice,
 	IRaukkPlanConfig,
+	IRaukkPlannedGate,
 	IRaukkShipProfile,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
@@ -134,6 +146,31 @@ export const useRaukkSourcingStore = defineStore(
 		 */
 		const depots: Ref<Record<string, IRaukkDepot>> = ref({});
 		/**
+		 * raukk: gates the user PLANNED, keyed by their own id. Account
+		 * global like the depots next to them — a gate is a place too —
+		 * and inert until switched on, at which point the route graph
+		 * carries them and everything routed goes stale.
+		 */
+		const plannedGates: Ref<Record<string, IRaukkPlannedGate>> = ref({});
+
+		/*
+		 * The routing layer holds the planned links, so the store hands
+		 * them over on every change AND on hydration, which is a change
+		 * of this very ref. `sync` because a lookup right after the write
+		 * — a recompute triggered by the same click — must already route
+		 * on the new graph; the set is tiny and the routing layer keeps
+		 * its memoized trees whenever the EDGES did not move.
+		 */
+		watch(
+			plannedGates,
+			(current: Record<string, IRaukkPlannedGate>) =>
+				setRaukkPlannedGateLinks(
+					raukkPlannedGateLinks(Object.values(current))
+				),
+			{ deep: true, immediate: true, flush: "sync" }
+		);
+
+		/**
 		 * raukk: account wide default source per input bucket. Account
 		 * global exactly like the shipping configuration: a base without an
 		 * own entry for one of its workforce consumables, repair materials
@@ -159,6 +196,7 @@ export const useRaukkSourcingStore = defineStore(
 			fleetSpillover.value = true;
 			chainConfig.value = raukkDefaultChainConfig();
 			depots.value = {};
+			plannedGates.value = {};
 			sourcingDefaults.value = {};
 		}
 
@@ -934,6 +972,166 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Stores one PLANNED gate, or patches the one that id already is.
+		 *
+		 * A planned gate that is switched ON is an edge of the route
+		 * graph, so every distance, every lane and every chain may be
+		 * routed over it from here on — which is exactly what planning it
+		 * is for, and exactly why everything computed on the old graph
+		 * goes stale. Chains always; snapshots only while shipping is
+		 * enabled, a routing change moves no number while nothing is
+		 * shipped (the rule {@link setShippingConfig} follows).
+		 *
+		 * A patch that touches nothing routable — the label, the note,
+		 * the status of a gate that stays switched off — stales NOTHING:
+		 * a knob that moves no stored number leaves the results alone,
+		 * the rule the depot rent and the ship count follow.
+		 *
+		 * Non finite numbers are refused rather than stored, so the users
+		 * own JSON backup cannot be poisoned with a `null` fee.
+		 * @author raukk
+		 *
+		 * @param {string} gateId Gate Id
+		 * @param {Partial<IRaukkPlannedGate>} patch Planned Gate Patch
+		 */
+		function setPlannedGate(
+			gateId: string,
+			patch: Partial<IRaukkPlannedGate> = {}
+		): void {
+			const id: string = gateId.trim();
+			if (id === "") return;
+
+			const known: IRaukkPlannedGate | undefined = plannedGates.value[id];
+
+			/** Numeric knob of the patch, refusing what JSON cannot hold */
+			function number(
+				value: number | undefined,
+				fallback: number
+			): number {
+				return value !== undefined &&
+					Number.isFinite(value) &&
+					value >= 0
+					? value
+					: fallback;
+			}
+
+			/*
+			 * A gate holds five upgrade levels across all three tracks,
+			 * whatever the per track maxima allow on their own, so the
+			 * track this patch RAISED is the one clamped — clamping the
+			 * others would undo a choice the user did not touch.
+			 */
+			const raised: RAUKK_GATE_UPGRADE =
+				patch.volumeUpgrades !== undefined
+					? "volume"
+					: patch.rangeUpgrades !== undefined
+						? "range"
+						: "capacity";
+
+			const upgrades: IRaukkGateUpgrades = raukkGateUpgradesFit(
+				{
+					capacity:
+						patch.capacityUpgrades ?? known?.capacityUpgrades ?? 0,
+					volume: patch.volumeUpgrades ?? known?.volumeUpgrades ?? 0,
+					range: patch.rangeUpgrades ?? known?.rangeUpgrades ?? 0,
+				},
+				raised
+			);
+
+			const next: IRaukkPlannedGate = {
+				id,
+				name: patch.name ?? known?.name,
+				planetA: (patch.planetA ?? known?.planetA ?? "").trim(),
+				planetB: (patch.planetB ?? known?.planetB ?? "").trim(),
+				fee: number(
+					patch.fee,
+					known?.fee ?? RAUKK_PLANNED_GATE_DEFAULT_FEE
+				),
+				capacityUpgrades: upgrades.capacity,
+				volumeUpgrades: upgrades.volume,
+				rangeUpgrades: upgrades.range,
+				enabled: patch.enabled ?? known?.enabled ?? false,
+				status: patch.status ?? known?.status ?? "proposed",
+				note: patch.note ?? known?.note,
+			};
+
+			// a gate needs both ends to be a link at all
+			if (next.planetA === "" || next.planetB === "") return;
+
+			plannedGates.value[id] = next;
+
+			if (routingChanged(known, next)) stalePlannedGateChange();
+		}
+
+		/**
+		 * Removes one planned gate. Stales what an enabled one moved —
+		 * dropping it takes its edge back out of the graph — while a
+		 * switched off gate was routing nothing and stales nothing.
+		 * @author raukk
+		 *
+		 * @param {string} gateId Gate Id
+		 */
+		function deletePlannedGate(gateId: string): void {
+			const known: IRaukkPlannedGate | undefined =
+				plannedGates.value[gateId];
+
+			if (known === undefined) return;
+
+			delete plannedGates.value[gateId];
+
+			if (known.enabled) stalePlannedGateChange();
+		}
+
+		/**
+		 * Whether a planned gate edit moved the ROUTE GRAPH.
+		 *
+		 * Only an enabled gate is in the graph at all, so a change
+		 * between two disabled states moves nothing however much of the
+		 * gate it rewrites.
+		 * @author raukk
+		 *
+		 * @param {IRaukkPlannedGate | undefined} before Previous state
+		 * @param {IRaukkPlannedGate} after Stored state
+		 * @returns {boolean} Route graph changed
+		 */
+		function routingChanged(
+			before: IRaukkPlannedGate | undefined,
+			after: IRaukkPlannedGate
+		): boolean {
+			if (before === undefined) return after.enabled;
+			if (!before.enabled && !after.enabled) return false;
+
+			return (
+				before.enabled !== after.enabled ||
+				before.planetA !== after.planetA ||
+				before.planetB !== after.planetB ||
+				before.volumeUpgrades !== after.volumeUpgrades ||
+				before.rangeUpgrades !== after.rangeUpgrades ||
+				before.fee !== after.fee
+			);
+		}
+
+		/**
+		 * Flags what a changed route graph invalidated.
+		 * @author raukk
+		 */
+		function stalePlannedGateChange(): void {
+			markAllChainsStale();
+
+			if (shippingConfig.value.enabled) markAllStale();
+		}
+
+		/**
+		 * Every planned gate, in insertion order.
+		 * @author raukk
+		 *
+		 * @returns {IRaukkPlannedGate[]} Planned Gates
+		 */
+		function listPlannedGates(): IRaukkPlannedGate[] {
+			return Object.values(plannedGates.value);
+		}
+
+		/**
 		 * Removes one ship type from the fleet, and with it its fleet
 		 * table row: rows come from the fleet slice alone. Assignments
 		 * naming the type stay — removing a hull is not un-assigning the
@@ -1416,6 +1614,7 @@ export const useRaukkSourcingStore = defineStore(
 				fleetSpillover: fleetSpillover.value,
 				chainConfig: inertClone(chainConfig.value),
 				depots: inertClone(depots.value),
+				plannedGates: inertClone(plannedGates.value),
 				sourcingDefaults: inertClone(sourcingDefaults.value),
 			};
 
@@ -1470,6 +1669,9 @@ export const useRaukkSourcingStore = defineStore(
 			chainConfig.value = validated.chainConfig;
 			// raukk: absent in every payload written before depots existed
 			depots.value = validated.depots;
+			// raukk: same, planned gates. Their edges reach the routing
+			// layer through the watcher above, which this write fires
+			plannedGates.value = validated.plannedGates;
 			// raukk: absent in every payload written before the account
 			// wide bucket defaults existed, the schema defaults them empty
 			sourcingDefaults.value = validated.sourcingDefaults;
@@ -1488,6 +1690,7 @@ export const useRaukkSourcingStore = defineStore(
 			fleetSpillover,
 			chainConfig,
 			depots,
+			plannedGates,
 			sourcingDefaults,
 			// reset
 			$reset,
@@ -1505,6 +1708,7 @@ export const useRaukkSourcingStore = defineStore(
 			chainConflictOf,
 			assignedShipTypeId,
 			depotStopRefs,
+			listPlannedGates,
 			// setters
 			setTickerSource,
 			clearTickerSource,
@@ -1536,6 +1740,8 @@ export const useRaukkSourcingStore = defineStore(
 			setFleetSpillover,
 			setDepot,
 			deleteDepot,
+			setPlannedGate,
+			deletePlannedGate,
 			setAssignment,
 			// import & export
 			exportJSON,
@@ -1557,6 +1763,7 @@ export const useRaukkSourcingStore = defineStore(
 				"fleetSpillover",
 				"chainConfig",
 				"depots",
+				"plannedGates",
 				"sourcingDefaults",
 			],
 		},

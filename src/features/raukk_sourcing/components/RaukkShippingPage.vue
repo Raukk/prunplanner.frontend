@@ -24,6 +24,7 @@
 	import RaukkFleetSection from "@/features/raukk_sourcing/components/RaukkFleetSection.vue";
 	import RaukkChainSection from "@/features/raukk_sourcing/components/RaukkChainSection.vue";
 	import RaukkDepotSection from "@/features/raukk_sourcing/components/RaukkDepotSection.vue";
+	import RaukkGateSection from "@/features/raukk_sourcing/components/RaukkGateSection.vue";
 	import RaukkShippingVisualsSection from "@/features/raukk_sourcing/components/RaukkShippingVisualsSection.vue";
 	import RaukkSourcingDefaultsSection from "@/features/raukk_sourcing/components/RaukkSourcingDefaultsSection.vue";
 
@@ -370,6 +371,8 @@
 			:storage-days="storageDays" />
 
 		<RaukkDepotSection v-else-if="refSection === 'depots'" />
+
+		<RaukkGateSection v-else-if="refSection === 'gates'" />
 
 		<RaukkShippingVisualsSection v-else-if="refSection === 'visuals'" />
 

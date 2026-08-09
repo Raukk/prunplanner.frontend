@@ -10,6 +10,7 @@ export const RAUKK_SHIPPING_SECTIONS = [
 	"fleet",
 	"chains",
 	"depots",
+	"gates",
 	"visuals",
 	"calibration",
 ] as const;

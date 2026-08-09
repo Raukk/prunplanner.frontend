@@ -10,6 +10,7 @@ import {
 	IRaukkDepot,
 	IRaukkFleetShip,
 	IRaukkPlanConfig,
+	IRaukkPlannedGate,
 	IRaukkShipProfile,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
@@ -63,6 +64,8 @@ export interface IRaukkExportPayload {
 	chainConfig: IRaukkChainConfig;
 	/** raukk: depot planets by natural id, absent before depots existed */
 	depots: Record<string, IRaukkDepot>;
+	/** raukk: planned gates by id, absent before the gate planning tool */
+	plannedGates: Record<string, IRaukkPlannedGate>;
 	/** raukk: account wide default source per input bucket, absent before
 	 * the defaults existed */
 	sourcingDefaults: IRaukkSourcingDefaults;

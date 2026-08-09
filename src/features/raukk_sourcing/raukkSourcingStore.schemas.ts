@@ -208,6 +208,32 @@ export const RaukkDepotSchema = z.object({
 	weeklyCostAic: z.number().nonnegative().optional(),
 });
 
+/**
+ * One gate the user PLANNED: one going up, or one they wish existed.
+ *
+ * raukk: fee and clearance are non negative and default to the shipped
+ * gut numbers, so a payload written by a future version that drops one of
+ * them still imports. `enabled` defaults OFF — importing a backup must
+ * never silently re-route an account over gates that do not exist.
+ */
+export const RaukkPlannedGateSchema = z.object({
+	id: z.string().min(1),
+	name: z.string().optional(),
+	planetA: z.string().min(1),
+	planetB: z.string().min(1),
+	fee: z.number().nonnegative().default(4000),
+	// raukk: upgrade levels of EACH end, capped as the game caps them.
+	// They replace the free-form clearance the first version stored, which
+	// stays readable as an optional legacy field
+	capacityUpgrades: z.number().int().min(0).max(5).default(0),
+	volumeUpgrades: z.number().int().min(0).max(3).default(0),
+	rangeUpgrades: z.number().int().min(0).max(3).default(0),
+	maxM3: z.number().nonnegative().optional(),
+	enabled: z.boolean().default(false),
+	status: z.enum(["construction", "proposed"]).default("proposed"),
+	note: z.string().optional(),
+});
+
 /** Account wide chain knobs, every field defaulted like the v1 config */
 export const RaukkChainConfigSchema = z.object({
 	cxSplitDetourParsecs: z.number().default(6),
@@ -456,6 +482,9 @@ export const RaukkSourcingExportSchema = z.object({
 	// same reason the five v2 slices are: every payload written before
 	// depots existed knows none.
 	depots: z.record(z.string(), RaukkDepotSchema).default({}),
+	// raukk: planned gates, keyed by their own id. Same rule as depots —
+	// every payload written before the gate planning tool knows none.
+	plannedGates: z.record(z.string(), RaukkPlannedGateSchema).default({}),
 	// raukk: account wide bucket defaults, absent in every payload written
 	// before they existed — an empty object is the pre defaults behaviour
 	sourcingDefaults: RaukkSourcingDefaultsSchema.prefault({}),

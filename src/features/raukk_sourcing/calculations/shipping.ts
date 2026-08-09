@@ -15,12 +15,21 @@ import {
 	raukkSmallestCandidate,
 } from "@/features/raukk_sourcing/calculations/shippingHull";
 import {
+	raukkFasterGatePath,
+	raukkFtlParsecsOf,
+	raukkGateLegCost,
 	raukkGateOnlyPath,
 	raukkStlOnlyCandidates,
 } from "@/features/raukk_sourcing/calculations/shippingStl";
+// raukk: a gate measures the SHIP, not its cargo hold
+import { raukkHullVolumeM3 } from "@/features/raukk_sourcing/calculations/shippingHullVolume";
 
 // Types & Interfaces
-import { IRaukkRoute } from "@/features/raukk_sourcing/calculations/routeDistance";
+import {
+	IRaukkMultiModalPath,
+	IRaukkRoute,
+} from "@/features/raukk_sourcing/calculations/routeDistance";
+import { IRaukkGateLegCost } from "@/features/raukk_sourcing/calculations/shippingStl";
 import {
 	IRaukkCadenceCaps,
 	IRaukkDirectionLoad,
@@ -176,11 +185,73 @@ export function calculateRepairBillCost(
  */
 export function calculateTripDamage(
 	route: IRaukkRoute,
-	profile: IRaukkResolvedShipProfile
+	profile: IRaukkResolvedShipProfile,
+	mixedPath?: IRaukkMultiModalPath
 ): number {
+	/*
+	 * A gate hop covers its distance without flying it: no per parsec
+	 * damage, a flat hit per traversal instead. Only the FTL hops of the
+	 * path may be multiplied by the per parsec rate.
+	 */
+	if (mixedPath !== undefined) {
+		const gate: IRaukkGateLegCost = raukkGateLegCost(mixedPath, profile);
+
+		return (
+			2 * raukkFtlParsecsOf(mixedPath) * profile.damagePerParsec +
+			2 * gate.damage +
+			2 * profile.damagePerStlBlock
+		);
+	}
+
 	return (
 		2 * route.parsecs * profile.damagePerParsec +
 		2 * profile.damagePerStlBlock
+	);
+}
+
+/**
+ * The gate route a lane should be flown on, `null` when the FTL network
+ * still wins.
+ *
+ * Same question {@link raukkFasterGatePath} answers for a chain leg, put
+ * where a lane can ask it: a lane carries its endpoints and its lookups
+ * for exactly this reason. Absent endpoints — every caller predating
+ * gates, the test literals included — means the lane keeps its pure FTL
+ * routing, which is the safe reading of "no gate network known".
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingPair} pair Lane
+ * @param {IRaukkResolvedShipProfile} profile Hull flying it
+ * @returns {(IRaukkMultiModalPath | null)} Faster gate path, or null
+ */
+export function raukkPairGatePath(
+	pair: IRaukkShippingPair,
+	profile: IRaukkResolvedShipProfile
+): IRaukkMultiModalPath | null {
+	if (
+		pair.route.sameSystem ||
+		profile.stlOnly ||
+		pair.fromSystemId === undefined ||
+		pair.toSystemId === undefined ||
+		pair.routes === undefined
+	)
+		return null;
+
+	return raukkFasterGatePath(
+		pair.routes,
+		pair.fromSystemId,
+		pair.toSystemId,
+		pair.route,
+		{
+			shipVolumeM3: raukkHullVolumeM3(
+				profile,
+				profile.stlOnly,
+				profile.ftlReactor
+			),
+			minutesPerParsec: profile.minutesPerParsec,
+			chargeMinutes: profile.chargeMinutes,
+		}
 	);
 }
 
@@ -200,10 +271,12 @@ export function calculateTripDamage(
 export function calculateRepairCostPerTrip(
 	route: IRaukkRoute,
 	profile: IRaukkResolvedShipProfile,
-	repairBillCost: number
+	repairBillCost: number,
+	mixedPath?: IRaukkMultiModalPath
 ): number {
 	return (
-		(calculateTripDamage(route, profile) / RAUKK_REPAIR_AT_DAMAGE) *
+		(calculateTripDamage(route, profile, mixedPath) /
+			RAUKK_REPAIR_AT_DAMAGE) *
 		repairBillCost
 	);
 }
@@ -227,16 +300,31 @@ export function calculateCostPerTrip(
 	route: IRaukkRoute,
 	profile: IRaukkResolvedShipProfile,
 	config: IRaukkShippingConfig,
-	repairBillCost: number
+	repairBillCost: number,
+	mixedPath?: IRaukkMultiModalPath
 ): number {
+	/*
+	 * Both modes pay for what each does: the FTL hops burn fuel per
+	 * parsec, the gate hops pay their fee and the sublight fuel of the
+	 * traversal overhead, and neither pays the other's bill. Both
+	 * directions of the round trip, so both fees are charged.
+	 */
+	const gate: IRaukkGateLegCost | null =
+		mixedPath !== undefined ? raukkGateLegCost(mixedPath, profile) : null;
+
 	const distanceCost: number = route.sameSystem
 		? config.sameSystemFlatCost
-		: 2 * route.parsecs * profile.costPerParsec;
+		: mixedPath !== undefined && gate !== null
+			? 2 *
+				(raukkFtlParsecsOf(mixedPath) * profile.costPerParsec +
+					gate.fees +
+					gate.fuelCost)
+			: 2 * route.parsecs * profile.costPerParsec;
 
 	return (
 		distanceCost +
 		2 * profile.stlBlockCost +
-		calculateRepairCostPerTrip(route, profile, repairBillCost)
+		calculateRepairCostPerTrip(route, profile, repairBillCost, mixedPath)
 	);
 }
 
@@ -283,11 +371,18 @@ export function calculateRoundTripMinutes(
 	route: IRaukkRoute,
 	profile: IRaukkResolvedShipProfile,
 	loadFactorOut: number,
-	loadFactorBack: number
+	loadFactorBack: number,
+	mixedPath?: IRaukkMultiModalPath
 ): number {
+	// a mixed path already timed both of its modes on this hull's speed
+	const flight: number =
+		mixedPath !== undefined
+			? 2 * mixedPath.minutes
+			: 2 * route.parsecs * profile.minutesPerParsec +
+				2 * route.jumps * profile.chargeMinutes;
+
 	return (
-		2 * route.parsecs * profile.minutesPerParsec +
-		2 * route.jumps * profile.chargeMinutes +
+		flight +
 		stlBlockMinutes(profile, loadFactorOut) +
 		stlBlockMinutes(profile, loadFactorBack)
 	);
@@ -784,17 +879,26 @@ export function calculatePairShipping(
 	let shippingFraction: number | null = 0;
 
 	legs.forEach((leg) => {
+		/*
+		 * Per LEG, because the hull is: the automatic pick may put a
+		 * different profile on each cadence class, and a gate that a
+		 * quick WCB beats is one a slow HCB gladly takes.
+		 */
+		const mixedPath: IRaukkMultiModalPath | undefined =
+			raukkPairGatePath(pair, leg.profile) ?? undefined;
+
 		// a hired lane wears someone elses hull, that is a hard zero —
 		// the same reasoning that zeroes its shipping fraction below
 		const damagePerTrip: number = hired
 			? 0
-			: calculateTripDamage(pair.route, leg.profile);
+			: calculateTripDamage(pair.route, leg.profile, mixedPath);
 		const repairCostPerTrip: number = hired
 			? 0
 			: calculateRepairCostPerTrip(
 					pair.route,
 					leg.profile,
-					repairBillCost
+					repairBillCost,
+					mixedPath
 				);
 		const costPerTrip: number =
 			lmRatePerTrip !== undefined
@@ -803,7 +907,8 @@ export function calculatePairShipping(
 						pair.route,
 						leg.profile,
 						config,
-						repairBillCost
+						repairBillCost,
+						mixedPath
 					);
 
 		const legDailyCost: number = leg.tripsPerDay * costPerTrip;
@@ -812,7 +917,8 @@ export function calculatePairShipping(
 			pair.route,
 			leg.profile,
 			leg.loadOut.loads / leg.tripsPerDay,
-			leg.loadBack.loads / leg.tripsPerDay
+			leg.loadBack.loads / leg.tripsPerDay,
+			mixedPath
 		);
 
 		/*
