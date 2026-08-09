@@ -502,6 +502,19 @@
 		"empty": {
 			"materials": "No material rows — nothing subscribes beyond its producer, or the filters hide every row.",
 			"fleet": "No fleet rows — the fleet holds no ship types, or the filters hide every row."
+		},
+		"recompute": {
+			"row": "Recompute",
+			"row_tooltip": "Recomputes the full dependency subgraph of this producer — its sources, the plan itself and its dependents. The subgraph may include plans outside this empire.",
+			"fleet": "Recompute chain results",
+			"fleet_tooltip": "Reprices every shipping chain from the stored snapshot flows — the same recompute as on the Shipping page. The snapshots themselves stay untouched.",
+			"busy_tooltip": "A sourcing recompute is already running — wait for it to finish before starting another.",
+			"strip_current": "Recomputing {name} …",
+			"strip_scope": "Recomputing the full dependency subgraph — it may include plans outside this empire.",
+			"fleet_running": "Recomputing chain results …",
+			"auto_snapshot_running": "Background snapshot upkeep is running …",
+			"error": "{name}: {message}",
+			"fleet_error_name": "shipping chains"
 		}
 	}
 }

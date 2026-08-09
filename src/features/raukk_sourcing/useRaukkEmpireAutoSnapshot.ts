@@ -1,4 +1,4 @@
-import { onScopeDispose, Ref, watch } from "vue";
+import { onScopeDispose, readonly, ref, Ref, watch } from "vue";
 
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
@@ -64,14 +64,16 @@ const RAUKK_EMPIRE_AUTO_SNAPSHOT_MAX_PASSES: number = 5;
  * @author raukk
  *
  * @param {IRaukkEmpireAutoSnapshotContext} context Empire Context
+ * @returns {Readonly<Ref<boolean>>} True while an upkeep run is in
+ * flight — the concurrency signal manual recompute buttons gate on
  */
 export function useRaukkEmpireAutoSnapshot(
 	context: IRaukkEmpireAutoSnapshotContext
-): void {
+): Readonly<Ref<boolean>> {
 	const sourcingStore = useRaukkSourcingStore();
 
 	let timer: ReturnType<typeof setTimeout> | undefined = undefined;
-	let running: boolean = false;
+	const running: Ref<boolean> = ref(false);
 	let rerunRequested: boolean = false;
 
 	/**
@@ -96,7 +98,7 @@ export function useRaukkEmpireAutoSnapshot(
 	async function run(): Promise<void> {
 		if (context.calculating.value) return;
 
-		if (running) {
+		if (running.value) {
 			rerunRequested = true;
 			return;
 		}
@@ -119,7 +121,7 @@ export function useRaukkEmpireAutoSnapshot(
 
 		if (pending.length === 0) return;
 
-		running = true;
+		running.value = true;
 
 		try {
 			const empireList: IPlanEmpireElement[] = await loadEmpireList();
@@ -161,7 +163,7 @@ export function useRaukkEmpireAutoSnapshot(
 				pending = pendingPlans();
 			}
 		} finally {
-			running = false;
+			running.value = false;
 
 			if (rerunRequested) {
 				rerunRequested = false;
@@ -182,4 +184,6 @@ export function useRaukkEmpireAutoSnapshot(
 	onScopeDispose(() => {
 		if (timer !== undefined) clearTimeout(timer);
 	});
+
+	return readonly(running);
 }

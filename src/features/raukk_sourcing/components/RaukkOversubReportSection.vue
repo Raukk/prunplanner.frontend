@@ -21,10 +21,16 @@
 
 	// Composables
 	import { useRaukkOversubReport } from "@/features/raukk_sourcing/useRaukkOversubReport";
+	import { useRaukkChainRecompute } from "@/features/raukk_sourcing/useRaukkChainRecompute";
+	import {
+		computeChainResults,
+		IRaukkChainComputeError,
+	} from "@/features/raukk_sourcing/useRaukkChainCompute";
 	import { provideRaukkOversubSelection } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubSelection";
 	import { provideRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
 
 	// Components
+	import ComputingProgress from "@/layout/components/ComputingProgress.vue";
 	import RaukkOversubTable from "@/features/raukk_sourcing/components/RaukkOversubTable.vue";
 	import RaukkOversubLedgerTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubLedgerTab.vue";
 	import RaukkOversubLegend from "@/features/raukk_sourcing/components/oversub/RaukkOversubLegend.vue";
@@ -40,7 +46,14 @@
 	import { raukkBayCode } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 
 	// UI
-	import { PButton, PButtonGroup, PCheckbox, PInput, PSelect } from "@/ui";
+	import {
+		PButton,
+		PButtonGroup,
+		PCheckbox,
+		PInput,
+		PProgressBar,
+		PSelect,
+	} from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -61,6 +74,12 @@
 			type: Array as PropType<(string | undefined)[]>,
 			required: true,
 		},
+		/** The empire snapshot upkeep is in flight, recompute waits */
+		autoSnapshotRunning: {
+			type: Boolean,
+			required: false,
+			default: false,
+		},
 	});
 
 	const { tickerRows, fleetRows } = useRaukkOversubReport(
@@ -71,6 +90,99 @@
 	const shippingEnabled: ComputedRef<boolean> = computed(
 		() => sourcingStore.shippingConfig.enabled
 	);
+
+	// ------------------------------------------------------------------
+	// recompute wiring: ONE shared chain recompute instance, the fleet
+	// chain-results action and the shared busy gate over both plus the
+	// empire auto snapshot upkeep
+	// ------------------------------------------------------------------
+
+	const {
+		running: recomputeRunning,
+		current: recomputeCurrent,
+		done: recomputeDone,
+		total: recomputeTotal,
+		errors: recomputeErrors,
+		recomputeChain,
+	} = useRaukkChainRecompute();
+
+	/** The fleet chain-results recompute is in flight */
+	const refFleetRecomputing: Ref<boolean> = ref(false);
+	/** Failed chains of the last fleet chain-results recompute */
+	const refFleetChainErrors: Ref<IRaukkChainComputeError[]> = ref([]);
+
+	/** Any sourcing recompute in flight — buttons gate on this, the
+	 * report content freezes under the overlay while it is true */
+	const sourcingBusy: ComputedRef<boolean> = computed(
+		() =>
+			props.autoSnapshotRunning ||
+			recomputeRunning.value ||
+			refFleetRecomputing.value
+	);
+
+	/**
+	 * Recomputes the sourcing chain of one producer row through the
+	 * shared instance. The buttons disable while anything runs — this
+	 * guard only backs them up, the composable's own silent re-entry
+	 * guard never surfaces to the user.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string} planUuid Producer Plan Uuid
+	 */
+	function onRecomputePlan(planUuid: string): void {
+		if (sourcingBusy.value) return;
+
+		void recomputeChain(planUuid);
+	}
+
+	/**
+	 * Recomputes every shipping chain RESULT from the stored snapshot
+	 * flows — the same `computeChainResults` call as the Shipping page
+	 * button, the snapshots themselves stay untouched.
+	 *
+	 * @author raukk
+	 */
+	async function onRecomputeFleet(): Promise<void> {
+		if (sourcingBusy.value) return;
+
+		refFleetRecomputing.value = true;
+
+		try {
+			refFleetChainErrors.value = await computeChainResults();
+		} finally {
+			refFleetRecomputing.value = false;
+		}
+	}
+
+	/** Progress numbers of the overlay; the fleet action and the auto
+	 * snapshot upkeep carry no counts, they show an empty bar */
+	const busyProgress: ComputedRef<{ step: number; total: number }> = computed(
+		() =>
+			recomputeRunning.value
+				? {
+						step: recomputeDone.value,
+						total: Math.max(recomputeTotal.value, 1),
+					}
+				: { step: 0, total: 1 }
+	);
+
+	/** Message line of the overlay, naming what is running */
+	const busyMessage: ComputedRef<string> = computed(() => {
+		if (recomputeRunning.value)
+			return recomputeCurrent.value !== undefined
+				? t("raukk_sourcing.oversub_report.recompute.strip_current", {
+						name: recomputeCurrent.value,
+					})
+				: t("raukk_sourcing.oversub_report.recompute.strip_scope");
+
+		if (refFleetRecomputing.value)
+			return t("raukk_sourcing.oversub_report.recompute.fleet_running");
+
+		return t(
+			"raukk_sourcing.oversub_report.recompute.auto_snapshot_running"
+		);
+	});
 
 	// filter bar state, component-local on purpose: the store persists
 	// domain data, never UI selection
@@ -343,24 +455,89 @@
 			</PButtonGroup>
 		</div>
 
-		<!-- the shared legend belongs to the viz tabs, the table names
-		 its consumers inline -->
-		<RaukkOversubLegend
-			v-if="refActiveTab !== 'table'"
-			:consumer-slots="consumerSlots" />
+		<!-- recompute strip: progress while the shared chain recompute
+		 runs, the errors of the last runs afterwards -->
+		<div
+			v-if="recomputeRunning"
+			class="pb-3 flex flex-col gap-y-1 text-xs text-white/60">
+			<PProgressBar
+				:step="recomputeDone"
+				:total="Math.max(recomputeTotal, 1)" />
+			<span v-if="recomputeCurrent !== undefined">
+				{{
+					$t(
+						"raukk_sourcing.oversub_report.recompute.strip_current",
+						{ name: recomputeCurrent }
+					)
+				}}
+			</span>
+			<span>
+				{{ $t("raukk_sourcing.oversub_report.recompute.strip_scope") }}
+			</span>
+		</div>
+		<div
+			v-if="recomputeErrors.length > 0 || refFleetChainErrors.length > 0"
+			class="pb-3 flex flex-col">
+			<span
+				v-for="chainError in recomputeErrors"
+				:key="`RAUKKOVERSUBRECOMPUTEERROR#${chainError.planUuid}`"
+				class="text-negative">
+				{{
+					$t("raukk_sourcing.oversub_report.recompute.error", {
+						name: chainError.planName,
+						message: chainError.message,
+					})
+				}}
+			</span>
+			<span
+				v-for="chainError in refFleetChainErrors"
+				:key="`RAUKKOVERSUBFLEETERROR#${chainError.chainId}`"
+				class="text-negative">
+				{{
+					$t("raukk_sourcing.oversub_report.recompute.error", {
+						name:
+							chainError.chainId !== ""
+								? chainError.chainId
+								: $t(
+										"raukk_sourcing.oversub_report.recompute.fleet_error_name"
+									),
+						message: chainError.message,
+					})
+				}}
+			</span>
+		</div>
 
-		<RaukkOversubTable
-			v-if="refActiveTab === 'table'"
-			:ticker-rows="filteredTickerRows"
-			:fleet-rows="filteredFleetRows"
-			:shipping-enabled="shippingEnabled"
-			:ship-type-labels="shipTypeLabels" />
-		<template v-for="tab in vizTabs" :key="tab.key">
-			<component
-				:is="tab.component"
-				v-if="refActiveTab === tab.key"
-				v-bind="vizTabProps"
-				@flip-problems-only="() => (refProblemsOnly = false)" />
+		<!-- while a run streams snapshot writes the report freezes under
+		 the overlay instead of animating intermediate states -->
+		<div v-if="sourcingBusy" class="min-h-96">
+			<ComputingProgress
+				:step="busyProgress.step"
+				:total="busyProgress.total"
+				:message="busyMessage" />
+		</div>
+		<template v-else>
+			<!-- the shared legend belongs to the viz tabs, the table names
+			 its consumers inline -->
+			<RaukkOversubLegend
+				v-if="refActiveTab !== 'table'"
+				:consumer-slots="consumerSlots" />
+
+			<RaukkOversubTable
+				v-if="refActiveTab === 'table'"
+				:ticker-rows="filteredTickerRows"
+				:fleet-rows="filteredFleetRows"
+				:shipping-enabled="shippingEnabled"
+				:ship-type-labels="shipTypeLabels"
+				:recompute-busy="sourcingBusy"
+				@recompute-plan="onRecomputePlan"
+				@recompute-fleet="onRecomputeFleet" />
+			<template v-for="tab in vizTabs" :key="tab.key">
+				<component
+					:is="tab.component"
+					v-if="refActiveTab === tab.key"
+					v-bind="vizTabProps"
+					@flip-problems-only="() => (refProblemsOnly = false)" />
+			</template>
 		</template>
 
 		<!-- the one tooltip host every tab drives -->

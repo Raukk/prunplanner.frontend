@@ -12,7 +12,7 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PTable, PTag } from "@/ui";
+	import { PButton, PTable, PTag, PTooltip } from "@/ui";
 
 	// Types & Interfaces
 	import {
@@ -43,7 +43,20 @@
 			type: Object as PropType<Record<string, string>>,
 			required: true,
 		},
+		/** A sourcing recompute is in flight, every recompute button
+		 * disables and its tooltip states the reason */
+		recomputeBusy: {
+			type: Boolean,
+			required: true,
+		},
 	});
+
+	// the table stays dumb: it emits the recompute intents, the section
+	// owns the shared recompute instance and the busy gating
+	const emit = defineEmits<{
+		(e: "recompute-plan", planUuid: string): void;
+		(e: "recompute-fleet"): void;
+	}>();
 
 	/** Keys of the rows whose subscriber breakdown is open */
 	const refExpanded: Ref<Set<string>> = ref(new Set());
@@ -146,6 +159,7 @@
 					}}
 				</th>
 				<th>{{ $t("raukk_sourcing.oversub_report.columns.flags") }}</th>
+				<th></th>
 			</tr>
 		</thead>
 		<tbody>
@@ -244,6 +258,37 @@
 							</PTag>
 						</div>
 					</td>
+					<td class="text-right">
+						<PTooltip>
+							<template #trigger>
+								<PButton
+									size="sm"
+									type="secondary"
+									:disabled="recomputeBusy"
+									@click="
+										emit(
+											'recompute-plan',
+											row.producerPlanUuid
+										)
+									">
+									{{
+										$t(
+											"raukk_sourcing.oversub_report.recompute.row"
+										)
+									}}
+								</PButton>
+							</template>
+							{{
+								recomputeBusy
+									? $t(
+											"raukk_sourcing.oversub_report.recompute.busy_tooltip"
+										)
+									: $t(
+											"raukk_sourcing.oversub_report.recompute.row_tooltip"
+										)
+							}}
+						</PTooltip>
+					</td>
 				</tr>
 				<template v-if="refExpanded.has(rowKey(row))">
 					<tr
@@ -271,7 +316,7 @@
 						<td colspan="2" class="text-right text-white/60">
 							{{ shareLabel(row, segment.amountPerDay) }}
 						</td>
-						<td colspan="2">
+						<td colspan="3">
 							<PTag v-if="segment.stale" size="sm" type="warning">
 								{{
 									$t(
@@ -284,7 +329,7 @@
 				</template>
 			</template>
 			<tr v-if="tickerRows.length === 0">
-				<td colspan="9" class="text-center text-white/50">
+				<td colspan="10" class="text-center text-white/50">
 					{{ $t("raukk_sourcing.oversub_report.empty.materials") }}
 				</td>
 			</tr>
@@ -292,12 +337,36 @@
 	</PTable>
 
 	<template v-if="shippingEnabled">
-		<h4 class="font-bold py-3">
-			{{ $t("raukk_sourcing.oversub_report.groups.fleet") }}
-			<span class="text-white/50 font-normal pl-1">
-				{{ $t("raukk_sourcing.oversub_report.groups.fleet_note") }}
-			</span>
-		</h4>
+		<div class="flex flex-row justify-between gap-x-3 child:my-auto">
+			<h4 class="font-bold py-3">
+				{{ $t("raukk_sourcing.oversub_report.groups.fleet") }}
+				<span class="text-white/50 font-normal pl-1">
+					{{ $t("raukk_sourcing.oversub_report.groups.fleet_note") }}
+				</span>
+			</h4>
+			<PTooltip>
+				<template #trigger>
+					<PButton
+						size="sm"
+						type="secondary"
+						:disabled="recomputeBusy"
+						@click="emit('recompute-fleet')">
+						{{
+							$t("raukk_sourcing.oversub_report.recompute.fleet")
+						}}
+					</PButton>
+				</template>
+				{{
+					recomputeBusy
+						? $t(
+								"raukk_sourcing.oversub_report.recompute.busy_tooltip"
+							)
+						: $t(
+								"raukk_sourcing.oversub_report.recompute.fleet_tooltip"
+							)
+				}}
+			</PTooltip>
+		</div>
 		<PTable striped>
 			<thead>
 				<tr>

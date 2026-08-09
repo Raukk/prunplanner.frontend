@@ -110,8 +110,9 @@
 		planData.value.map((plan) => plan.uuid)
 	);
 
-	// raukk: compute first sourcing snapshots of plans that never had one
-	useRaukkEmpireAutoSnapshot({
+	// raukk: compute first sourcing snapshots of plans that never had
+	// one; the running signal gates the report's recompute buttons
+	const raukkSnapshotUpkeepRunning = useRaukkEmpireAutoSnapshot({
 		planUuids: empirePlanUuids,
 		calculating: isCalculating,
 	});
@@ -476,7 +477,10 @@
 								 its own prop union -->
 								<AsyncRaukkOversubReportSection
 									v-if="mainContent === 'oversubscription'"
-									:plan-uuids="empirePlanUuids" />
+									:plan-uuids="empirePlanUuids"
+									:auto-snapshot-running="
+										raukkSnapshotUpkeepRunning
+									" />
 								<EmpireMaterialIOFiltered
 									v-else
 									:content="materialIOContent"
