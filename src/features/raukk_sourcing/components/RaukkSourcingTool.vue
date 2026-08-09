@@ -495,21 +495,29 @@
 			</PTooltip>
 			<PTooltip v-if="snapshot.shippingFraction !== undefined">
 				<template #trigger>
-					<span
-						class="hover:cursor-help"
-						:class="
-							raukkShipTimeOver(snapshot.shippingFraction)
-								? 'text-negative font-bold'
-								: 'text-white/60'
-						">
-						{{
-							$t("raukk_sourcing.snapshot.shipping_fraction", {
-								value: shipTimeLabel(snapshot.shippingFraction),
-							})
-						}}
-					</span>
+					<RouterLink to="/shipping">
+						<span
+							class="hover:underline"
+							:class="
+								raukkShipTimeOver(snapshot.shippingFraction)
+									? 'text-negative font-bold'
+									: 'text-white/60'
+							">
+							{{
+								$t(
+									"raukk_sourcing.snapshot.shipping_fraction",
+									{
+										value: shipTimeLabel(
+											snapshot.shippingFraction
+										),
+									}
+								)
+							}}
+						</span>
+					</RouterLink>
 				</template>
 				{{ $t("raukk_sourcing.snapshot.shipping_fraction_tooltip") }}
+				{{ $t("raukk_sourcing.snapshot.shipping_fraction_link_hint") }}
 			</PTooltip>
 		</template>
 		<span v-else class="text-white/60">
