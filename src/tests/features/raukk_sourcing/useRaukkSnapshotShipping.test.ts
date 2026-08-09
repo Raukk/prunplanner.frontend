@@ -447,7 +447,7 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			// 11 * 100 + 11 * 100 + 12 * 10 + 8 * 10
 			const repairBill: number = 2400;
 			const repairPerTrip: number =
-				((2 * CX_TO_CONSUMER * 0.001) / 0.8) * repairBill;
+				((2 * CX_TO_CONSUMER * 0.001) / 0.2) * repairBill;
 			const dailyCost: number =
 				0.1 * (2 * CX_TO_CONSUMER * 10 + repairPerTrip);
 

@@ -87,7 +87,7 @@ These supersede the matching decisions above.
    FTL fuel, CHRG 1m15s between jumps, per-jump times 6pc/1h07m,
    11pc/4h15m, 14pc/5h29m, 6pc/2h32m, 9pc/3h23m.
 6. **Damage/repair: deferred pending user data.** Users normally
-   repair at ~80% damage. Damage per parsec varies by system
+   repair at ~80% condition (round 21: "damage" here was a slip). Damage per parsec varies by system
    (micro-meteor density), and VERIFIED: no such field exists in
    our data (planets carry only pressure/surface/temperature/
    fertility/gravity; systems only positions/connections/type). So
@@ -103,8 +103,10 @@ These supersede the matching decisions above.
    components); at ~80% damage LHP and SSC were each ~10–12. Model:
    repair bill = fixed (12 MFK + 8 FLP) + LHP/SSC scaling roughly
    linearly with damage (≈3 each at 4.5%, ≈11 each at 80%). Users
-   repair at ~80% damage, so per-trip ship-repair cost =
-   (trip damage % ÷ 80%) × priced full bill. Trip damage comes from
+   repair at ~80% CONDITION, i.e. 20% damage (round 21 corrects the
+   "80% damage" phrasing of this entry and the divisor it produced),
+   so per-trip ship-repair cost =
+   (trip damage % ÷ 20%) × priced full bill. Trip damage comes from
    the per-leg damage numbers (flat per-parsec constant + per-STL-
    leg constant; no per-system variation, see Round 2 item 6).
 2. **STL legs: constant length.** Assume the sublight legs in and
@@ -600,7 +602,34 @@ and read as a working button — nothing said the field had to be filled
    new to the anchor list (or un-marking one) stales now, the same
    line round 19 drew for the fleet count.
 
-## Round 21 (depots as homes: gate planets, free handover, STL basing)
+## Round 21 (repair point: 80 % condition, not 80 % damage)
+
+Bug: the fleet Drydock column and every repair charge read the repair
+point as 80 % DAMAGE (2026-08-09, user report on the fleet table).
+
+1. **`RAUKK_REPAIR_AT_DAMAGE` is 0.2, not 0.8**: players repair at
+   80 % CONDITION — 20 % accumulated damage — because a hull below
+   that flies slow, and a hull above it wastes the fixed part of the
+   bill. Round 3 item 1 wrote that observation down as "at ~80 %
+   damage" and the constant took the phrase literally, so every
+   repair number was off by 4x: drydock cadence 4x too long, repair
+   cost per trip 4x too low. The round 3 numbers themselves settle
+   it — LHP/SSC scale roughly linearly and were 3 each at 4.5 %
+   damage, 10-12 each at the repair point; linear from 4.5 % lands
+   at ~13 by 20 % damage and at ~53 by 80 % damage.
+2. **`RAUKK_REPAIR_BILL` is unchanged**: the observed bill belongs to
+   that same 80 % condition cycle, so only the divisor was wrong.
+   Every consumer already reads the constant, so the fix is the one
+   value plus the copy that spelled "80 % repair threshold" out.
+3. **The fleet table breaks the spillover split out**: "own X % +
+   spilled Y %" printed inside the capacity cell, which squeezed the
+   bar of every row that carried it down to a stub. Own and Spilled
+   In are their own columns now, shown only while the spillover
+   display is on. The "Assigned" header reads "Routes" — it counts
+   the lanes and chains flown by the type, and "assigned" read as a
+   ship count next to a ship count.
+
+## Round 22 (depots as homes: gate planets, free handover, STL basing)
 
 User decision 2026-08-09, four connected changes that turn a depot from
 a pure routing anchor into the place non-FTL ships live.
@@ -668,7 +697,7 @@ a pure routing anchor into the place non-FTL ships live.
    was considered and NOT done — flow endpoints name the exchange, so
    re-anchoring without re-targeting the flows claims nothing, and
    re-targeting them needs a transshipment volume the model has no
-   notion of. Chain splitting at depot anchors (round 12) already gives
+   notion of. Chain splitting at depot anchors (round 11) already gives
    the gate-side/FTL handover that motivated it.
 
 Rent, for the record (user, 2026-08-09): a depot is normally cheap or

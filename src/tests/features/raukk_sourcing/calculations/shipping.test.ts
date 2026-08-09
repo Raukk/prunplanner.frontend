@@ -67,10 +67,10 @@ const resolvePrice = (ticker: string): number => prices[ticker] ?? 0;
 
 /** 11 * 100 + 11 * 100 + 12 * 10 + 8 * 10 */
 const REPAIR_BILL_COST: number = 2400;
-/** (2 * 10 * 0.001 + 2 * 0.002) / 0.8 * 2400 */
-const REPAIR_PER_TRIP: number = 72;
-/** 2 * 10 * 100 + 2 * 50 + 72 */
-const COST_PER_TRIP: number = 2172;
+/** (2 * 10 * 0.001 + 2 * 0.002) / 0.2 * 2400 */
+const REPAIR_PER_TRIP: number = 288;
+/** 2 * 10 * 100 + 2 * 50 + 288 */
+const COST_PER_TRIP: number = 2388;
 
 /** Account defaults; the fixtures below fill their hulls well inside
  * them, so the cap only binds where a test says so */
@@ -179,7 +179,8 @@ describe("Raukk Sourcing: Shipping", () => {
 				MFK: 12,
 				FLP: 8,
 			});
-			expect(RAUKK_REPAIR_AT_DAMAGE).toBe(0.8);
+			// 80% condition, which is 20% accumulated damage
+			expect(RAUKK_REPAIR_AT_DAMAGE).toBe(0.2);
 		});
 
 		it("charges the repair budget share of a trip", () => {
@@ -202,7 +203,7 @@ describe("Raukk Sourcing: Shipping", () => {
 			};
 
 			// flat cost once per trip, sublight blocks and the block damage
-			// still apply: 25 + 2 * 50 + (2 * 0.002 / 0.8) * 2400
+			// still apply: 25 + 2 * 50 + (2 * 0.002 / 0.2) * 2400
 			expect(
 				calculateCostPerTrip(
 					sameSystem,
@@ -210,7 +211,7 @@ describe("Raukk Sourcing: Shipping", () => {
 					{ ...config, sameSystemFlatCost: 25 },
 					REPAIR_BILL_COST
 				)
-			).toBeCloseTo(25 + 100 + 12, 10);
+			).toBeCloseTo(25 + 100 + 48, 10);
 		});
 
 		it("is free inside one system by default", () => {
@@ -280,9 +281,9 @@ describe("Raukk Sourcing: Shipping", () => {
 
 			expect(result.tripsPerDay).toBeCloseTo(0.5, 10);
 			expect(result.costPerTrip).toBeCloseTo(COST_PER_TRIP, 10);
-			expect(result.dailyCost).toBeCloseTo(1086, 10);
+			expect(result.dailyCost).toBeCloseTo(1194, 10);
 			expect(result.perUnitOut).toStrictEqual({});
-			expect(result.perUnitBack.ORE).toBeCloseTo(1086 / 500, 10);
+			expect(result.perUnitBack.ORE).toBeCloseTo(1194 / 500, 10);
 		});
 
 		it("amortizes a CX pair by load share", () => {
@@ -295,10 +296,10 @@ describe("Raukk Sourcing: Shipping", () => {
 			);
 
 			expect(result.tripsPerDay).toBeCloseTo(0.5, 10);
-			expect(result.dailyCost).toBeCloseTo(1086, 10);
-			// 1086 * (1/3) / 250 and 1086 * (2/3) / 500
-			expect(result.perUnitOut.FE).toBeCloseTo(1.448, 10);
-			expect(result.perUnitBack.ORE).toBeCloseTo(1.448, 10);
+			expect(result.dailyCost).toBeCloseTo(1194, 10);
+			// 1194 * (1/3) / 250 and 1194 * (2/3) / 500
+			expect(result.perUnitOut.FE).toBeCloseTo(1.592, 10);
+			expect(result.perUnitBack.ORE).toBeCloseTo(1.592, 10);
 			expect(
 				result.perUnitOut.FE * 250 + result.perUnitBack.ORE * 500
 			).toBeCloseTo(result.dailyCost, 10);
@@ -447,7 +448,7 @@ describe("Raukk Sourcing: Shipping", () => {
 
 			// null, never 0: a zero would read as infinite capacity
 			expect(result.shippingFraction).toBeNull();
-			expect(result.dailyCost).toBeCloseTo(1086, 10);
+			expect(result.dailyCost).toBeCloseTo(1194, 10);
 		});
 
 		it("keeps a hired lane at a hard zero, not at undefined", () => {
@@ -948,9 +949,9 @@ describe("Raukk Sourcing: Shipping", () => {
 					(result.pairs[1].shippingFraction ?? 0),
 				10
 			);
-			expect(result.inbound.ORE).toBeCloseTo(1086 / 500, 10);
-			expect(result.inbound.RAT).toBeCloseTo(1.448, 10);
-			expect(result.outbound.FE).toBeCloseTo(1.448, 10);
+			expect(result.inbound.ORE).toBeCloseTo(1194 / 500, 10);
+			expect(result.inbound.RAT).toBeCloseTo(1.592, 10);
+			expect(result.outbound.FE).toBeCloseTo(1.592, 10);
 		});
 
 		it("weights a ticker shipped on two pairs by its units", () => {
