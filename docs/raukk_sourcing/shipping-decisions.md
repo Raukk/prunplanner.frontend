@@ -519,6 +519,34 @@ LM rate and ship assignment are pair-keyed.
    number with an "own X % + spilled Y %" note. Toggle off renders
    exactly as before. See shipping-fleet.md, "Utilization spillover".
 
+## Round 18 (fleet ownership: advisory filter, owned-set staleness)
+
+Bug: adding the advised hull to the fleet (e.g. MCB, count 1) neither
+removed the "MCB … now on SCB" advisory nor moved any work onto the
+new hull — the MCB row stayed at 0%.
+
+1. **An advisory is dropped the moment its hull is owned**: an
+   advisory's whole meaning is "a hull the fleet does NOT own would
+   serve this better", so `useRaukkFleet` now filters the stored
+   (frozen) advisories at READ time against the current fleet —
+   advice whose `suggestedShipTypeId` has a count above zero
+   disappears immediately, without waiting for any recompute. A row
+   at count 0 does not count as ownership.
+2. **The owned set is a costing input and stales everything**: the
+   automatic hull pick assigns OWNED types only
+   (`raukkOwnedHullCandidates`, starter fallback included), so
+   `setFleetShip`/`deleteFleetShip` no longer stale nothing — a type
+   entering or leaving ownership (newly added with hulls, count
+   crossing zero in either direction, an owned type deleted) calls
+   `markAllStale()`, the established account-global precedent
+   (shipping config, ship profiles), gated on shipping being enabled
+   like `setShipProfile`. That is what moves the work onto the newly
+   bought hull once the recompute flows answer the flags.
+3. **A count change on the same side of zero still stales nothing**:
+   2→3 hulls, a design-name edit, adding or deleting a count-0 row —
+   all pure utilization-denominator reads, exactly the old rule,
+   which was simply overbroad in claiming ALL fleet edits were that.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,

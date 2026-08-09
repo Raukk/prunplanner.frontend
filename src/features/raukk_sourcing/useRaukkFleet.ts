@@ -29,7 +29,10 @@ import { IRaukkFleetAdvisory } from "@/features/raukk_sourcing/calculations/ship
  * so the rollup reads the STORED per lane numbers of every snapshot and
  * the stored chain results, never live values. Utilization itself is
  * derived at read time: changing a ship count moves the percentages
- * immediately and stales nothing, because no cost depends on it.
+ * immediately. Costs are another matter — the automatic hull pick
+ * assigns OWNED types only, so the store stales the stored results
+ * whenever the owned set changes (see `setFleetShip`); a count change
+ * on the same side of zero really is just the denominator.
  *
  * Hired work is skipped: someone elses ship is doing the flying, which
  * is precisely why hiring is worth comparing against.
@@ -92,15 +95,27 @@ export function useRaukkFleet() {
 	 * advice onto the chain result, and both are account level answers —
 	 * one fleet serves every plan — so they are read from the same stored
 	 * state the utilization is and rolled up together.
+	 *
+	 * Ownership is re-checked at READ time: an advisory's whole meaning
+	 * is "a hull the fleet does NOT own would serve this better", so the
+	 * moment the fleet holds the suggested type the advice is answered
+	 * and dropped here — the stored results only recompute later, and a
+	 * frozen advisory must not outlive its own purchase.
 	 */
-	const advisories: ComputedRef<IRaukkFleetAdvisory[]> = computed(() => [
-		...Object.values(sourcingStore.snapshots).flatMap(
-			(snapshot: IRaukkSnapshot) => snapshot.advisories ?? []
-		),
-		...Object.values(sourcingStore.chainResults).flatMap(
-			(chain: IRaukkChainResult) => chain.advisories ?? []
-		),
-	]);
+	const advisories: ComputedRef<IRaukkFleetAdvisory[]> = computed(() =>
+		[
+			...Object.values(sourcingStore.snapshots).flatMap(
+				(snapshot: IRaukkSnapshot) => snapshot.advisories ?? []
+			),
+			...Object.values(sourcingStore.chainResults).flatMap(
+				(chain: IRaukkChainResult) => chain.advisories ?? []
+			),
+		].filter(
+			(advisory: IRaukkFleetAdvisory) =>
+				(sourcingStore.fleet[advisory.suggestedShipTypeId]?.count ??
+					0) <= 0
+		)
+	);
 
 	return { entries, utilization, advisories };
 }
