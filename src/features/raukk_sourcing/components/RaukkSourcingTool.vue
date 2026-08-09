@@ -11,18 +11,18 @@
 	// Composables
 	import { useRaukkSnapshot } from "@/features/raukk_sourcing/useRaukkSnapshot";
 	import { useRaukkChainRecompute } from "@/features/raukk_sourcing/useRaukkChainRecompute";
+	import { useRaukkShippingOptions } from "@/features/raukk_sourcing/useRaukkShippingOptions";
 
 	// Components
-	import RaukkBaseTransportSection from "@/features/raukk_sourcing/components/RaukkBaseTransportSection.vue";
 	import RaukkInputsTable from "@/features/raukk_sourcing/components/RaukkInputsTable.vue";
 	import RaukkOutputsTable from "@/features/raukk_sourcing/components/RaukkOutputsTable.vue";
-	import RaukkShippingSection from "@/features/raukk_sourcing/components/RaukkShippingSection.vue";
 
 	// Calculations
 	import {
 		raukkShipTimeOver,
 		raukkShipTimePercent,
 	} from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+	import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
 
 	// Util
 	import { formatDate } from "@/util/date";
@@ -31,6 +31,7 @@
 	// UI
 	import {
 		PButton,
+		PButtonGroup,
 		PInputNumber,
 		PSelect,
 		PTag,
@@ -83,8 +84,6 @@
 		config,
 		shippingConfig,
 		caps,
-		shippingPairs,
-		repairBillCost,
 		inputRows,
 		outputRows,
 		exchangePrices,
@@ -107,15 +106,27 @@
 		() => props.disabled || props.planUuid === undefined
 	);
 
-	/** Plan names of every stored snapshot, labels the shipping lanes */
-	const planNames: ComputedRef<Record<string, string>> = computed(() =>
-		Object.fromEntries(
-			Object.entries(sourcingStore.snapshots).map(([uuid, stored]) => [
-				uuid,
-				stored.planName,
-			])
-		)
-	);
+	/**
+	 * One panel of the tool. Only the active one mounts, so the tables a
+	 * user is not looking at cost nothing — the same contract the
+	 * oversubscription report's tab registry follows.
+	 *
+	 * "Costs" is the default and holds the two tables the tool exists for;
+	 * everything that is configured once per plan lives under "Settings",
+	 * and the freight tables moved to the account Shipping page, where the
+	 * state they edit is actually account global.
+	 */
+	interface IRaukkSourcingTab {
+		key: string;
+		labelKey: string;
+	}
+
+	const TABS: IRaukkSourcingTab[] = [
+		{ key: "costs", labelKey: "raukk_sourcing.tabs.costs" },
+		{ key: "settings", labelKey: "raukk_sourcing.tabs.settings" },
+	];
+
+	const refActiveTab: Ref<string> = ref("costs");
 
 	/**
 	 * Ship time of this plan as the percentage every other shipping
@@ -174,6 +185,48 @@
 		}
 
 		sourcingStore.setTickerSource(props.planUuid, ticker, source);
+	}
+
+	/*
+	 * CX anchor of the open plan
+	 */
+
+	const { anchorOptions } = useRaukkShippingOptions();
+
+	/**
+	 * Account wide anchor as the plan picker's placeholder states it: the
+	 * exchange code, or the translated "nearest" label. `RAUKK_CX_ANCHOR_
+	 * NEAREST` is a stored SENTINEL, never a string to show a user.
+	 */
+	const anchorModeLabel: ComputedRef<string> = computed(() => {
+		const mode: string =
+			shippingConfig.value.cxAnchorMode ?? RAUKK_CX_ANCHOR_NEAREST;
+
+		return mode === RAUKK_CX_ANCHOR_NEAREST
+			? t("raukk_sourcing.cx_anchor.nearest")
+			: mode;
+	});
+
+	/** Anchor override of the open plan, null while it follows the account */
+	const planAnchor: ComputedRef<string | null> = computed(() =>
+		props.planUuid === undefined
+			? null
+			: (sourcingStore.configs[props.planUuid]?.cxAnchor ?? null)
+	);
+
+	/**
+	 * Stores or clears the anchor of the open plan. Clearing puts the
+	 * plan back onto the account wide mode, which is what the placeholder
+	 * of the picker shows.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string | null} cxCode Exchange code, null clears
+	 */
+	function changePlanAnchor(cxCode: string | null): void {
+		if (readOnly.value || props.planUuid === undefined) return;
+
+		sourcingStore.setPlanCxAnchor(props.planUuid, cxCode ?? undefined);
 	}
 
 	/**
@@ -325,145 +378,10 @@
 		{{ $t("raukk_sourcing.info") }}
 	</div>
 
+	<!-- Snapshot state and the two actions that refresh it: the one strip
+	     that stays visible whichever panel is open -->
 	<div
-		class="border rounded-[3px] border-white/20 p-3 flex flex-row flex-wrap gap-3 justify-between">
-		<div class="flex flex-row flex-wrap gap-3 child:my-auto">
-			<div class="font-bold">
-				{{ $t("raukk_sourcing.controls.repair_day") }}
-			</div>
-			<PSelect
-				class="w-25!"
-				:value="config.repairDay"
-				:options="repairDayOptions"
-				:disabled="readOnly"
-				@update:value="
-					(v) => changeRepairDay(Number(v) as RAUKK_REPAIR_DAY)
-				" />
-
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.controls.cadence") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.controls.cadence_tooltip") }}
-			</PTooltip>
-			<PInputNumber
-				class="min-w-25"
-				:min="1"
-				:disabled="readOnly"
-				:placeholder="String(caps.production)"
-				:value="config.cadence?.production ?? null"
-				@update:value="(v) => changeCadence('production', v ?? null)" />
-			<PInputNumber
-				class="min-w-25"
-				:min="1"
-				:disabled="readOnly"
-				:placeholder="String(caps.workforce)"
-				:value="config.cadence?.workforce ?? null"
-				@update:value="(v) => changeCadence('workforce', v ?? null)" />
-			<PInputNumber
-				class="min-w-25"
-				:min="1"
-				:disabled="readOnly"
-				:placeholder="String(caps.repair)"
-				:value="config.cadence?.repair ?? null"
-				@update:value="(v) => changeCadence('repair', v ?? null)" />
-
-			<PButton
-				type="primary"
-				:loading="refIsComputing"
-				:disabled="readOnly || busy"
-				@click="compute">
-				{{ $t("raukk_sourcing.controls.compute") }}
-			</PButton>
-
-			<PTooltip>
-				<template #trigger>
-					<PButton
-						:loading="chainRunning"
-						:disabled="readOnly || busy"
-						@click="recompute">
-						{{ $t("raukk_sourcing.controls.recompute_chain") }}
-					</PButton>
-				</template>
-				{{ $t("raukk_sourcing.controls.recompute_chain_tooltip") }}
-			</PTooltip>
-
-			<span v-if="chainRunning" class="text-white/60">
-				{{
-					$t("raukk_sourcing.controls.recompute_chain_progress", {
-						done: chainStep,
-						total: chainTotal,
-						name: chainCurrent ?? "",
-					})
-				}}
-			</span>
-		</div>
-
-		<div class="flex flex-row flex-wrap gap-3 child:my-auto">
-			<PButton type="secondary" @click="exportJSON">
-				{{ $t("raukk_sourcing.controls.export") }}
-			</PButton>
-			<PButton type="secondary" @click="refShowImport = !refShowImport">
-				{{ $t("raukk_sourcing.controls.import") }}
-			</PButton>
-		</div>
-	</div>
-
-	<div v-if="refShowImport" class="pt-3 flex flex-col gap-3">
-		<PInput
-			v-model:value="refImportPayload"
-			type="textarea"
-			:rows="4"
-			:placeholder="$t('raukk_sourcing.controls.import_placeholder')" />
-		<div class="flex flex-row gap-3">
-			<PButton
-				type="primary"
-				:disabled="!refImportPayload"
-				@click="applyImport(refImportPayload ?? '')">
-				{{ $t("raukk_sourcing.controls.import_apply") }}
-			</PButton>
-			<input
-				ref="refFileInput"
-				type="file"
-				accept=".json"
-				style="display: none"
-				@change="handleFileChange" />
-			<PButton type="secondary" @click="refFileInput?.click()">
-				{{ $t("raukk_sourcing.controls.import_file") }}
-			</PButton>
-			<PButton type="secondary" @click="refShowImport = false">
-				{{ $t("raukk_sourcing.controls.import_cancel") }}
-			</PButton>
-		</div>
-	</div>
-
-	<div v-if="refComputeError" class="pt-3">
-		<span class="text-negative">{{ refComputeError }}</span>
-	</div>
-
-	<div v-if="chainErrors.length > 0" class="pt-3 flex flex-col">
-		<span
-			v-for="chainError in chainErrors"
-			:key="chainError.planUuid"
-			class="text-negative">
-			{{
-				$t("raukk_sourcing.controls.recompute_chain_error", {
-					name: chainError.planName,
-					message: chainError.message,
-				})
-			}}
-		</span>
-	</div>
-
-	<div v-if="refImportMessage" class="pt-3">
-		<span :class="refImportFailed ? 'text-negative' : 'text-positive'">
-			{{ refImportMessage }}
-		</span>
-	</div>
-
-	<div class="pt-3 flex flex-row flex-wrap gap-3 child:my-auto">
+		class="border rounded-[3px] border-white/20 p-3 flex flex-row flex-wrap gap-3 child:my-auto">
 		<template v-if="snapshot">
 			<span class="text-white/60">
 				{{
@@ -505,14 +423,11 @@
 									: 'text-white/60'
 							">
 							{{
-								$t(
-									"raukk_sourcing.snapshot.shipping_fraction",
-									{
-										value: shipTimeLabel(
-											snapshot.shippingFraction
-										),
-									}
-								)
+								$t("raukk_sourcing.snapshot.shipping_fraction", {
+									value: shipTimeLabel(
+										snapshot.shippingFraction
+									),
+								})
 							}}
 						</span>
 					</RouterLink>
@@ -532,6 +447,54 @@
 				})
 			}}
 		</PTag>
+
+		<PButton
+			type="primary"
+			:loading="refIsComputing"
+			:disabled="readOnly || busy"
+			@click="compute">
+			{{ $t("raukk_sourcing.controls.compute") }}
+		</PButton>
+
+		<PTooltip>
+			<template #trigger>
+				<PButton
+					:loading="chainRunning"
+					:disabled="readOnly || busy"
+					@click="recompute">
+					{{ $t("raukk_sourcing.controls.recompute_chain") }}
+				</PButton>
+			</template>
+			{{ $t("raukk_sourcing.controls.recompute_chain_tooltip") }}
+		</PTooltip>
+
+		<span v-if="chainRunning" class="text-white/60">
+			{{
+				$t("raukk_sourcing.controls.recompute_chain_progress", {
+					done: chainStep,
+					total: chainTotal,
+					name: chainCurrent ?? "",
+				})
+			}}
+		</span>
+	</div>
+
+	<div v-if="refComputeError" class="pt-3">
+		<span class="text-negative">{{ refComputeError }}</span>
+	</div>
+
+	<div v-if="chainErrors.length > 0" class="pt-3 flex flex-col">
+		<span
+			v-for="chainError in chainErrors"
+			:key="chainError.planUuid"
+			class="text-negative">
+			{{
+				$t("raukk_sourcing.controls.recompute_chain_error", {
+					name: chainError.planName,
+					message: chainError.message,
+				})
+			}}
+		</span>
 	</div>
 
 	<div v-if="props.planUuid === undefined" class="pt-3 text-white/50">
@@ -541,40 +504,185 @@
 		{{ $t("raukk_sourcing.read_only") }}
 	</div>
 
-	<RaukkShippingSection
-		:plan-uuid="planUuid"
-		:pairs="shippingPairs"
-		:repair-bill-cost="repairBillCost"
-		:caps="caps"
-		:plan-names="planNames"
-		:disabled="readOnly" />
+	<div class="py-3">
+		<PButtonGroup>
+			<PButton
+				v-for="tab in TABS"
+				:key="`RAUKKSOURCINGTAB#${tab.key}`"
+				:type="refActiveTab === tab.key ? 'primary' : 'secondary'"
+				size="sm"
+				@click="() => (refActiveTab = tab.key)">
+				{{ $t(tab.labelKey) }}
+			</PButton>
+		</PButtonGroup>
+	</div>
 
-	<RaukkBaseTransportSection
-		v-if="shippingConfig.enabled && planUuid !== undefined"
-		:plan-uuid="planUuid"
-		:planet-natural-id="planetNaturalId" />
+	<template v-if="refActiveTab === 'costs'">
+		<h3 class="font-bold pb-3">
+			{{ $t("raukk_sourcing.inputs_title") }}
+		</h3>
+		<RaukkInputsTable
+			:rows="inputRows"
+			:source-options="sourceOptions"
+			:repair-cost-per-day="repairCost.total"
+			:shipping-enabled="shippingConfig.enabled"
+			:exchange-prices="exchangePrices"
+			:exchange-code="cxExchangeCode"
+			:disabled="readOnly"
+			@update:source="changeSource" />
 
-	<h3 class="font-bold py-3">
-		{{ $t("raukk_sourcing.inputs_title") }}
-	</h3>
-	<RaukkInputsTable
-		:rows="inputRows"
-		:source-options="sourceOptions"
-		:repair-cost-per-day="repairCost.total"
-		:shipping-enabled="shippingConfig.enabled"
-		:exchange-prices="exchangePrices"
-		:exchange-code="cxExchangeCode"
-		:disabled="readOnly"
-		@update:source="changeSource" />
+		<h3 class="font-bold py-3">
+			{{ $t("raukk_sourcing.outputs_title") }}
+		</h3>
+		<RaukkOutputsTable
+			:rows="outputRows"
+			:local-sales="localSales"
+			:exchange-prices="exchangePrices"
+			:exchange-code="cxExchangeCode"
+			:read-only="readOnly"
+			@update:local-sale="changeLocalSale" />
+	</template>
 
-	<h3 class="font-bold py-3">
-		{{ $t("raukk_sourcing.outputs_title") }}
-	</h3>
-	<RaukkOutputsTable
-		:rows="outputRows"
-		:local-sales="localSales"
-		:exchange-prices="exchangePrices"
-		:exchange-code="cxExchangeCode"
-		:read-only="readOnly"
-		@update:local-sale="changeLocalSale" />
+	<template v-else-if="refActiveTab === 'settings'">
+		<div
+			class="border rounded-[3px] border-white/20 p-3 flex flex-row flex-wrap gap-3 child:my-auto">
+			<div class="font-bold">
+				{{ $t("raukk_sourcing.controls.repair_day") }}
+			</div>
+			<PSelect
+				class="w-25!"
+				:value="config.repairDay"
+				:options="repairDayOptions"
+				:disabled="readOnly"
+				@update:value="
+					(v) => changeRepairDay(Number(v) as RAUKK_REPAIR_DAY)
+				" />
+
+			<PTooltip>
+				<template #trigger>
+					<div class="font-bold pl-3 hover:cursor-help">
+						{{ $t("raukk_sourcing.controls.cadence_production") }}
+					</div>
+				</template>
+				{{ $t("raukk_sourcing.controls.cadence_tooltip") }}
+			</PTooltip>
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:disabled="readOnly"
+				:placeholder="String(caps.production)"
+				:value="config.cadence?.production ?? null"
+				@update:value="(v) => changeCadence('production', v ?? null)" />
+
+			<PTooltip>
+				<template #trigger>
+					<div class="font-bold pl-3 hover:cursor-help">
+						{{ $t("raukk_sourcing.controls.cadence_workforce") }}
+					</div>
+				</template>
+				{{ $t("raukk_sourcing.controls.cadence_tooltip") }}
+			</PTooltip>
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:disabled="readOnly"
+				:placeholder="String(caps.workforce)"
+				:value="config.cadence?.workforce ?? null"
+				@update:value="(v) => changeCadence('workforce', v ?? null)" />
+
+			<PTooltip>
+				<template #trigger>
+					<div class="font-bold pl-3 hover:cursor-help">
+						{{ $t("raukk_sourcing.controls.cadence_repair") }}
+					</div>
+				</template>
+				{{ $t("raukk_sourcing.controls.cadence_tooltip") }}
+			</PTooltip>
+			<PInputNumber
+				class="min-w-25"
+				:min="1"
+				:disabled="readOnly"
+				:placeholder="String(caps.repair)"
+				:value="config.cadence?.repair ?? null"
+				@update:value="(v) => changeCadence('repair', v ?? null)" />
+		</div>
+
+		<div
+			v-if="shippingConfig.enabled"
+			class="mt-3 border rounded-[3px] border-white/20 p-3 flex flex-row flex-wrap gap-3 child:my-auto">
+			<PTooltip>
+				<template #trigger>
+					<div class="font-bold hover:cursor-help">
+						{{ $t("raukk_sourcing.cx_anchor.plan_label") }}
+					</div>
+				</template>
+				{{ $t("raukk_sourcing.cx_anchor.tooltip") }}
+			</PTooltip>
+			<PSelect
+				class="w-40!"
+				clearable
+				:disabled="readOnly || planUuid === undefined"
+				:value="planAnchor"
+				:options="anchorOptions"
+				:placeholder="anchorModeLabel"
+				@update:value="(v) => changePlanAnchor((v as string) ?? null)" />
+
+			<RouterLink to="/shipping" class="pl-3">
+				<PButton type="secondary">
+					{{ $t("raukk_sourcing.shipping_page.manage_link") }}
+				</PButton>
+			</RouterLink>
+		</div>
+
+		<div v-else class="pt-3 text-white/50">
+			{{ $t("raukk_sourcing.shipping.disabled_info") }}
+		</div>
+
+		<div
+			class="mt-3 border rounded-[3px] border-white/20 p-3 flex flex-row flex-wrap gap-3 child:my-auto">
+			<div class="font-bold">
+				{{ $t("raukk_sourcing.controls.data_label") }}
+			</div>
+			<PButton type="secondary" @click="exportJSON">
+				{{ $t("raukk_sourcing.controls.export") }}
+			</PButton>
+			<PButton type="secondary" @click="refShowImport = !refShowImport">
+				{{ $t("raukk_sourcing.controls.import") }}
+			</PButton>
+		</div>
+
+		<div v-if="refShowImport" class="pt-3 flex flex-col gap-3">
+			<PInput
+				v-model:value="refImportPayload"
+				type="textarea"
+				:rows="4"
+				:placeholder="$t('raukk_sourcing.controls.import_placeholder')" />
+			<div class="flex flex-row gap-3">
+				<PButton
+					type="primary"
+					:disabled="!refImportPayload"
+					@click="applyImport(refImportPayload ?? '')">
+					{{ $t("raukk_sourcing.controls.import_apply") }}
+				</PButton>
+				<input
+					ref="refFileInput"
+					type="file"
+					accept=".json"
+					style="display: none"
+					@change="handleFileChange" />
+				<PButton type="secondary" @click="refFileInput?.click()">
+					{{ $t("raukk_sourcing.controls.import_file") }}
+				</PButton>
+				<PButton type="secondary" @click="refShowImport = false">
+					{{ $t("raukk_sourcing.controls.import_cancel") }}
+				</PButton>
+			</div>
+		</div>
+
+		<div v-if="refImportMessage" class="pt-3">
+			<span :class="refImportFailed ? 'text-negative' : 'text-positive'">
+				{{ refImportMessage }}
+			</span>
+		</div>
+	</template>
 </template>

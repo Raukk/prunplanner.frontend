@@ -3,9 +3,16 @@
 	"info": "True break-even cost per output unit, with inputs either bought at market or drawn from another plan's stored snapshot.",
 	"unsaved_plan": "Save the plan first, sourcing snapshots are stored per plan uuid.",
 	"read_only": "This plan is read-only, sourcing configuration can't be changed.",
+	"tabs": {
+		"costs": "Costs",
+		"settings": "Settings"
+	},
 	"controls": {
 		"repair_day": "Repair Day",
-		"cadence": "Days/Visit In-Out · Workforce · Repair",
+		"cadence_production": "Days/Visit In-Out",
+		"cadence_workforce": "Days/Visit Workforce",
+		"cadence_repair": "Days/Visit Repair",
+		"data_label": "Sourcing Data",
 		"cadence_tooltip": "Days between two deliveries this plan accepts, per cargo class: production in and out, workforce consumables, repair materials. Empty follows the account default — the placeholder shows what applies. Any positive day count is allowed; 365 means once a year. The cap binds the shipping: a hold needing longer to fill flies partly loaded, and a partial trip pays a full trip.",
 		"compute": "Compute Snapshot",
 		"compute_error": "Snapshot computation failed: {message}",
