@@ -389,6 +389,9 @@ export const RaukkSnapshotSchema = z.object({
 	// null: the profile of a pair claims no ship at all, so the fraction
 	// has no denominator and is displayed as an em-dash
 	shippingFraction: z.number().nullable().optional(),
+	// storage cross-check input of the shipping page; null when the plan
+	// result carried no storage block, absent in payloads predating it
+	storageFilledDays: z.number().nullable().optional(),
 });
 
 /**

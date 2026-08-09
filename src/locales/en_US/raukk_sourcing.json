@@ -95,6 +95,15 @@
 		"self": "Own output",
 		"stale": "stale snapshot"
 	},
+	"shipping_page": {
+		"view_title": "Shipping",
+		"info": "Fleet, routes and depots of the whole account. Everything here is account-global; the per-plan pieces — sources, local market rates and the plan CX anchor — stay on each plan's Sourcing tool.",
+		"manage_link": "Manage fleet & routes",
+		"recompute": "Recompute Chains",
+		"recompute_tooltip": "Re-costs every chain from the stored snapshot flows. To refresh the snapshots themselves, use the sourcing tool of a plan.",
+		"chain_error": "Chain '{name}': {message}",
+		"auto_chain_error": "Automatic chains: {message}"
+	},
 	"shipping": {
 		"title": "Shipping",
 		"enabled": "Charge Shipping",
@@ -339,6 +348,7 @@
 	"hub_spoke": {
 		"title": "Exchange Hub/Spoke",
 		"info": "Cargo of THIS base no chain hauls: it buys what it needs at its exchange and sells its excess at the same one. One row per resource, optionally split by the base pair it moves between; the share is of this base's exchange cargo.",
+		"info_account": "Cargo no chain hauls, account wide: the consumer buys it at its exchange and the producer sells its excess at its own. One row per resource, optionally split by the base pair it moves between; the share is of everything rerouted through the exchanges.",
 		"ticker": "Material",
 		"bucket": "Class",
 		"from": "From",
@@ -348,7 +358,8 @@
 		"volume": "m³ / Day",
 		"share": "Share",
 		"grouped": "Group by base",
-		"empty": "Nothing of this base goes through the exchange: every plan to plan flow it touches rides a chain."
+		"empty": "Nothing of this base goes through the exchange: every plan to plan flow it touches rides a chain.",
+		"empty_account": "Nothing goes through the exchange: every plan to plan flow rides a chain."
 	},
 	"cx_anchor": {
 		"label": "CX Anchor",

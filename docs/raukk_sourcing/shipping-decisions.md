@@ -458,6 +458,26 @@ LM rate and ship assignment are pair-keyed.
    because the old placeholder only ever showed on an empty field and
    the field is never empty.
 
+## Round 15 (merge: shipping page split × round 13/14 fixes)
+
+1. **The account-level shipping page exists now** (PR #8), the
+   "possible future item" of round 13.3: fleet, chains, depots and the
+   calibration editor moved off the sourcing tool onto `/shipping`
+   (`RaukkShippingPage.vue`). The plan side keeps the LM rates table
+   and the per-plan CX anchor only.
+2. **The chain section renders with NO open plan**, so
+   `raukkFlowConcernsPlan` passes every flow — its documented no-uuid
+   behaviour — and the page's hub/spoke table is the account-wide view.
+   The copy follows the scope: `hub_spoke.info` / `hub_spoke.empty`
+   (base phrasing, round 13.3) with a plan open,
+   `hub_spoke.info_account` / `hub_spoke.empty_account` on the page.
+   Round 13.3's base-scoped table currently has no render site;
+   restoring a per-plan chain view is open, NOT decided.
+3. **`storageFilledDays` joined `RaukkSnapshotSchema`**: the page reads
+   the storage cross-check from the frozen snapshots and zod strips
+   unknown keys on import, so a re-imported payload would silently have
+   lost the field.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration, and

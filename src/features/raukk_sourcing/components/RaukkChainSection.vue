@@ -178,7 +178,17 @@
 	const refGroupHubSpoke: Ref<boolean> = ref(true);
 
 	/**
-	 * What the OPEN base still routes through the exchange.
+	 * Whether the hub/spoke listing speaks for one base: with a plan
+	 * open it is scoped to that base, without one — the account level
+	 * shipping page — every flow passes and the copy says so.
+	 */
+	const hubSpokeScoped: ComputedRef<boolean> = computed(
+		() => props.planUuid !== undefined
+	);
+
+	/**
+	 * What the OPEN base still routes through the exchange — or the
+	 * whole account, when no plan scopes the listing.
 	 *
 	 * Claims are subtracted account wide first and the scoping follows:
 	 * a claim is keyed per owning plan and lane, so dropping the other
@@ -658,7 +668,11 @@
 		{{ $t("raukk_sourcing.hub_spoke.title") }}
 	</h4>
 	<div class="text-white/50 pb-3">
-		{{ $t("raukk_sourcing.hub_spoke.info") }}
+		{{
+			hubSpokeScoped
+				? $t("raukk_sourcing.hub_spoke.info")
+				: $t("raukk_sourcing.hub_spoke.info_account")
+		}}
 	</div>
 
 	<div class="flex flex-row gap-3 pb-3 child:my-auto">
@@ -718,7 +732,11 @@
 				<td
 					:colspan="refGroupHubSpoke ? 8 : 6"
 					class="text-center text-white/50">
-					{{ $t("raukk_sourcing.hub_spoke.empty") }}
+					{{
+						hubSpokeScoped
+							? $t("raukk_sourcing.hub_spoke.empty")
+							: $t("raukk_sourcing.hub_spoke.empty_account")
+					}}
 				</td>
 			</tr>
 		</tbody>
