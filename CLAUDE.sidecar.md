@@ -219,3 +219,24 @@ anywhere in the repo. Not retroactive.
   replaced the material i/o column's hardcoded `top-12`. Opening a
   tool while scrolled down scrolls the panel into view, it would
   otherwise render off-screen above.
+- 2026-08-09: Sourcing tab de-bloated (user request — nine stacked
+  blocks, three of them read on a normal visit). REVISES round 16 of
+  docs/raukk_sourcing/shipping-decisions.md. The tool now pins the
+  snapshot strip plus Compute/Recompute above a Costs/Settings button
+  strip (the `RaukkOversubReportSection` tab-registry idiom;
+  `refActiveTab` stays component-local, the store persists domain data
+  and never UI selection). Costs = inputs + outputs tables, Settings =
+  repair day, the three cadence overrides (each labelled now, they
+  shared one header and were told apart by position), plan CX anchor,
+  export/import. User decision, picked over collapse-in-place: the
+  freight tables LEFT the plan tab entirely for a new account-wide
+  Transport section on /shipping — `lmRates` and per-lane
+  `assignments` are account-global yet were editable only from a
+  per-plan tab, and the old LM table and base-transport table listed
+  overlapping lanes with different freshness. Both are gone, merged
+  into one table (`shippingBaseScope.ts`, `useRaukkBaseTransport.ts`,
+  `RaukkShippingSection.vue`, `RaukkBaseTransportSection.vue`,
+  `RaukkLmRatesTable.vue` deleted). See docs/raukk_sourcing/
+  transport.md for why it reads frozen lanes rather than rebuilding
+  pairs live, and for the one behavioural loss (a lane that ships
+  nothing has no stored lanes, so no rate can be pre-entered for it).

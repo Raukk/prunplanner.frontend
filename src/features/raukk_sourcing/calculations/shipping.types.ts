@@ -376,6 +376,20 @@ export interface IRaukkLegShipping {
 	repairCostPerTrip: number;
 	/** Hull damage per round trip as a fraction, 0 when hired */
 	damagePerTrip: number;
+	/**
+	 * ȼ per trip the OWN fleet would charge for this leg, stated even
+	 * while the lane is hired: the hire comparison is what hiring buys,
+	 * so it needs the counterfactual and not the rate that replaced it.
+	 */
+	ownCostPerTrip: number;
+	/**
+	 * Hull damage per round trip the OWN fleet would take, stated even
+	 * while hired, for the same reason as {@link ownCostPerTrip} — part
+	 * of what hiring buys is the wear the own hulls are spared.
+	 */
+	ownDamagePerTrip: number;
+	/** Units this leg moves per day, both directions summed */
+	unitsPerDay: number;
 	dailyCost: number;
 	roundTripMinutes: number;
 	/** Ship time share of this leg, `null` without a ship count */

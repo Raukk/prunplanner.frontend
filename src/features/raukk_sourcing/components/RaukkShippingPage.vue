@@ -19,6 +19,7 @@
 	// Components
 	import RaukkShipProfileEditor from "@/features/raukk_sourcing/components/RaukkShipProfileEditor.vue";
 	import RaukkFleetSection from "@/features/raukk_sourcing/components/RaukkFleetSection.vue";
+	import RaukkTransportSection from "@/features/raukk_sourcing/components/RaukkTransportSection.vue";
 	import RaukkChainSection from "@/features/raukk_sourcing/components/RaukkChainSection.vue";
 	import RaukkDepotSection from "@/features/raukk_sourcing/components/RaukkDepotSection.vue";
 	import RaukkShippingVisualsSection from "@/features/raukk_sourcing/components/RaukkShippingVisualsSection.vue";
@@ -362,6 +363,8 @@
 		</div>
 
 		<RaukkFleetSection :repair-bill-cost="repairBillCost" />
+
+		<RaukkTransportSection :repair-bill-cost="repairBillCost" />
 
 		<RaukkChainSection
 			:fuel-prices="fuelPrices"

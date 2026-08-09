@@ -18,7 +18,7 @@
 
 	// Types & Interfaces
 	import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
-	import { IRaukkLmComparisonRow } from "@/features/raukk_sourcing/calculations/shippingDisplay";
+	import { IRaukkTransportRow } from "@/features/raukk_sourcing/calculations/shippingDisplay";
 
 	/** Tag colour of a cargo bucket, the same three the inputs table uses */
 	const BUCKET_COLORS: Record<RAUKK_CARGO_BUCKET, ColorKey> = {
@@ -29,7 +29,7 @@
 
 	const props = defineProps({
 		rows: {
-			type: Array as PropType<IRaukkLmComparisonRow[]>,
+			type: Array as PropType<IRaukkTransportRow[]>,
 			required: true,
 		},
 		/** Plan name per plan uuid, for the lane labels */
@@ -49,11 +49,6 @@
 			required: false,
 			default: () => ({}),
 		},
-		disabled: {
-			type: Boolean,
-			required: false,
-			default: false,
-		},
 	});
 
 	const emit = defineEmits<{
@@ -66,21 +61,16 @@
 	}>();
 
 	/**
-	 * Label of one lane: the exchange pair, or the source plan the lane
-	 * imports from. A source plan without a stored snapshot name degrades
-	 * to its uuid rather than to an empty cell.
+	 * Name of one plan, its bare uuid where no snapshot ever named it —
+	 * an unnamed lane end is still an identifiable one.
 	 *
 	 * @author raukk
 	 *
-	 * @param {IRaukkLmComparisonRow} row Comparison Row
-	 * @returns {string} Lane Label
+	 * @param {string} planUuid Plan Uuid
+	 * @returns {string} Plan Name
 	 */
-	function label(row: IRaukkLmComparisonRow): string {
-		if (row.identity.kind === "cx") return "";
-
-		const sourcePlanUuid: string = row.identity.sourcePlanUuid ?? "";
-
-		return props.planNames[sourcePlanUuid] ?? sourcePlanUuid;
+	function planLabel(planUuid: string): string {
+		return props.planNames[planUuid] ?? planUuid;
 	}
 
 	/** The full repair bill, spelled out for the wear tooltip */
@@ -103,16 +93,26 @@
 			: "—";
 	}
 
-	function change(pairKey: string, value: number | null | undefined): void {
-		if (props.disabled) return;
+	/**
+	 * One frozen figure as a cell prints it: an em-dash where the
+	 * snapshot never froze it. A zero would read as free freight.
+	 *
+	 * @author raukk
+	 *
+	 * @param {number | undefined} value Frozen figure
+	 * @returns {string} Cell label
+	 */
+	function figure(value: number | undefined): string {
+		return value === undefined ? "—" : formatNumber(value);
+	}
 
+	function change(pairKey: string, value: number | null | undefined): void {
 		emit("update:rate", pairKey, value ?? undefined);
 	}
 
 	/**
-	 * Assigns a ship type to one lane. The picker is plan scoped — the
-	 * lane belongs to the open plan — and therefore follows its read-only
-	 * state, unlike the account global fleet itself.
+	 * Assigns a ship type to one lane. Both the lanes and the fleet are
+	 * account global, so the picker follows no plan's read-only state.
 	 *
 	 * @author raukk
 	 *
@@ -123,8 +123,6 @@
 		pairKey: string,
 		shipTypeId: string | null
 	): void {
-		if (props.disabled) return;
-
 		emit("update:assignment", pairKey, shipTypeId ?? undefined);
 	}
 </script>
@@ -133,41 +131,60 @@
 	<PTable striped>
 		<thead>
 			<tr>
-				<th>{{ $t("raukk_sourcing.shipping.lm.lane") }}</th>
-				<th>{{ $t("raukk_sourcing.shipping.lm.ship_type") }}</th>
+				<th>{{ $t("raukk_sourcing.transport.base") }}</th>
+				<th>{{ $t("raukk_sourcing.transport.lane") }}</th>
+				<th>{{ $t("raukk_sourcing.transport.ship_type") }}</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.shipping.lm.visits") }}
+					{{ $t("raukk_sourcing.transport.visits") }}
 				</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.shipping.lm.units_per_day") }}
+					{{ $t("raukk_sourcing.transport.units_per_day") }}
 				</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.shipping.lm.own_per_trip") }}
+					{{ $t("raukk_sourcing.transport.round_trip") }}
 				</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.shipping.lm.wear") }}
+					{{ $t("raukk_sourcing.transport.own_per_trip") }}
 				</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.shipping.lm.rate_per_trip") }}
+					{{ $t("raukk_sourcing.transport.wear") }}
 				</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.shipping.lm.own_per_unit") }}
+					{{ $t("raukk_sourcing.transport.rate_per_trip") }}
 				</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.shipping.lm.hired_per_unit") }}
+					{{ $t("raukk_sourcing.transport.own_per_unit") }}
 				</th>
 				<th class="text-right!">
-					{{ $t("raukk_sourcing.shipping.lm.saving") }}
+					{{ $t("raukk_sourcing.transport.hired_per_unit") }}
+				</th>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.transport.saving") }}
 				</th>
 			</tr>
 		</thead>
 		<tbody>
-			<tr v-for="row in rows" :key="`RAUKKLM#${row.pairKey}`">
+			<tr v-for="row in rows" :key="`RAUKKTRANSPORT#${row.pairKey}`">
 				<td>
-					<PTag v-if="row.identity.kind === 'cx'" size="sm">
-						{{ $t("raukk_sourcing.shipping.lm.cx_lane") }}
-					</PTag>
-					<span v-else>{{ label(row) }}</span>
+					<div class="flex flex-row gap-x-1 child:my-auto">
+						<span>{{ planLabel(row.identity.planUuid) }}</span>
+						<PTag v-if="row.stale" size="sm" type="warning">
+							{{ $t("raukk_sourcing.transport.stale") }}
+						</PTag>
+					</div>
+				</td>
+				<td>
+					<div class="flex flex-row gap-x-1 child:my-auto">
+						<PTag v-if="row.identity.kind === 'cx'" size="sm">
+							{{ $t("raukk_sourcing.transport.cx_lane") }}
+						</PTag>
+						<span v-else>
+							{{ planLabel(row.identity.sourcePlanUuid ?? "") }}
+						</span>
+						<PTag v-if="row.hired" size="sm" type="secondary">
+							{{ $t("raukk_sourcing.transport.hired") }}
+						</PTag>
+					</div>
 				</td>
 				<td>
 					<PSelect
@@ -175,66 +192,71 @@
 						clearable
 						:value="assignments[row.pairKey] ?? null"
 						:options="shipTypeOptions"
-						:disabled="disabled"
-						:placeholder="$t('raukk_sourcing.shipping.lm.auto')"
+						:placeholder="$t('raukk_sourcing.transport.auto')"
 						@update:value="
 							(v) =>
-								changeAssignment(
-									row.pairKey,
-									v as string | null
-								)
+								changeAssignment(row.pairKey, v as string | null)
 						" />
 				</td>
 				<td class="text-right">
 					<div
 						v-for="leg in row.legs"
-						:key="`RAUKKLMLEG#${row.pairKey}#${leg.bucket}`"
+						:key="`RAUKKTRANSPORTLEG#${row.pairKey}#${leg.bucket}`"
 						class="flex flex-row gap-x-1 justify-end child:my-auto">
-						<PTag size="sm" :type="BUCKET_COLORS[leg.bucket]">
+						<PTag
+							v-if="leg.bucket"
+							size="sm"
+							:type="BUCKET_COLORS[leg.bucket]">
 							{{ $t(`raukk_sourcing.buckets.${leg.bucket}`) }}
 						</PTag>
 						<RaukkVisitCadence :trips-per-day="leg.tripsPerDay" />
 					</div>
 					<span v-if="row.legs.length === 0">—</span>
 				</td>
-				<td class="text-right">{{ formatNumber(row.unitsPerDay) }}</td>
+				<td class="text-right">{{ figure(row.unitsPerDay) }}</td>
 				<td class="text-right text-white/60">
-					<PTooltip v-if="row.legs.length > 0">
+					{{
+						$t("raukk_sourcing.transport.round_trip_minutes", {
+							minutes: formatNumber(row.roundTripMinutes),
+						})
+					}}
+				</td>
+				<td class="text-right text-white/60">
+					<PTooltip
+						v-if="row.legs.length > 0 && row.ownCostPerTrip !== undefined">
 						<template #trigger>
 							<span class="hover:cursor-help">
-								{{ formatNumber(row.ownCostPerTrip) }}
+								{{ figure(row.ownCostPerTrip) }}
 							</span>
 						</template>
 						{{
-							$t(
-								"raukk_sourcing.shipping.lm.own_per_trip_tooltip",
-								{
-									legs: row.legs.length,
-									trips: formatNumber(row.tripsPerDay),
-									daily: formatNumber(
-										row.tripsPerDay * row.ownCostPerTrip
-									),
-								}
-							)
+							$t("raukk_sourcing.transport.own_per_trip_tooltip", {
+								legs: row.legs.length,
+								trips: formatNumber(row.tripsPerDay),
+								daily: formatNumber(
+									row.tripsPerDay * (row.ownCostPerTrip ?? 0)
+								),
+							})
 						}}
 					</PTooltip>
 					<template v-else>
-						{{ formatNumber(row.ownCostPerTrip) }}
+						{{ figure(row.ownCostPerTrip) }}
 					</template>
 				</td>
 				<td class="text-right text-white/60">
-					<PTooltip v-if="row.ownWear.damagePerTrip > 0">
+					<PTooltip
+						v-if="row.ownWear && row.ownWear.damagePerTrip > 0">
 						<template #trigger>
 							<span class="hover:cursor-help">
 								{{
-									$t("raukk_sourcing.shipping.lm.wear_days", {
+									$t("raukk_sourcing.transport.wear_days", {
 										days: wearDaysLabel(row.ownWear),
 									})
 								}}
 							</span>
 						</template>
 						{{
-							$t("raukk_sourcing.shipping.lm.wear_tooltip", {
+							$t("raukk_sourcing.transport.wear_tooltip", {
 								damage: formatNumber(
 									row.ownWear.damagePerTrip * 100
 								),
@@ -257,39 +279,28 @@
 						decimals
 						:min="0"
 						:value="row.lmRatePerTrip ?? null"
-						:disabled="disabled"
 						:placeholder="
-							$t('raukk_sourcing.shipping.lm.rate_placeholder')
+							$t('raukk_sourcing.transport.rate_placeholder')
 						"
 						@update:value="(v) => change(row.pairKey, v)" />
 				</td>
-				<td class="text-right">
-					{{ formatNumber(row.ownCostPerUnit) }}
-				</td>
-				<td class="text-right">
-					{{
-						row.hiredCostPerUnit === undefined
-							? "—"
-							: formatNumber(row.hiredCostPerUnit)
-					}}
-				</td>
+				<td class="text-right">{{ figure(row.ownCostPerUnit) }}</td>
+				<td class="text-right">{{ figure(row.hiredCostPerUnit) }}</td>
 				<td
 					class="text-right font-bold"
 					:class="
-						(row.savingPerUnit ?? 0) > -RAUKK_EPSILON_EQUAL
-							? 'text-positive'
-							: 'text-negative'
-					">
-					{{
 						row.savingPerUnit === undefined
-							? "—"
-							: formatNumber(row.savingPerUnit)
-					}}
+							? ''
+							: row.savingPerUnit > -RAUKK_EPSILON_EQUAL
+								? 'text-positive'
+								: 'text-negative'
+					">
+					{{ figure(row.savingPerUnit) }}
 				</td>
 			</tr>
 			<tr v-if="rows.length === 0">
-				<td colspan="10" class="text-center text-white/50">
-					{{ $t("raukk_sourcing.shipping.lm.empty") }}
+				<td colspan="12" class="text-center text-white/50">
+					{{ $t("raukk_sourcing.transport.empty") }}
 				</td>
 			</tr>
 		</tbody>
