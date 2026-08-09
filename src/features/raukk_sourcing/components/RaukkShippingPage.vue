@@ -21,6 +21,7 @@
 	import RaukkFleetSection from "@/features/raukk_sourcing/components/RaukkFleetSection.vue";
 	import RaukkChainSection from "@/features/raukk_sourcing/components/RaukkChainSection.vue";
 	import RaukkDepotSection from "@/features/raukk_sourcing/components/RaukkDepotSection.vue";
+	import RaukkShippingVisualsSection from "@/features/raukk_sourcing/components/RaukkShippingVisualsSection.vue";
 
 	// Calculations
 	import { calculateRepairBillCost } from "@/features/raukk_sourcing/calculations/shipping";
@@ -369,5 +370,7 @@
 			:storage-days="storageDays" />
 
 		<RaukkDepotSection />
+
+		<RaukkShippingVisualsSection />
 	</template>
 </template>
