@@ -466,3 +466,11 @@ anywhere in the repo. Not retroactive.
   `modified` (`usePlan.saveExistingPlan` swallows the error), and
   logout does not reset `userStore.preferences` (a self-assign no-op),
   `raukkSourcingStore` or `userAlertsStore`.
+- 2026-08-09: Staleness indicator says "age unknown" rather than
+  hiding. Suppressing it when any payload's age is unknown was honest
+  but useless — that is exactly the state after every deploy, when
+  `validateMetaVersion` wipes the meta while IndexedDB keeps the
+  payloads, i.e. when the screen may be showing the oldest data it ever
+  will. `hasUnknownDataAge` drives a distinct message; a cache whose
+  purpose is serving old data should never be silent about not knowing
+  how old.

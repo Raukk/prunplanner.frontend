@@ -1256,3 +1256,41 @@ describe("queryStore: eviction must not disable hydration", () => {
 		expect(mocks.hydrateTtl).toHaveBeenCalledTimes(1);
 	});
 });
+
+describe("queryStore: hasUnknownDataAge", () => {
+	it("is false while every cached payload has a known age", () => {
+		seedEntry(["ttlQuery", "k1"], {
+			definitionName: "ttlQuery",
+			data: { v: 1 },
+			hasData: true,
+			timestamp: NOW - 1000,
+		});
+
+		expect(store.hasUnknownDataAge).toBe(false);
+	});
+
+	it("is true once a payload was restored without a known age", () => {
+		seedEntry(["ttlQuery", "k2"], {
+			definitionName: "ttlQuery",
+			data: { v: 1 },
+			hasData: true,
+			hydrated: true,
+			timestamp: 0,
+		});
+
+		expect(store.hasUnknownDataAge).toBe(true);
+		// and the age itself stays unreported rather than understated
+		expect(store.oldestDataTimestamp).toBeNull();
+	});
+
+	it("ignores entries that hold no payload", () => {
+		seedEntry(["ttlQuery", "k3"], {
+			definitionName: "ttlQuery",
+			data: null,
+			hasData: false,
+			timestamp: 0,
+		});
+
+		expect(store.hasUnknownDataAge).toBe(false);
+	});
+});

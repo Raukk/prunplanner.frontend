@@ -550,12 +550,20 @@
 			class="text-center child:my-auto"
 			:class="isFull ? 'py-2' : 'py-1'">
 			<div
-				v-if="isFull && queryStore.oldestDataTimestamp"
+				v-if="
+					isFull &&
+					(queryStore.oldestDataTimestamp ||
+						queryStore.hasUnknownDataAge)
+				"
 				class="text-[10px] text-white/40">
 				{{
-					t("common.navigation.data.as_of", {
-						when: relativeFromDate(queryStore.oldestDataTimestamp),
-					})
+					queryStore.hasUnknownDataAge
+						? t("common.navigation.data.age_unknown")
+						: t("common.navigation.data.as_of", {
+								when: relativeFromDate(
+									queryStore.oldestDataTimestamp ?? 0
+								),
+							})
 				}}
 			</div>
 			<div
@@ -631,13 +639,20 @@
 									: t("common.navigation.data.refresh")
 							}}
 						</div>
-						<div v-if="queryStore.oldestDataTimestamp">
+						<div
+							v-if="
+								queryStore.oldestDataTimestamp ||
+								queryStore.hasUnknownDataAge
+							">
 							{{
-								t("common.navigation.data.as_of", {
-									when: relativeFromDate(
-										queryStore.oldestDataTimestamp
-									),
-								})
+								queryStore.hasUnknownDataAge
+									? t("common.navigation.data.age_unknown")
+									: t("common.navigation.data.as_of", {
+											when: relativeFromDate(
+												queryStore.oldestDataTimestamp ??
+													0
+											),
+										})
 							}}
 						</div>
 					</PTooltip>

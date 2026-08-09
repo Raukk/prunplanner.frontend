@@ -966,6 +966,23 @@ export const useQueryStore = defineStore(
 		});
 
 		/**
+		 * True while something on screen came from local storage with no
+		 * recorded fetch time, i.e. its age cannot be stated. Lets the UI
+		 * say "unknown" rather than silently show nothing, which matters
+		 * for a cache whose whole purpose is serving data that is old.
+		 *
+		 * @author jplacht
+		 *
+		 * @type {ComputedRef<boolean>}
+		 */
+		const hasUnknownDataAge: ComputedRef<boolean> = computed(() =>
+			Object.values(cacheState).some(
+				(s) =>
+					(s.hasData === true || s.data !== null) && s.timestamp <= 0
+			)
+		);
+
+		/**
 		 * Forces a refetch of every cached entry that holds data,
 		 * keeping the current payload visible while it runs. This backs
 		 * the manual "refresh data" action, letting a user pull fresh
@@ -1151,6 +1168,7 @@ export const useQueryStore = defineStore(
 			isAnythingLoading,
 			isAnythingRevalidating,
 			oldestDataTimestamp,
+			hasUnknownDataAge,
 			// only exposed for testing
 			checkEntryStatusAndRefresh,
 			startStatusWatcher,

@@ -33,7 +33,8 @@
 		"data": {
 			"refresh": "Refresh Data",
 			"refreshing": "Refreshing...",
-			"as_of": "Data as of {when}"
+			"as_of": "Data as of {when}",
+			"age_unknown": "Data age unknown, refresh to be sure"
 		}
 	},
 	"buttons": {
