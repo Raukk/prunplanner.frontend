@@ -22,6 +22,7 @@
 	import RaukkChainSection from "@/features/raukk_sourcing/components/RaukkChainSection.vue";
 	import RaukkDepotSection from "@/features/raukk_sourcing/components/RaukkDepotSection.vue";
 	import RaukkGateSection from "@/features/raukk_sourcing/components/RaukkGateSection.vue";
+	import RaukkShippingVisualsSection from "@/features/raukk_sourcing/components/RaukkShippingVisualsSection.vue";
 
 	// Calculations
 	import { calculateRepairBillCost } from "@/features/raukk_sourcing/calculations/shipping";
@@ -372,5 +373,7 @@
 		<RaukkDepotSection />
 
 		<RaukkGateSection />
+
+		<RaukkShippingVisualsSection />
 	</template>
 </template>

@@ -16,9 +16,11 @@ import {
 	RAUKK_CHAIN_SIDE_KEYS,
 } from "@/features/raukk_sourcing/calculations/shippingChains";
 import {
+	raukkDepotCandidates,
 	raukkDepotDailyCosts,
 	raukkDepotDailyTotal,
 	raukkDepotStopKey,
+	raukkStopsServeDepot,
 	RAUKK_DEPOT_DAYS_PER_WEEK,
 } from "@/features/raukk_sourcing/calculations/shippingDepots";
 
@@ -496,6 +498,54 @@ describe("Raukk Sourcing: Depots", () => {
 
 			expect(rows[0].weeklyCostAic).toBe(0);
 			expect(rows[0].dailyCost).toBe(0);
+		});
+	});
+
+	describe("raukkStopsServeDepot", () => {
+		it("answers whether a loop calls at one, case blind", () => {
+			expect(raukkStopsServeDepot(["NC1", "zv-307C"], [HEPH])).toBe(true);
+			expect(raukkStopsServeDepot(["NC1", HRT], [HEPH])).toBe(false);
+		});
+
+		it("is false without a depot to call at", () => {
+			expect(raukkStopsServeDepot([HEPH, "NC1"], [])).toBe(false);
+			expect(raukkStopsServeDepot([], [HEPH])).toBe(false);
+		});
+	});
+
+	describe("raukkDepotCandidates", () => {
+		/** A gate planet of the transcription, next to Hephaestus */
+		const GRIFFON: string = "LS-300c";
+
+		it("offers own bases on gate planets, by plan name", () => {
+			expect(
+				raukkDepotCandidates([
+					{ planetNaturalId: GRIFFON, planName: "Zinc" },
+					{ planetNaturalId: HRT, planName: "Aluminium" },
+					{ planetNaturalId: HEPH, planName: "Beryl" },
+				])
+			).toStrictEqual([
+				{ planetNaturalId: HEPH, planName: "Beryl" },
+				{ planetNaturalId: GRIFFON, planName: "Zinc" },
+			]);
+		});
+
+		it("drops a planet already marked, whatever the case", () => {
+			expect(
+				raukkDepotCandidates(
+					[{ planetNaturalId: HEPH, planName: "Beryl" }],
+					["zv-307C"]
+				)
+			).toStrictEqual([]);
+		});
+
+		it("collapses two plans on one planet to one candidate", () => {
+			expect(
+				raukkDepotCandidates([
+					{ planetNaturalId: HEPH, planName: "First" },
+					{ planetNaturalId: HEPH, planName: "Second" },
+				])
+			).toStrictEqual([{ planetNaturalId: HEPH, planName: "First" }]);
 		});
 	});
 });

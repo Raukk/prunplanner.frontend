@@ -18,16 +18,16 @@ describe("Raukk Sourcing: Shipping Wear", () => {
 			expect(wear.tripsUntilRepair).toBeCloseTo(
 				RAUKK_REPAIR_AT_DAMAGE / 0.004
 			);
-			expect(wear.tripsUntilRepair).toBeCloseTo(200);
-			expect(wear.daysUntilRepair).toBeCloseTo(400);
+			expect(wear.tripsUntilRepair).toBeCloseTo(50);
+			expect(wear.daysUntilRepair).toBeCloseTo(100);
 		});
 
 		it("charges the exact repair share of the cost model", () => {
 			const wear: IRaukkShipWear = raukkWearOf(0.004, 0.5, 2400);
 
-			// (0.004 / 0.8) * 2400
-			expect(wear.repairCostPerTrip).toBeCloseTo(12);
-			expect(wear.repairCostPerDay).toBeCloseTo(6);
+			// (0.004 / 0.2) * 2400
+			expect(wear.repairCostPerTrip).toBeCloseTo(48);
+			expect(wear.repairCostPerDay).toBeCloseTo(24);
 		});
 
 		it("never repairs while no trip takes damage", () => {
@@ -42,7 +42,7 @@ describe("Raukk Sourcing: Shipping Wear", () => {
 		it("knows the trips but not the days without any cadence", () => {
 			const wear: IRaukkShipWear = raukkWearOf(0.004, 0, 2400);
 
-			expect(wear.tripsUntilRepair).toBeCloseTo(200);
+			expect(wear.tripsUntilRepair).toBeCloseTo(50);
 			expect(wear.daysUntilRepair).toBe(Infinity);
 			expect(wear.repairCostPerDay).toBe(0);
 		});
@@ -58,8 +58,8 @@ describe("Raukk Sourcing: Shipping Wear", () => {
 
 	describe("raukkDaysUntilRepair", () => {
 		it("inverts a daily damage rate into the drydock cadence", () => {
-			// 1 % per day reaches 80 % in 80 days
-			expect(raukkDaysUntilRepair(0.01)).toBeCloseTo(80);
+			// 1 % per day reaches 20 % damage — 80 % condition — in 20 days
+			expect(raukkDaysUntilRepair(0.01)).toBeCloseTo(20);
 		});
 
 		it("never repairs without damage", () => {

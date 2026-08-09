@@ -221,7 +221,7 @@ anywhere in the repo. Not retroactive.
   Switching/moving/re-pricing an ENABLED gate stales chains (and
   snapshots while shipping is on); labels, notes and switched-off
   edits stale nothing. Full reasoning in
-  docs/raukk_sourcing/shipping-decisions.md round 21.
+  docs/raukk_sourcing/shipping-decisions.md round 23.
 - 2026-08-09: Gate build costs transcribed from the in-game GTWI panel
   (13 configurations, two gates) into `assets/raukk_gate_costs.json` —
   FIO serves none of this (`/sites/gateways` 401, `/infrastructure/
@@ -234,7 +234,7 @@ anywhere in the repo. Not retroactive.
   panel's Reachable Systems distances match it to three decimals, which
   validates that metric against the game. Planned-gate clearance is now
   derived from volume upgrades rather than typed. Full reasoning in
-  docs/raukk_sourcing/shipping-decisions.md round 22.
+  docs/raukk_sourcing/shipping-decisions.md round 24.
 - 2026-08-09: Plan tool tabs are sticky (user request — open/close a
   tool while working further down the plan). The toolbar and the tool
   view are now separate grid items of PlanView's header grid (rows 4

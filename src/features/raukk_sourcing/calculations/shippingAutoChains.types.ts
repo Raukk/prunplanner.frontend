@@ -78,6 +78,19 @@ export interface IRaukkAutoChainInput {
 	/** Exchange code one planet is anchored at, undefined when unknown */
 	anchorOf(planetNaturalId: string): string | undefined;
 	/**
+	 * Whether one stop is a marked DEPOT.
+	 *
+	 * A base standing on one owns no exchange lane — it hands its cargo
+	 * over at the warehouse next door — so nothing but a loop moves that
+	 * cargo any further. Such a stop therefore always qualifies and may
+	 * form a loop on its own: `CX → depot → CX` is the RESTOCK run, and
+	 * restocking the depot is a leg like any other.
+	 *
+	 * Absent lookup: no stop is a depot, the behaviour before depots
+	 * meant anything to the builder.
+	 */
+	isDepot?(stopRef: RAUKK_STOP_REF): boolean;
+	/**
 	 * Days per visit one consuming plan allows for one cargo class. The
 	 * chain flies at the MINIMUM of its members answers — no member may
 	 * be visited less often than its own cap allows.

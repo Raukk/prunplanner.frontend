@@ -50,6 +50,27 @@
 		IRaukkShipTypeOption,
 	} from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 	import { IRaukkShipProfile } from "@/features/raukk_sourcing/raukkSourcing.types";
+	import { RAUKK_FTL_REACTOR } from "@/features/raukk_sourcing/calculations/shipping.types";
+
+	/**
+	 * How one ship types drive reads: the reactor it carries, or the fact
+	 * that it carries none. An STL-only build has an `ftlReactor` in its
+	 * stored shape all the same — the flag is what decides.
+	 *
+	 * @author raukk
+	 *
+	 * @param {RAUKK_FTL_REACTOR} ftlReactor FTL reactor
+	 * @param {boolean} stlOnly Whether the build carries no FTL drive
+	 * @returns {string} Drive label
+	 */
+	function driveLabel(
+		ftlReactor: RAUKK_FTL_REACTOR,
+		stlOnly: boolean
+	): string {
+		return stlOnly
+			? t("raukk_sourcing.fleet.reactors.stl-only")
+			: t(`raukk_sourcing.fleet.reactors.${ftlReactor}`);
+	}
 
 	const props = defineProps({
 		/** ȼ of one full ship repair bill, 0 while unpriced — the drydock
@@ -83,6 +104,14 @@
 					raukkFleetSpillover(utilization.value)
 				)
 			: rows.value
+	);
+
+	/**
+	 * Columns the table draws, the colspan of its full width rows: the
+	 * spillover display adds the own and spilled in columns.
+	 */
+	const columnCount: ComputedRef<number> = computed(() =>
+		sourcingStore.fleetSpillover ? 10 : 8
 	);
 
 	const advisoryRows: ComputedRef<IRaukkFleetAdvisoryRow[]> = computed(() =>
@@ -135,9 +164,7 @@
 					bay: option.bayCode ?? "—",
 					weight: option.hull.cargoWeight,
 					volume: option.hull.cargoVolume,
-					reactor: t(
-						`raukk_sourcing.fleet.reactors.${option.ftlReactor}`
-					),
+					reactor: driveLabel(option.ftlReactor, option.stlOnly),
 				}),
 				value: option.shipTypeId,
 			}));
@@ -223,6 +250,12 @@
 					{{ $t("raukk_sourcing.fleet.count") }}
 				</th>
 				<th>{{ $t("raukk_sourcing.fleet.utilization") }}</th>
+				<th v-if="sourcingStore.fleetSpillover" class="text-right!">
+					{{ $t("raukk_sourcing.fleet.spillover.own") }}
+				</th>
+				<th v-if="sourcingStore.fleetSpillover" class="text-right!">
+					{{ $t("raukk_sourcing.fleet.spillover.spilled") }}
+				</th>
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.fleet.drydock") }}
 				</th>
@@ -246,9 +279,7 @@
 						$t("raukk_sourcing.fleet.hull_label", {
 							weight: row.cargoWeight,
 							volume: row.cargoVolume,
-							reactor: $t(
-								`raukk_sourcing.fleet.reactors.${row.ftlReactor}`
-							),
+							reactor: driveLabel(row.ftlReactor, row.stlOnly),
 						})
 					}}
 				</td>
@@ -266,7 +297,7 @@
 				</td>
 				<td class="text-right">
 					<PInputNumber
-						class="min-w-20"
+						class="w-20 ml-auto"
 						size="sm"
 						:min="0"
 						:value="row.count"
@@ -277,7 +308,7 @@
 						v-if="row.spill"
 						class="flex flex-row gap-x-2 child:my-auto min-w-40">
 						<div
-							class="w-full bg-gray-800 size-2 rounded-full overflow-hidden flex flex-row">
+							class="shrink-0 w-24 h-2 bg-gray-800 rounded-full overflow-hidden flex flex-row">
 							<div
 								class="h-full transition-all duration-300 ease-out"
 								:class="
@@ -310,25 +341,13 @@
 								row.spill.over ? 'text-negative font-bold' : ''
 							">
 							{{ formatNumber(row.spill.printedPercent) }} %
-							<span
-								v-if="row.spill.received"
-								class="text-xs text-white/50">
-								{{
-									$t("raukk_sourcing.fleet.spillover.split", {
-										own: formatNumber(row.spill.ownPercent),
-										spilled: formatNumber(
-											row.spill.spilledInPercent
-										),
-									})
-								}}
-							</span>
 						</span>
 					</div>
 					<div
 						v-else
 						class="flex flex-row gap-x-2 child:my-auto min-w-40">
 						<div
-							class="w-full bg-gray-800 size-2 rounded-full overflow-hidden">
+							class="shrink-0 w-24 h-2 bg-gray-800 rounded-full overflow-hidden">
 							<div
 								class="h-full transition-all duration-300 ease-out"
 								:class="
@@ -348,6 +367,24 @@
 							}}
 						</span>
 					</div>
+				</td>
+				<td
+					v-if="sourcingStore.fleetSpillover"
+					class="text-right text-white/60">
+					{{
+						row.spill
+							? `${formatNumber(row.spill.ownPercent)} %`
+							: "—"
+					}}
+				</td>
+				<td
+					v-if="sourcingStore.fleetSpillover"
+					class="text-right text-white/60">
+					{{
+						row.spill && row.spill.received
+							? `${formatNumber(row.spill.spilledInPercent)} %`
+							: "—"
+					}}
 				</td>
 				<td class="text-right text-white/60">
 					<PTooltip v-if="row.drydockDays !== null">
@@ -405,12 +442,12 @@
 				</td>
 			</tr>
 			<tr v-if="rows.length === 0">
-				<td colspan="8" class="text-center text-white/50">
+				<td :colspan="columnCount" class="text-center text-white/50">
 					{{ $t("raukk_sourcing.fleet.empty") }}
 				</td>
 			</tr>
 			<tr>
-				<td colspan="8">
+				<td :colspan="columnCount">
 					<div class="flex flex-row flex-wrap gap-3 child:my-auto">
 						<PSelect
 							class="w-80!"

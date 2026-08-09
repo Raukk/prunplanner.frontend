@@ -957,7 +957,8 @@ describe("Raukk Sourcing Store", () => {
 
 			const list = store.listShipProfiles();
 
-			expect(list.length).toBe(12);
+			// six hulls, two reactors each plus the STL-only build
+			expect(list.length).toBe(18);
 			expect(
 				list.find(
 					(profile) => profile.id === RAUKK_DEFAULT_SHIP_PROFILE_ID

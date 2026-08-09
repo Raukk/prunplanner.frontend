@@ -60,6 +60,11 @@ export const RAUKK_AUTO_CHAIN_MAX_STOPS: number = 5;
  * ONE ship serves several planets in one loop; below two stops there is
  * nothing to share.
  *
+ * A DEPOT stop is exempt, and the reasoning above is exactly why: a base
+ * standing on a depot hands its cargo over at the warehouse and flies no
+ * exchange lane at all, so there is no lane to duplicate — the one stop
+ * loop is the RESTOCK run and the only thing that moves that cargo.
+ *
  * @author raukk
  */
 export const RAUKK_AUTO_CHAIN_MIN_STOPS: number = 2;
@@ -256,14 +261,12 @@ function cheaperLoop(
 ): boolean {
 	const difference: number = candidate.parsecs - best.parsecs;
 
-	if (Math.abs(difference) > RAUKK_LOOP_PARSEC_EPSILON)
-		return difference < 0;
+	if (Math.abs(difference) > RAUKK_LOOP_PARSEC_EPSILON) return difference < 0;
 
 	if (candidate.jumps !== best.jumps) return candidate.jumps < best.jumps;
 
 	if (
-		Math.abs(candidate.firstLeg - best.firstLeg) >
-		RAUKK_LOOP_PARSEC_EPSILON
+		Math.abs(candidate.firstLeg - best.firstLeg) > RAUKK_LOOP_PARSEC_EPSILON
 	)
 		return candidate.firstLeg < best.firstLeg;
 
@@ -347,7 +350,10 @@ export function raukkOrderChainStops(
 	loopPermutations(stops.length, binding.length === 0).forEach(
 		(permutation) => {
 			// positions in `refs`: the exchange is 0, stop i is i + 1
-			const order: number[] = [0, ...permutation.map((index) => index + 1)];
+			const order: number[] = [
+				0,
+				...permutation.map((index) => index + 1),
+			];
 
 			const visited: RAUKK_STOP_REF[] = order.map((index) => refs[index]);
 
@@ -507,6 +513,12 @@ function cargoOf(flow: IRaukkChainFlow): { weight: number; volume: number } {
  * the same stop a heavy one is. A flow between two bases counts at both
  * of them: the ship has to call at either end to move it.
  *
+ * A DEPOT qualifies whatever its share. The share test asks "is this
+ * base worth a detour, or is it better served by the exchange lane it
+ * flies anyway" — and a base on a depot flies no such lane any more, so
+ * failing the test would not send its cargo to the hub/spoke listing, it
+ * would leave the cargo unmoved and unpaid.
+ *
  * @author raukk
  *
  * @param {IRaukkChainFlow[]} flows Flows of one region and class
@@ -514,6 +526,7 @@ function cargoOf(flow: IRaukkChainFlow): { weight: number; volume: number } {
  * @param {IRaukkChainConfig} chainConfig Chain configuration
  * @param {IRaukkRouteDistance} routes Route lookups
  * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @param {(stopRef: RAUKK_STOP_REF) => boolean} [isDepot] Depot lookup
  * @returns {IRaukkAutoChainCandidate[]} Bases, nearest exchange first
  */
 export function raukkAutoChainCandidates(
@@ -521,7 +534,8 @@ export function raukkAutoChainCandidates(
 	cxCode: string,
 	chainConfig: IRaukkChainConfig,
 	routes: IRaukkRouteDistance = RAUKK_DEFAULT_CHAIN_ROUTES,
-	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE,
+	isDepot: (stopRef: RAUKK_STOP_REF) => boolean = () => false
 ): IRaukkAutoChainCandidate[] {
 	const weight: Map<string, number> = new Map();
 	const volume: Map<string, number> = new Map();
@@ -572,6 +586,7 @@ export function raukkAutoChainCandidates(
 				share: Math.max(weightShare, volumeShare),
 				parsecsFromCx: route === null ? null : route.parsecs,
 				qualified:
+					isDepot(planetNaturalId) ||
 					(totalWeight > 0 && weightShare >= threshold) ||
 					(totalVolume > 0 && volumeShare >= threshold),
 			};
@@ -854,6 +869,9 @@ export function raukkBuildAutoChains(
 	const groups: Map<string, IRaukkChainFlow[]> = groupFlows(input, cxSystems);
 	const chains: IRaukkAutoChain[] = [];
 
+	const isDepot: (stopRef: RAUKK_STOP_REF) => boolean = (stopRef) =>
+		input.isDepot?.(stopRef) === true;
+
 	CARGO_BUCKETS.forEach((bucket) => {
 		const codes: string[] = Array.from(groups.keys())
 			.filter((key) => key.startsWith(`${bucket}|`))
@@ -869,7 +887,8 @@ export function raukkBuildAutoChains(
 				cxCode,
 				input.chainConfig,
 				routes,
-				cxSystems
+				cxSystems,
+				isDepot
 			)
 				.filter(
 					(candidate) =>
@@ -892,8 +911,22 @@ export function raukkBuildAutoChains(
 			let open: IRaukkChainFlow[] = flows;
 
 			loops.forEach((loop) => {
-				// the exchange is a stop of every loop and does not count
-				if (loop.stops.length - 1 < RAUKK_AUTO_CHAIN_MIN_STOPS) return;
+				/*
+				 * The exchange is a stop of every loop and does not count.
+				 * A DEPOT loop is exempt from the minimum: the rule exists
+				 * because `CX → A → CX` is the exchange lane plan A flies
+				 * anyway, so deriving it would move that lane to the
+				 * account level and change nothing else. A base ON a depot
+				 * flies no such lane — it hands its cargo over at the
+				 * warehouse — so here the one stop loop is the only thing
+				 * that moves the cargo at all. That is the RESTOCK run,
+				 * and restocking the depot is a leg like any other.
+				 */
+				if (
+					loop.stops.length - 1 < RAUKK_AUTO_CHAIN_MIN_STOPS &&
+					!loop.stops.some((stopRef) => isDepot(stopRef))
+				)
+					return;
 
 				const claim: IRaukkChainClaim = claimChainFlows(
 					loop.stops,

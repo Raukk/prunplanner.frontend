@@ -87,7 +87,7 @@ These supersede the matching decisions above.
    FTL fuel, CHRG 1m15s between jumps, per-jump times 6pc/1h07m,
    11pc/4h15m, 14pc/5h29m, 6pc/2h32m, 9pc/3h23m.
 6. **Damage/repair: deferred pending user data.** Users normally
-   repair at ~80% damage. Damage per parsec varies by system
+   repair at ~80% condition (round 21: "damage" here was a slip). Damage per parsec varies by system
    (micro-meteor density), and VERIFIED: no such field exists in
    our data (planets carry only pressure/surface/temperature/
    fertility/gravity; systems only positions/connections/type). So
@@ -103,8 +103,10 @@ These supersede the matching decisions above.
    components); at ~80% damage LHP and SSC were each ~10–12. Model:
    repair bill = fixed (12 MFK + 8 FLP) + LHP/SSC scaling roughly
    linearly with damage (≈3 each at 4.5%, ≈11 each at 80%). Users
-   repair at ~80% damage, so per-trip ship-repair cost =
-   (trip damage % ÷ 80%) × priced full bill. Trip damage comes from
+   repair at ~80% CONDITION, i.e. 20% damage (round 21 corrects the
+   "80% damage" phrasing of this entry and the divisor it produced),
+   so per-trip ship-repair cost =
+   (trip damage % ÷ 20%) × priced full bill. Trip damage comes from
    the per-leg damage numbers (flat per-parsec constant + per-STL-
    leg constant; no per-system variation, see Round 2 item 6).
 2. **STL legs: constant length.** Assume the sublight legs in and
@@ -600,7 +602,111 @@ and read as a working button — nothing said the field had to be filled
    new to the anchor list (or un-marking one) stales now, the same
    line round 19 drew for the fleet count.
 
-## Round 21 (gate planning tool)
+## Round 21 (repair point: 80 % condition, not 80 % damage)
+
+Bug: the fleet Drydock column and every repair charge read the repair
+point as 80 % DAMAGE (2026-08-09, user report on the fleet table).
+
+1. **`RAUKK_REPAIR_AT_DAMAGE` is 0.2, not 0.8**: players repair at
+   80 % CONDITION — 20 % accumulated damage — because a hull below
+   that flies slow, and a hull above it wastes the fixed part of the
+   bill. Round 3 item 1 wrote that observation down as "at ~80 %
+   damage" and the constant took the phrase literally, so every
+   repair number was off by 4x: drydock cadence 4x too long, repair
+   cost per trip 4x too low. The round 3 numbers themselves settle
+   it — LHP/SSC scale roughly linearly and were 3 each at 4.5 %
+   damage, 10-12 each at the repair point; linear from 4.5 % lands
+   at ~13 by 20 % damage and at ~53 by 80 % damage.
+2. **`RAUKK_REPAIR_BILL` is unchanged**: the observed bill belongs to
+   that same 80 % condition cycle, so only the divisor was wrong.
+   Every consumer already reads the constant, so the fix is the one
+   value plus the copy that spelled "80 % repair threshold" out.
+3. **The fleet table breaks the spillover split out**: "own X % +
+   spilled Y %" printed inside the capacity cell, which squeezed the
+   bar of every row that carried it down to a stub. Own and Spilled
+   In are their own columns now, shown only while the spillover
+   display is on. The "Assigned" header reads "Routes" — it counts
+   the lanes and chains flown by the type, and "assigned" read as a
+   ship count next to a ship count.
+
+## Round 22 (depots as homes: gate planets, free handover, STL basing)
+
+User decision 2026-08-09, four connected changes that turn a depot from
+a pure routing anchor into the place non-FTL ships live.
+
+1. **A depot is SUGGESTED from own bases on gate planets**: the add row
+   is a dropdown of the planets the account has a snapshot for that the
+   gate transcription puts a gate on (`raukkDepotCandidates`), minus
+   the ones already marked. Both halves are the user's rule — a depot
+   without a gate anchors nothing a non-FTL ship could reach, and the
+   exchange already serves as the handover point everywhere else, while
+   a depot on a planet with no base has no warehouse behind it.
+   SUGGESTED, not enforced: `raukk_gates.json` is a hand transcription
+   and a gate built since it was taken is simply absent, so an "Enter
+   Id" escape hatch stays beside the list and a gateless entry warns
+   ("No Gate" tag) exactly as an unplaceable one does. Round 20's
+   precedent, unchanged: the transcription is not the map.
+2. **A base ON a depot owns no exchange lane**: it hands its sells over
+   and draws its buys at the warehouse on its own planet, so both
+   directions cost nothing and `buildShippingPairs` does not build the
+   CX pair at all (`depotOf` lookup). Inputs as well as outputs, per
+   user decision — the warehouse is next door in both directions. The
+   directed FLOWS are deliberately untouched: a loop calling at the
+   depot may still claim the onward move to the exchange and price it,
+   which is what keeps the freight on the books instead of deleting it.
+   Sourcing lanes are untouched too — a counterpart plan sits on
+   another planet and its cargo really is flown here. Marking or
+   un-marking a depot therefore stales SNAPSHOTS as well as chains,
+   widening round 20 decision 5 (rent edits still stale nothing).
+3. **A non-FTL hull is auto-assigned only to depot-served routes**:
+   `raukkStlOnlyCandidates` now takes a second bar, `depotServed`, on
+   top of round 18's `gateServable`. Such a ship is BASED at a depot
+   and cannot jump out of the gate network it sits in, so a route that
+   never calls at one is a route it could reach only by being flown
+   there and stranded. Because every leg of a gate-servable route is
+   gate-connected, one depot among the stops puts the whole route
+   inside that depot's reach — no separate reachability search. Lanes
+   answer it from the two PLANETS at build time (`depotServed` on the
+   pair, resolved where the planets are still known); auto chains from
+   their stop list (`raukkStopsServeDepot`). MANUAL assignment passes
+   neither bar, unchanged and on purpose: a deliberate non-FTL run
+   between two gate-linked planets is a real thing to want, it is
+   simply not something to guess at.
+4. **One offered preset per hull, quick-charge, plus its STL sibling**:
+   both reactors fly and burn near enough the same, so the second row
+   per hull asked a question with no consequence — the add row offers
+   `RAUKK_OFFERED_FTL_REACTOR` alone and the default profile and
+   starter-fleet assumption follow it. The standard presets keep being
+   BUILT so every id ever written into a fleet, assignment or snapshot
+   still resolves; they are only no longer suggested. The STL build
+   gets a preset id of its own (`2000x2000-stl`) — as a flag on the
+   shared profile, ticking `stlOnly` on the LCB turned every LCB in
+   the account into an STL hull, so the two builds could never be owned
+   side by side. They are different ship types and now say so.
+5. **The builder RESTOCKS a depot, and that is a leg** (user decision,
+   closing the hole decision 2 opened): a depot stop always qualifies as
+   an auto chain stop whatever its share, and is exempt from
+   `RAUKK_AUTO_CHAIN_MIN_STOPS`, so `CX → depot → CX` is derived. The
+   minimum's own justification is what makes the exemption sound — it
+   exists because a one stop loop is the exchange lane that plan flies
+   anyway, and a base on a depot flies no such lane since decision 2.
+   Without the exemption its cargo would be neither flown nor charged.
+   The share test is skipped for the same reason: failing it normally
+   sends a base to the hub/spoke listing, which for a depot base means
+   nowhere. Anchoring OTHER bases at a depot instead of their exchange
+   was considered and NOT done — flow endpoints name the exchange, so
+   re-anchoring without re-targeting the flows claims nothing, and
+   re-targeting them needs a transshipment volume the model has no
+   notion of. Chain splitting at depot anchors (round 11) already gives
+   the gate-side/FTL handover that motivated it.
+
+Rent, for the record (user, 2026-08-09): a depot is normally cheap or
+free — most capacity comes from STO storage, which has no upkeep once
+built, and a rented warehouse runs a few thousand ȼ per week for ~10 kt.
+Cargo merely flowing through needs none. The field stays, defaulting to
+zero; it is not a number worth agonising over.
+
+## Round 23 (gate planning tool)
 
 User request: plan gates that do NOT exist — one seen going up
 in-game, or one the player thinks would be worth building. Delivered
@@ -657,7 +763,7 @@ is in the graph and priced by the chain math when routed, but the
 planning table itself compares TIME only), and no "which of my lanes
 would use it" column.
 
-## Round 22 (gate costs transcribed, and the range cap)
+## Round 24 (gate costs transcribed, and the range cap)
 
 The user transcribed the in-game GATEWAY INFORMATION (GTWI) panel across
 13 configurations on two gates (ZV-307c, SE-648c) into
@@ -710,9 +816,9 @@ The 13 panels are pinned as fixtures in
 change that breaks one of those rows is a change that no longer describes
 the game.
 
-## Round 23 (review fixes: a stranded gate must not route)
+## Round 25 (review fixes: a stranded gate must not route)
 
-Two reviews of the round 21/22 tool — a UI/UX pass and a player pass —
+Two reviews of the round 23/24 tool — a UI/UX pass and a player pass —
 found one blocker and one bug that contradicted the docs. Both are fixed;
 the rest of both reviews is triage, not yet actioned.
 
@@ -731,16 +837,16 @@ the rest of both reviews is triage, not yet actioned.
    to remember to switch it back on. The row says "Not Routed" while the
    two disagree.
 2. **The add form warned about an impossible gate and added it anyway.**
-   Round 22 point 4 claimed it "refuses the second outright"; it did not
+   Round 24 point 4 claimed it "refuses the second outright"; it did not
    — `canAdd` only checked that both fields were non-empty. It now
    refuses `unreachable_range` and `same_system`, and still permits an
    unknown planet id, which is the call the depot table makes for the
    same reason: the bundled systems JSON may not know a planet the user
    does.
 
-Round 22's point 4 wording is corrected by this round.
+Round 24's point 4 wording is corrected by this round.
 
-## Round 24 (gates on FTL routes)
+## Round 26 (gates on FTL routes)
 
 Closes the gap both reviews and the user landed on: an FTL hull's leg
 never consulted the gate network, so no gate — planned or transcribed —
