@@ -33,6 +33,19 @@
 			type: Boolean,
 			required: true,
 		},
+		/**
+		 * Auto-optimization is forced on account wide, the checkbox only
+		 * reports the state and cannot be switched off here
+		 */
+		habOptimizeForced: {
+			type: Boolean,
+			default: false,
+		},
+		/** Solver goal the automatic optimization runs at */
+		habOptimizeGoal: {
+			type: String as PropType<HabSolverGoal>,
+			default: "auto",
+		},
 		infrastructureData: {
 			type: Object as PropType<IInfrastructureRecord>,
 			required: true,
@@ -81,7 +94,11 @@
 	const localAutoOptimizeHabs: WritableComputedRef<boolean> = computed({
 		get: () => props.autoOptimizeHabs,
 		set: (value: boolean) => {
-			emit("update:auto-optimize-habs", value, "auto");
+			// forced: the checkbox is disabled, a write can only come from a
+			// stale event and must not turn the optimization off
+			if (props.habOptimizeForced) return;
+
+			emit("update:auto-optimize-habs", value, props.habOptimizeGoal);
 		},
 	});
 </script>
@@ -95,12 +112,16 @@
 					<template #trigger>
 						<PCheckbox
 							v-model:checked="localAutoOptimizeHabs"
-							:disabled="disabled" />
+							:disabled="disabled || habOptimizeForced" />
 					</template>
 					{{
-						$t(
-							"plan.components.infrastructure.auto_optimize_tooltip"
-						)
+						habOptimizeForced
+							? $t(
+									"plan.components.infrastructure.auto_optimize_forced_tooltip"
+								)
+							: $t(
+									"plan.components.infrastructure.auto_optimize_tooltip"
+								)
 					}}
 				</PTooltip>
 			</PFormItem>

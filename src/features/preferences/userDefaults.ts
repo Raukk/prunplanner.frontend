@@ -18,6 +18,9 @@ export const preferenceDefaults: IPreferenceDefault = {
 	burnResupplyDays: 20,
 	burnOrigin: "Configure on Execution",
 	layoutNavigationStyle: "full",
+	// Habitation optimization is forced on account wide, the per plan
+	// checkbox only regains control when the user opts in here
+	habOptimizePerPlan: false,
 
 	planOverrides: {},
 	planDefaults: {

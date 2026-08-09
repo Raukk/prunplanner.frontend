@@ -9,6 +9,7 @@ import { usePlanningStore } from "@/stores/planningStore";
 
 // Composables
 import { usePlan } from "@/features/planning_data/usePlan";
+import { useHabOptimization } from "@/features/preferences/useHabOptimization";
 
 // API
 import { useQuery } from "@/lib/query_cache/useQuery";
@@ -38,6 +39,7 @@ export function usePreferences() {
 	const planningStore = usePlanningStore();
 
 	const { getPlanNamePlanet } = usePlan();
+	const { habOptimizePerPlan, habOptimizeForced } = useHabOptimization();
 
 	watch(
 		() => cloneDeep(userStore.preferences),
@@ -159,7 +161,10 @@ export function usePreferences() {
 						);
 					}
 
+					// while forced account wide the stored value has no effect
+					// and listing it here would claim a state the plan is not in
 					if (
+						!habOptimizeForced.value &&
 						"autoOptimizeHabs" in preference &&
 						preference.autoOptimizeHabs !==
 							preferenceDefaults.planDefaults.autoOptimizeHabs
@@ -238,6 +243,8 @@ export function usePreferences() {
 		planSettingsOverview,
 		layoutNavigationStyle,
 		locale,
+		habOptimizePerPlan,
+		habOptimizeForced,
 		// functions
 		cleanPlanPreferences,
 		getBurnDisplayClass,

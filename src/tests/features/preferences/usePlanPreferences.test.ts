@@ -26,6 +26,9 @@ describe("usePreferences", async () => {
 		setActivePinia(createPinia());
 		userStore = useUserStore();
 		planningStore = usePlanningStore();
+		// the store reactives `preferenceDefaults` itself, so a preference
+		// written by one test survives into the next one
+		userStore.setPreference("habOptimizePerPlan", false);
 	});
 
 	it("fullPreferences", async () => {
@@ -65,7 +68,19 @@ describe("usePreferences", async () => {
 	});
 
 	describe("autoOptimizeHabs", async () => {
-		it("get", async () => {
+		it("get is forced on, whatever the plan stored", async () => {
+			const { autoOptimizeHabs, setPlanPreference } =
+				usePlanPreferences("meow");
+
+			expect(autoOptimizeHabs.value).toBe(true);
+
+			setPlanPreference("autoOptimizeHabs", false);
+			expect(autoOptimizeHabs.value).toBe(true);
+		});
+
+		it("get follows the plan in per plan mode", async () => {
+			userStore.setPreference("habOptimizePerPlan", true);
+
 			const { autoOptimizeHabs } = usePlanPreferences("meow");
 
 			expect(autoOptimizeHabs.value).toBe(
@@ -74,8 +89,20 @@ describe("usePreferences", async () => {
 		});
 
 		it("set", async () => {
+			userStore.setPreference("habOptimizePerPlan", true);
+
 			const { autoOptimizeHabs } = usePlanPreferences("meow");
 			autoOptimizeHabs.value = true;
+			expect(autoOptimizeHabs.value).toBe(true);
+		});
+
+		it("set writes through while forced", async () => {
+			const { autoOptimizeHabs, fullPreferences } =
+				usePlanPreferences("meow");
+
+			autoOptimizeHabs.value = false;
+			expect(fullPreferences.value.autoOptimizeHabs).toBe(false);
+			// the stored value is kept, the read stays forced
 			expect(autoOptimizeHabs.value).toBe(true);
 		});
 	});

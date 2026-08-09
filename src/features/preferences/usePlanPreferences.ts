@@ -3,11 +3,15 @@ import { computed, ComputedRef, WritableComputedRef } from "vue";
 // Stores
 import { useUserStore } from "@/stores/userStore";
 
+// Composables
+import { useHabOptimization } from "@/features/preferences/useHabOptimization";
+
 // Types & Interfaces
 import { IPreferencePerPlan } from "@/features/preferences/userPreferences.types";
 
 export function usePlanPreferences(planUuid: string) {
 	const userStore = useUserStore();
+	const { resolveAutoOptimizeHabs } = useHabOptimization();
 
 	/**
 	 * Computed individual plans full preferences
@@ -68,8 +72,22 @@ export function usePlanPreferences(planUuid: string) {
 		set: (v) => setPlanPreference("visitationMaterialExclusions", v),
 	});
 
+	/**
+	 * Writable computed for the plans habitation auto-optimization.
+	 *
+	 * The READ is overridden account wide: unless the user handed the
+	 * decision back to the plans, this is always `true`, whatever the
+	 * stored override says or fails to say. The WRITE stays untouched so
+	 * the stored value survives the override and is picked up again once
+	 * per plan control is switched back on.
+	 *
+	 * @author jplacht
+	 *
+	 * @type {WritableComputedRef<boolean, boolean>}
+	 */
 	const autoOptimizeHabs: WritableComputedRef<boolean, boolean> = computed({
-		get: () => fullPreferences.value.autoOptimizeHabs,
+		get: () =>
+			resolveAutoOptimizeHabs(fullPreferences.value.autoOptimizeHabs),
 		set: (v) => setPlanPreference("autoOptimizeHabs", v),
 	});
 
