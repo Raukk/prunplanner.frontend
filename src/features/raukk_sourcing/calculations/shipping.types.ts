@@ -24,6 +24,20 @@ export interface IRaukkShipHull {
 	cargoWeight: number;
 	/** Cargo volume capacity in m³ */
 	cargoVolume: number;
+	/**
+	 * Volume of the SHIP, m³ — not of its cargo hold.
+	 *
+	 * The figure a gate measures: the in-game blueprint screen states it
+	 * as "SHIP OVERVIEW → VOLUME", separately from "CARGO → VOLUME
+	 * CAPACITY", and a gate's clearance is compared against this one. A
+	 * 5,000 m³ hold rides in a ship of about 5,837 m³.
+	 *
+	 * Absent means DERIVE, see `raukkHullVolumeM3`: the derivation is a
+	 * fit against real blueprints and a good default, while this field is
+	 * the figure the user read off their own ship and is always believed
+	 * over it.
+	 */
+	hullVolumeM3?: number;
 }
 
 /**

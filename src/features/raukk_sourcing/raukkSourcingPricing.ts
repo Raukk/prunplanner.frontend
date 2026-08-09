@@ -49,15 +49,20 @@ const DEFAULT_EXCHANGE_CODE: string = "UNIVERSE";
 export function isAggregateSource(
 	value: string
 ): value is RAUKK_SOURCE_AGGREGATE {
-	return value === "AGG_AVG" || value === "AGG_MAX";
+	return (
+		value === "AGG_AVG" || value === "AGG_MAX" || value === "AGG_AVG_MKT"
+	);
 }
 
 /**
  * Price of an aggregate source over a set of producers.
  *
- * `AGG_AVG` is the output weighted average of the producers transfer
- * prices, `AGG_MAX` the highest one. Producers without any output fall
- * back to a plain average so a snapshot with zero units still prices.
+ * `AGG_AVG` and `AGG_AVG_MKT` are the output weighted average of the
+ * producers transfer prices, `AGG_MAX` the highest one. Producers without
+ * any output fall back to a plain average so a snapshot with zero units
+ * still prices. The market top up of `AGG_AVG_MKT` is applied on top of
+ * this average by {@link blendMarketTopUp} — it needs the demand and the
+ * market price, neither of which is a property of the producers.
  *
  * @author raukk
  *
@@ -98,16 +103,83 @@ export function aggregateProducerPrice(
 }
 
 /**
+ * Share of a demand an aggregate producer pool actually covers.
+ *
+ * The pools whole daily output against everything drawn from it: this
+ * plans own daily need plus what every other plan already draws. Two
+ * bases eating 90 rations each off a pool making 100 are covered 100/180
+ * — both pay the pool average for 55.6 % of their rations and the market
+ * for the rest, and the pools 100 units are exactly used up.
+ *
+ * Nothing drawn at all is fully covered, a pool without output covers
+ * nothing. The result is clamped into [0, 1]: a pool making more than is
+ * drawn from it does not make the units cheaper than its own average.
+ *
+ * @author raukk
+ *
+ * @param {number} unitsTotal Daily output of the whole pool
+ * @param {number} demandPerDay Daily need of the consuming plan
+ * @param {number} othersDrawnPerDay Daily draw of every other plan
+ * @returns {number} Covered share of the demand, 0 to 1
+ */
+export function aggregateCoverage(
+	unitsTotal: number,
+	demandPerDay: number,
+	othersDrawnPerDay: number
+): number {
+	if (!(unitsTotal > 0)) return 0;
+
+	const drawn: number =
+		Math.max(0, demandPerDay) + Math.max(0, othersDrawnPerDay);
+
+	if (!(drawn > 0)) return 1;
+
+	return Math.min(1, unitsTotal / drawn);
+}
+
+/**
+ * Blends the pool average with the market price of the uncovered rest.
+ *
+ * The price model of `AGG_AVG_MKT`: the covered share of a unit is
+ * charged at what the producers make it for, everything the pool cannot
+ * supply is bought at the market price the ticker would cost without any
+ * source at all.
+ *
+ * @author raukk
+ *
+ * @param {number} averagePrice Output weighted producer average
+ * @param {number} marketPrice Market price of the uncovered share
+ * @param {number} coverage Covered share, see {@link aggregateCoverage}
+ * @returns {number} Blended ȼ per unit
+ */
+export function blendMarketTopUp(
+	averagePrice: number,
+	marketPrice: number,
+	coverage: number
+): number {
+	const covered: number = Math.min(1, Math.max(0, coverage));
+
+	return averagePrice * covered + marketPrice * (1 - covered);
+}
+
+/**
  * Builds the price resolver `calculateTrueCosts` consumes.
  *
  * Resolution order per ticker:
  *  - no configuration entry: the plans existing CX preference price,
  *    matching the behavior of the untouched plan calculation
+ *  - `{ mode: "cx" }`: that same CX preference price, stated explicitly
  *  - `{ mode: "market" }`: exchange data at the configured price mode
  *  - `{ mode: "local" }`: the local market ad price of the consuming
  *    planet, bought there and therefore drawn from no plan at all
  *  - `{ mode: "plan" }`: the source snapshots `costPerUnit`, reported
  *    with its plan uuid so the daily units land in `draws`
+ *
+ * `AGG_AVG_MKT` prices the share the pool covers at its average and the
+ * rest at the CX preference price, see {@link aggregateCoverage}. It still
+ * books the FULL daily need as a draw: the pool is oversubscribed by
+ * exactly the share bought at the market, and hiding that would take the
+ * subscription warning away from the very configuration that needs it.
  *
  * Aggregates report the sentinel itself as `fromPlanUuid`, their draws
  * are pre split into concrete uuids afterwards by
@@ -126,7 +198,7 @@ export function createRaukkPriceResolver(
 	return (ticker: string): IRaukkResolvedPrice => {
 		const source: IRaukkTickerSource | undefined = context.sources[ticker];
 
-		if (source === undefined)
+		if (source === undefined || source.mode === "cx")
 			return { price: context.getDefaultPrice(ticker) };
 
 		if (source.mode === "market")
@@ -151,8 +223,29 @@ export function createRaukkPriceResolver(
 			if (producers.length === 0)
 				return { price: context.getDefaultPrice(ticker) };
 
+			const price: number = aggregateProducerPrice(
+				producers,
+				source.sourcePlanUuid
+			);
+
+			if (source.sourcePlanUuid !== "AGG_AVG_MKT")
+				return { price, fromPlanUuid: source.sourcePlanUuid };
+
+			const coverage: number = aggregateCoverage(
+				producers.reduce(
+					(sum, producer) => sum + producer.unitsPerDay,
+					0
+				),
+				context.getDemand?.(ticker) ?? 0,
+				context.getOthersDrawn?.(ticker) ?? 0
+			);
+
 			return {
-				price: aggregateProducerPrice(producers, source.sourcePlanUuid),
+				price: blendMarketTopUp(
+					price,
+					context.getDefaultPrice(ticker),
+					coverage
+				),
 				fromPlanUuid: source.sourcePlanUuid,
 			};
 		}
@@ -405,13 +498,29 @@ export function buildSourceOptions(
 
 	const stale: boolean = producers.some((producer) => producer.stale);
 
-	(["AGG_AVG", "AGG_MAX"] as RAUKK_SOURCE_AGGREGATE[]).forEach(
+	/** Covered share of this plans need, the market top up blends on it */
+	const coverage: number = aggregateCoverage(
+		unitsTotal,
+		input.prospectiveDrawPerDay,
+		othersTotal
+	);
+
+	(["AGG_AVG", "AGG_MAX", "AGG_AVG_MKT"] as RAUKK_SOURCE_AGGREGATE[]).forEach(
 		(aggregate) => {
+			const average: number = aggregateProducerPrice(
+				producers,
+				aggregate
+			);
+
 			options.push({
 				value: aggregate,
 				planName: aggregate,
 				planetNaturalId: "",
-				costPerUnit: aggregateProducerPrice(producers, aggregate),
+				costPerUnit:
+					aggregate === "AGG_AVG_MKT" &&
+					input.marketPrice !== undefined
+						? blendMarketTopUp(average, input.marketPrice, coverage)
+						: average,
 				unitsPerDay: unitsTotal,
 				ownPct:
 					unitsTotal > 0
@@ -422,6 +531,7 @@ export function buildSourceOptions(
 				self: false,
 				aggregate: true,
 				baseFraction: aggregateBaseFraction(aggregate),
+				coverage: aggregate === "AGG_AVG_MKT" ? coverage : undefined,
 			});
 		}
 	);
@@ -598,19 +708,20 @@ export function snapshotMateriallyChanged(
  * `planName` and no planet, other concrete producers render as
  * "Plan (Planet)". Producers whose snapshot already stores a base
  * fraction append it as "— BF 1.50", it is the quickest hint that a
- * source ties up more than its own base.
+ * source ties up more than its own base. The market top up aggregate
+ * appends the share its pool covers, the rest of its price being market.
  *
  * @author raukk
  *
  * @param {IRaukkSourceOption} option Dropdown Option
  * @param {(value: number) => string} formatValue Number formatter
- * @param {{ yours: string; others: string }} words Translated words
+ * @param {{ yours: string; others: string; pooled?: string }} words Words
  * @returns {string} Label
  */
 export function formatSourceOptionLabel(
 	option: IRaukkSourceOption,
 	formatValue: (value: number) => string,
-	words: { yours: string; others: string }
+	words: { yours: string; others: string; pooled?: string }
 ): string {
 	const name: string =
 		option.aggregate || option.self
@@ -627,9 +738,53 @@ export function formatSourceOptionLabel(
 			? ""
 			: ` — BF ${formatValue(option.baseFraction)}`;
 
+	const pooled: string =
+		option.coverage === undefined
+			? ""
+			: ` — ${formatValue(option.coverage * 100)}% ${
+					words.pooled ?? "pooled"
+				}`;
+
 	return `${name} — ${formatValue(
 		option.costPerUnit
-	)} ȼ/u — ${own} / ${others}${baseFraction}`;
+	)} ȼ/u — ${own} / ${others}${baseFraction}${pooled}`;
+}
+
+/**
+ * Daily need of every sourcable input ticker of a plan.
+ *
+ * The units {@link buildInputRows} prices: the net inputs of the material
+ * I/O (`delta < 0`) plus the repair demand, which appears in no material
+ * I/O of its own. Ship fuel is deliberately absent — its burn depends on
+ * the shipping model, which is priced with the very resolver this demand
+ * feeds, so counting it would close a circle for a handful of units.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkInputRowSource} planResult Plan Result
+ * @param {IRaukkMaterialUnits} repairUnitsPerDay Repair demand per day
+ * @returns {IRaukkMaterialUnits} Daily need per ticker
+ */
+export function inputDemandPerDay(
+	planResult: IRaukkInputRowSource,
+	repairUnitsPerDay: IRaukkMaterialUnits = {}
+): IRaukkMaterialUnits {
+	const units: IRaukkMaterialUnits = {};
+
+	planResult.materialio.forEach((element) => {
+		if (element.delta >= 0) return;
+
+		units[element.ticker] =
+			(units[element.ticker] ?? 0) + element.delta * -1;
+	});
+
+	Object.entries(repairUnitsPerDay).forEach(([ticker, unitsPerDay]) => {
+		if (unitsPerDay <= 0) return;
+
+		units[ticker] = (units[ticker] ?? 0) + unitsPerDay;
+	});
+
+	return units;
 }
 
 /**
@@ -666,11 +821,12 @@ export function formatSourceOptionLabel(
  *
  * @param {IRaukkInputRowSource} planResult Plan Result
  * @param {IRaukkMaterialUnits} repairUnitsPerDay Repair demand per day
- * @param {Record<string, IRaukkTickerSource>} sources Plan sources
+ * @param {Record<string, IRaukkTickerSource>} sources Effective sources
  * @param {IRaukkPriceResolver} resolve Price Resolver
  * @param {Record<string, number>} shippingPerUnitIn Inbound freight ȼ/u
  * @param {(ticker: string) => number} [getDefaultPrice] Stable sort price
  * @param {IRaukkMaterialUnits} fuelUnitsPerDay Ship fuel burnt per day
+ * @param {Set<string>} defaulted Tickers following an account default
  * @returns {IRaukkInputRow[]} Priced input rows
  */
 export function buildInputRows(
@@ -680,7 +836,8 @@ export function buildInputRows(
 	resolve: IRaukkPriceResolver,
 	shippingPerUnitIn: Record<string, number> = {},
 	getDefaultPrice?: (ticker: string) => number,
-	fuelUnitsPerDay: IRaukkMaterialUnits = {}
+	fuelUnitsPerDay: IRaukkMaterialUnits = {},
+	defaulted: Set<string> = new Set()
 ): IRaukkInputRow[] {
 	const units: IRaukkMaterialUnits = {};
 	/** Units riding a route pair, the material I/O ones only */
@@ -754,6 +911,7 @@ export function buildInputRows(
 				},
 				unitsPerDay,
 				source: sources[ticker],
+				fromDefault: defaulted.has(ticker),
 				price: resolved.price,
 				// fuel is hauled to the exchange by the player, it rides
 				// no route pair and pays no freight of its own
@@ -778,6 +936,7 @@ export function buildInputRows(
 				buckets: bucketOf(ticker),
 				unitsPerDay,
 				source: sources[ticker],
+				fromDefault: defaulted.has(ticker),
 				price: resolved.price,
 				shippedUnitsPerDay,
 				shippingPerUnit,

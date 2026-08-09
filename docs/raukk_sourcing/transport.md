@@ -1,9 +1,10 @@
 # Account-wide transport table
 
-A "Transport" section on the account `/shipping` page, between the
-fleet and the chains: every stored lane of the account, with what the
-own fleet charges to fly it and what an LM transport ad would. Editable
-— the LM ȼ/trip rate and the per-lane ship assignment both live here.
+A "Transport" section of the account `/shipping` page's section strip,
+between Fleet and Chains: every stored lane of the account, with what
+the own fleet charges to fly it and what an LM transport ad would.
+Editable — the LM ȼ/trip rate and the per-lane ship assignment both
+live here.
 
 Supersedes two earlier surfaces, both on the plan Sourcing tool and
 both removed: the "Hired Transport" LM rates table and the read-only
@@ -67,12 +68,33 @@ snapshot, so one key only ever meets one snapshot; staleness is still
 OR-ed rather than overwritten, since an imported payload need not hold
 to that.
 
-## Known loss
+## Known losses
 
-A pair that ships nothing yields no snapshot lanes at all, so the
-account table cannot list it — the old per-plan table did, so a rate
-could be entered before the cargo existed. Enter the rate once the lane
-carries something.
+- A pair that ships nothing yields no snapshot lanes at all, so the
+  account table cannot list it — the old per-plan table did, so a rate
+  could be entered before the cargo existed. Enter the rate once the
+  lane carries something.
+- Base SCOPING is gone. The old section answered "what transport
+  touches *this* base", foreign lanes pointing at it included; the
+  table is account-wide and merely sorted by owning base. Deliberate:
+  the lanes and the fleet are account-global, and the per-base cut was
+  the reason the same lane appeared twice on two surfaces.
+- The chains half of the old base section is not reproduced here. The
+  Chains section of the same page already lists every chain with a
+  superset of those columns, and editable.
+
+## Where the ȼ come from
+
+`ownCostPerTrip` is frozen, and therefore priced with the owning plan's
+repair bill. The wear tooltip's "wear costs N ȼ per trip" is NOT: it is
+derived at read time from the frozen `ownDamagePerTrip` against the
+page's own account-level, anchorless repair bill. For a plan whose
+anchor exchange prices the repair materials differently from the
+account default, those two ȼ in one row rest on different price bases.
+Only that one tooltip field is affected — the damage fraction, trips
+until repair and days until repair are pure damage math. `FleetSection`
+on the same page already mixes frozen damage with the account bill, so
+the reading is at least consistent across the page.
 
 ## Figures
 
@@ -85,8 +107,12 @@ days, LM ȼ/trip (editable), own ȼ/u, hired ȼ/u, saving ȼ/u.
 
 - `calculations/shippingDisplay.ts` — `raukkPairIdentity`,
   `buildTransportRows`, and the `tripWeighted` helper. Pure, no store.
-- `useRaukkTransport.ts` — thin composable; reads `store.snapshots`
-  directly (reactivity rule: never through the cloning getters).
+- `useRaukkTransport.ts` — thin composable; reads through
+  `store.scopedSnapshots()`, which filters `snapshots.value` without
+  cloning, so the computed still tracks (reactivity rule: never through
+  the `getSnapshot`/`getConfig` cloning getters, which `toRaw` first).
+  It also owns the display ORDER — by owning base name, then
+  counterpart name — because the builder only ever sees plan uuids.
 - `components/RaukkTransportSection.vue` — the section and its store
   writes; `components/RaukkTransportTable.vue` — the table.
 

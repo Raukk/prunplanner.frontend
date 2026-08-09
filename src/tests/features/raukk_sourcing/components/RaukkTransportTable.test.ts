@@ -60,6 +60,10 @@ function render(rows: IRaukkTransportRow[]): VueWrapper {
 		props: {
 			rows,
 			planNames: { consumer: "Consumer Base", source: "Source Base" },
+			shipTypeOptions: [
+				{ label: "BAY1 · Test Hauler", value: "test" },
+				{ label: "BAY2 · Big Hauler", value: "big" },
+			],
 		},
 		global: {
 			plugins: [i18n],
@@ -161,6 +165,54 @@ describe("RaukkTransportTable", () => {
 
 		expect(html).not.toContain("text-positive");
 		expect(html).not.toContain("text-negative");
+	});
+
+	it("names the hull the lane was actually costed with", () => {
+		// the picker beside it is empty on an auto lane, so this is the
+		// only place the automatic pick becomes visible
+		const wrapper: VueWrapper = render([row()]);
+
+		expect(wrapper.text()).toContain("BAY1 · Test Hauler");
+	});
+
+	it("names every distinct hull of a lane flying two", () => {
+		const wrapper: VueWrapper = render([
+			row({
+				legs: [
+					{
+						bucket: "production",
+						shipTypeId: "test",
+						visitDays: 2,
+						tripsPerDay: 0.5,
+					},
+					{
+						bucket: "workforce",
+						shipTypeId: "big",
+						visitDays: 4,
+						tripsPerDay: 0.25,
+					},
+				],
+			}),
+		]);
+
+		expect(wrapper.text()).toContain("BAY1 · Test Hauler · BAY2 · Big Hauler");
+	});
+
+	it("degrades a hull no profile answers to, to its id", () => {
+		const wrapper: VueWrapper = render([
+			row({
+				legs: [
+					{
+						bucket: "production",
+						shipTypeId: "gone",
+						visitDays: 2,
+						tripsPerDay: 0.5,
+					},
+				],
+			}),
+		]);
+
+		expect(wrapper.text()).toContain("gone");
 	});
 
 	it("states the empty table instead of an empty body", () => {

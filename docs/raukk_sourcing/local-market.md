@@ -69,8 +69,8 @@ post-round-10 code.
   (no-migration rule; old payloads/blobs parse unchanged).
 - Wording: in game the Local Market (LM) bundles three ad types —
   shipping, buy, sell. Label by ad type: "LM sell" (output flag),
-  "LM buy" (input source mode), "LM shipping" (existing
-  `RaukkLmRatesTable` hired rates). Never bare "LM" for any single
+  "LM buy" (input source mode), "LM shipping" (the hired
+  rates of `RaukkTransportTable`). Never bare "LM" for any single
   one; i18n keys `lm_sell` / `lm_buy` accordingly.
 - Verify chain validation reads sensibly when a claimed flow vanishes
   because its ticker got flagged local.

@@ -10,21 +10,22 @@
 // Calculations
 import { raukkNearestCalibration } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 import {
+	IRaukkStlBlock,
+	RAUKK_DEFAULT_G_FACTOR,
+	RAUKK_DEFAULT_STL_ENGINE,
+	RAUKK_DEFAULT_STL_SLIDER,
 	RAUKK_DEFAULT_STL_TANK,
+	RAUKK_FTL_FUEL_UNITS_PER_PARSEC,
+	RAUKK_FTL_PANEL_FLOOR_MINUTES_PER_PARSEC,
+	RAUKK_FTL_PANEL_MINUTES_PER_PARSEC_HOUR,
 	RAUKK_REFERENCE_METEOROID_DENSITY,
-	RAUKK_REFERENCE_STL_LEG_KM,
 	RAUKK_STANDARD_GRAVITY,
 	RAUKK_STL_ENGINE,
 	RAUKK_STL_ENGINES,
 	raukkAccelerationMax,
 	raukkFtlDamagePerParsec,
 	raukkInferStlEngine,
-	raukkStlDamage,
-	raukkTakeoffFuel,
-	raukkTakeoffSeconds,
-	raukkTransitCapSeconds,
-	raukkTransitFuel,
-	raukkTransitSeconds,
+	raukkStlBlock,
 } from "@/features/raukk_sourcing/calculations/shippingPhysics";
 
 // Types & Interfaces
@@ -34,9 +35,9 @@ import {
 	RAUKK_FTL_REACTOR,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 
-/** Fuel rate of the fuel-save sublight engine, units per second */
-export const RAUKK_FSE_FUEL_RATE_PER_SECOND: number =
-	RAUKK_STL_ENGINES.FSE.fuelRatePerSecond;
+/** Fuel rate of the default sublight engine, units per second */
+export const RAUKK_DEFAULT_FUEL_RATE_PER_SECOND: number =
+	RAUKK_STL_ENGINES[RAUKK_DEFAULT_STL_ENGINE].fuelRatePerSecond;
 
 /** Blueprint Performance stats as the user reads them off the panel */
 export interface IRaukkBlueprintStats {
@@ -48,18 +49,24 @@ export interface IRaukkBlueprintStats {
 	accelerationMax?: number;
 	/** `Operating empty mass`, tonnes */
 	operatingEmptyMassTons?: number;
-	/** Sublight engine fuel rate, units per second; FSE is the default */
+	/** Sublight engine fuel rate, units per second */
 	stlFuelRatePerSecond?: number;
-	/** Engine code, inferred from the fuel rate when omitted */
+	/** Engine code; inferred from the fuel rate, else the default */
 	stlEngine?: RAUKK_STL_ENGINE;
 	/** `Max g`, the hull plate and seat rating; inferred when omitted */
 	maxGFactor?: number;
 	/** Sublight tank capacity, fuel units; the MSL is the default */
 	stlTankCapacity?: number;
-	/** Fuel-usage slider as a fraction, 0 — the default — being MIN */
+	/** Fuel-usage slider as a fraction, 0 being MIN */
 	stlFuelSliderFraction?: number;
 	/** Meteoroid density the block damage is stated at */
 	meteoroidDensity?: number;
+	/** Surface hop of the planet end, km */
+	surfaceLegKm?: number;
+	/** Planet side in-system transit leg, km */
+	planetTransitKm?: number;
+	/** Station side in-system transit leg, km */
+	stationTransitKm?: number;
 }
 
 /** Constants a blueprint seed can state, plus why it could state them */
@@ -68,8 +75,11 @@ export interface IRaukkBlueprintSeed {
 	stlBlockMinutesEmpty: number;
 	stlBlockMinutesLoaded: number;
 	stlFuelPerBlock: number;
+	ftlFuelPerParsec: number;
 	damagePerParsec: number;
 	damagePerStlBlock: number;
+	/** Cruising speed the empty block was timed at, km/s */
+	cruiseSpeedKmPerSecond: number;
 	/** Codes of the fields the blueprint actually determined */
 	seededFields: string[];
 	/** Codes of the stats that were missing, see the UI wording */
@@ -90,7 +100,7 @@ const RAUKK_G_CAP_MARGIN: number = 1.02;
 
 /** The two acceleration figures a sublight block is timed from */
 interface IRaukkDesignAcceleration {
-	/** m/s² with an empty hold, undefined when the panel stated nothing */
+	/** m/s² with an empty hold */
 	empty: number | undefined;
 	/** m/s² with the hold full, undefined when the mass is unknown */
 	loaded: number | undefined;
@@ -106,26 +116,21 @@ interface IRaukkDesignAcceleration {
  *
  *  - the engine gives thrust, so `thrust / grossMass` is known at any
  *    load;
- *  - a stated `Max g` gives the cap directly;
- *  - and when it is not stated, the panel itself reveals it: an
- *    acceleration BELOW what the engine's thrust would give at the empty
- *    mass is a capped reading, so the panel value IS the cap.
- *
- * Without the engine there is no thrust and no cap to find, and the
- * model falls back to the constant-thrust reading of the panel figure —
- * `thrust = accelerationMax × emptyMass` — which reproduces the plain
- * `√(gross / empty)` scaling the seed used before this file knew any
- * engine constants.
+ *  - a stated `Max g` gives the cap directly, and where nothing is
+ *    stated the default plate stands in ({@link RAUKK_DEFAULT_G_FACTOR});
+ *  - and a panel acceleration BELOW what the engine's thrust would give
+ *    at the empty mass is itself a capped reading, so the panel value IS
+ *    the cap and beats the default.
  *
  * @author raukk
  *
  * @param {IRaukkBlueprintStats} stats Blueprint Performance block
- * @param {(RAUKK_STL_ENGINE | null)} engine Engine, null when unknown
+ * @param {number} thrust Engine thrust, tonne × m/s²
  * @returns {IRaukkDesignAcceleration} Empty and loaded acceleration
  */
 function accelerationOf(
 	stats: IRaukkBlueprintStats,
-	engine: RAUKK_STL_ENGINE | null
+	thrust: number
 ): IRaukkDesignAcceleration {
 	const panel: number | undefined =
 		stats.accelerationMax !== undefined && stats.accelerationMax > 0
@@ -137,24 +142,16 @@ function accelerationOf(
 			? stats.operatingEmptyMassTons
 			: undefined;
 
-	const thrust: number | undefined =
-		engine !== null
-			? RAUKK_STL_ENGINES[engine].thrustTonneMetersPerSecondSquared
-			: panel !== undefined && emptyMass !== undefined
-				? panel * emptyMass
-				: undefined;
+	if (emptyMass === undefined) return { empty: panel, loaded: undefined };
 
-	if (thrust === undefined || emptyMass === undefined)
-		return { empty: panel, loaded: undefined };
-
-	/** g rating: stated, else the one the panel reading implies */
-	const gCapFactor: number | undefined =
+	/** g rating: stated, else the one the panel implies, else the plate */
+	const gCapFactor: number =
 		stats.maxGFactor !== undefined && stats.maxGFactor > 0
 			? stats.maxGFactor
 			: panel !== undefined &&
 				  thrust / emptyMass > panel * RAUKK_G_CAP_MARGIN
 				? panel / RAUKK_STANDARD_GRAVITY
-				: undefined;
+				: RAUKK_DEFAULT_G_FACTOR;
 
 	return {
 		empty: panel ?? raukkAccelerationMax(thrust, emptyMass, gCapFactor),
@@ -169,32 +166,28 @@ function accelerationOf(
 /**
  * Profile constants seeded from one blueprint's Performance block.
  *
- * The sublight BLOCK of this model is one one-way flight's powered
- * portion — a takeoff, a transit leg and a landing — and every term of
- * it comes from the calibration campaign:
+ * The sublight BLOCK of this model is the powered portion of ONE ONE-WAY
+ * FLIGHT between a planet and a CX station — a surface hop, a planet
+ * side transit leg and a station side transit leg — and every term of it
+ * comes from the calibration campaign:
  *
- *  - TIME. Takeoff and landing each run `3200 / √accelMax` seconds and
- *    the transit leg `10800 / √accelMax` over the campaign's reference
- *    distance (calibration §1.2, §1.3), the fuel saver's transit
- *    stretched by its documented cap-speed penalty. Cargo enters ONLY
- *    through `accelMax`, which is why a g-capped design loses nothing at
- *    all by loading up while a thrust-limited one slows by
- *    `√(gross / empty)`.
- *  - FUEL. Takeoff and landing burn `7.55 × rated rate × seconds`
- *    each, a per-trip constant the slider does not touch (§1.3). The
- *    transit leg has the campaign's two operating points (§1.1): at MIN
- *    it burns at roughly the rated rate, and at any slider setting it
- *    spends that FRACTION OF THE TANK, engine, mass and distance
- *    independent.
- *  - DAMAGE. The jump term is the flat 0.0011 % per parsec, the block
- *    term the meteoroid law over the reference leg (§6).
- *  - `minutesPerParsec` stays `60 / FTL speed (max)`, definitional off
- *    the panel.
- *
- * `ftlFuelPerParsec` is deliberately NOT seeded: calibration §3 finds
- * the FTL burn hull-independent but per-profile — "keep per-profile
- * calibrated burn, not a universal constant" — so no blueprint number
- * determines it and the reference flight keeps it.
+ *  - TIME. The surface hop is `√(2 × km / accelMax)` (§11.1) and each
+ *    transit leg `km / cruiseSpeed` (§11.2), where the cruise speed is
+ *    what the slider's fuel budget buys, capped by the engine's own top
+ *    speed. Cargo enters ONLY through `accelMax`, and on a design whose
+ *    slider already reaches the engine ceiling it does not enter the
+ *    transit legs at all — which is exactly what batch 1 measured when
+ *    it flew the same 43m47s empty and with 5,000 t aboard.
+ *  - FUEL. The surface hop burns `7.55 × rated rate × seconds` (§1.3),
+ *    each transit leg the slider's whole budget (§1.1).
+ *  - DAMAGE. The meteoroid law over both transit legs plus one landing
+ *    (§6, §11.4).
+ *  - `minutesPerParsec` from the panel's `FTL speed (max)`, through the
+ *    measured relation of §11.3 rather than the `60 / speed` this seed
+ *    used to assume — that reading runs 1.2× to 2.1× optimistic.
+ *  - `ftlFuelPerParsec` at the flat 4.687 units §11.3 fits over eight
+ *    hops. §3 finds it higher on a loaded 5,831 m³ hull, so a reference
+ *    flight still beats it.
  *
  * @author raukk
  *
@@ -216,7 +209,9 @@ export function raukkBlueprintSeed(
 	let minutesPerParsec: number = nearest.minutesPerParsec;
 
 	if (speed !== undefined && speed > 0) {
-		minutesPerParsec = 60 / speed;
+		minutesPerParsec =
+			RAUKK_FTL_PANEL_FLOOR_MINUTES_PER_PARSEC +
+			RAUKK_FTL_PANEL_MINUTES_PER_PARSEC_HOUR / speed;
 		seededFields.push("minutesPerParsec");
 	} else {
 		missing.push("ftlSpeedMaxParsecPerHour");
@@ -232,57 +227,65 @@ export function raukkBlueprintSeed(
 		missing.push("operatingEmptyMassTons");
 
 	const rate: number =
-		stats.stlFuelRatePerSecond ?? RAUKK_FSE_FUEL_RATE_PER_SECOND;
-	const engine: RAUKK_STL_ENGINE | null =
+		stats.stlFuelRatePerSecond ?? RAUKK_DEFAULT_FUEL_RATE_PER_SECOND;
+	const engine: RAUKK_STL_ENGINE =
 		stats.stlEngine ??
 		raukkInferStlEngine(
 			rate,
 			stats.accelerationMax,
 			stats.operatingEmptyMassTons
-		);
-	const speedCapFactor: number =
-		engine !== null ? RAUKK_STL_ENGINES[engine].speedCapFactor : 1;
+		) ??
+		RAUKK_DEFAULT_STL_ENGINE;
+	const thrust: number =
+		RAUKK_STL_ENGINES[engine].thrustTonneMetersPerSecondSquared;
 
 	const acceleration: IRaukkDesignAcceleration = accelerationOf(
 		stats,
-		engine
+		thrust
 	);
 
-	const tank: number = stats.stlTankCapacity ?? RAUKK_DEFAULT_STL_TANK;
-	const slider: number = Math.max(stats.stlFuelSliderFraction ?? 0, 0);
-	const capSeconds: number = raukkTransitCapSeconds(
-		acceleration.empty ?? 0,
-		speedCapFactor
-	);
+	const density: number =
+		stats.meteoroidDensity ?? RAUKK_REFERENCE_METEOROID_DENSITY;
 
-	/** Minutes of one whole sublight block at a given acceleration */
-	function blockMinutes(accelerationMax: number): number {
-		return (
-			(2 * raukkTakeoffSeconds(accelerationMax) +
-				raukkTransitSeconds(accelerationMax, capSeconds)) /
-			60
-		);
-	}
-
-	/** Fuel units of one whole sublight block at a given acceleration */
-	function blockFuel(accelerationMax: number): number {
-		return (
-			2 * raukkTakeoffFuel(rate, raukkTakeoffSeconds(accelerationMax)) +
-			raukkTransitFuel(
-				rate,
-				raukkTransitSeconds(accelerationMax, capSeconds),
-				tank,
-				slider
-			)
-		);
+	/** One whole sublight block at a given acceleration */
+	function block(accelerationMax: number): IRaukkStlBlock {
+		return raukkStlBlock({
+			accelerationMax,
+			fuelRatePerSecond: rate,
+			topSpeedKmPerSecond: RAUKK_STL_ENGINES[engine].topSpeedKmPerSecond,
+			tankCapacity: stats.stlTankCapacity ?? RAUKK_DEFAULT_STL_TANK,
+			sliderFraction:
+				stats.stlFuelSliderFraction ?? RAUKK_DEFAULT_STL_SLIDER,
+			meteoroidDensity: density,
+			surfaceLegKm: stats.surfaceLegKm,
+			planetTransitKm: stats.planetTransitKm,
+			stationTransitKm: stats.stationTransitKm,
+		});
 	}
 
 	let stlBlockMinutesEmpty: number = nearest.stlBlockMinutesEmpty;
 	let stlBlockMinutesLoaded: number = nearest.stlBlockMinutesLoaded;
 	let stlFuelPerBlock: number = nearest.stlFuelPerBlock;
+	let cruiseSpeedKmPerSecond: number = 0;
+
+	/*
+	 * The damage terms are laws, not readings: they need no blueprint
+	 * stat at all — the block's two transit legs and its landing have
+	 * their damage whatever the design's acceleration — so they are
+	 * always seeded and always beat a reference flight that could not
+	 * tell the two terms apart.
+	 */
+	const damagePerStlBlock: number = block(0).damage;
 
 	if (acceleration.empty !== undefined) {
-		stlBlockMinutesEmpty = blockMinutes(acceleration.empty);
+		const empty: IRaukkStlBlock = block(acceleration.empty);
+		const loaded: IRaukkStlBlock =
+			acceleration.loaded !== undefined
+				? block(acceleration.loaded)
+				: empty;
+
+		stlBlockMinutesEmpty = empty.seconds / 60;
+		cruiseSpeedKmPerSecond = empty.cruiseSpeedKmPerSecond;
 		seededFields.push("stlBlockMinutesEmpty");
 
 		/*
@@ -292,7 +295,7 @@ export function raukkBlueprintSeed(
 		 */
 		stlBlockMinutesLoaded =
 			acceleration.loaded !== undefined
-				? blockMinutes(acceleration.loaded)
+				? loaded.seconds / 60
 				: (stlBlockMinutesEmpty * nearest.stlBlockMinutesLoaded) /
 					nearest.stlBlockMinutesEmpty;
 
@@ -304,34 +307,26 @@ export function raukkBlueprintSeed(
 		 * the fully loaded block — the same figure the two flight solver
 		 * averages out of its pair of observations.
 		 */
-		stlFuelPerBlock =
-			(blockFuel(acceleration.empty) +
-				blockFuel(acceleration.loaded ?? acceleration.empty)) /
-			2;
+		stlFuelPerBlock = (empty.fuel + loaded.fuel) / 2;
 
 		seededFields.push("stlFuelPerBlock");
 	}
 
-	/*
-	 * Both damage terms are laws, not readings: they need no blueprint
-	 * stat at all, so they are always seeded and always beat a reference
-	 * flight that could not tell the two terms apart.
-	 */
-	const damagePerParsec: number = raukkFtlDamagePerParsec();
-	const damagePerStlBlock: number = raukkStlDamage(
-		RAUKK_REFERENCE_STL_LEG_KM,
-		stats.meteoroidDensity ?? RAUKK_REFERENCE_METEOROID_DENSITY
+	seededFields.push(
+		"ftlFuelPerParsec",
+		"damagePerParsec",
+		"damagePerStlBlock"
 	);
-
-	seededFields.push("damagePerParsec", "damagePerStlBlock");
 
 	return {
 		minutesPerParsec,
 		stlBlockMinutesEmpty,
 		stlBlockMinutesLoaded,
 		stlFuelPerBlock,
-		damagePerParsec,
+		ftlFuelPerParsec: RAUKK_FTL_FUEL_UNITS_PER_PARSEC,
+		damagePerParsec: raukkFtlDamagePerParsec(),
 		damagePerStlBlock,
+		cruiseSpeedKmPerSecond,
 		seededFields,
 		missing,
 	};

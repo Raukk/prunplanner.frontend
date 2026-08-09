@@ -84,7 +84,8 @@
 		"AVG7D": "Average 7d",
 		"AVG30D": "Average 30d",
 		"MANUAL": "Manual",
-		"default": "CX Preference"
+		"default": "Default (account/CX)",
+		"cx": "CX Preference (pinned)"
 	},
 	"local_price": {
 		"absolute": "ȼ/u",
@@ -101,14 +102,40 @@
 		"agg_avg": "All producers (weighted avg)",
 		"agg_max": "Highest-cost producer",
 		"self": "Own output",
-		"stale": "stale snapshot"
+		"stale": "stale snapshot",
+		"agg_avg_mkt": "All producers (weighted avg + market top-up)",
+		"pooled": "from own bases"
 	},
 	"shipping_page": {
 		"view_title": "Shipping",
-		"info": "Fleet, routes and depots of the whole account. Everything here is account-global; the per-plan pieces — sources, local market rates and the plan CX anchor — stay on each plan's Sourcing tool.",
+		"info": "Fleet, routes and depots of the whole account, one section at a time. Everything here is account-global; the per-plan pieces — sources, local market rates and the plan CX anchor — stay on each plan's Sourcing tool.",
+		"sections": {
+			"settings": "Settings",
+			"defaults": "Defaults",
+			"fleet": "Fleet",
+			"transport": "Transport",
+			"chains": "Chains",
+			"depots": "Depots",
+			"gates": "Gates",
+			"visuals": "Visuals",
+			"calibration": "Calibration",
+			"settings_tooltip": "Account-wide shipping switches: whether shipping is charged at all, the default ship profile, cadences and the CX anchor rule.",
+			"defaults_tooltip": "Where every base sources each input group by default, set once instead of base by base. Independent of the shipping switch.",
+			"fleet_tooltip": "Every ship the account commits, its wear and its share of the repair bill.",
+			"transport_tooltip": "Every stored lane, what your own fleet charges to fly it and what hiring an LM carrier would cost instead.",
+			"chains_tooltip": "Routes the cargo actually flies — authored chains, the automatic ones and the hub/spoke rollup.",
+			"depots_tooltip": "Planets that act as ship homes and handover points.",
+			"gates_tooltip": "Gates you plan to build: what they cost, whether they are in range, and what the routes look like once they exist.",
+			"visuals_tooltip": "The account's freight drawn out: a star map of every lane, and weight against volume per trip versus a bay's hold.",
+			"calibration_tooltip": "Per-hull figures behind every cost on this page — speeds, fuel burn and hold sizes."
+		},
 		"manage_link": "Manage fleet & routes",
 		"recompute": "Recompute Chains",
-		"recompute_tooltip": "Re-costs every chain from the stored snapshot flows. To refresh the snapshots themselves, use the sourcing tool of a plan.",
+		"recompute_tooltip": "Re-costs every chain from the stored snapshot flows. It never touches the snapshots — use Recompute Snapshots for those.",
+		"recompute_snapshots": "Recompute Snapshots",
+		"recompute_snapshots_tooltip": "Recomputes every stored snapshot flagged stale, upstream first, then re-costs the chains. This is what moves lanes onto a changed fleet: a ship count crossing zero stales the stored results, but the assignment each lane was costed with only changes when its plan is recomputed.",
+		"recompute_snapshots_progress": "Recomputing snapshot {done}/{total}: {name}…",
+		"snapshot_error": "{name}: {message}",
 		"chain_error": "Chain '{name}': {message}",
 		"auto_chain_error": "Automatic chains: {message}"
 	},
@@ -120,6 +147,7 @@
 		"cx_lane": "Exchange",
 		"ship_type": "Ship Type",
 		"auto": "Auto",
+		"flown": "flown: {hulls}",
 		"visits": "Days / Visit",
 		"units_per_day": "Units / Day",
 		"round_trip": "Round Trip",
@@ -147,8 +175,6 @@
 		"cadence_in_out": "Days/Visit In-Out",
 		"cadence_workforce": "Days/Visit Workforce",
 		"cadence_tooltip": "Account default for the maximum days between two deliveries of that cargo class. Repair materials follow each plan's own repair day. Every plan may override all three. The cap binds the shipping, not the storage: a hold needing longer to fill flies partly loaded, and a partial trip pays a full trip.",
-		"show_calibration": "Show Calibration",
-		"hide_calibration": "Hide Calibration",
 		"calibration_info": "Calibration constants per hull and FTL reactor, pre-filled from recorded test flights. Cost per parsec and per sublight block are left empty on purpose: an empty field follows the profile's fuel burn at the current FF and SF price. Type a number to override one, empty it again to go back to the derived value. Edited profiles override the preset until reset.",
 		"derived_tooltip": "Empty: derived from this profile's fuel burn times the current FF (per parsec) or SF (per sublight block) price. Any number you enter — zero included — wins.",
 		"stl_only_tooltip": "A hull built without an FTL drive and reactor — roughly a quarter cheaper. It can only leave its system through a GATE, which drops it straight into the destination orbit, so it serves same-system lanes and lanes whose every inter-system hop is a gate. A lane without such a route is an error, not a slower route: the ship cannot fly it. The FTL constants are greyed out for such a profile and kept as they are.",
@@ -202,6 +228,8 @@
 		"drydock_cost": "Wear over all hulls of the type costs {daily} ȼ/day, already included in the lane and chain costs.",
 		"drydock_unknown": "At least one stored result of this type predates wear tracking, so the wear is unknown rather than zero. Recompute the plan snapshots and chains to fill it in.",
 		"assigned": "Routes",
+		"stale": "stale",
+		"stale_tooltip": "{stale} of {total} routes on this type come from stored results flagged stale: the assignment is what the LAST compute chose, and a fleet change stales the stored results without moving anything. Recompute the plan snapshots and the chains and the automatic pick reruns over the fleet you own now.",
 		"calibrate": "Calibrate",
 		"remove": "Remove",
 		"add": "Add Type",
@@ -298,6 +326,7 @@
 		},
 		"ship_type": "Ship Type",
 		"auto": "Auto",
+		"flown": "flown: {hulls}",
 		"visits": "Days / Visit",
 		"daily_cost": "ȼ / Day",
 		"shipping_fraction": "Ship Time",
@@ -441,6 +470,62 @@
 			"total": "Shipping ȼ / Day"
 		}
 	},
+	"gates": {
+		"title": "Planned Gates",
+		"info": "Gates that do NOT exist: one you watched go up in-game and want to route over before it opens, or one nobody is building that you want to know the worth of. Gates fly in a STRAIGHT LINE, which is most of what makes them worth having — but only as far as their linking range, 10 parsecs plus 5 per range upgrade, and a gap wider than that is not an expensive gate but an impossible one. Each row is measured against the network as it stands today: the same trip, flown by a hull as big as the planned gate would pass, over the FTL jumps and the real gates that exist now. Switch a gate ON and it becomes an edge of the route graph — every lane, chain and distance in the account may then be planned over it, which is why switching one stales the shipping numbers.",
+		"gate": "Gate",
+		"link": "Link",
+		"fee": "Fee ȼ",
+		"volume": "Max m³",
+		"parsecs": "Gap pc",
+		"traversal": "Traversal h",
+		"today": "Today h",
+		"saves": "Saves",
+		"enabled": "Plan Over It",
+		"remove": "Remove",
+		"add": "Add Gate",
+		"hcb": "HCB",
+		"unrouted": "Unroutable",
+		"opens_route": "opens a route",
+		"name_placeholder": "Name, optional",
+		"planet_a_placeholder": "Planet A, e.g. ZV-307c",
+		"planet_b_placeholder": "Planet B, e.g. OT-580b",
+		"status": {
+			"construction": "Under construction",
+			"proposed": "Wishlist"
+		},
+		"issue": {
+			"no_endpoints": "The gate is missing a planet on one of its sides.",
+			"unknown_a": "No planet of the A side id is known — check the spelling, e.g. ZV-307c.",
+			"unknown_b": "No planet of the B side id is known — check the spelling, e.g. OT-580b.",
+			"same_system": "Both planets sit in one system, and a gate bridges systems — there is nothing here to traverse.",
+			"out_of_range": "The gap is wider than this gate's linking range. It needs {needed} range upgrade(s) to reach — buy them in the Upgrades column.",
+			"unreachable_range": "The gap is wider than any gate can link, even with all 3 range upgrades (25 parsecs). No gate can be built here."
+		},
+		"hint": {
+			"empty": "Type both planet ids to enable Add Gate.",
+			"unknown": "One of those planets is unknown — the gate would route nothing.",
+			"same_system": "Both planets sit in one system — a gate between them bridges nothing.",
+			"unreachable_range": "Those planets are more than 25 parsecs apart — no gate can link them, however upgraded."
+		},
+		"empty": "No planned gates yet. Add one you saw going up in-game, or one you wish someone would build, and see what it would save.",
+		"planning_warning": "{count} planned gate(s) are switched on: distances, lanes and chains are being routed over gates that do not exist yet. Switch them off for the numbers you can fly today.",
+		"upgrades": "Upgrades",
+		"range": "Linking Range",
+		"track": {
+			"capacity": "Uses",
+			"volume": "Volume",
+			"range": "Range"
+		},
+		"budget_left": "{left} of {total} upgrade levels left",
+		"build_cost": "Build ȼ",
+		"build_cost_tooltip": "Both ends of the link at today's exchange prices — a gate is bought TWICE, one at each end, and this is the pair. The bill is dominated by a few enormous positions ({materials}), and those are thin markets: this is what the exchange says today, not what actually buying that much would cost.",
+		"cost_note": "Build ȼ counts BOTH ends of every link — a gate is two gates. A gate holds {budget} upgrade levels in total across uses, volume and range, so every level of range is a level of clearance not bought. Upgrade cost is triangular: the n-th level costs n times the first, so the third level of an upgrade costs three times what the first one did.",
+		"rollup_build": "Build ȼ, every planned link",
+		"out_of_range_tag": "Out of Range",
+		"not_routed": "Not Routed",
+		"enabled_broken": "Switched on, but this gate cannot exist as configured, so nothing is being routed over it. Fix the range or the planets — or switch it off."
+	},
 	"oversub_report": {
 		"title": "Oversubscription",
 		"info": "Where this empire is overdrawn: every producer and ticker whose subscribed draws approach or exceed its net capacity, plus the committed ship time of the fleet. Read-only — rows link to the owning plan, fleet rows to the Shipping page.",
@@ -455,7 +540,18 @@
 			"blocks": "Blocks",
 			"bubbles": "Bubbles",
 			"map": "Map",
-			"starmap": "Star Map"
+			"starmap": "Star Map",
+			"table_tooltip": "The numbers themselves — every row with its capacity, its subscribers and a recompute button.",
+			"ledger_tooltip": "Bar per row: how much of a producer's capacity each consumer takes, and by how much the overdrawn ones run past it.",
+			"matrix_tooltip": "Heatmap of rows against consumer plans — spot at a glance which plan is leaning on everything.",
+			"beeswarm_tooltip": "Every row as one dot on a shared utilization axis — where the empire's load sits overall, and which rows are outliers.",
+			"dumbbell_tooltip": "Capacity against subscribed for each row, so the size of the gap — headroom or deficit — is the length of the line.",
+			"waffle_tooltip": "One square per unit of capacity, coloured by who takes it — the most literal picture of where a producer's output goes.",
+			"grid_tooltip": "Producer against consumer adjacency with margin totals — who supplies whom, across the whole empire at once.",
+			"blocks_tooltip": "Treemap: box area is the subscribed volume, so the biggest draws in the empire are the biggest boxes.",
+			"bubbles_tooltip": "Packed circles per row — compare subscribed volume within a unit, and open one to see its consumers nested inside.",
+			"map_tooltip": "Flow diagram: producers on the left, consumers on the right, ribbon thickness the draw between them.",
+			"starmap_tooltip": "The empire drawn spatially — plans as nodes, supply flows as edges, so distance and clustering are visible."
 		},
 		"legend": {
 			"other": "Other ({count} plans)",
@@ -737,8 +833,11 @@
 	},
 	"visuals": {
 		"title": "Visualisations",
+		"info": "The account's frozen freight, drawn two ways: where the cargo actually flies, and whether a bay can carry it.",
 		"tab_map": "Freight star map",
 		"tab_plane": "Weight / volume plane",
+		"tab_map_tooltip": "Every lane on the real system coordinates — which stops carry the tonnage, which gates the freight passes.",
+		"tab_plane_tooltip": "Every lane as one dot of weight against volume per trip, against the selected bay's hold — which cargo needs a bigger ship, and which dimension binds.",
 		"empty": "No frozen flows yet. Recompute the plans with shipping enabled and the account's cargo shows up here."
 	},
 	"shipping_map": {
@@ -789,5 +888,19 @@
 		"legend_outside": "A ringed point overflows it and needs a bigger bay or a shorter cadence",
 		"legend_diagonal": "Above the diagonal the cargo is volume bound, below it weight bound",
 		"legend_clamped": "A point pinned to the plot edge reaches beyond the axis — its tooltip carries the real figure"
+	},
+	"defaults": {
+		"title": "Sourcing Defaults",
+		"tooltip": "Default source of every base at once, per input group: a ticker without its own setting on a base follows the default of its group. \"All producers (weighted avg + market top-up)\" charges the share your own bases actually cover at their weighted average and buys the rest at the market price — bases producing two thirds of your rations pay two thirds average and one third market. A per-base setting always wins; pick \"CX Preference (pinned)\" on a row to opt that one ticker out.",
+		"none": "No default (CX preference)",
+		"row_marker": "(default)",
+		"row_marker_tooltip": "Follows the account default of this input group, this base stores no setting of its own.",
+		"confirm_title": "Replace the settings on every base?",
+		"confirm_text": "{tickers} ticker setting(s) on {plans} base(s) override this default. Replacing drops them, so those bases follow the account default from here on.",
+		"confirm_apply": "Replace everywhere",
+		"confirm_keep": "Keep per-base settings",
+		"info": "Default source of every base at once, per input group. A ticker without its own setting on a base follows the default of its group — rations, drinking water and the repair materials are configured once here instead of base by base. Changing a default marks every stored snapshot stale.",
+		"note": "Account defaults —",
+		"note_link": "manage"
 	}
 }

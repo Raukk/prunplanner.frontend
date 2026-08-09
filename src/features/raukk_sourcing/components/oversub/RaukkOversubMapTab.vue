@@ -21,6 +21,10 @@
 	// Calculations
 	import { RAUKK_OVERSUB_STATUS_COLORS } from "@/features/raukk_sourcing/calculations/oversubDisplay";
 	import {
+		RAUKK_VIZ_ALERT,
+		RAUKK_VIZ_INK,
+	} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
+	import {
 		RAUKK_OVERSUB_MAP_CONSUMER_X,
 		RAUKK_OVERSUB_MAP_FOCUS_UTILIZATION,
 		RAUKK_OVERSUB_MAP_NODE_WIDTH,
@@ -52,6 +56,10 @@
 		IRaukkOversubTooltipLine,
 		IRaukkOversubTooltipPayload,
 	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+
+	/** The two washes of the no-net-capacity hatch pattern */
+	const ALERT_HATCH_BACK: string = `rgba(${RAUKK_VIZ_ALERT.rgb}, 0.12)`;
+	const ALERT_HATCH_BAR: string = `rgba(${RAUKK_VIZ_ALERT.rgb}, 0.55)`;
 
 	/* eslint-disable vue/no-unused-properties -- the viz tab contract of
 	 `IRaukkOversubVizTab` fixes this exact prop set; the flow map renders
@@ -472,14 +480,8 @@
 						height="7"
 						patternUnits="userSpaceOnUse"
 						patternTransform="rotate(45)">
-						<rect
-							width="7"
-							height="7"
-							fill="rgba(199, 0, 57, 0.12)" />
-						<rect
-							width="3"
-							height="7"
-							fill="rgba(199, 0, 57, 0.55)" />
+						<rect width="7" height="7" :fill="ALERT_HATCH_BACK" />
+						<rect width="3" height="7" :fill="ALERT_HATCH_BAR" />
 					</pattern>
 				</defs>
 
@@ -564,7 +566,7 @@
 						:fill="
 							producer.row.over
 								? RAUKK_OVERSUB_STATUS_COLORS.over
-								: '#565650'
+								: RAUKK_VIZ_INK.dim
 						"
 						rx="2" />
 					<rect
@@ -646,9 +648,9 @@
 
 <style scoped>
 	svg text {
-		font:
-			11.5px system-ui,
-			sans-serif;
+		/* inherit the app face, never system-ui: a chart label must not
+		 read in a different typeface to the prose around it */
+		font-size: 11.5px;
 		fill: rgba(255, 255, 255, 0.7);
 	}
 	svg text.mname {

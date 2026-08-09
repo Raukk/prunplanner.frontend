@@ -32,14 +32,6 @@ import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
 export function useRaukkTransport(repairBillCost: Ref<number>) {
 	const sourcingStore = useRaukkSourcingStore();
 
-	const rows: ComputedRef<IRaukkTransportRow[]> = computed(() =>
-		buildTransportRows(
-			sourcingStore.scopedSnapshots(),
-			sourcingStore.shippingConfig,
-			repairBillCost.value
-		)
-	);
-
 	/** Plan name per plan uuid, labels both ends of a lane */
 	const planNames: ComputedRef<Record<string, string>> = computed(() =>
 		Object.fromEntries(
@@ -51,6 +43,36 @@ export function useRaukkTransport(repairBillCost: Ref<number>) {
 			)
 		)
 	);
+
+	/**
+	 * Rows in the order the table reads them: by owning base, then by
+	 * counterpart, both by the NAME shown rather than by the uuid the
+	 * pair key carries — the builder can only sort by key, and a column
+	 * of names ordered by hidden uuids looks unsorted.
+	 */
+	const rows: ComputedRef<IRaukkTransportRow[]> = computed(() => {
+		const names: Record<string, string> = planNames.value;
+
+		/** Sort label of one lane end, the uuid where nothing named it */
+		function label(planUuid: string | undefined): string {
+			return planUuid === undefined ? "" : (names[planUuid] ?? planUuid);
+		}
+
+		return buildTransportRows(
+			sourcingStore.scopedSnapshots(),
+			sourcingStore.shippingConfig,
+			repairBillCost.value
+		).sort(
+			(left, right) =>
+				label(left.identity.planUuid).localeCompare(
+					label(right.identity.planUuid)
+				) ||
+				label(left.identity.sourcePlanUuid).localeCompare(
+					label(right.identity.sourcePlanUuid)
+				) ||
+				left.pairKey.localeCompare(right.pairKey)
+		);
+	});
 
 	return { rows, planNames };
 }

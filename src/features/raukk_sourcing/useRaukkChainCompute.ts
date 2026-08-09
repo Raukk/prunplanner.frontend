@@ -23,10 +23,8 @@ import {
 	raukkAutoChainReason,
 	raukkBuildAutoChains,
 } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
-import {
-	calculateRepairBillCost,
-	RAUKK_REPAIR_BILL,
-} from "@/features/raukk_sourcing/calculations/shipping";
+import { calculateRepairBillCost } from "@/features/raukk_sourcing/calculations/shipping";
+import { RAUKK_REPAIR_TICKERS } from "@/features/raukk_sourcing/calculations/shippingRepair";
 import {
 	RAUKK_FUEL_TICKERS,
 	raukkResolveShipProfile,
@@ -35,7 +33,10 @@ import {
 	raukkChainAssignmentKey,
 	raukkOwnedHullCandidates,
 } from "@/features/raukk_sourcing/calculations/shippingFleet";
-import { raukkPickHull } from "@/features/raukk_sourcing/calculations/shippingHull";
+import {
+	raukkPickHull,
+	raukkSmallestCandidate,
+} from "@/features/raukk_sourcing/calculations/shippingHull";
 import { raukkCxAnchorCode } from "@/features/raukk_sourcing/calculations/shippingFlows";
 import {
 	RAUKK_DEFAULT_CADENCE_REPAIR_DAYS,
@@ -81,7 +82,7 @@ import { IRaukkAutoChain } from "@/features/raukk_sourcing/calculations/shipping
  * @author raukk
  */
 export const RAUKK_CHAIN_PRICE_TICKERS: string[] = [
-	...Object.keys(RAUKK_REPAIR_BILL),
+	...RAUKK_REPAIR_TICKERS,
 	RAUKK_FUEL_TICKERS.ftl,
 	RAUKK_FUEL_TICKERS.stl,
 ];
@@ -654,9 +655,20 @@ async function computeOneAutoChain(
 					autoChain.capDays
 				);
 
+	/*
+	 * Nothing to choose from — every owned hull filtered out as non-FTL
+	 * on a loop no gate serves or no depot bases — falls back to the
+	 * smallest OWNED hull.
+	 * The account default is a hull the fleet may own none of, and
+	 * assigning work to it draws a fleet row with a capacity of zero;
+	 * only a fleet without a single hull reaches the default.
+	 */
 	const profileId: string =
 		manual ??
 		owned?.candidate.shipTypeId ??
+		raukkSmallestCandidate(
+			raukkOwnedHullCandidates(sourcingStore.fleet, candidateOf)
+		)?.shipTypeId ??
 		shippingConfig.defaultProfileId;
 
 	const ideal: IRaukkHullPick | null =

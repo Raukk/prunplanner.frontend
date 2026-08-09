@@ -34,6 +34,7 @@ function row(
 		},
 		unitsPerDay,
 		source: undefined,
+		fromDefault: false,
 		price,
 		shippedUnitsPerDay: buckets.shipFuel ? 0 : unitsPerDay,
 		shippingPerUnit: buckets.shipFuel ? 0 : 1,

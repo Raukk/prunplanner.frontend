@@ -1,0 +1,901 @@
+{
+	"source": "https://docs.google.com/spreadsheets/d/1LQP237JEehyA3XaCPb0CpCdvS5BMl86wqPHdSFcV5xY (PrUn community ship repair / damage calculator by RNGzero, credits: PrUn Community Tools Discord, lowstrife, Archiel, AEM, neke86)",
+	"retrieved": "2026-08-09",
+	"description": "Transcribed from the community sheet's own cells and formulas. Two things live here: the REPAIR BILL law (how many of each component a repair at a given damage consumes) and the DAMAGE TYPE split (every trip's damage divided into wear, meteoroid, heat and radiation, each reducible by its own shield). Component PRICES are deliberately not carried: PRUNplanner already prices tickers from the API, so the sheet's ci figures are recorded only as the snapshot that let us verify the law.",
+	"repairBill": {
+		"formula": "count = ceil(componentCount x damageFraction x 0.75 x factor), where factor is `shieldRelief` for the hull plate and structural elements and 0.662 for each shield; plus a flat MFK 12 and FLP 8 whatever the ship and the damage. shieldRelief = 1 - sum(relief of every installed shield).",
+		"hullShare": 0.75,
+		"shieldShare": 0.662,
+		"shieldRelief": {
+			"BPT": 0.05,
+			"BWH": 0.05,
+			"BRP": 0.05,
+			"APT": 0.15,
+			"AWH": 0.15,
+			"ARP": 0.1,
+			"SRP": 0.15
+		},
+		"fixed": {
+			"MFK": 12,
+			"FLP": 8
+		},
+		"verified": "A 90 plate LHP ship at 20% damage: ceil(90 x .2 x .75) = 14 plates, and 14x4000 + 12x180 + 8x400 = 61,360 ci, the sheet's own figure. The fully shielded AHP ship reproduces at 253,860 ci.",
+		"sheetPricesSnapshot": {
+			"BHP": 4500,
+			"LHP": 4000,
+			"RHP": 5000,
+			"HHP": 5000,
+			"AHP": 8000,
+			"BPT": 2000,
+			"APT": 7500,
+			"BWH": 4000,
+			"AWH": 9000,
+			"BRP": 2000,
+			"ARP": 3000,
+			"SRP": 4000,
+			"DRF": 4000,
+			"MFK": 180,
+			"FLP": 400
+		}
+	},
+	"damageModifiers": {
+		"note": "General modifiers reduce the WHOLE trip's damage; per-type ones reduce only their own type. Matches the drydock SHIELDING_* table of shipping-calibration.md section 2.3. LHP is NEGATIVE: it raises damage by 10%.",
+		"general": {
+			"BHP": 0.0,
+			"LHP": -0.1,
+			"RHP": 0.1,
+			"HHP": 0.15,
+			"AHP": 0.3,
+			"RDS": 0.05,
+			"RDL": 0.1
+		},
+		"meteoroid": {
+			"BWH": 0.5,
+			"AWH": 1.0
+		},
+		"heat": {
+			"BPT": 0.5,
+			"APT": 1.0
+		},
+		"radiation": {
+			"BRP": 0.15,
+			"ARP": 0.35,
+			"SRP": 0.7
+		}
+	},
+	"damageTypeSplit": {
+		"method": "Measured by differencing in the Blueprint Test Flight simulator: fly a lane bare for the base damage, then re-fly with one shield type installed at a time and attribute the drop to that type. Wear is the remainder, unshieldable.",
+		"shipUsed": "HCB, minimum fuel use, full inventory load (the sheet's own note)",
+		"caveat": "Shares are PER LANE, not per system, and they are that ship's. They swing hard: Ant -> Ice Station is 44% heat, Mor -> Hrt is 98% wear, Ant -> Eos is 77% radiation.",
+		"lanes": {
+			"Ant -> Origo": {
+				"min": {
+					"baseDamagePercent": 0.418,
+					"wear": 0.128161,
+					"meteoroid": 0.643541,
+					"heat": 0.009569,
+					"radiation": 0.218729
+				},
+				"half": {
+					"baseDamagePercent": 0.254,
+					"wear": 0.17604,
+					"meteoroid": 0.472441,
+					"heat": 0.019685,
+					"radiation": 0.331834
+				},
+				"max": {
+					"baseDamagePercent": 0.262,
+					"wear": 0.216467,
+					"meteoroid": 0.442748,
+					"heat": 0.019084,
+					"radiation": 0.321701
+				}
+			},
+			"Ant -> Harm.": {
+				"min": {
+					"baseDamagePercent": 0.141,
+					"wear": 0.191489,
+					"meteoroid": 0.319149,
+					"heat": 0.276596,
+					"radiation": 0.212766
+				},
+				"half": {
+					"baseDamagePercent": 0.159,
+					"wear": 0.28841,
+					"meteoroid": 0.295597,
+					"heat": 0.245283,
+					"radiation": 0.17071
+				},
+				"max": {
+					"baseDamagePercent": 0.171,
+					"wear": 0.324144,
+					"meteoroid": 0.274854,
+					"heat": 0.233918,
+					"radiation": 0.167084
+				}
+			},
+			"Ant -> Ice Station": {
+				"min": {
+					"baseDamagePercent": 0.433,
+					"wear": 0.055427,
+					"meteoroid": 0.321016,
+					"heat": 0.438799,
+					"radiation": 0.184758
+				},
+				"half": {
+					"baseDamagePercent": 0.405,
+					"wear": 0.065256,
+					"meteoroid": 0.25679,
+					"heat": 0.483951,
+					"radiation": 0.194004
+				},
+				"max": {
+					"baseDamagePercent": 0.418,
+					"wear": 0.091251,
+					"meteoroid": 0.289474,
+					"heat": 0.4689,
+					"radiation": 0.150376
+				}
+			},
+			"Harm -> ZV-896d": {
+				"min": {
+					"baseDamagePercent": 0.173,
+					"wear": 0.298101,
+					"meteoroid": 0.687861,
+					"heat": 0.00578,
+					"radiation": 0.008258
+				},
+				"half": {
+					"baseDamagePercent": 0.202,
+					"wear": 0.376238,
+					"meteoroid": 0.623762,
+					"heat": 0,
+					"radiation": 0
+				},
+				"max": {
+					"baseDamagePercent": 0.226,
+					"wear": 0.442478,
+					"meteoroid": 0.557522,
+					"heat": 0,
+					"radiation": 0
+				}
+			},
+			"Harm -> Nascent": {
+				"min": {
+					"baseDamagePercent": 0.248,
+					"wear": 0.237903,
+					"meteoroid": 0.701613,
+					"heat": 0.060484,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.254,
+					"wear": 0.295276,
+					"meteoroid": 0.645669,
+					"heat": 0.059055,
+					"radiation": 0
+				},
+				"max": {
+					"baseDamagePercent": 0.274,
+					"wear": 0.350365,
+					"meteoroid": 0.591241,
+					"heat": 0.058394,
+					"radiation": 0
+				}
+			},
+			"Ant -> Eos": {
+				"min": {
+					"baseDamagePercent": 0.102,
+					"wear": 0.161064,
+					"meteoroid": 0.058824,
+					"heat": 0.009804,
+					"radiation": 0.770308
+				},
+				"half": {
+					"baseDamagePercent": 0.13,
+					"wear": 0.153846,
+					"meteoroid": 0.069231,
+					"heat": 0.007692,
+					"radiation": 0.769231
+				},
+				"max": {
+					"baseDamagePercent": 0.131,
+					"wear": 0.073064,
+					"meteoroid": 0.145038,
+					"heat": 0.007634,
+					"radiation": 0.774264
+				}
+			},
+			"Ant -> Hephaestus": {
+				"min": {
+					"baseDamagePercent": 0.236,
+					"wear": 0.242736,
+					"meteoroid": 0.114407,
+					"heat": 0.110169,
+					"radiation": 0.532688
+				},
+				"half": {
+					"baseDamagePercent": 0.209,
+					"wear": 0.24812,
+					"meteoroid": 0.119617,
+					"heat": 0.119617,
+					"radiation": 0.512645
+				},
+				"max": {
+					"baseDamagePercent": 0.209,
+					"wear": 0.241285,
+					"meteoroid": 0.114833,
+					"heat": 0.124402,
+					"radiation": 0.519481
+				}
+			},
+			"Ant -> Deimos": {
+				"min": {
+					"baseDamagePercent": 0.081,
+					"wear": 0.176367,
+					"meteoroid": 0.111111,
+					"heat": 0.395062,
+					"radiation": 0.31746
+				},
+				"half": {
+					"baseDamagePercent": 0.091,
+					"wear": 0.287284,
+					"meteoroid": 0.120879,
+					"heat": 0.340659,
+					"radiation": 0.251177
+				},
+				"max": {
+					"baseDamagePercent": 0.1,
+					"wear": 0.258571,
+					"meteoroid": 0.13,
+					"heat": 0.34,
+					"radiation": 0.271429
+				}
+			},
+			"Ant -> Griffonstone": {
+				"min": {
+					"baseDamagePercent": 0.125,
+					"wear": 0.250286,
+					"meteoroid": 0.416,
+					"heat": 0.128,
+					"radiation": 0.205714
+				},
+				"half": {
+					"baseDamagePercent": 0.172,
+					"wear": 0.324751,
+					"meteoroid": 0.424419,
+					"heat": 0.093023,
+					"radiation": 0.157807
+				},
+				"max": {
+					"baseDamagePercent": 0.197,
+					"wear": 0.417694,
+					"meteoroid": 0.375635,
+					"heat": 0.076142,
+					"radiation": 0.130529
+				}
+			},
+			"Ant -> Ben": {
+				"min": {
+					"baseDamagePercent": 0.106,
+					"wear": 0.67655,
+					"meteoroid": 0.09434,
+					"heat": 0,
+					"radiation": 0.229111
+				},
+				"half": {
+					"baseDamagePercent": 0.147,
+					"wear": 0.787172,
+					"meteoroid": 0.047619,
+					"heat": 0,
+					"radiation": 0.165209
+				},
+				"max": {
+					"baseDamagePercent": 0.198,
+					"wear": 0.841991,
+					"meteoroid": 0.035354,
+					"heat": 0,
+					"radiation": 0.122655
+				}
+			},
+			"Ben -> Mor": {
+				"min": {
+					"baseDamagePercent": 0.069,
+					"wear": 0.869565,
+					"meteoroid": 0.130435,
+					"heat": 0,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.085,
+					"wear": 0.889076,
+					"meteoroid": 0.094118,
+					"heat": 0,
+					"radiation": 0.016807
+				},
+				"max": {
+					"baseDamagePercent": 0.104,
+					"wear": 0.932692,
+					"meteoroid": 0.067308,
+					"heat": 0,
+					"radiation": 0
+				}
+			},
+			"Ben -> Gibson": {
+				"min": {
+					"baseDamagePercent": 0.07,
+					"wear": 0.414286,
+					"meteoroid": 0.228571,
+					"heat": 0.357143,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.086,
+					"wear": 0.385382,
+					"meteoroid": 0.244186,
+					"heat": 0.337209,
+					"radiation": 0.033223
+				},
+				"max": {
+					"baseDamagePercent": 0.093,
+					"wear": 0.494624,
+					"meteoroid": 0.215054,
+					"heat": 0.290323,
+					"radiation": 0
+				}
+			},
+			"Ben -> Kiruna": {
+				"min": {
+					"baseDamagePercent": 0.151,
+					"wear": 0.315043,
+					"meteoroid": 0.609272,
+					"heat": 0.066225,
+					"radiation": 0.009461
+				},
+				"half": {
+					"baseDamagePercent": 0.149,
+					"wear": 0.363375,
+					"meteoroid": 0.543624,
+					"heat": 0.073826,
+					"radiation": 0.019175
+				},
+				"max": {
+					"baseDamagePercent": 0.192,
+					"wear": 0.520833,
+					"meteoroid": 0.427083,
+					"heat": 0.052083,
+					"radiation": 0
+				}
+			},
+			"Ben -> Brokkraf": {
+				"min": {
+					"baseDamagePercent": 0.303,
+					"wear": 0.181518,
+					"meteoroid": 0.363036,
+					"heat": 0.455446,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.265,
+					"wear": 0.116442,
+					"meteoroid": 0.309434,
+					"heat": 0.54717,
+					"radiation": 0.026954
+				},
+				"max": {
+					"baseDamagePercent": 0.272,
+					"wear": 0.264706,
+					"meteoroid": 0.238971,
+					"heat": 0.496324,
+					"radiation": 0
+				}
+			},
+			"Ben -> Giedi Prime": {
+				"min": {
+					"baseDamagePercent": 0.443,
+					"wear": 0.051919,
+					"meteoroid": 0.069977,
+					"heat": 0.878104,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.471,
+					"wear": 0.076736,
+					"meteoroid": 0.027601,
+					"heat": 0.889597,
+					"radiation": 0.006066
+				},
+				"max": {
+					"baseDamagePercent": 0.488,
+					"wear": -0.016979,
+					"meteoroid": 0.118852,
+					"heat": 0.868852,
+					"radiation": 0.029274
+				}
+			},
+			"Ben -> Katoa": {
+				"min": {
+					"baseDamagePercent": 0.125,
+					"wear": 0.332571,
+					"meteoroid": 0.416,
+					"heat": 0.24,
+					"radiation": 0.011429
+				},
+				"half": {
+					"baseDamagePercent": 0.153,
+					"wear": 0.398693,
+					"meteoroid": 0.411765,
+					"heat": 0.189542,
+					"radiation": 0
+				},
+				"max": {
+					"baseDamagePercent": 0.154,
+					"wear": 0.342301,
+					"meteoroid": 0.435065,
+					"heat": 0.194805,
+					"radiation": 0.027829
+				}
+			},
+			"Ben -> Yannick": {
+				"min": {
+					"baseDamagePercent": 0.451,
+					"wear": 0.477035,
+					"meteoroid": 0.51663,
+					"heat": 0,
+					"radiation": 0.006335
+				},
+				"half": {
+					"baseDamagePercent": 0.616,
+					"wear": 0.479128,
+					"meteoroid": 0.516234,
+					"heat": 0,
+					"radiation": 0.004638
+				},
+				"max": {
+					"baseDamagePercent": 0.623,
+					"wear": 0.480165,
+					"meteoroid": 0.515249,
+					"heat": 0,
+					"radiation": 0.004586
+				}
+			},
+			"Ben -> Biogenesis": {
+				"min": {
+					"baseDamagePercent": 0.513,
+					"wear": 0.422167,
+					"meteoroid": 0.444444,
+					"heat": 0.130604,
+					"radiation": 0.002785
+				},
+				"half": {
+					"baseDamagePercent": 0.443,
+					"wear": 0.41535,
+					"meteoroid": 0.433409,
+					"heat": 0.151242,
+					"radiation": 0
+				},
+				"max": {
+					"baseDamagePercent": 0.439,
+					"wear": 0.414579,
+					"meteoroid": 0.437358,
+					"heat": 0.148064,
+					"radiation": 0
+				}
+			},
+			"Ben -> Asbestos": {
+				"min": {
+					"baseDamagePercent": 0.299,
+					"wear": 0.140946,
+					"meteoroid": 0.264214,
+					"heat": 0.585284,
+					"radiation": 0.009556
+				},
+				"half": {
+					"baseDamagePercent": 0.277,
+					"wear": 0.071171,
+					"meteoroid": 0.223827,
+					"heat": 0.689531,
+					"radiation": 0.015472
+				},
+				"max": {
+					"baseDamagePercent": 0.285,
+					"wear": -0.008521,
+					"meteoroid": 0.287719,
+					"heat": 0.680702,
+					"radiation": 0.0401
+				}
+			},
+			"Ben -> Uponor": {
+				"min": {
+					"baseDamagePercent": 0.117,
+					"wear": 0.282051,
+					"meteoroid": 0.393162,
+					"heat": 0.324786,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.146,
+					"wear": 0.332681,
+					"meteoroid": 0.369863,
+					"heat": 0.287671,
+					"radiation": 0.009785
+				},
+				"max": {
+					"baseDamagePercent": 0.158,
+					"wear": 0.402351,
+					"meteoroid": 0.322785,
+					"heat": 0.265823,
+					"radiation": 0.009042
+				}
+			},
+			"Ben -> Etherwind": {
+				"min": {
+					"baseDamagePercent": 0.373,
+					"wear": 0.161241,
+					"meteoroid": 0.793566,
+					"heat": 0.037534,
+					"radiation": 0.00766
+				},
+				"half": {
+					"baseDamagePercent": 0.232,
+					"wear": 0.304187,
+					"meteoroid": 0.633621,
+					"heat": 0.056034,
+					"radiation": 0.006158
+				},
+				"max": {
+					"baseDamagePercent": 0.247,
+					"wear": 0.364372,
+					"meteoroid": 0.578947,
+					"heat": 0.05668,
+					"radiation": 0
+				}
+			},
+			"Mor -> Hrt": {
+				"min": {
+					"baseDamagePercent": 0.058,
+					"wear": 0.982759,
+					"meteoroid": 0.017241,
+					"heat": 0,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.065,
+					"wear": 0.947253,
+					"meteoroid": 0.030769,
+					"heat": 0,
+					"radiation": 0.021978
+				},
+				"max": {
+					"baseDamagePercent": 0.071,
+					"wear": 0.985915,
+					"meteoroid": 0.014085,
+					"heat": 0,
+					"radiation": 0
+				}
+			},
+			"Mor -> Verdant": {
+				"min": {
+					"baseDamagePercent": 0.146,
+					"wear": 0.410959,
+					"meteoroid": 0.363014,
+					"heat": 0.226027,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.19,
+					"wear": 0.419549,
+					"meteoroid": 0.378947,
+					"heat": 0.178947,
+					"radiation": 0.022556
+				},
+				"max": {
+					"baseDamagePercent": 0.213,
+					"wear": 0.470825,
+					"meteoroid": 0.338028,
+					"heat": 0.164319,
+					"radiation": 0.026828
+				}
+			},
+			"Mor -> Danakil": {
+				"min": {
+					"baseDamagePercent": 0.139,
+					"wear": 0.18705,
+					"meteoroid": 0.453237,
+					"heat": 0.359712,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.103,
+					"wear": 0.151179,
+					"meteoroid": 0.330097,
+					"heat": 0.504854,
+					"radiation": 0.01387
+				},
+				"max": {
+					"baseDamagePercent": 0.108,
+					"wear": 0.177249,
+					"meteoroid": 0.324074,
+					"heat": 0.472222,
+					"radiation": 0.026455
+				}
+			},
+			"Mor -> Celebdil": {
+				"min": {
+					"baseDamagePercent": 0.154,
+					"wear": 0.286642,
+					"meteoroid": 0.688312,
+					"heat": 0.006494,
+					"radiation": 0.018553
+				},
+				"half": {
+					"baseDamagePercent": 0.204,
+					"wear": 0.32423,
+					"meteoroid": 0.656863,
+					"heat": 0.004902,
+					"radiation": 0.014006
+				},
+				"max": {
+					"baseDamagePercent": 0.23,
+					"wear": 0.390062,
+					"meteoroid": 0.586957,
+					"heat": 0.004348,
+					"radiation": 0.018634
+				}
+			},
+			"Mor -> Circe": {
+				"min": {
+					"baseDamagePercent": 0.137,
+					"wear": 0.306569,
+					"meteoroid": 0.481752,
+					"heat": 0.211679,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.197,
+					"wear": 0.31327,
+					"meteoroid": 0.517766,
+					"heat": 0.147208,
+					"radiation": 0.021755
+				},
+				"max": {
+					"baseDamagePercent": 0.227,
+					"wear": 0.388295,
+					"meteoroid": 0.475771,
+					"heat": 0.123348,
+					"radiation": 0.012587
+				}
+			},
+			"Mor -> Pallada": {
+				"min": {
+					"baseDamagePercent": 0.81,
+					"wear": 0.158907,
+					"meteoroid": 0.124691,
+					"heat": 0.661728,
+					"radiation": 0.054674
+				},
+				"half": {
+					"baseDamagePercent": 0.751,
+					"wear": 0.065627,
+					"meteoroid": 0.139814,
+					"heat": 0.720373,
+					"radiation": 0.074187
+				},
+				"max": {
+					"baseDamagePercent": 0.692,
+					"wear": 0.197977,
+					"meteoroid": 0.102601,
+					"heat": 0.699422,
+					"radiation": 0
+				}
+			},
+			"Mor -> Orm": {
+				"min": {
+					"baseDamagePercent": 0.254,
+					"wear": 0.224409,
+					"meteoroid": 0.488189,
+					"heat": 0.287402,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.238,
+					"wear": 0.246098,
+					"meteoroid": 0.428571,
+					"heat": 0.319328,
+					"radiation": 0.006002
+				},
+				"max": {
+					"baseDamagePercent": 0.256,
+					"wear": 0.279576,
+					"meteoroid": 0.410156,
+					"heat": 0.304688,
+					"radiation": 0.00558
+				}
+			},
+			"Hrt -> Ant": {
+				"min": {
+					"baseDamagePercent": 0.095,
+					"wear": 0.723308,
+					"meteoroid": 0.021053,
+					"heat": 0,
+					"radiation": 0.255639
+				},
+				"half": {
+					"baseDamagePercent": 0.174,
+					"wear": 0.654351,
+					"meteoroid": 0.017241,
+					"heat": 0,
+					"radiation": 0.328407
+				},
+				"max": {
+					"baseDamagePercent": 0.212,
+					"wear": 0.743261,
+					"meteoroid": 0.014151,
+					"heat": 0,
+					"radiation": 0.242588
+				}
+			},
+			"Hrt -> Promitor": {
+				"min": {
+					"baseDamagePercent": 0.037,
+					"wear": 0.096525,
+					"meteoroid": 0,
+					"heat": 0.864865,
+					"radiation": 0.03861
+				},
+				"half": {
+					"baseDamagePercent": 0.039,
+					"wear": 0.179487,
+					"meteoroid": 0,
+					"heat": 0.820513,
+					"radiation": 0
+				},
+				"max": {
+					"baseDamagePercent": 0.036,
+					"wear": 0.194444,
+					"meteoroid": 0,
+					"heat": 0.805556,
+					"radiation": 0
+				}
+			},
+			"Hrt -> Phantasm": {
+				"min": {
+					"baseDamagePercent": 0.133,
+					"wear": 0.263158,
+					"meteoroid": 0.548872,
+					"heat": 0.18797,
+					"radiation": 0
+				},
+				"half": {
+					"baseDamagePercent": 0.095,
+					"wear": 0.305263,
+					"meteoroid": 0.421053,
+					"heat": 0.273684,
+					"radiation": 0
+				},
+				"max": {
+					"baseDamagePercent": 0.104,
+					"wear": 0.303571,
+					"meteoroid": 0.413462,
+					"heat": 0.269231,
+					"radiation": 0.013736
+				}
+			},
+			"Hrt -> Curie": {
+				"min": {
+					"baseDamagePercent": 0.117,
+					"wear": 0.363858,
+					"meteoroid": 0.598291,
+					"heat": 0.025641,
+					"radiation": 0.01221
+				},
+				"half": {
+					"baseDamagePercent": 0.113,
+					"wear": 0.447535,
+					"meteoroid": 0.513274,
+					"heat": 0.026549,
+					"radiation": 0.012642
+				},
+				"max": {
+					"baseDamagePercent": 0.123,
+					"wear": 0.492451,
+					"meteoroid": 0.471545,
+					"heat": 0.02439,
+					"radiation": 0.011614
+				}
+			},
+			"Hrt -> Adalina": {
+				"min": {
+					"baseDamagePercent": 0.081,
+					"wear": 0.507937,
+					"meteoroid": 0.45679,
+					"heat": 0,
+					"radiation": 0.035273
+				},
+				"half": {
+					"baseDamagePercent": 0.11,
+					"wear": 0.533766,
+					"meteoroid": 0.427273,
+					"heat": 0,
+					"radiation": 0.038961
+				},
+				"max": {
+					"baseDamagePercent": 0.125,
+					"wear": 0.609143,
+					"meteoroid": 0.368,
+					"heat": 0,
+					"radiation": 0.022857
+				}
+			},
+			"Hrt -> Boucher": {
+				"min": {
+					"baseDamagePercent": 0.146,
+					"wear": 0.373777,
+					"meteoroid": 0.541096,
+					"heat": 0.075342,
+					"radiation": 0.009785
+				},
+				"half": {
+					"baseDamagePercent": 0.225,
+					"wear": 0.373333,
+					"meteoroid": 0.582222,
+					"heat": 0.044444,
+					"radiation": 0
+				},
+				"max": {
+					"baseDamagePercent": 0.241,
+					"wear": 0.427979,
+					"meteoroid": 0.518672,
+					"heat": 0.041494,
+					"radiation": 0.011855
+				}
+			},
+			"Hrt -> Chu": {
+				"min": {
+					"baseDamagePercent": 0.324,
+					"wear": 0.191799,
+					"meteoroid": 0.787037,
+					"heat": 0.012346,
+					"radiation": 0.008818
+				},
+				"half": {
+					"baseDamagePercent": 0.244,
+					"wear": 0.334309,
+					"meteoroid": 0.643443,
+					"heat": 0.016393,
+					"radiation": 0.005855
+				},
+				"max": {
+					"baseDamagePercent": 0.265,
+					"wear": 0.409704,
+					"meteoroid": 0.573585,
+					"heat": 0.011321,
+					"radiation": 0.005391
+				}
+			},
+			"YI-705b -> YI-705d": {
+				"min": {
+					"baseDamagePercent": 0.196,
+					"wear": 0.01895,
+					"meteoroid": 0.693878,
+					"heat": 0.265306,
+					"radiation": 0.021866
+				},
+				"half": {
+					"baseDamagePercent": 0.177,
+					"wear": 0.090395,
+					"meteoroid": 0.644068,
+					"heat": 0.265537,
+					"radiation": 0
+				},
+				"max": {
+					"baseDamagePercent": 0.176,
+					"wear": 0.079545,
+					"meteoroid": 0.659091,
+					"heat": 0.261364,
+					"radiation": 0
+				}
+			}
+		}
+	}
+}

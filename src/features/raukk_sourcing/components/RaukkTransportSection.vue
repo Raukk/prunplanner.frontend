@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, ComputedRef, toRef } from "vue";
+	import { computed, ComputedRef, PropType, toRef } from "vue";
 
 	// Stores
 	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
@@ -7,13 +7,13 @@
 
 	// Composables
 	import { useRaukkTransport } from "@/features/raukk_sourcing/useRaukkTransport";
-	import { useRaukkShippingOptions } from "@/features/raukk_sourcing/useRaukkShippingOptions";
 
 	// Components
 	import RaukkTransportTable from "@/features/raukk_sourcing/components/RaukkTransportTable.vue";
 
 	// Types & Interfaces
 	import { IRaukkShippingConfig } from "@/features/raukk_sourcing/raukkSourcing.types";
+	import { PSelectOption } from "@/ui/ui.types";
 
 	const props = defineProps({
 		/** ȼ of a full repair bill, prices the wear column */
@@ -21,14 +21,21 @@
 			type: Number,
 			required: true,
 		},
+		/** Ship types a lane can be assigned to, the page's shared set */
+		shipTypeOptions: {
+			type: Array as PropType<PSelectOption[]>,
+			required: false,
+			default: () => [],
+		},
 	});
 
 	const config: ComputedRef<IRaukkShippingConfig> = computed(
 		() => sourcingStore.shippingConfig
 	);
 
-	const { rows, planNames } = useRaukkTransport(toRef(props, "repairBillCost"));
-	const { shipTypeOptions } = useRaukkShippingOptions();
+	const { rows, planNames } = useRaukkTransport(
+		toRef(props, "repairBillCost")
+	);
 
 	const assignments: ComputedRef<Record<string, string>> = computed(
 		() => sourcingStore.assignments
@@ -85,7 +92,7 @@
 		<RaukkTransportTable
 			:rows="rows"
 			:plan-names="planNames"
-			:ship-type-options="shipTypeOptions"
+			:ship-type-options="props.shipTypeOptions"
 			:assignments="assignments"
 			@update:rate="changeLmRate"
 			@update:assignment="changeAssignment" />

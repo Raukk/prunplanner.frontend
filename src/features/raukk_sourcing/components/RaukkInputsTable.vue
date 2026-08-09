@@ -31,6 +31,9 @@
 	/** Sentinel of the "no configuration, use CX preference" entry */
 	const DEFAULT_MODE: string = "DEFAULT";
 
+	/** Sentinel of the "CX preference, ignore the account default" entry */
+	const CX_MODE: string = "CX";
+
 	/** Sentinel of the "bought on the local market here" entry */
 	const LOCAL_MODE: string = "LOCAL";
 
@@ -88,6 +91,7 @@
 
 	const priceModeOptions: ComputedRef<PSelectOption[]> = computed(() => [
 		{ label: t("raukk_sourcing.price_modes.default"), value: DEFAULT_MODE },
+		{ label: t("raukk_sourcing.price_modes.cx"), value: CX_MODE },
 		{ label: t("raukk_sourcing.price_modes.BID"), value: "BID" },
 		{ label: t("raukk_sourcing.price_modes.ASK"), value: "ASK" },
 		{ label: t("raukk_sourcing.price_modes.MID"), value: "MID" },
@@ -98,6 +102,7 @@
 
 	function priceModeValue(row: IRaukkInputRow): string {
 		if (row.source?.mode === "local") return LOCAL_MODE;
+		if (row.source?.mode === "cx") return CX_MODE;
 
 		return row.source?.mode === "market"
 			? row.source.priceMode
@@ -107,6 +112,11 @@
 	function changePriceMode(row: IRaukkInputRow, value: string): void {
 		if (value === DEFAULT_MODE) {
 			emit("update:source", row.ticker, undefined);
+			return;
+		}
+
+		if (value === CX_MODE) {
+			emit("update:source", row.ticker, { mode: "cx" });
 			return;
 		}
 
@@ -320,6 +330,7 @@
 					<td>
 						<RaukkSourceCell
 							:source="row.source"
+							:from-default="row.fromDefault"
 							:options="
 								sourceOptions(row.ticker, row.unitsPerDay)
 							"

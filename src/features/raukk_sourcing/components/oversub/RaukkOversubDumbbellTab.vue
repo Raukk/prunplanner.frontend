@@ -619,9 +619,10 @@
 		border-radius: 2px;
 	}
 	/* line color states direction but never alone: the printed Δ and
-	 the ▲ carry the verdict */
+	 the ▲ carry the verdict. Lime, not a sage green of its own — the
+	 app says "good" in `positive` lime everywhere else */
 	.dline.head {
-		background: rgba(120, 190, 120, 0.65);
+		background: var(--rviz-accent-wash);
 	}
 	.dline.def {
 		background: var(--roversub-over);
@@ -636,11 +637,11 @@
 		z-index: 1;
 	}
 	.ddot.netd {
-		background: #212529;
-		border: 2px solid #c3c2b7;
+		background: var(--rviz-chip);
+		border: 2px solid var(--rviz-ink-bright);
 	}
 	.ddot.subd {
-		background: #3987e5;
+		background: var(--rviz-ramp-solid);
 	}
 	.ddot.subd.over {
 		background: var(--roversub-over);
@@ -656,11 +657,11 @@
 		top: 4px;
 		bottom: 4px;
 		width: 46px;
-		border: 1px solid rgba(137, 135, 129, 0.6);
+		border: 1px solid rgba(var(--rviz-ink-rgb), 0.6);
 		border-radius: 1px;
 		background: repeating-linear-gradient(
 			45deg,
-			rgba(137, 135, 129, 0.55) 0 3px,
+			rgba(var(--rviz-ink-rgb), 0.55) 0 3px,
 			transparent 3px 7px
 		);
 	}
@@ -673,7 +674,7 @@
 		border-radius: 3px;
 		border: 1px solid currentColor;
 		color: var(--roversub-over-text);
-		background: #212529;
+		background: var(--rviz-chip);
 		white-space: nowrap;
 		z-index: 2;
 	}
@@ -688,7 +689,7 @@
 		font-weight: 400;
 	}
 	.dval .free {
-		color: #8fce8f;
+		color: var(--rviz-accent);
 	}
 	.dval .defc {
 		color: var(--roversub-over-text);

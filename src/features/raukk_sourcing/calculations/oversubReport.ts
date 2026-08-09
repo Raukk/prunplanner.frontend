@@ -284,6 +284,7 @@ export function raukkFleetLoadEntries(
 					lane.damagePerTrip === undefined
 						? undefined
 						: lane.tripsPerDay * lane.damagePerTrip,
+				stale: snapshot.stale === true,
 			});
 		})
 	);
@@ -297,6 +298,7 @@ export function raukkFleetLoadEntries(
 			tripsPerDay: 1,
 			roundTripMinutes: chain.shipMinutesPerDay,
 			damagePerDay: chain.damagePerDay,
+			stale: chain.stale === true,
 		});
 	});
 

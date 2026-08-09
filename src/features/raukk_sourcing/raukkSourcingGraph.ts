@@ -23,7 +23,8 @@ export interface IRaukkRecomputePlanning {
 /**
  * Finds all plans whose snapshot lists the given ticker as an output.
  * Backs the conservative expansion of the synthetic aggregate sources
- * ("AGG_AVG", "AGG_MAX"): an aggregate depends on every producer.
+ * ("AGG_AVG", "AGG_MAX", "AGG_AVG_MKT"): an aggregate depends on every
+ * producer.
  *
  * @author raukk
  *
@@ -51,6 +52,11 @@ export function expandAggregateSource(
  * Aggregate sources are expanded to all plans producing the ticker.
  * Self edges are dropped: a plan feeding its own repairs needs no graph
  * edge, its own staleness flag already covers it.
+ *
+ * A source a plan only holds through an ACCOUNT WIDE bucket default is
+ * not in its config and therefore contributes no config edge; setting a
+ * default stales the whole store anyway, and from the first snapshot on
+ * the draws carry the edge.
  *
  * @author raukk
  *
@@ -88,7 +94,8 @@ export function buildDependencyGraph(
 
 			if (
 				source.sourcePlanUuid === "AGG_AVG" ||
-				source.sourcePlanUuid === "AGG_MAX"
+				source.sourcePlanUuid === "AGG_MAX" ||
+				source.sourcePlanUuid === "AGG_AVG_MKT"
 			) {
 				expandAggregateSource(snapshots, ticker).forEach(
 					(producerUuid) => addEdge(planUuid, producerUuid)

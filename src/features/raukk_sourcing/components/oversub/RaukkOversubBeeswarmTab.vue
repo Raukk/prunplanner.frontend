@@ -27,7 +27,16 @@
 		RAUKK_OVERSUB_OTHER_KEY,
 		raukkOversubFoldSegments,
 	} from "@/features/raukk_sourcing/calculations/oversubDisplay";
+	import { raukkOversubBlueRamp } from "@/features/raukk_sourcing/calculations/oversubMatrix";
 	import { raukkBeeDodge } from "@/features/raukk_sourcing/calculations/oversubSwarm";
+	import {
+		RAUKK_VIZ_ACCENT,
+		RAUKK_VIZ_ALERT,
+		RAUKK_VIZ_INK,
+		RAUKK_VIZ_INK_RGB,
+		RAUKK_VIZ_RAMP,
+		RAUKK_VIZ_SURFACE,
+	} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
 
 	// Util
 	import { relativeFromDate } from "@/util/date";
@@ -48,6 +57,10 @@
 		IRaukkOversubTooltipLine,
 		IRaukkOversubTooltipPayload,
 	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+
+	/** Washes of the no-capacity gutter hatch */
+	const INK_HATCH_BACK: string = `rgba(${RAUKK_VIZ_INK_RGB}, 0.1)`;
+	const INK_HATCH_BAR: string = `rgba(${RAUKK_VIZ_INK_RGB}, 0.5)`;
 
 	const props = defineProps({
 		/** Materials rows, filtered and sorted by the section */
@@ -188,13 +201,16 @@
 		stroke: string;
 	} {
 		if (row.over)
-			return { fill: "rgba(199, 0, 57, 0.42)", stroke: "#c70039" };
+			return {
+				fill: `rgba(${RAUKK_VIZ_ALERT.rgb}, 0.42)`,
+				stroke: RAUKK_VIZ_ALERT.solid,
+			};
 
-		const alpha: number = Math.min(1, 0.12 + 0.55 * (row.utilization ?? 0));
-
+		// the ONE ramp — a 70 % row must not read deeper here than it
+		// does in the Matrix, the Grid or the Star Map
 		return {
-			fill: `rgba(57, 135, 229, ${alpha.toFixed(3)})`,
-			stroke: "rgba(57, 135, 229, 0.85)",
+			fill: raukkOversubBlueRamp(row.utilization ?? 0),
+			stroke: RAUKK_VIZ_RAMP.stroke,
 		};
 	}
 
@@ -709,14 +725,8 @@
 							height="7"
 							patternUnits="userSpaceOnUse"
 							patternTransform="rotate(45)">
-							<rect
-								width="7"
-								height="7"
-								fill="rgba(137, 135, 129, 0.1)" />
-							<rect
-								width="3"
-								height="7"
-								fill="rgba(137, 135, 129, 0.5)" />
+							<rect width="7" height="7" :fill="INK_HATCH_BACK" />
+							<rect width="3" height="7" :fill="INK_HATCH_BAR" />
 						</pattern>
 					</defs>
 
@@ -730,7 +740,7 @@
 							:stroke="
 								tick === 100
 									? 'rgba(255, 255, 255, 0.38)'
-									: '#2c2c2a'
+									: RAUKK_VIZ_SURFACE.rule
 							"
 							:stroke-width="tick === 100 ? 1.4 : 1" />
 						<text
@@ -739,7 +749,9 @@
 							:y="TOP - 10"
 							text-anchor="middle"
 							:style="
-								tick === 100 ? { fill: '#c3c2b7' } : undefined
+								tick === 100
+									? { fill: RAUKK_VIZ_INK.bright }
+									: undefined
 							">
 							{{ tick }}%
 						</text>
@@ -752,7 +764,7 @@
 						:width="GX1 - GX0"
 						:height="svgHeight - TOP + 2"
 						fill="url(#roversubBeeHatch)"
-						stroke="rgba(137, 135, 129, 0.5)"
+						:stroke="INK_HATCH_BAR"
 						rx="3" />
 					<text
 						class="bsm"
@@ -771,7 +783,7 @@
 							:y1="lane.top"
 							:x2="GX0 - 8"
 							:y2="lane.top"
-							stroke="#2c2c2a"
+							:stroke="RAUKK_VIZ_SURFACE.rule"
 							stroke-dasharray="3 5" />
 						<text class="bsm" :x="2" :y="lane.top + 16">
 							{{ $t(lane.labelKey) }}
@@ -793,7 +805,7 @@
 								:fill="dot.fill"
 								:stroke="
 									rowKey(dot.row) === refOpenKey
-										? '#c0e219'
+										? RAUKK_VIZ_ACCENT.solid
 										: dot.stroke
 								"
 								:stroke-width="
@@ -816,7 +828,7 @@
 								v-if="dot.row.anyStale"
 								:x="dot.x + dot.r * 0.75 + 3"
 								:y="dot.y - dot.r * 0.75"
-								fill="#fab219">
+								:fill="RAUKK_VIZ_ALERT.warn">
 								◷
 							</text>
 							<!-- labels on dots when they fit, else hover -->
@@ -832,7 +844,7 @@
 							<template v-if="dot.clipped">
 								<path
 									:d="tornPath(dot)"
-									stroke="#c70039"
+									:stroke="RAUKK_VIZ_ALERT.solid"
 									fill="none"
 									stroke-width="1.3" />
 								<text
@@ -880,11 +892,11 @@
 								:cx="dot.x"
 								:cy="dot.y"
 								:r="dot.r"
-								fill="#1e1e1e"
+								:fill="RAUKK_VIZ_SURFACE.inert"
 								:stroke="
 									rowKey(dot.row) === refOpenKey
-										? '#c0e219'
-										: '#898781'
+										? RAUKK_VIZ_ACCENT.solid
+										: RAUKK_VIZ_INK.base
 								"
 								:stroke-width="
 									rowKey(dot.row) === refOpenKey ? 2.2 : 1.2
@@ -1177,9 +1189,9 @@
 
 <style scoped>
 	svg text {
-		font:
-			11px system-ui,
-			sans-serif;
+		/* inherit the app face, never system-ui: a chart label must not
+		 read in a different typeface to the prose around it */
+		font-size: 11px;
 		fill: rgba(255, 255, 255, 0.75);
 		pointer-events: none;
 	}
@@ -1294,7 +1306,7 @@
 		top: 0;
 		bottom: 0;
 		right: 0;
-		background: rgba(199, 0, 57, 0.08);
+		background: rgba(var(--rviz-alert-rgb), 0.08);
 	}
 	.lrule {
 		position: absolute;
@@ -1334,11 +1346,11 @@
 		right: calc(100% + 3px);
 		top: 5px;
 		bottom: 5px;
-		border: 1px solid rgba(137, 135, 129, 0.6);
+		border: 1px solid rgba(var(--rviz-ink-rgb), 0.6);
 		border-radius: 1px;
 		background: repeating-linear-gradient(
 			45deg,
-			rgba(137, 135, 129, 0.55) 0 3px,
+			rgba(var(--rviz-ink-rgb), 0.55) 0 3px,
 			transparent 3px 7px
 		);
 	}
@@ -1353,10 +1365,10 @@
 		bottom: 7px;
 		left: 0;
 		border-radius: 2px;
-		border: 1px solid rgba(199, 0, 57, 0.5);
+		border: 1px solid rgba(var(--rviz-alert-rgb), 0.5);
 		background: repeating-linear-gradient(
 			45deg,
-			rgba(199, 0, 57, 0.55) 0 3px,
+			rgba(var(--rviz-alert-rgb), 0.55) 0 3px,
 			transparent 3px 7px
 		);
 	}
@@ -1369,7 +1381,7 @@
 		border-radius: 3px;
 		border: 1px solid currentColor;
 		color: var(--roversub-over-text);
-		background: #212529;
+		background: var(--rviz-chip);
 		white-space: nowrap;
 	}
 	.lval {

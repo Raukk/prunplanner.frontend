@@ -12,6 +12,7 @@ import {
 	RAUKK_OVERSUB_OTHER_KEY,
 	RAUKK_OVERSUB_STATUS_COLORS,
 } from "@/features/raukk_sourcing/calculations/oversubDisplay";
+import { RAUKK_VIZ_RAMP } from "@/features/raukk_sourcing/calculations/raukkVizPalette";
 import {
 	IRaukkOversubFleetRow,
 	IRaukkOversubTickerRow,
@@ -21,10 +22,13 @@ import {
 export const RAUKK_OVERSUB_EXTERNAL_KEY: string = "external";
 
 /**
- * Single-hue blue utilization ramp of the matrix cells and grid
- * squares. The share is clamped to [0, 1] — a value carrying no
- * reading (null utilization, net ≤ 0) must never reach the ramp, those
- * cells render hatched with absolute numbers instead.
+ * Single-hue blue utilization ramp — THE ramp of every tab that paints
+ * a utilization: matrix cells, grid squares, star map nodes, beeswarm
+ * dots and bubbles. One function on purpose; the same reading must not
+ * render at one intensity here and another there. The share is clamped
+ * to [0, 1] — a value carrying no reading (null utilization, net ≤ 0)
+ * must never reach the ramp, those marks render hatched or inert with
+ * absolute numbers instead.
  *
  * @author raukk
  *
@@ -33,7 +37,7 @@ export const RAUKK_OVERSUB_EXTERNAL_KEY: string = "external";
  */
 export function raukkOversubBlueRamp(share: number): string {
 	const clamped: number = Math.min(Math.max(share, 0), 1);
-	return `rgba(57, 135, 229, ${(0.08 + 0.8 * clamped).toFixed(3)})`;
+	return `rgba(${RAUKK_VIZ_RAMP.rgb}, ${(0.08 + 0.8 * clamped).toFixed(3)})`;
 }
 
 /**

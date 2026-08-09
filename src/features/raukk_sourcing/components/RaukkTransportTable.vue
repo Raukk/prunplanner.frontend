@@ -73,6 +73,37 @@
 		return props.planNames[planUuid] ?? planUuid;
 	}
 
+	/**
+	 * The hulls a lane was actually FROZEN with, distinct and in leg
+	 * order. The picker above it shows the manual override, which is
+	 * empty on an auto lane — so without this the hull the automatic
+	 * pick chose would be invisible, and the ȼ next to it unexplained.
+	 *
+	 * Labels come from the ship type options, the same "bay · name"
+	 * spelling the picker uses; an id no profile answers to degrades to
+	 * the id itself rather than to a blank.
+	 *
+	 * @author raukk
+	 *
+	 * @param {IRaukkTransportRow} row Transport Row
+	 * @returns {string} Hull labels, an em-dash where the lane has none
+	 */
+	function flownLabel(row: IRaukkTransportRow): string {
+		const ids: string[] = [
+			...new Set(row.legs.map((leg) => leg.shipTypeId)),
+		];
+
+		if (ids.length === 0) return "—";
+
+		return ids
+			.map(
+				(id) =>
+					props.shipTypeOptions.find((option) => option.value === id)
+						?.label ?? id
+			)
+			.join(" · ");
+	}
+
 	/** The full repair bill, spelled out for the wear tooltip */
 	const billLabel: string = Object.entries(RAUKK_REPAIR_BILL)
 		.map(([ticker, units]) => `${units} ${ticker}`)
@@ -187,21 +218,36 @@
 					</div>
 				</td>
 				<td>
-					<PSelect
-						class="w-50!"
-						clearable
-						:value="assignments[row.pairKey] ?? null"
-						:options="shipTypeOptions"
-						:placeholder="$t('raukk_sourcing.transport.auto')"
-						@update:value="
-							(v) =>
-								changeAssignment(row.pairKey, v as string | null)
-						" />
+					<div class="flex flex-col gap-y-1">
+						<PSelect
+							class="w-50!"
+							clearable
+							:value="assignments[row.pairKey] ?? null"
+							:options="shipTypeOptions"
+							:placeholder="$t('raukk_sourcing.transport.auto')"
+							@update:value="
+								(v) =>
+									changeAssignment(
+										row.pairKey,
+										v as string | null
+									)
+							" />
+						<!-- what the lane was actually costed with: on an
+						auto lane the picker is empty, so without this the
+						hull the automatic pick chose is invisible -->
+						<span class="text-white/50 text-xs">
+							{{
+								$t("raukk_sourcing.transport.flown", {
+									hulls: flownLabel(row),
+								})
+							}}
+						</span>
+					</div>
 				</td>
 				<td class="text-right">
 					<div
-						v-for="leg in row.legs"
-						:key="`RAUKKTRANSPORTLEG#${row.pairKey}#${leg.bucket}`"
+						v-for="(leg, legIndex) in row.legs"
+						:key="`RAUKKTRANSPORTLEG#${row.pairKey}#${legIndex}`"
 						class="flex flex-row gap-x-1 justify-end child:my-auto">
 						<PTag
 							v-if="leg.bucket"

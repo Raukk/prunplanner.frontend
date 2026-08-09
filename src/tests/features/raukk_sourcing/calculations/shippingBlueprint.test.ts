@@ -2,11 +2,16 @@ import { describe, it, expect } from "vitest";
 
 // Calculations
 import {
-	RAUKK_FSE_FUEL_RATE_PER_SECOND,
+	RAUKK_DEFAULT_FUEL_RATE_PER_SECOND,
 	raukkBlueprintSeed,
 } from "@/features/raukk_sourcing/calculations/shippingBlueprint";
 import { raukkNearestCalibration } from "@/features/raukk_sourcing/calculations/shippingProfiles";
-import { RAUKK_STL_TANKS } from "@/features/raukk_sourcing/calculations/shippingPhysics";
+import {
+	RAUKK_FTL_FUEL_UNITS_PER_PARSEC,
+	RAUKK_STL_ENGINES,
+	RAUKK_STL_TANKS,
+	raukkStlBlockDamage,
+} from "@/features/raukk_sourcing/calculations/shippingPhysics";
 
 // Types & Interfaces
 import { IRaukkShipHull } from "@/features/raukk_sourcing/calculations/shipping.types";
@@ -19,15 +24,32 @@ const WCB: IRaukkShipHull = { cargoWeight: 3000, cargoVolume: 1000 };
 const HCB: IRaukkShipHull = { cargoWeight: 5000, cargoVolume: 5000 };
 
 describe("Raukk Shipping: Blueprint Seed", () => {
-	it("reads the jump speed straight off the FTL maximum", () => {
-		const seed: IRaukkBlueprintSeed = raukkBlueprintSeed({
-			hull: WCB,
-			ftlReactor: "quick-charge",
-			ftlSpeedMaxParsecPerHour: 2.5,
-		});
+	it("corrects the FTL maximum the panel advertises", () => {
+		/*
+		 * calibration §11.3: the panel stat is a ceiling, not a speed.
+		 * The three hulls of §3 fly 4 pc in 59m49s, 1h29m and 1h44m at
+		 * 8.6, 3.9 and 2.8 pc/h — 2.1×, 1.5× and 1.2× slower than the
+		 * `60 / speed` this seed used to assume.
+		 */
+		const observed: [number, number][] = [
+			[8.6, 59.82 / 4],
+			[3.9, 89 / 4],
+			[2.8, 104 / 4],
+		];
 
-		expect(seed.minutesPerParsec).toBeCloseTo(24);
-		expect(seed.seededFields).toContain("minutesPerParsec");
+		observed.forEach(([speed, minutesPerParsec]) => {
+			const seed: IRaukkBlueprintSeed = raukkBlueprintSeed({
+				hull: WCB,
+				ftlReactor: "standard",
+				ftlSpeedMaxParsecPerHour: speed,
+			});
+
+			expect(seed.minutesPerParsec).toBeGreaterThan(
+				minutesPerParsec * 0.94
+			);
+			expect(seed.minutesPerParsec).toBeLessThan(minutesPerParsec * 1.06);
+			expect(seed.seededFields).toContain("minutesPerParsec");
+		});
 	});
 
 	it("reports what the blueprint never stated and seeds nothing there", () => {
@@ -48,7 +70,7 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 		);
 	});
 
-	it("seeds both damage terms from the laws, with or without stats", () => {
+	it("seeds every law-only term with or without stats", () => {
 		const bare: IRaukkBlueprintSeed = raukkBlueprintSeed({
 			hull: WCB,
 			ftlReactor: "standard",
@@ -56,25 +78,33 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 
 		// calibration §6: a flat 0.0011 % per parsec, reactor independent
 		expect(bare.damagePerParsec).toBeCloseTo(0.000011, 12);
-		// and the meteoroid law over the reference sublight leg
+		// §11.3: a flat 4.687 units per real parsec
+		expect(bare.ftlFuelPerParsec).toBe(RAUKK_FTL_FUEL_UNITS_PER_PARSEC);
+		// §11.4: the meteoroid law over both transit legs, plus a landing
 		expect(bare.damagePerStlBlock).toBeCloseTo(
-			(25_000_000 * (2.2e-10 + 5.5e-10 * 3.28)) / 100,
+			raukkStlBlockDamage(3.28),
 			12
 		);
 		expect(bare.seededFields).toContain("damagePerParsec");
 		expect(bare.seededFields).toContain("damagePerStlBlock");
+		expect(bare.seededFields).toContain("ftlFuelPerParsec");
 	});
 
-	it("prices a Hortus run at the damage the campaign observed", () => {
-		// batch 1 flew VH-331a → HRT, density 0.028, and took 0.006 %
-		const seed: IRaukkBlueprintSeed = raukkBlueprintSeed({
+	it("prices a clean system far below a dirty one", () => {
+		const hortus: IRaukkBlueprintSeed = raukkBlueprintSeed({
 			hull: HCB,
 			ftlReactor: "standard",
 			meteoroidDensity: 0.028,
 		});
+		const romulan: IRaukkBlueprintSeed = raukkBlueprintSeed({
+			hull: HCB,
+			ftlReactor: "standard",
+			meteoroidDensity: 2.93,
+		});
 
-		// the game reports damage to three decimals: 0.005885 reads 0.006
-		expect(seed.damagePerStlBlock * 100).toBeCloseTo(0.006, 3);
+		expect(romulan.damagePerStlBlock).toBeGreaterThan(
+			4 * hortus.damagePerStlBlock
+		);
 	});
 
 	describe("batch 1: the HCB of BP-ELTK-1115, FSE at 1,672 t", () => {
@@ -84,44 +114,79 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 			ftlReactor: "standard" as const,
 			accelerationMax: 59.8,
 			operatingEmptyMassTons: 1672,
-			stlFuelRatePerSecond: RAUKK_FSE_FUEL_RATE_PER_SECOND,
+			stlFuelRatePerSecond: RAUKK_DEFAULT_FUEL_RATE_PER_SECOND,
 			stlTankCapacity: RAUKK_STL_TANKS.MSL,
 		};
 
-		it("reproduces the observed takeoff and transit legs", () => {
+		it("flies both transit legs at the fuel saver's own ceiling", () => {
 			const seed: IRaukkBlueprintSeed = raukkBlueprintSeed(stats);
 
 			/*
-			 * Observed: TO 6m59s and, once the slider is off MIN, a transit
-			 * of 43m47s that the fuel saver's speed cap pins there. Adding
-			 * the landing §1.3 gives the block, so the whole block is
-			 * 6m59s + 43m47s + 6m59s ≈ 57.9 minutes. Two percent is the
-			 * band the campaign's own constants are quoted at.
+			 * At the default 5 % slider a 3,500 unit tank buys far more
+			 * speed than the fuel saver can use, so the block is the two
+			 * reference transit legs at 9,550 km/s plus one surface hop —
+			 * which is exactly the regime batch 1 measured at 25, 50 and
+			 * 100 %, three prices for one duration.
 			 */
-			const observed: number = (419 + 2627 + 419) / 60;
-
-			expect(seed.stlBlockMinutesEmpty).toBeGreaterThan(observed * 0.98);
-			expect(seed.stlBlockMinutesEmpty).toBeLessThan(observed * 1.02);
+			expect(seed.cruiseSpeedKmPerSecond).toBe(
+				RAUKK_STL_ENGINES.FSE.topSpeedKmPerSecond
+			);
+			expect(seed.stlBlockMinutesEmpty).toBeCloseTo(160.8, 0);
 			expect(seed.seededFields).toContain("stlBlockMinutesEmpty");
 		});
 
-		it("slows the loaded block through the acceleration alone", () => {
+		it("charges cargo once it pulls the ship off the ceiling", () => {
 			const seed: IRaukkBlueprintSeed = raukkBlueprintSeed(stats);
 
 			/*
-			 * 5,000 t aboard drops accelMax from 59.8 to 100,000 / 6,672 =
-			 * 15.0 m/s², and the observed takeoff grows from 6m59s to
-			 * 13m20s — the campaign needs no separate mass term at all.
+			 * 5,000 t on a 1,672 t hull drops accelMax from 59.8 to 15.0
+			 * m/s², which is far enough to leave the fuel saver's ceiling
+			 * behind — so the loaded block runs about half again as long.
+			 * Cargo is free only while the ceiling still binds, which is
+			 * what the g-capped case below shows.
 			 */
-			const observed: number = (800 + 2627 + 800) / 60;
-
-			expect(seed.stlBlockMinutesLoaded).toBeGreaterThan(observed * 0.95);
-			expect(seed.stlBlockMinutesLoaded).toBeLessThan(observed * 1.1);
+			expect(seed.stlBlockMinutesLoaded).toBeGreaterThan(
+				1.4 * seed.stlBlockMinutesEmpty
+			);
 			expect(seed.seededFields).toContain("stlBlockMinutesLoaded");
 		});
 
+		it("leaves a light load free while the ceiling still binds", () => {
+			const seed: IRaukkBlueprintSeed = raukkBlueprintSeed({
+				...stats,
+				hull: { cargoWeight: 500, cargoVolume: 500 },
+			});
+
+			// batch 10 flew 0, 200 and 400 t at an identical 4h16m
+			expect(seed.stlBlockMinutesLoaded).toBeLessThan(
+				1.02 * seed.stlBlockMinutesEmpty
+			);
+		});
+
+		it("lets MIN cost the loaded ship its whole day", () => {
+			const min: IRaukkBlueprintSeed = raukkBlueprintSeed({
+				...stats,
+				stlFuelSliderFraction: 0,
+			});
+
+			/*
+			 * MIN buys a flat ~40 units, which at 15.0 m/s² is nowhere near
+			 * the ceiling — batch 1 flew 2h24m loaded against 43m47s at any
+			 * slider setting at all.
+			 */
+			expect(min.cruiseSpeedKmPerSecond).toBeLessThan(
+				RAUKK_STL_ENGINES.FSE.topSpeedKmPerSecond
+			);
+			expect(min.stlBlockMinutesLoaded).toBeGreaterThan(
+				3 * min.stlBlockMinutesEmpty
+			);
+		});
+
 		it("spends a quarter tank per transit leg at a 25% slider", () => {
-			const min: IRaukkBlueprintSeed = raukkBlueprintSeed(stats);
+			const min: IRaukkBlueprintSeed = raukkBlueprintSeed({
+				...stats,
+				stlFuelSliderFraction: 0,
+			});
 			const fast: IRaukkBlueprintSeed = raukkBlueprintSeed({
 				...stats,
 				stlFuelSliderFraction: 0.25,
@@ -129,15 +194,17 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 
 			/*
 			 * The slider is a BUDGET, not a throttle: 25 % of the 3,500
-			 * unit MSL burned 874 units on batch 1, whatever the engine,
-			 * the mass or the distance. Every block then costs that plus
-			 * its two slider-blind takeoff legs, ~47 units empty and ~94
-			 * loaded, so the flat mean lands just past 945.
+			 * unit MSL burned 874 units on a whole transit leg of batch 1.
+			 * A block flies two HALF legs — a departure and an approach at
+			 * 0.49 and 0.63 of that budget (§13.2) — plus its slider-blind
+			 * surface hop.
 			 */
-			expect(fast.stlFuelPerBlock).toBeCloseTo(945, 0);
+			expect(fast.stlFuelPerBlock).toBeGreaterThan(1.12 * 875);
+			expect(fast.stlFuelPerBlock).toBeLessThan(1.12 * 875 + 60);
 			expect(fast.stlFuelPerBlock).toBeGreaterThan(min.stlFuelPerBlock);
-			// MIN is the other operating point: rated burn, ~91 units
-			expect(min.stlFuelPerBlock).toBeCloseTo(91, 0);
+			// MIN is the other operating point: two flat 40 unit budgets
+			expect(min.stlFuelPerBlock).toBeGreaterThan(2 * 40);
+			expect(min.stlFuelPerBlock).toBeLessThan(2 * 40 + 60);
 		});
 
 		it("clamps a slider past the quarter tank the campaign caps at", () => {
@@ -156,20 +223,21 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 			);
 		});
 
-		it("burns the observed takeoff fuel at the rated rate", () => {
-			const seed: IRaukkBlueprintSeed = raukkBlueprintSeed(stats);
-			const empty: IRaukkBlueprintSeed = raukkBlueprintSeed({
+		it("burns the observed surface-hop fuel at the rated rate", () => {
+			const seed: IRaukkBlueprintSeed = raukkBlueprintSeed({
 				...stats,
-				hull: { cargoWeight: 0, cargoVolume: 0 },
+				stlFuelSliderFraction: 0,
+				surfaceLegKm: 5_250,
 			});
 
 			/*
-			 * 7.55 × 0.0075 u/s × 419 s = 23.7 units, and the campaign read
-			 * 24 off the panel. A hold that holds nothing makes the block
-			 * two of those plus the MIN transit burn.
+			 * 5,250 km is what batch 1's own takeoff implies through
+			 * §11.1, and 7.55 × 0.0075 u/s × 419 s = 23.7 units is what the
+			 * campaign back-predicted against the 24 on the panel. The
+			 * block is that plus its two MIN transit budgets.
 			 */
-			expect(empty.stlFuelPerBlock).toBeGreaterThan(2 * 23.7);
-			expect(seed.stlFuelPerBlock).toBeGreaterThan(empty.stlFuelPerBlock);
+			expect(seed.stlFuelPerBlock).toBeGreaterThan(2 * 40 + 23);
+			expect(seed.stlFuelPerBlock).toBeLessThan(2 * 40 + 50);
 		});
 	});
 
@@ -188,6 +256,7 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 				accelerationMax: 66.4,
 				operatingEmptyMassTons: 753,
 				stlFuelRatePerSecond: 0.015,
+				stlFuelSliderFraction: 0,
 			});
 			const standard: IRaukkBlueprintSeed = raukkBlueprintSeed({
 				hull: WCB,
@@ -195,15 +264,16 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 				accelerationMax: 98.1,
 				operatingEmptyMassTons: 931,
 				stlFuelRatePerSecond: 0.015,
+				stlFuelSliderFraction: 0,
 			});
 
-			// the glass engine is thrust limited: 50,000 / 3,753 = 13.3
-			expect(
-				glass.stlBlockMinutesLoaded / glass.stlBlockMinutesEmpty
-			).toBeCloseTo(Math.sqrt(66.4 / (50_000 / 3753)), 1);
-			// the standard one keeps far more of its acceleration
-			expect(standard.stlBlockMinutesLoaded).toBeLessThan(
-				glass.stlBlockMinutesLoaded
+			// the glass engine loses far more of its cruise to the cargo
+			expect(glass.stlBlockMinutesLoaded).toBeGreaterThan(
+				standard.stlBlockMinutesLoaded
+			);
+			// and neither reaches its ceiling on a MIN budget
+			expect(glass.cruiseSpeedKmPerSecond).toBeLessThan(
+				RAUKK_STL_ENGINES.GEN.topSpeedKmPerSecond
 			);
 		});
 
@@ -211,9 +281,7 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 			/*
 			 * The advanced engine at 250,000 t·m/s² gives a 931 t hull far
 			 * more than its 10 g cap allows, so the first tonnes of cargo
-			 * cost NOTHING — the plain √(gross / empty) scaling the seed
-			 * used before this file knew any engine constants would have
-			 * charged for them.
+			 * cost NOTHING.
 			 */
 			const light: IRaukkBlueprintSeed = raukkBlueprintSeed({
 				hull: { cargoWeight: 100, cargoVolume: 100 },
@@ -229,23 +297,32 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 			);
 		});
 
-		it("falls back to constant thrust when no engine matches", () => {
+		it("falls back to the fleet's own engine when nothing matches", () => {
 			/*
-			 * An unknown burn rate identifies no engine, so the panel
-			 * reading is all there is: thrust = accel × empty mass, which
-			 * is the √(gross / empty) law of the pre-campaign seed.
+			 * USER DECISION (2026-08-09): an unknown burn rate identifies no
+			 * engine, and the app then assumes what the user's fleet flies —
+			 * the fuel saver on a Lightweight plate — rather than reading a
+			 * thrust off the panel figure.
 			 */
 			const seed: IRaukkBlueprintSeed = raukkBlueprintSeed({
 				hull: WCB,
 				ftlReactor: "standard",
-				accelerationMax: 98.1,
 				operatingEmptyMassTons: 936,
 				stlFuelRatePerSecond: 0.0123,
+				stlFuelSliderFraction: 0,
 			});
 
-			expect(
-				seed.stlBlockMinutesLoaded / seed.stlBlockMinutesEmpty
-			).toBeCloseTo(Math.sqrt((936 + 3000) / 936), 6);
+			/*
+			 * The fuel saver's 100,000 t·m/s² over 936 t is 106.8, above the
+			 * 98.1 a 10 g plate allows, so the design flies at the cap — and
+			 * the panel's own burn rate is still what prices it, because a
+			 * stated stat beats an assumed one wherever it exists.
+			 */
+			expect(seed.cruiseSpeedKmPerSecond).toBeCloseTo(
+				(40 * 98.1) / (34 * 0.0123),
+				6
+			);
+			expect(RAUKK_DEFAULT_FUEL_RATE_PER_SECOND).toBe(0.0075);
 		});
 	});
 });
