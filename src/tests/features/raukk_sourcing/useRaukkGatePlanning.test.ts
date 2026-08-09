@@ -13,10 +13,17 @@ import {
 // Calculations
 import { setRaukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations/routeDistance";
 
-/** Planets the bundled systems JSON really carries */
-const MONTEM: string = "OT-580b";
-const AMETHYST: string = "IA-158b";
+/**
+ * Planets the bundled systems JSON really carries.
+ *
+ * `HEPHAESTUS` to `FAR` is 12.88 parsecs — inside a gate's reach with one
+ * range upgrade — over an FTL route that takes some seventeen hours, so a
+ * gate there is worth a great deal. `AMETHYST` is the far end of the
+ * TRANSCRIBED Antares corridor, the pair a planned gate adds nothing to.
+ */
 const HEPHAESTUS: string = "ZV-307c";
+const FAR: string = "IA-335b";
+const AMETHYST: string = "IA-158b";
 
 describe("Raukk Sourcing: useRaukkGatePlanning", () => {
 	let store: ReturnType<typeof useRaukkSourcingStore>;
@@ -38,13 +45,15 @@ describe("Raukk Sourcing: useRaukkGatePlanning", () => {
 			enabled: 0,
 			broken: 0,
 			savedMinutes: 0,
+			buildCostAic: 0,
 		});
 	});
 
 	it("measures a planned gate against today's network", () => {
 		store.setPlannedGate("g1", {
-			planetA: MONTEM,
-			planetB: AMETHYST,
+			planetA: HEPHAESTUS,
+			planetB: FAR,
+			rangeUpgrades: 1,
 		});
 
 		const { rows } = useRaukkGatePlanning();
@@ -58,28 +67,55 @@ describe("Raukk Sourcing: useRaukkGatePlanning", () => {
 	});
 
 	it("re-measures when a single field of one gate changes", () => {
-		store.setPlannedGate("g1", { planetA: MONTEM, planetB: AMETHYST });
+		store.setPlannedGate("g1", {
+			planetA: HEPHAESTUS,
+			planetB: FAR,
+			rangeUpgrades: 1,
+		});
 
 		const { rows } = useRaukkGatePlanning();
-		const narrow: number = rows.value[0].value.savedMinutes;
 
-		// a wider gate is measured against a network fewer real gates
-		// serve, so the very same link saves MORE
-		store.setPlannedGate("g1", { maxM3: 6000 });
+		expect(rows.value[0].value.issue).toBe("");
 
-		expect(rows.value[0].gate.maxM3).toBe(6000);
-		expect(rows.value[0].value.savedMinutes).toBeGreaterThanOrEqual(narrow);
+		// dropping the range upgrade puts the far end out of reach, and
+		// the row has to say so rather than keep its old saving
+		store.setPlannedGate("g1", { rangeUpgrades: 0 });
+
+		expect(rows.value[0].gate.rangeUpgrades).toBe(0);
+		expect(rows.value[0].value.issue).toBe("out_of_range");
+		expect(rows.value[0].value.savedMinutes).toBe(0);
+	});
+
+	it("costs both ends of the link, and the bill grows with upgrades", () => {
+		store.setPlannedGate("g1", {
+			planetA: HEPHAESTUS,
+			planetB: FAR,
+			rangeUpgrades: 1,
+		});
+
+		const { rows } = useRaukkGatePlanning();
+
+		// two gates: the base bill is 5,000 SEA each
+		expect(rows.value[0].materials.SEA).toBe(10000);
+
+		store.setPlannedGate("g1", { volumeUpgrades: 3 });
+
+		// volume upgrades are bought at both ends too, triangular: the
+		// third level costs 6 units of 200 PSH, doubled for the pair
+		expect(rows.value[0].materials.PSH).toBe(2 * (1000 + 6 * 200));
 	});
 
 	it("counts what is switched on and what cannot route", () => {
 		store.setPlannedGate("on", {
-			planetA: MONTEM,
-			planetB: AMETHYST,
+			planetA: HEPHAESTUS,
+			planetB: FAR,
+			rangeUpgrades: 1,
 			enabled: true,
 		});
 		store.setPlannedGate("off", {
 			planetA: HEPHAESTUS,
 			planetB: AMETHYST,
+			rangeUpgrades: 2,
 		});
 		store.setPlannedGate("broken", {
 			planetA: "NOWHERE-9z",
@@ -102,8 +138,9 @@ describe("Raukk Sourcing: useRaukkGatePlanning", () => {
 		// still has to compare against the network WITHOUT it, or every
 		// switched on gate would report saving nothing
 		store.setPlannedGate("g1", {
-			planetA: MONTEM,
-			planetB: AMETHYST,
+			planetA: HEPHAESTUS,
+			planetB: FAR,
+			rangeUpgrades: 1,
 			enabled: true,
 		});
 

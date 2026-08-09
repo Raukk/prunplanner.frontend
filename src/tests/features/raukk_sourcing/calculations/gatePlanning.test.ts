@@ -6,10 +6,11 @@ import {
 	IRaukkPlannedGateValue,
 	RAUKK_HCB_HULL_M3,
 	RAUKK_PLANNED_GATE_DEFAULT_FEE,
-	RAUKK_PLANNED_GATE_DEFAULT_M3,
 	raukkPlannedGateLabel,
 	raukkPlannedGateLink,
 	raukkPlannedGateLinks,
+	raukkPlannedGateRangeUpgrades,
+	raukkPlannedGateSpecs,
 	raukkPlannedGateTraversalMinutes,
 	raukkPlannedGateValue,
 } from "@/features/raukk_sourcing/calculations/gatePlanning";
@@ -41,30 +42,40 @@ function system(
 }
 
 /**
- * Four systems on one line, 30 parsecs end to end over three FTL jumps.
+ * A dog-leg the FTL network has to fly round.
  *
- * PG-005 hangs off the graph with no connection at all, the unreachable
- * case a planned gate is the only way into.
+ * PG-001 to PG-004 is 20 parsecs in a straight line — a gate reaches it
+ * with 2 range upgrades — while the FTL route detours over PG-002 and
+ * PG-003 for 39.5 parsecs and three jumps. PG-005 hangs off the graph
+ * 10 parsecs out, the unreachable case a gate is the only way into;
+ * PG-006 sits 2 parsecs away behind one plain jump, the case a gate is
+ * SLOWER than flying; PG-007 sits 30 parsecs out, past what any gate can
+ * link however upgraded.
  */
 const graph: IRaukkSystemNode[] = [
-	system("PG-001", [0, 0, 0], ["PG-002"]),
-	system("PG-002", [120, 0, 0], ["PG-001", "PG-003"]),
-	system("PG-003", [240, 0, 0], ["PG-002", "PG-004"]),
-	system("PG-004", [360, 0, 0], ["PG-003"]),
-	system("PG-005", [0, 600, 0], []),
+	system("PG-001", [0, 0, 0], ["PG-002", "PG-006"]),
+	system("PG-002", [80, 180, 0], ["PG-003"]),
+	system("PG-003", [160, 180, 0], ["PG-004"]),
+	system("PG-004", [240, 0, 0], []),
+	system("PG-005", [0, 120, 0], []),
+	system("PG-006", [24, 0, 0], []),
+	system("PG-007", [0, 360, 0], []),
 ];
 
 function routes(gateLinks: IRaukkGateLink[] = []): IRaukkRouteDistance {
 	return createRouteDistance(graph, RAUKK_CX_SYSTEM_IDS, gateLinks);
 }
 
+/** A gate over the dog-leg, ranged far enough to actually link it */
 function gate(patch: Partial<IRaukkPlannedGate> = {}): IRaukkPlannedGate {
 	return {
 		id: "gate-1",
 		planetA: "PG-001a",
 		planetB: "PG-004b",
 		fee: RAUKK_PLANNED_GATE_DEFAULT_FEE,
-		maxM3: RAUKK_PLANNED_GATE_DEFAULT_M3,
+		capacityUpgrades: 0,
+		volumeUpgrades: 1,
+		rangeUpgrades: 2,
 		enabled: false,
 		status: "proposed",
 		...patch,
@@ -87,7 +98,7 @@ describe("Raukk Sourcing: gate planning", () => {
 	describe("graph edges", () => {
 		it("builds a symmetric, planned flagged link", () => {
 			const link: IRaukkGateLink = raukkPlannedGateLink(
-				gate({ fee: 2500, maxM3: 3000, name: "Long Haul" })
+				gate({ fee: 2500, volumeUpgrades: 1, name: "Long Haul" })
 			);
 
 			expect(link.a).toBe("PG-001a");
@@ -104,24 +115,27 @@ describe("Raukk Sourcing: gate planning", () => {
 			expect(link.aGate.est).toBe("");
 		});
 
-		it("refuses negative fees and clearances", () => {
+		it("refuses a negative fee and clamps a negative upgrade", () => {
 			const link: IRaukkGateLink = raukkPlannedGateLink(
-				gate({ fee: -100, maxM3: -1 })
+				gate({ fee: -100, volumeUpgrades: -1 })
 			);
 
 			expect(link.aGate.fee).toBe(0);
-			expect(link.maxTraversalM3).toBe(0);
+			// no upgrades is still a gate: the base clearance
+			expect(link.maxTraversalM3).toBe(1500);
 		});
 
-		it("flags HCB clearance exactly at the hull volume", () => {
+		it("flags HCB clearance at the volume upgrade that clears it", () => {
+			// 1,500 m³ base plus 1,500 a level: only the third level of
+			// volume gets a link past the 5,825 m³ HCB hull
 			expect(
-				raukkPlannedGateLink(gate({ maxM3: RAUKK_HCB_HULL_M3 }))
-					.hcbCapable
+				raukkPlannedGateLink(gate({ volumeUpgrades: 3 })).hcbCapable
 			).toBe(true);
 			expect(
-				raukkPlannedGateLink(gate({ maxM3: RAUKK_HCB_HULL_M3 - 1 }))
-					.hcbCapable
+				raukkPlannedGateLink(gate({ volumeUpgrades: 2 })).hcbCapable
 			).toBe(false);
+			expect(RAUKK_HCB_HULL_M3).toBeGreaterThan(4500);
+			expect(RAUKK_HCB_HULL_M3).toBeLessThan(6000);
 		});
 
 		it("only the enabled gates become edges", () => {
@@ -165,11 +179,11 @@ describe("Raukk Sourcing: gate planning", () => {
 			expect(value.systemIdA).toBe("sys-PG-001");
 			expect(value.systemIdB).toBe("sys-PG-004");
 			expect(value.parsecs).toBeCloseTo(
-				360 / RAUKK_POSITION_UNITS_PER_PARSEC,
+				240 / RAUKK_POSITION_UNITS_PER_PARSEC,
 				9
 			);
 			expect(value.traversalMinutes).toBeCloseTo(
-				raukkPlannedGateTraversalMinutes(30),
+				raukkPlannedGateTraversalMinutes(20),
 				9
 			);
 		});
@@ -180,10 +194,8 @@ describe("Raukk Sourcing: gate planning", () => {
 				routes()
 			);
 
-			// three FTL jumps of 10 pc against one 30 pc traversal
-			expect(value.todayMinutes).toBeGreaterThan(
-				value.traversalMinutes!
-			);
+			// a 39.5 pc detour over three jumps against one 20 pc hop
+			expect(value.todayMinutes).toBeGreaterThan(value.traversalMinutes!);
 			expect(value.plannedMinutes).toBe(value.traversalMinutes);
 			expect(value.savedMinutes).toBeCloseTo(
 				value.todayMinutes! - value.traversalMinutes!,
@@ -198,7 +210,7 @@ describe("Raukk Sourcing: gate planning", () => {
 		it("reports zero rather than a negative saving", () => {
 			// one short jump the ship flies quicker than any gate hop
 			const value: IRaukkPlannedGateValue = raukkPlannedGateValue(
-				gate({ planetA: "PG-001a", planetB: "PG-002a" }),
+				gate({ planetA: "PG-001a", planetB: "PG-006a" }),
 				routes()
 			);
 
@@ -252,7 +264,7 @@ describe("Raukk Sourcing: gate planning", () => {
 					id: "GTW-NARROW-A",
 					fee: 1000,
 					cur: "NCC",
-					maxM3: 500,
+					maxM3: 2000,
 					jumps24h: 250,
 					up: "",
 					est: "",
@@ -261,21 +273,21 @@ describe("Raukk Sourcing: gate planning", () => {
 					id: "GTW-NARROW-B",
 					fee: 1000,
 					cur: "NCC",
-					maxM3: 500,
+					maxM3: 2000,
 					jumps24h: 250,
 					up: "",
 					est: "",
 				},
-				maxTraversalM3: 500,
+				maxTraversalM3: 2000,
 				hcbCapable: false,
 			};
 
 			const wide: IRaukkPlannedGateValue = raukkPlannedGateValue(
-				gate({ maxM3: 3000 }),
+				gate({ volumeUpgrades: 1 }),
 				routes([narrow])
 			);
 			const small: IRaukkPlannedGateValue = raukkPlannedGateValue(
-				gate({ maxM3: 400 }),
+				gate({ volumeUpgrades: 0 }),
 				routes([narrow])
 			);
 
@@ -287,8 +299,9 @@ describe("Raukk Sourcing: gate planning", () => {
 		});
 
 		it("states why it cannot route", () => {
-			expect(raukkPlannedGateValue(gate({ planetA: " " }), routes()).issue)
-				.toBe("no_endpoints");
+			expect(
+				raukkPlannedGateValue(gate({ planetA: " " }), routes()).issue
+			).toBe("no_endpoints");
 			expect(
 				raukkPlannedGateValue(gate({ planetA: "XX-999a" }), routes())
 					.issue
@@ -305,10 +318,90 @@ describe("Raukk Sourcing: gate planning", () => {
 			).toBe("same_system");
 		});
 
+		it("refuses a gap wider than the gate's linking range", () => {
+			// 20 pc apart, and a gate with no range upgrade reaches 10
+			const value: IRaukkPlannedGateValue = raukkPlannedGateValue(
+				gate({ rangeUpgrades: 0 }),
+				routes()
+			);
+
+			expect(value.issue).toBe("out_of_range");
+			expect(value.linkingRangeParsecs).toBe(10);
+			expect(value.rangeUpgradesNeeded).toBe(2);
+			// the gap and the hop are still stated: what it WOULD be
+			expect(value.parsecs).toBeCloseTo(20, 9);
+			expect(value.traversalMinutes).not.toBeNull();
+			// nothing may be claimed about a route it cannot fly
+			expect(value.todayMinutes).toBeNull();
+			expect(value.savedMinutes).toBe(0);
+		});
+
+		it("routes as soon as the range upgrades reach", () => {
+			expect(
+				raukkPlannedGateValue(gate({ rangeUpgrades: 1 }), routes())
+					.issue
+			).toBe("out_of_range");
+			expect(
+				raukkPlannedGateValue(gate({ rangeUpgrades: 2 }), routes())
+					.issue
+			).toBe("");
+		});
+
+		it("calls a gap past the fully upgraded range impossible", () => {
+			// PG-007 sits 30 pc out, a fully ranged gate reaches 25
+			const value: IRaukkPlannedGateValue = raukkPlannedGateValue(
+				gate({ planetB: "PG-007a", rangeUpgrades: 3 }),
+				routes()
+			);
+
+			expect(value.issue).toBe("unreachable_range");
+			expect(value.rangeUpgradesNeeded).toBeNull();
+			expect(value.linkingRangeParsecs).toBe(25);
+		});
+
+		it("states the range upgrades a gap needs", () => {
+			expect(raukkPlannedGateRangeUpgrades(9)).toBe(0);
+			expect(raukkPlannedGateRangeUpgrades(10)).toBe(0);
+			expect(raukkPlannedGateRangeUpgrades(10.01)).toBe(1);
+			expect(raukkPlannedGateRangeUpgrades(15)).toBe(1);
+			expect(raukkPlannedGateRangeUpgrades(20)).toBe(2);
+			expect(raukkPlannedGateRangeUpgrades(25)).toBe(3);
+			expect(raukkPlannedGateRangeUpgrades(25.01)).toBeNull();
+		});
+
+		it("derives the clearance from the volume upgrades", () => {
+			[
+				[0, 1500],
+				[1, 3000],
+				[2, 4500],
+				[3, 6000],
+			].forEach(([level, m3]) => {
+				expect(
+					raukkPlannedGateValue(
+						gate({ volumeUpgrades: level }),
+						routes()
+					).maxM3
+				).toBe(m3);
+			});
+		});
+
+		it("reads the legacy clearance of a pre-upgrade gate", () => {
+			// a gate stored before the GTWI transcription knew a bare m³
+			const legacy = {
+				...gate(),
+				volumeUpgrades: undefined,
+				maxM3: 4200,
+			} as unknown as IRaukkPlannedGate;
+
+			expect(raukkPlannedGateSpecs(legacy).maxShipVolumeM3).toBe(4200);
+			// and the upgrade levels still drive everything else
+			expect(raukkPlannedGateSpecs(legacy).linkingRangeParsecs).toBe(20);
+		});
+
 		it("carries the HCB verdict even while it cannot route", () => {
 			expect(
 				raukkPlannedGateValue(
-					gate({ planetA: "XX-999a", maxM3: 6000 }),
+					gate({ planetA: "XX-999a", volumeUpgrades: 3 }),
 					routes()
 				).hcbCapable
 			).toBe(true);

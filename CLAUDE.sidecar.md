@@ -222,6 +222,19 @@ anywhere in the repo. Not retroactive.
   snapshots while shipping is on); labels, notes and switched-off
   edits stale nothing. Full reasoning in
   docs/raukk_sourcing/shipping-decisions.md round 21.
+- 2026-08-09: Gate build costs transcribed from the in-game GTWI panel
+  (13 configurations, two gates) into `assets/raukk_gate_costs.json` —
+  FIO serves none of this (`/sites/gateways` 401, `/infrastructure/
+  gateways` 204). Upgrade cost is TRIANGULAR (n-th level costs n x unit),
+  which one screenshot alone reads as linear and gets 2x wrong; effects
+  are linear. A link is TWO gates (user emphasis), and a gate holds 5
+  upgrade levels TOTAL across the 5/3/3 tracks, so range bought is
+  clearance not bought. Linking range (10 pc, +5/upgrade, 25 max) is a
+  hard cap in the same parsecs `straightLineParsecs` measures — the
+  panel's Reachable Systems distances match it to three decimals, which
+  validates that metric against the game. Planned-gate clearance is now
+  derived from volume upgrades rather than typed. Full reasoning in
+  docs/raukk_sourcing/shipping-decisions.md round 22.
 - 2026-08-09: Plan tool tabs are sticky (user request — open/close a
   tool while working further down the plan). The toolbar and the tool
   view are now separate grid items of PlanView's header grid (rows 4

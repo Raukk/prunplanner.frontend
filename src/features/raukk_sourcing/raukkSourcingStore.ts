@@ -46,9 +46,13 @@ import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippi
 // raukk: planned gates are edges of the route graph while switched on
 import {
 	RAUKK_PLANNED_GATE_DEFAULT_FEE,
-	RAUKK_PLANNED_GATE_DEFAULT_M3,
 	raukkPlannedGateLinks,
 } from "@/features/raukk_sourcing/calculations/gatePlanning";
+import {
+	IRaukkGateUpgrades,
+	RAUKK_GATE_UPGRADE,
+	raukkGateUpgradesFit,
+} from "@/features/raukk_sourcing/calculations/gateCosts";
 import { setRaukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations/routeDistance";
 // raukk: only plans assigned to an empire take part account wide
 import {
@@ -988,6 +992,29 @@ export const useRaukkSourcingStore = defineStore(
 					: fallback;
 			}
 
+			/*
+			 * A gate holds five upgrade levels across all three tracks,
+			 * whatever the per track maxima allow on their own, so the
+			 * track this patch RAISED is the one clamped — clamping the
+			 * others would undo a choice the user did not touch.
+			 */
+			const raised: RAUKK_GATE_UPGRADE =
+				patch.volumeUpgrades !== undefined
+					? "volume"
+					: patch.rangeUpgrades !== undefined
+						? "range"
+						: "capacity";
+
+			const upgrades: IRaukkGateUpgrades = raukkGateUpgradesFit(
+				{
+					capacity:
+						patch.capacityUpgrades ?? known?.capacityUpgrades ?? 0,
+					volume: patch.volumeUpgrades ?? known?.volumeUpgrades ?? 0,
+					range: patch.rangeUpgrades ?? known?.rangeUpgrades ?? 0,
+				},
+				raised
+			);
+
 			const next: IRaukkPlannedGate = {
 				id,
 				name: patch.name ?? known?.name,
@@ -997,10 +1024,9 @@ export const useRaukkSourcingStore = defineStore(
 					patch.fee,
 					known?.fee ?? RAUKK_PLANNED_GATE_DEFAULT_FEE
 				),
-				maxM3: number(
-					patch.maxM3,
-					known?.maxM3 ?? RAUKK_PLANNED_GATE_DEFAULT_M3
-				),
+				capacityUpgrades: upgrades.capacity,
+				volumeUpgrades: upgrades.volume,
+				rangeUpgrades: upgrades.range,
 				enabled: patch.enabled ?? known?.enabled ?? false,
 				status: patch.status ?? known?.status ?? "proposed",
 				note: patch.note ?? known?.note,
@@ -1056,7 +1082,8 @@ export const useRaukkSourcingStore = defineStore(
 				before.enabled !== after.enabled ||
 				before.planetA !== after.planetA ||
 				before.planetB !== after.planetB ||
-				before.maxM3 !== after.maxM3 ||
+				before.volumeUpgrades !== after.volumeUpgrades ||
+				before.rangeUpgrades !== after.rangeUpgrades ||
 				before.fee !== after.fee
 			);
 		}
@@ -1099,8 +1126,7 @@ export const useRaukkSourcingStore = defineStore(
 		 * @param {string} shipTypeId Ship Type Id
 		 */
 		function deleteFleetShip(shipTypeId: string): void {
-			const wasOwned: boolean =
-				(fleet.value[shipTypeId]?.count ?? 0) > 0;
+			const wasOwned: boolean = (fleet.value[shipTypeId]?.count ?? 0) > 0;
 
 			delete fleet.value[shipTypeId];
 

@@ -657,6 +657,59 @@ is in the graph and priced by the chain math when routed, but the
 planning table itself compares TIME only), and no "which of my lanes
 would use it" column.
 
+## Round 22 (gate costs transcribed, and the range cap)
+
+The user transcribed the in-game GATEWAY INFORMATION (GTWI) panel across
+13 configurations on two gates (ZV-307c, SE-648c) into
+`src/features/raukk_sourcing/assets/raukk_gate_costs.json`. FIO does NOT
+serve this: `/sites/gateways` is 401 (your own sites, and no cost table),
+`/infrastructure/gateways` exists but returns 204. Screenshots are the
+only source, and 13 of them are enough — the model reproduces every
+material of every panel exactly.
+
+What the transcription established:
+
+1. **Upgrade cost is TRIANGULAR, not linear.** The n-th level costs
+   n x unit, so n levels cost `unit * n(n+1)/2`. This is the round's most
+   important finding and the one a single screenshot gets WRONG: the
+   3-level range panel shows 480 LIT, and 480/3 = 160 reads exactly like
+   a per-level price — the real first level costs 80. Caught only because
+   the user supplied levels 1, 2 AND 3. Effects, by contrast, ARE linear
+   per level (150 uses/day, 1,500 m³, 5 parsecs).
+2. **A link costs TWO gates** (user emphasis), one at each end, both
+   paying the full base bill. `raukkGateLinkBuildCost` doubles, the
+   column is labelled "Build ȼ" and the note under the table says so.
+3. **Five upgrade levels TOTAL** across the three tracks (user), even
+   though the per-track maxima are 5/3/3 and would sum to eleven. This is
+   the binding constraint and the interesting one: range bought is
+   clearance not bought. The store clamps the track the user just
+   RAISED — clamping the others would undo an untouched choice.
+4. **Linking range is a hard cap in the same parsecs the tool already
+   measures.** The panel's "Reachable Systems" distances match
+   `straightLineParsecs` to three decimals on all four sampled systems,
+   which both validates that metric against the game and makes the cap
+   enforceable: 10 pc, +5 per range upgrade, 25 pc fully upgraded. A
+   wider gap is not an expensive gate but an impossible one —
+   `out_of_range` (buy N range upgrades) and `unreachable_range` (nothing
+   can be built) are issues, and the add form refuses the second outright.
+5. **Clearance is no longer free-form.** A planned gate's m³ comes from
+   its volume upgrades (1,500 + 1,500/level), because that is all the
+   game offers. The old bare `maxM3` stays readable as a legacy field for
+   blobs written by round 21, and nothing writes it any more.
+6. **Upkeep is transcribed but NOT modelled**: constant across every
+   observed upgrade level, and the panel never states its billing period.
+   It sits in the asset for the user to read.
+
+Cost in ȼ is priced universe-wide at BUY, and the tooltip says plainly
+that a bill dominated by 10,000 SEA and 16,000 SP per link is what the
+exchange claims today rather than what buying that much would cost —
+the user's own caveat about thin markets.
+
+The 13 panels are pinned as fixtures in
+`src/tests/features/raukk_sourcing/calculations/gateCosts.test.ts`: a
+change that breaks one of those rows is a change that no longer describes
+the game.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,

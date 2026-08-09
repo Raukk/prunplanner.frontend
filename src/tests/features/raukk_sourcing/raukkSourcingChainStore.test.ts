@@ -1134,7 +1134,9 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 				planetA: "ZV-307c",
 				planetB: "OT-580b",
 				fee: 4000,
-				maxM3: 3000,
+				capacityUpgrades: 0,
+				volumeUpgrades: 0,
+				rangeUpgrades: 0,
 				enabled: false,
 				status: "proposed",
 				note: undefined,
@@ -1158,12 +1160,12 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 				planetB: "OT-580b",
 				fee: 2500,
 			});
-			store.setPlannedGate("g1", { maxM3: 6000, name: "Long Haul" });
+			store.setPlannedGate("g1", { volumeUpgrades: 3, name: "Long Haul" });
 
 			expect(store.plannedGates["g1"]).toMatchObject({
 				planetA: "ZV-307c",
 				fee: 2500,
-				maxM3: 6000,
+				volumeUpgrades: 3,
 				name: "Long Haul",
 			});
 		});
@@ -1174,10 +1176,10 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 				planetB: "OT-580b",
 				fee: 2500,
 			});
-			store.setPlannedGate("g1", { fee: Number.NaN, maxM3: -1 });
+			store.setPlannedGate("g1", { fee: Number.NaN, volumeUpgrades: -1 });
 
 			expect(store.plannedGates["g1"].fee).toBe(2500);
-			expect(store.plannedGates["g1"].maxM3).toBe(3000);
+			expect(store.plannedGates["g1"].volumeUpgrades).toBe(0);
 		});
 
 		it("only an ENABLED gate reaches the route index", () => {
@@ -1250,7 +1252,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 
 			store.setShippingConfig({ enabled: true });
 			store.setSnapshot("plan-1", makeSnapshot("Plan 1", "ZV-307c"));
-			store.setPlannedGate("g1", { maxM3: 6000 });
+			store.setPlannedGate("g1", { volumeUpgrades: 3 });
 
 			expect(store.snapshots["plan-1"].stale).toBe(true);
 		});
@@ -1290,7 +1292,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 				planetA: "ZV-307c",
 				planetB: "OT-580b",
 				fee: 2500,
-				maxM3: 6000,
+				volumeUpgrades: 3,
 				enabled: true,
 				status: "construction",
 				name: "Long Haul",
@@ -1308,7 +1310,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 				planetA: "ZV-307c",
 				planetB: "OT-580b",
 				fee: 2500,
-				maxM3: 6000,
+				volumeUpgrades: 3,
 				enabled: true,
 				status: "construction",
 				name: "Long Haul",

@@ -444,7 +444,7 @@
 	},
 	"gates": {
 		"title": "Planned Gates",
-		"info": "Gates that do NOT exist: one you watched go up in-game and want to route over before it opens, or one nobody is building that you want to know the worth of. Each row is measured against the network as it stands today — the same trip, flown by a hull as big as the planned gate would pass, over the FTL jumps and the real gates that exist now. Switch a gate ON and it becomes an edge of the route graph: every lane, chain and distance in the account may then be planned over it, which is why switching one stales the shipping numbers. Both sides of a planned gate are assumed identical — you plan a link, not two separately upgraded ends — and the fee currency is not modelled, the four trade about 1:1.",
+		"info": "Gates that do NOT exist: one you watched go up in-game and want to route over before it opens, or one nobody is building that you want to know the worth of. Gates fly in a STRAIGHT LINE, which is most of what makes them worth having — but only as far as their linking range, 10 parsecs plus 5 per range upgrade, and a gap wider than that is not an expensive gate but an impossible one. Each row is measured against the network as it stands today: the same trip, flown by a hull as big as the planned gate would pass, over the FTL jumps and the real gates that exist now. Switch a gate ON and it becomes an edge of the route graph — every lane, chain and distance in the account may then be planned over it, which is why switching one stales the shipping numbers.",
 		"gate": "Gate",
 		"link": "Link",
 		"fee": "Fee ȼ",
@@ -470,15 +470,31 @@
 			"no_endpoints": "The gate is missing a planet on one of its sides.",
 			"unknown_a": "No planet of the A side id is known — check the spelling, e.g. ZV-307c.",
 			"unknown_b": "No planet of the B side id is known — check the spelling, e.g. OT-580b.",
-			"same_system": "Both planets sit in one system, and a gate bridges systems — there is nothing here to traverse."
+			"same_system": "Both planets sit in one system, and a gate bridges systems — there is nothing here to traverse.",
+			"out_of_range": "The gap is wider than this gate's linking range. It needs {needed} range upgrade(s) to reach — buy them in the Upgrades column.",
+			"unreachable_range": "The gap is wider than any gate can link, even with all 3 range upgrades (25 parsecs). No gate can be built here."
 		},
 		"hint": {
 			"empty": "Type both planet ids to enable Add Gate.",
 			"unknown": "One of those planets is unknown — the gate would route nothing.",
-			"same_system": "Both planets sit in one system — a gate between them bridges nothing."
+			"same_system": "Both planets sit in one system — a gate between them bridges nothing.",
+			"unreachable_range": "Those planets are more than 25 parsecs apart — no gate can link them, however upgraded."
 		},
 		"empty": "No planned gates yet. Add one you saw going up in-game, or one you wish someone would build, and see what it would save.",
-		"planning_warning": "{count} planned gate(s) are switched on: distances, lanes and chains are being routed over gates that do not exist yet. Switch them off for the numbers you can fly today."
+		"planning_warning": "{count} planned gate(s) are switched on: distances, lanes and chains are being routed over gates that do not exist yet. Switch them off for the numbers you can fly today.",
+		"upgrades": "Upgrades",
+		"range": "Linking Range",
+		"track": {
+			"capacity": "Uses",
+			"volume": "Volume",
+			"range": "Range"
+		},
+		"budget_left": "{left} of {total} upgrade levels left",
+		"build_cost": "Build ȼ",
+		"build_cost_tooltip": "Both ends of the link at today's exchange prices — a gate is bought TWICE, one at each end, and this is the pair. The bill is dominated by a few enormous positions ({materials}), and those are thin markets: this is what the exchange says today, not what actually buying that much would cost.",
+		"cost_note": "Build ȼ counts BOTH ends of every link — a gate is two gates. A gate holds {budget} upgrade levels in total across uses, volume and range, so every level of range is a level of clearance not bought. Upgrade cost is triangular: the n-th level costs n times the first, so the third level of an upgrade costs three times what the first one did.",
+		"rollup_build": "Build ȼ, every planned link",
+		"out_of_range_tag": "Out of Range"
 	},
 	"oversub_report": {
 		"title": "Oversubscription",

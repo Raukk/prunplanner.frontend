@@ -2,16 +2,32 @@
 // user watched go up in the game and wants to route over before it opens,
 // or one nobody is building and the user wants to know the worth of.
 //
-// A planned gate is a WHAT-IF and nothing else. It carries no upgrade
-// levels, no jump capacity and no age — those are transcription facts of
-// a real gate — and both of its sides are assumed identical: the user
-// states one fee and one volume clearance, since nobody planning a gate
-// knows which side will end up the narrower one. Currencies are not
-// modelled at all, the four trade ~1:1 and the cost math treats them as
-// one unit (shipping-decisions.md round 8).
+// A planned gate is a WHAT-IF, but not a free one: it is specified the
+// way the game specifies a gate, by its three upgrade tracks, and what
+// those buy it — clearance, linking range, traversals a day — comes from
+// the transcribed GTWI panel in `gateCosts.ts` rather than from a number
+// the user is free to type. Both of its ends are assumed identical, since
+// nobody planning a link knows which side will end up the narrower one,
+// and the fee is the one thing the user does state: the operator sets it.
+// Currencies are not modelled at all, the four trade ~1:1 and the cost
+// math treats them as one unit (shipping-decisions.md round 8).
+//
+// The hard constraint that falls out of the panel is LINKING RANGE: a
+// gate reaches 10 parsecs, 5 more per range upgrade, and a gap wider than
+// that is not an expensive gate but an impossible one.
 //
 // Pure functions over plain data, like the rest of the calculation layer:
 // no store, no Vue, no price fetching. The routing surface is injected.
+
+// Calculations
+import {
+	IRaukkGateSpecs,
+	IRaukkGateUpgrades,
+	RAUKK_GATE_NO_UPGRADES,
+	RAUKK_GATE_UPGRADE_CAPS,
+	raukkGateSpecs,
+	raukkGateUpgradeLevel,
+} from "@/features/raukk_sourcing/calculations/gateCosts";
 
 // Types & Interfaces
 import {
@@ -34,18 +50,6 @@ import { RAUKK_STOP_REF } from "@/features/raukk_sourcing/calculations/shippingC
  * @author raukk
  */
 export const RAUKK_HCB_HULL_M3: number = 5825;
-
-/**
- * Volume clearance a planned gate gets when the user states none.
- *
- * The commonest clearance of the transcribed network: 10 of its 17 links
- * stop at 3,000 m³. Planning a gate that turns out narrower is a nastier
- * surprise than planning one that turns out wider, so the default is the
- * modest one rather than the generous one.
- *
- * @author raukk
- */
-export const RAUKK_PLANNED_GATE_DEFAULT_M3: number = 3000;
 
 /**
  * Traversal fee a planned gate gets when the user states none.
@@ -88,13 +92,75 @@ export interface IRaukkPlannedGate {
 	planetB: RAUKK_STOP_REF;
 	/** Usage fee ONE traversal pays, ȼ, same on both sides */
 	fee: number;
-	/** Ship volume the link would admit, m³, same on both sides */
-	maxM3: number;
+	/** Capacity upgrade levels of EACH end, 0 to 5 */
+	capacityUpgrades: number;
+	/** Volume upgrade levels of each end, 0 to 3 — sets the clearance */
+	volumeUpgrades: number;
+	/** Range upgrade levels of each end, 0 to 3 — sets how far it links */
+	rangeUpgrades: number;
 	/** Fed into the route graph while on */
 	enabled: boolean;
 	status: RAUKK_PLANNED_GATE_STATUS;
 	/** Free text, e.g. an ETA or who is building it */
 	note?: string;
+	/**
+	 * Clearance as a bare number, m³.
+	 *
+	 * The shape the very first version of this tool persisted, before the
+	 * GTWI transcription made clear that a gate's clearance is not free
+	 * to choose — it is 1,500 m³ plus 1,500 per volume upgrade. Read only
+	 * when the upgrade levels are absent, which is exactly the blob that
+	 * version wrote; nothing writes it any more.
+	 */
+	maxM3?: number;
+}
+
+/**
+ * Upgrade levels of one planned gate, clamped to what the game allows.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkPlannedGate} gate Planned gate
+ * @returns {IRaukkGateUpgrades} Upgrade levels
+ */
+export function raukkPlannedGateUpgrades(
+	gate: IRaukkPlannedGate
+): IRaukkGateUpgrades {
+	return {
+		capacity: raukkGateUpgradeLevel("capacity", gate.capacityUpgrades ?? 0),
+		volume: raukkGateUpgradeLevel("volume", gate.volumeUpgrades ?? 0),
+		range: raukkGateUpgradeLevel("range", gate.rangeUpgrades ?? 0),
+	};
+}
+
+/**
+ * Specifications a planned gate would have once built.
+ *
+ * Falls back to the legacy `maxM3` for the clearance alone, and only
+ * when the upgrade levels are absent entirely: a gate stored by the
+ * pre-transcription version knew a clearance and nothing else.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkPlannedGate} gate Planned gate
+ * @returns {IRaukkGateSpecs} Specifications
+ */
+export function raukkPlannedGateSpecs(
+	gate: IRaukkPlannedGate
+): IRaukkGateSpecs {
+	const specs: IRaukkGateSpecs = raukkGateSpecs(
+		raukkPlannedGateUpgrades(gate)
+	);
+
+	if (
+		gate.volumeUpgrades === undefined &&
+		gate.maxM3 !== undefined &&
+		Number.isFinite(gate.maxM3)
+	) {
+		specs.maxShipVolumeM3 = Math.max(gate.maxM3, 0);
+	}
+
+	return specs;
 }
 
 /**
@@ -111,7 +177,9 @@ export type RAUKK_PLANNED_GATE_ISSUE =
 	| "no_endpoints"
 	| "unknown_a"
 	| "unknown_b"
-	| "same_system";
+	| "same_system"
+	| "out_of_range"
+	| "unreachable_range";
 
 /** What one planned gate would be worth, measured against today */
 export interface IRaukkPlannedGateValue {
@@ -141,6 +209,15 @@ export interface IRaukkPlannedGateValue {
 	unreachableToday: boolean;
 	/** The link would clear an HCB */
 	hcbCapable: boolean;
+	/** Ship volume the link would admit, m³ */
+	maxM3: number;
+	/** How far each end could link at its range upgrades, parsecs */
+	linkingRangeParsecs: number;
+	/**
+	 * Range upgrades the gap needs, null when even a fully upgraded gate
+	 * cannot reach. `0` means the base gate already spans it.
+	 */
+	rangeUpgradesNeeded: number | null;
 }
 
 /**
@@ -196,7 +273,7 @@ function plannedSide(id: string, fee: number, maxM3: number): IRaukkGateSide {
  */
 export function raukkPlannedGateLink(gate: IRaukkPlannedGate): IRaukkGateLink {
 	const fee: number = Math.max(gate.fee, 0);
-	const maxM3: number = Math.max(gate.maxM3, 0);
+	const maxM3: number = raukkPlannedGateSpecs(gate).maxShipVolumeM3;
 	const label: string = raukkPlannedGateLabel(gate);
 
 	return {
@@ -284,7 +361,8 @@ export function raukkPlannedGateValue(
 	routes: IRaukkRouteDistance,
 	options: Partial<IRaukkRouteTimeOptions> = {}
 ): IRaukkPlannedGateValue {
-	const maxM3: number = Math.max(gate.maxM3, 0);
+	const specs: IRaukkGateSpecs = raukkPlannedGateSpecs(gate);
+	const maxM3: number = specs.maxShipVolumeM3;
 
 	const blank: IRaukkPlannedGateValue = {
 		gateId: gate.id,
@@ -300,6 +378,9 @@ export function raukkPlannedGateValue(
 		savedShare: 0,
 		unreachableToday: false,
 		hcbCapable: maxM3 >= RAUKK_HCB_HULL_M3,
+		maxM3,
+		linkingRangeParsecs: specs.linkingRangeParsecs,
+		rangeUpgradesNeeded: 0,
 	};
 
 	if (gate.planetA.trim() === "" || gate.planetB.trim() === "")
@@ -309,8 +390,7 @@ export function raukkPlannedGateValue(
 	const systemIdB: string | null = routes.resolveSystemId(gate.planetB);
 
 	if (systemIdA === null) return { ...blank, issue: "unknown_a" };
-	if (systemIdB === null)
-		return { ...blank, systemIdA, issue: "unknown_b" };
+	if (systemIdB === null) return { ...blank, systemIdA, issue: "unknown_b" };
 	if (systemIdA === systemIdB)
 		return { ...blank, systemIdA, systemIdB, issue: "same_system" };
 
@@ -319,23 +399,51 @@ export function raukkPlannedGateValue(
 
 	if (parsecs === null) return { ...blank, systemIdA, systemIdB };
 
+	/*
+	 * A gate only links as far as its LINKING RANGE, and that range is
+	 * measured in exactly these parsecs — the GTWI "Reachable Systems"
+	 * distances match this straight line to three decimals. A gap wider
+	 * than the range is not an expensive gate, it is no gate at all, so
+	 * it is reported as an issue rather than as a slow route.
+	 */
+	const rangeUpgradesNeeded: number | null =
+		raukkPlannedGateRangeUpgrades(parsecs);
+
 	const traversalMinutes: number = raukkPlannedGateTraversalMinutes(
 		parsecs,
 		options
 	);
+
+	if (parsecs > specs.linkingRangeParsecs) {
+		return {
+			...blank,
+			systemIdA,
+			systemIdB,
+			parsecs,
+			traversalMinutes,
+			rangeUpgradesNeeded,
+			issue:
+				rangeUpgradesNeeded === null
+					? "unreachable_range"
+					: "out_of_range",
+		};
+	}
 
 	/*
 	 * Today's best, planned gates barred. `shipVolumeM3` is the planned
 	 * clearance so both sides of the comparison fly one hull; a gate
 	 * without a stated clearance asks for the network any ship may use.
 	 */
-	const today: IRaukkMultiModalPath | null | undefined =
-		routes.fastestPath?.(systemIdA, systemIdB, {
+	const today: IRaukkMultiModalPath | null | undefined = routes.fastestPath?.(
+		systemIdA,
+		systemIdB,
+		{
 			...options,
 			usePlannedGates: false,
 			gatesOnly: false,
 			shipVolumeM3: maxM3,
-		});
+		}
+	);
 
 	const todayMinutes: number | null = today?.minutes ?? null;
 
@@ -365,5 +473,31 @@ export function raukkPlannedGateValue(
 		plannedMinutes,
 		savedMinutes,
 		savedShare: todayMinutes > 0 ? savedMinutes / todayMinutes : 0,
+		rangeUpgradesNeeded,
 	};
+}
+
+/**
+ * Fewest range upgrades a gap of that width needs.
+ *
+ * `0` when the base gate already spans it, `null` when even a fully
+ * upgraded gate does not reach — no amount of building bridges that gap,
+ * which is a planning answer in its own right.
+ *
+ * @author raukk
+ *
+ * @param {number} parsecs Gap the gate would bridge
+ * @returns {(number | null)} Range upgrade levels, null if out of reach
+ */
+export function raukkPlannedGateRangeUpgrades(parsecs: number): number | null {
+	for (let level = 0; level <= RAUKK_GATE_UPGRADE_CAPS.range; level++) {
+		if (
+			parsecs <=
+			raukkGateSpecs({ ...RAUKK_GATE_NO_UPGRADES, range: level })
+				.linkingRangeParsecs
+		)
+			return level;
+	}
+
+	return null;
 }

@@ -25,8 +25,14 @@ const i18n = createI18n({
 	messages: { en_US: { common, raukk_sourcing } },
 });
 
-/** Two planets the bundled systems JSON really carries, far apart */
+/**
+ * Planets the bundled systems JSON really carries.
+ *
+ * `HEPH` to `FAR` is 12.88 parsecs, which a gate reaches with one range
+ * upgrade; `MONTEM` is 56 parsecs from `HEPH`, past what any gate links.
+ */
 const HEPH: string = "ZV-307c";
+const FAR: string = "IA-335b";
 const MONTEM: string = "OT-580b";
 
 function render(): VueWrapper {
@@ -87,7 +93,7 @@ describe("Raukk Sourcing: RaukkGateSection", () => {
 	it("adds a switched OFF gate once both ends are entered", async () => {
 		const wrapper: VueWrapper = render();
 
-		await typeLink(wrapper, ` ${HEPH} `, MONTEM);
+		await typeLink(wrapper, ` ${HEPH} `, FAR);
 
 		expect(addButton(wrapper).props("disabled")).toBe(false);
 
@@ -98,9 +104,11 @@ describe("Raukk Sourcing: RaukkGateSection", () => {
 		expect(gates).toHaveLength(1);
 		expect(gates[0]).toMatchObject({
 			planetA: HEPH,
-			planetB: MONTEM,
+			planetB: FAR,
 			enabled: false,
 			status: "proposed",
+			// the add form buys the range the gap actually needs
+			rangeUpgrades: 1,
 		});
 		// nothing may be routed over it before the user says so
 		expect(wrapper.text()).not.toContain("are switched on");
@@ -108,7 +116,7 @@ describe("Raukk Sourcing: RaukkGateSection", () => {
 
 	it("warns about planets no system carries, without refusing them", async () => {
 		const wrapper: VueWrapper = render();
-		await typeLink(wrapper, "NOWHERE-9z", MONTEM);
+		await typeLink(wrapper, "NOWHERE-9z", FAR);
 
 		expect(addButton(wrapper).props("disabled")).toBe(false);
 		expect(wrapper.text()).toContain("would route nothing");
@@ -122,19 +130,44 @@ describe("Raukk Sourcing: RaukkGateSection", () => {
 	});
 
 	it("states what a planned gate would save", () => {
-		store.setPlannedGate("g1", { planetA: MONTEM, planetB: "IA-158b" });
+		store.setPlannedGate("g1", {
+			planetA: HEPH,
+			planetB: FAR,
+			rangeUpgrades: 1,
+		});
 
 		const text: string = render().text();
 
-		// NC1 straight to Amethyst, which no transcribed gate spans
+		// a 12.9 pc hop against a seventeen hour FTL detour
 		expect(text).toContain("%)");
 		expect(text).not.toContain("Unroutable");
+	});
+
+	it("refuses a gap no gate can link, before it is even added", async () => {
+		const wrapper: VueWrapper = render();
+		await typeLink(wrapper, HEPH, MONTEM);
+
+		expect(wrapper.text()).toContain("no gate can link them");
+	});
+
+	it("tags a gate whose range falls short of its own gap", () => {
+		store.setPlannedGate("g1", {
+			planetA: HEPH,
+			planetB: FAR,
+			rangeUpgrades: 0,
+		});
+
+		expect(render().text()).toContain("Out of Range");
 	});
 
 	it("says a gate saves nothing when a real one already spans it", () => {
 		// the transcribed Antares corridor admits 6,000 m³, so a 3,000 m³
 		// planned link over the same pair adds exactly nothing
-		store.setPlannedGate("g1", { planetA: HEPH, planetB: "IA-158b" });
+		store.setPlannedGate("g1", {
+			planetA: HEPH,
+			planetB: "IA-158b",
+			rangeUpgrades: 2,
+		});
 
 		const wrapper: VueWrapper = render();
 
@@ -143,7 +176,7 @@ describe("Raukk Sourcing: RaukkGateSection", () => {
 	});
 
 	it("tags a gate the route index cannot place and bars planning it", () => {
-		store.setPlannedGate("g1", { planetA: "NOWHERE-9z", planetB: MONTEM });
+		store.setPlannedGate("g1", { planetA: "NOWHERE-9z", planetB: FAR });
 
 		const wrapper: VueWrapper = render();
 
@@ -154,7 +187,8 @@ describe("Raukk Sourcing: RaukkGateSection", () => {
 	it("warns while gates are switched on, and routes over them", async () => {
 		store.setPlannedGate("g1", {
 			planetA: HEPH,
-			planetB: MONTEM,
+			planetB: FAR,
+			rangeUpgrades: 1,
 			enabled: true,
 		});
 
@@ -171,7 +205,7 @@ describe("Raukk Sourcing: RaukkGateSection", () => {
 	});
 
 	it("removes a gate", async () => {
-		store.setPlannedGate("g1", { planetA: HEPH, planetB: MONTEM });
+		store.setPlannedGate("g1", { planetA: HEPH, planetB: FAR });
 
 		const wrapper: VueWrapper = render();
 

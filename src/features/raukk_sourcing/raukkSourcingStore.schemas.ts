@@ -205,7 +205,13 @@ export const RaukkPlannedGateSchema = z.object({
 	planetA: z.string().min(1),
 	planetB: z.string().min(1),
 	fee: z.number().nonnegative().default(4000),
-	maxM3: z.number().nonnegative().default(3000),
+	// raukk: upgrade levels of EACH end, capped as the game caps them.
+	// They replace the free-form clearance the first version stored, which
+	// stays readable as an optional legacy field
+	capacityUpgrades: z.number().int().min(0).max(5).default(0),
+	volumeUpgrades: z.number().int().min(0).max(3).default(0),
+	rangeUpgrades: z.number().int().min(0).max(3).default(0),
+	maxM3: z.number().nonnegative().optional(),
 	enabled: z.boolean().default(false),
 	status: z.enum(["construction", "proposed"]).default("proposed"),
 	note: z.string().optional(),
