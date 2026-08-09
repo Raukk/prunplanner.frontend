@@ -8,6 +8,7 @@ import {
 	raukkHullLoads,
 	raukkLegDensity,
 	raukkPickHull,
+	raukkSmallestCandidate,
 } from "@/features/raukk_sourcing/calculations/shippingHull";
 
 // Types & Interfaces
@@ -227,6 +228,34 @@ describe("Raukk Sourcing: Shipping Hull Selection", () => {
 
 			expect(pick.candidate.shipTypeId).toBe(WCB.shipTypeId);
 			expect(pick.tripsPerDay).toBeCloseTo(0.5, 10);
+		});
+	});
+
+	describe("raukkSmallestCandidate", () => {
+		it("takes the smallest hold of the list", () => {
+			expect(raukkSmallestCandidate(ALL)?.shipTypeId).toBe(
+				SCB.shipTypeId
+			);
+		});
+
+		it("does not depend on the order the candidates arrive in", () => {
+			expect(
+				raukkSmallestCandidate([HCB, WCB, MCB, SCB])?.shipTypeId
+			).toBe(raukkSmallestCandidate([SCB, MCB, WCB, HCB])?.shipTypeId);
+		});
+
+		it("breaks a tied hold by weight, then by id", () => {
+			// same 3,000,000 hold, the lighter one carries less tonnage
+			const wide: IRaukkHullCandidate = hull(1000, 3000);
+			const heavy: IRaukkHullCandidate = hull(3000, 1000);
+
+			expect(
+				raukkSmallestCandidate([heavy, wide])?.shipTypeId
+			).toBe(wide.shipTypeId);
+		});
+
+		it("has nothing to answer for an empty list", () => {
+			expect(raukkSmallestCandidate([])).toBeNull();
 		});
 	});
 });

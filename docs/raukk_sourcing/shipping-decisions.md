@@ -706,6 +706,46 @@ built, and a rented warehouse runs a few thousand ȼ per week for ~10 kt.
 Cargo merely flowing through needs none. The field stays, defaulting to
 zero; it is not a number worth agonising over.
 
+## Round 23 (a zero-hull type keeps its routes)
+
+Bug report: SCB set to 0 ships kept 11 routes and "Recompute Chains"
+changed nothing (2026-08-09, user, fleet table).
+
+1. **The pick was right, the DISPLAY was stale**: the fleet rollup
+   reads stored snapshot lanes and stored chain results, and
+   `setFleetShip` stales them all when a count crosses zero — but
+   staling moves nothing. Lanes only change hull when their plan's
+   snapshot is recomputed, which happens on PlanView/EmpireView, not
+   on the Shipping page; "Recompute Chains" re-costs chains from the
+   stored snapshot flows and never touches a lane. So the table was
+   faithfully reporting the last compute.
+2. **The table says so now**: each fleet load entry carries the
+   `stale` flag of the result it came from, the rollup collects them
+   per type (`staleKeys`), and the Routes cell tags a row holding
+   any. A row nobody can explain is worse than a slow recompute.
+3. **The page carries its own recompute**: "Recompute Snapshots"
+   recomputes every stale snapshot of the operated plans upstream
+   first and then re-costs the chains, in that order because a chain
+   is costed FROM the snapshot flows. Scope is `scopedSnapshots()`,
+   the same set the fleet rolls up, and only the stale ones — a
+   current snapshot gains nothing from being recomputed. The pass
+   logic is the empire upkeep's, cap included.
+4. **The fallback stops naming an unowned hull**: a pick with nothing
+   to choose from — every owned hull filtered out as STL only on a
+   leg no gate serves — fell back to `defaultProfileId`, which is the
+   SCB starter, so work could be assigned to a hull the account owns
+   none of and draw a fleet row with zero capacity. Both the lane and
+   the chain path now fall back to the smallest OWNED hull
+   (`raukkSmallestCandidate`); only a fleet without a single hull
+   still reaches the default, which is the starter assumption and
+   deliberate. Smallest, not best-fitting: a fallback places work the
+   heuristic could not, and the cheapest hull to fly is the
+   conservative answer.
+5. **Manual assignments still win outright**: none of this touches
+   `assignments[key]`. A user who picked SCB by hand keeps SCB at
+   zero hulls — the assignment is an answer, not a guess, and the
+   utilization row states the consequence.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,

@@ -179,6 +179,63 @@ describe("Raukk Shipping: Fleet", () => {
 			expect(rows[0].shipMinutesPerDay).toBe(0);
 		});
 
+		it("lists the stale work of a type separately", () => {
+			const rows = raukkFleetUtilization({ WCB: { count: 1 } }, [
+				{
+					key: "a>CX",
+					shipTypeId: "WCB",
+					tripsPerDay: 1,
+					roundTripMinutes: 100,
+					stale: true,
+				},
+				{
+					key: "b>CX",
+					shipTypeId: "WCB",
+					tripsPerDay: 1,
+					roundTripMinutes: 100,
+				},
+			]);
+
+			expect(rows[0].keys).toStrictEqual(["a>CX", "b>CX"]);
+			expect(rows[0].staleKeys).toStrictEqual(["a>CX"]);
+		});
+
+		it("dedupes the stale keys like the assigned ones", () => {
+			// one lane contributes one entry per leg, all of them stale
+			const rows = raukkFleetUtilization({ WCB: { count: 1 } }, [
+				{
+					key: "a>CX",
+					shipTypeId: "WCB",
+					tripsPerDay: 1,
+					roundTripMinutes: 100,
+					stale: true,
+				},
+				{
+					key: "a>CX",
+					shipTypeId: "WCB",
+					tripsPerDay: 1,
+					roundTripMinutes: 50,
+					stale: true,
+				},
+			]);
+
+			expect(rows[0].keys).toStrictEqual(["a>CX"]);
+			expect(rows[0].staleKeys).toStrictEqual(["a>CX"]);
+		});
+
+		it("holds no stale work without a stale result", () => {
+			const rows = raukkFleetUtilization({ WCB: { count: 1 } }, [
+				{
+					key: "a>CX",
+					shipTypeId: "WCB",
+					tripsPerDay: 1,
+					roundTripMinutes: 100,
+				},
+			]);
+
+			expect(rows[0].staleKeys).toStrictEqual([]);
+		});
+
 		it("sums the assigned wear per ship type", () => {
 			const rows = raukkFleetUtilization({ WCB: { count: 2 } }, [
 				{

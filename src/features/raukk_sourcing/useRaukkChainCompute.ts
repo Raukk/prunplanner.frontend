@@ -35,7 +35,10 @@ import {
 	raukkChainAssignmentKey,
 	raukkOwnedHullCandidates,
 } from "@/features/raukk_sourcing/calculations/shippingFleet";
-import { raukkPickHull } from "@/features/raukk_sourcing/calculations/shippingHull";
+import {
+	raukkPickHull,
+	raukkSmallestCandidate,
+} from "@/features/raukk_sourcing/calculations/shippingHull";
 import { raukkCxAnchorCode } from "@/features/raukk_sourcing/calculations/shippingFlows";
 import {
 	RAUKK_DEFAULT_CADENCE_REPAIR_DAYS,
@@ -654,9 +657,20 @@ async function computeOneAutoChain(
 					autoChain.capDays
 				);
 
+	/*
+	 * Nothing to choose from — every owned hull filtered out as non-FTL
+	 * on a loop no gate serves or no depot bases — falls back to the
+	 * smallest OWNED hull.
+	 * The account default is a hull the fleet may own none of, and
+	 * assigning work to it draws a fleet row with a capacity of zero;
+	 * only a fleet without a single hull reaches the default.
+	 */
 	const profileId: string =
 		manual ??
 		owned?.candidate.shipTypeId ??
+		raukkSmallestCandidate(
+			raukkOwnedHullCandidates(sourcingStore.fleet, candidateOf)
+		)?.shipTypeId ??
 		shippingConfig.defaultProfileId;
 
 	const ideal: IRaukkHullPick | null =
