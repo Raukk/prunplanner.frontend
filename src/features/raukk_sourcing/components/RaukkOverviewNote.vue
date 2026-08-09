@@ -11,6 +11,13 @@
 	// Stores
 	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
+	// Calculations
+	import {
+		IRaukkShipTimeEntry,
+		raukkShipTimeByType,
+	} from "@/features/raukk_sourcing/calculations/shippingCadenceDisplay";
+	import { raukkShipTypeLabel } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
+
 	// Util
 	import { formatNumber } from "@/util/numbers";
 	import { formatDate } from "@/util/date";
@@ -123,6 +130,18 @@
 		return localProfitPerDay.value / baseFraction;
 	});
 
+	/**
+	 * Ship time per hull type of the plans own lanes, busiest first.
+	 * Empty while shipping is off, on pre-shipping snapshots and when
+	 * every lane is hired — the note then renders no ship time line.
+	 * @author raukk
+	 */
+	const localShipTime: ComputedRef<IRaukkShipTimeEntry[]> = computed(() =>
+		localSnapshot.value?.lanes
+			? raukkShipTimeByType(localSnapshot.value.lanes)
+			: []
+	);
+
 	const localIsStale: ComputedRef<boolean> = computed(
 		() => localSnapshot.value?.stale === true
 	);
@@ -168,6 +187,21 @@
 							baseFraction: formatNumber(
 								localSnapshot!.baseFraction!
 							),
+						})
+					}}
+				</div>
+				<div
+					v-for="entry in localShipTime"
+					:key="entry.shipTypeId">
+					{{
+						$t("raukk_overview.line_ship_time", {
+							ship: raukkShipTypeLabel(entry.shipTypeId),
+							perTrip: formatNumber(entry.hoursPerTrip),
+							visitDays:
+								entry.visitDays === null
+									? "—"
+									: formatNumber(entry.visitDays),
+							perDay: formatNumber(entry.hoursPerDay),
 						})
 					}}
 				</div>

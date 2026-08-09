@@ -132,6 +132,28 @@ export function raukkBayCode(
 }
 
 /**
+ * Compact label of a ship type id, for surfaces that only carry the id.
+ *
+ * A ship type id is `${cargoWeight}x${cargoVolume}-${ftlReactor}`
+ * (`raukkShipProfileId`), so the hull key is everything before the first
+ * dash — the reactor flag may contain dashes itself, the hull key never
+ * does. A preset hull reads as its in-game bay code ("WCB"), anything
+ * else falls back to the raw hull key ("1500x1500").
+ *
+ * @author raukk
+ *
+ * @param {string} shipTypeId Ship type id
+ * @returns {string} Bay code, or the hull key where none exists
+ */
+export function raukkShipTypeLabel(shipTypeId: string): string {
+	const separator: number = shipTypeId.indexOf("-");
+	const hullKey: string =
+		separator < 0 ? shipTypeId : shipTypeId.slice(0, separator);
+
+	return RAUKK_BAY_CODE_BY_HULL[hullKey] ?? hullKey;
+}
+
+/**
  * Every hull times reactor flag, as the add row offers them.
  *
  * @author raukk

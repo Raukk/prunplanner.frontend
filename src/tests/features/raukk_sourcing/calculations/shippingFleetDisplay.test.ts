@@ -6,6 +6,7 @@ import {
 	raukkFleetAdvisoryRows,
 	raukkFleetRows,
 	raukkFleetSpilloverRows,
+	raukkShipTypeLabel,
 	raukkShipTypeOptions,
 	raukkSpilloverBarWidths,
 	raukkUtilizationBarWidth,
@@ -50,6 +51,25 @@ describe("Raukk Shipping: Fleet Display", () => {
 
 		it("has no code for a hull the game does not ship", () => {
 			expect(raukkBayCode(250, 250)).toBeUndefined();
+		});
+	});
+
+	describe("raukkShipTypeLabel", () => {
+		it("labels a preset hull with its bay code, either reactor", () => {
+			expect(raukkShipTypeLabel("3000x1000-standard")).toBe("WCB");
+			expect(raukkShipTypeLabel("5000x5000-quick-charge")).toBe("HCB");
+		});
+
+		it("falls back to the hull key of an off-preset hull", () => {
+			expect(raukkShipTypeLabel("1500x1500-standard")).toBe("1500x1500");
+			expect(raukkShipTypeLabel("1500x1500-quick-charge")).toBe(
+				"1500x1500"
+			);
+		});
+
+		it("passes an id without a reactor part through unchanged", () => {
+			expect(raukkShipTypeLabel("3000x1000")).toBe("WCB");
+			expect(raukkShipTypeLabel("mystery")).toBe("mystery");
 		});
 	});
 

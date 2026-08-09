@@ -214,7 +214,10 @@ other stores. Shape (indicative):
      the snapshot's `baseFraction` as "Per base: X ȼ/d (BF 1.85)" —
      the profit normalized to one base permit, comparable across
      plans regardless of how much upstream base capacity the product
-     chain occupies.
+     chain occupies. With shipping enabled, one ship time line per
+     hull type from the snapshot's `lanes` — "Ship time WCB:
+     16.00 h/trip · every 4.00 d · 4.00 h/d" — summing the plan's own
+     (non-hired) lane legs, busiest hull first.
 
 ## Conventions
 

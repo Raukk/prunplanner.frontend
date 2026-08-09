@@ -3,8 +3,26 @@ import { describe, it, expect } from "vitest";
 // Calculations
 import {
 	RAUKK_CADENCE_RATE_MIN_TRIPS,
+	raukkShipTimeByType,
 	raukkVisitCadence,
 } from "@/features/raukk_sourcing/calculations/shippingCadenceDisplay";
+
+// Types & Interfaces
+import { IRaukkSnapshotLane } from "@/features/raukk_sourcing/raukkSourcing.types";
+
+/**
+ * Lane leg fixture with the fields the ship time rollup reads.
+ */
+function lane(overrides: Partial<IRaukkSnapshotLane>): IRaukkSnapshotLane {
+	return {
+		pairKey: "plan>CX",
+		shipTypeId: "3000x1000-standard",
+		tripsPerDay: 0.25,
+		roundTripMinutes: 960,
+		hired: false,
+		...overrides,
+	};
+}
 
 describe("Raukk Shipping: Cadence Display", () => {
 	describe("raukkVisitCadence", () => {
@@ -97,6 +115,71 @@ describe("Raukk Shipping: Cadence Display", () => {
 
 		it("keeps the rate of the fortnightly in/out default", () => {
 			expect(raukkVisitCadence(1 / 14).showRate).toBe(true);
+		});
+	});
+
+	describe("raukkShipTimeByType", () => {
+		it("states one hull flying one lane: 16 h trips every 4 days", () => {
+			const entries = raukkShipTimeByType([
+				lane({ tripsPerDay: 0.25, roundTripMinutes: 960 }),
+			]);
+
+			expect(entries).toHaveLength(1);
+			expect(entries[0].shipTypeId).toBe("3000x1000-standard");
+			expect(entries[0].hoursPerTrip).toBeCloseTo(16, 10);
+			expect(entries[0].tripsPerDay).toBeCloseTo(0.25, 10);
+			expect(entries[0].visitDays).toBeCloseTo(4, 10);
+			expect(entries[0].hoursPerDay).toBeCloseTo(4, 10);
+		});
+
+		it("sums the lanes of one hull, trips weighting the mean trip", () => {
+			const entries = raukkShipTimeByType([
+				lane({ tripsPerDay: 0.25, roundTripMinutes: 960 }),
+				lane({
+					pairKey: "plan>source",
+					tripsPerDay: 0.75,
+					roundTripMinutes: 120,
+				}),
+			]);
+
+			expect(entries).toHaveLength(1);
+			// (0.25 × 960 + 0.75 × 120) / 1 trip = 330 min = 5.5 h
+			expect(entries[0].hoursPerTrip).toBeCloseTo(5.5, 10);
+			expect(entries[0].tripsPerDay).toBeCloseTo(1, 10);
+			expect(entries[0].visitDays).toBeCloseTo(1, 10);
+			expect(entries[0].hoursPerDay).toBeCloseTo(5.5, 10);
+		});
+
+		it("keeps hull types apart and orders them busiest first", () => {
+			const entries = raukkShipTimeByType([
+				lane({
+					shipTypeId: "500x500-standard",
+					tripsPerDay: 1,
+					roundTripMinutes: 60,
+				}),
+				lane({ tripsPerDay: 0.25, roundTripMinutes: 960 }),
+			]);
+
+			expect(entries.map((entry) => entry.shipTypeId)).toStrictEqual([
+				"3000x1000-standard",
+				"500x500-standard",
+			]);
+		});
+
+		it("skips hired legs: the operator flies its own ships", () => {
+			expect(
+				raukkShipTimeByType([lane({ hired: true })])
+			).toStrictEqual([]);
+		});
+
+		it("skips legs moving nothing", () => {
+			expect(
+				raukkShipTimeByType([lane({ tripsPerDay: 0 })])
+			).toStrictEqual([]);
+		});
+
+		it("has no entries without any lanes", () => {
+			expect(raukkShipTimeByType([])).toStrictEqual([]);
 		});
 	});
 });
