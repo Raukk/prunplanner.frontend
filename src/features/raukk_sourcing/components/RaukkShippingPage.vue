@@ -225,7 +225,7 @@
 
 <template>
 	<h2 class="pb-3 text-white/80 font-bold text-lg">
-		{{ $t("raukk_sourcing.shipping_page.view_title") }}
+		{{ $t("raukk_sourcing.shipping.title") }}
 	</h2>
 	<div class="text-white/50 pb-3">
 		{{ $t("raukk_sourcing.shipping_page.info") }}
