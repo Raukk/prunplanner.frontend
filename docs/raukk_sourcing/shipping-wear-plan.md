@@ -6,6 +6,11 @@ the phases that turn the already-computed numbers into a visible ship
 wear system: repair cost per trip/day, and trips (and days) a ship can
 fly before it needs a drydock visit.
 
+Status: Phases A and B are IMPLEMENTED (`shippingWear.ts`, wear
+columns on the hired-transport table, the chain detail wear line, the
+fleet drydock column, `damagePerTrip`/`damagePerDay` persisted on
+snapshot lanes and chain results). Phases C and D remain open.
+
 Related docs: shipping-calibration.md (damage law, §6 and §8),
 shipping-chains-v2.md (per-system damage weighting),
 shipping-plan.md / shipping-cadence-plan.md (lane model),

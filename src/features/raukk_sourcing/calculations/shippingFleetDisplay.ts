@@ -5,11 +5,13 @@
 // and everything testable lives here.
 
 // Calculations
+import { RAUKK_REPAIR_AT_DAMAGE } from "@/features/raukk_sourcing/calculations/shipping";
 import {
 	RAUKK_FTL_REACTORS,
 	RAUKK_SHIP_HULLS,
 	raukkShipProfileId,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import { raukkDaysUntilRepair } from "@/features/raukk_sourcing/calculations/shippingWear";
 import {
 	RAUKK_EPSILON_EQUAL,
 	raukkEqualWithin,
@@ -85,6 +87,28 @@ export interface IRaukkFleetRow {
 	over: boolean;
 	/** Number of lanes and chains assigned to this type */
 	assignedCount: number;
+	/**
+	 * True while at least one stored result of this type predates the
+	 * wear rollup: the wear is UNKNOWN then, never zero, and the row says
+	 * so instead of promising an eternity between repairs.
+	 */
+	wearUnknown: boolean;
+	/**
+	 * Days one hull of this type flies between two repairs, the work
+	 * spread over the count exactly as the utilization spreads it. Null
+	 * while the wear is unknown, no hull is owned, or nothing assigned
+	 * takes damage — the cell prints an em-dash either way, the tooltip
+	 * tells the cases apart via {@link wearUnknown}.
+	 */
+	drydockDays: number | null;
+	/** Hull damage of one hull per day in PERCENT, null as above */
+	damagePercentPerDay: number | null;
+	/**
+	 * ȼ of wear per day over ALL hulls of the type,
+	 * `(damagePerDay / repair threshold) × bill`. Null while the wear is
+	 * unknown or no bill cost was handed in.
+	 */
+	repairCostPerDay: number | null;
 	/** Spillover overlay, absent with the display off or no hull owned */
 	spill?: IRaukkFleetRowSpill;
 }
@@ -162,18 +186,39 @@ export function raukkShipTypeOptions(): IRaukkShipTypeOption[] {
  * untouched: a held type at count zero has no denominator, and a zero
  * there would read as infinite capacity.
  *
+ * Wear is stated per HULL: the assigned damage per day is spread over
+ * the count — the same denominator the utilization uses — and inverted
+ * into the days one ship flies between two repairs. An unknown wear
+ * (a stored result predating the rollup) stays unknown, never zero.
+ *
  * @author raukk
  *
  * @param {IRaukkFleetUtilization[]} utilization Rollup per ship type
  * @param {(shipTypeId: string) => IRaukkShipProfile} profileOf Profiles
+ * @param {number} repairBillCost ȼ of a full repair bill, 0 unpriced
  * @returns {IRaukkFleetRow[]} Fleet rows
  */
 export function raukkFleetRows(
 	utilization: IRaukkFleetUtilization[],
-	profileOf: (shipTypeId: string) => IRaukkShipProfile
+	profileOf: (shipTypeId: string) => IRaukkShipProfile,
+	repairBillCost: number = 0
 ): IRaukkFleetRow[] {
 	return utilization.map((entry) => {
 		const profile: IRaukkShipProfile = profileOf(entry.shipTypeId);
+
+		const wearUnknown: boolean = entry.damagePerDay === null;
+
+		/** Damage one hull accrues per day, null without a denominator */
+		const damagePerShipPerDay: number | null =
+			entry.damagePerDay === null || entry.count <= 0
+				? null
+				: entry.damagePerDay / entry.count;
+
+		const drydockDays: number | null =
+			damagePerShipPerDay === null ||
+			!Number.isFinite(raukkDaysUntilRepair(damagePerShipPerDay))
+				? null
+				: raukkDaysUntilRepair(damagePerShipPerDay);
 
 		return {
 			shipTypeId: entry.shipTypeId,
@@ -190,6 +235,15 @@ export function raukkFleetRows(
 				entry.utilization !== null &&
 				entry.utilization > 1 + RAUKK_EPSILON_EQUAL,
 			assignedCount: entry.keys.length,
+			wearUnknown,
+			drydockDays,
+			damagePercentPerDay:
+				damagePerShipPerDay === null ? null : damagePerShipPerDay * 100,
+			repairCostPerDay:
+				entry.damagePerDay === null || repairBillCost <= 0
+					? null
+					: (entry.damagePerDay / RAUKK_REPAIR_AT_DAMAGE) *
+						repairBillCost,
 		};
 	});
 }
@@ -355,10 +409,7 @@ export function raukkFleetSpilloverRows(
 		)
 			return row;
 
-		if (
-			entry.spilledOutMinutes > 0 ||
-			entry.residualOverflowMinutes > 0
-		) {
+		if (entry.spilledOutMinutes > 0 || entry.residualOverflowMinutes > 0) {
 			const printedPercent: number =
 				((entry.capacityMinutes + entry.residualOverflowMinutes) /
 					entry.capacityMinutes) *

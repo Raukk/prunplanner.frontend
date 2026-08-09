@@ -612,6 +612,10 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 				10
 			);
 			expect(result.repairCostPerTrip).toBeCloseTo(repair, 10);
+			expect(result.damagePerTrip).toBeCloseTo(damage, 10);
+			expect(
+				result.legs.reduce((sum, leg) => sum + leg.damagePerTrip, 0)
+			).toBeCloseTo(damage, 10);
 			expect(result.dailyCost).toBeCloseTo(
 				result.tripsPerDay * result.costPerTrip,
 				10
@@ -740,6 +744,7 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 			expect(result.hired).toBe(true);
 			expect(result.costPerTrip).toBe(400);
 			expect(result.repairCostPerTrip).toBe(0);
+			expect(result.damagePerTrip).toBe(0);
 			expect(result.shippingFraction).toBe(0);
 			expect(result.dailyCost).toBeCloseTo(0.5 * 400, 10);
 		});

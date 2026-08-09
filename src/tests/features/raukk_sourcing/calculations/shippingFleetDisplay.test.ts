@@ -74,6 +74,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 					designName: "FSE_WCB_QCR",
 					shipMinutesPerDay: 1440,
 					utilization: 0.5,
+					damagePerDay: 0.004,
 					keys: ["a>CX", "chain:c1"],
 				},
 			];
@@ -98,6 +99,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						designName: undefined,
 						shipMinutesPerDay: 1930,
 						utilization: 1.34,
+						damagePerDay: 0,
 						keys: [],
 					},
 				],
@@ -118,6 +120,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						designName: undefined,
 						shipMinutesPerDay: 1444,
 						utilization: 1.005,
+						damagePerDay: 0,
 						keys: [],
 					},
 				],
@@ -138,6 +141,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						designName: undefined,
 						shipMinutesPerDay: 720,
 						utilization: null,
+						damagePerDay: 0.004,
 						keys: ["a>CX"],
 					},
 				],
@@ -147,6 +151,79 @@ describe("Raukk Shipping: Fleet Display", () => {
 			expect(row.utilization).toBeNull();
 			expect(row.utilizationPercent).toBeNull();
 			expect(row.over).toBe(false);
+			// count 0: wear is known but has no hull to land on
+			expect(row.wearUnknown).toBe(false);
+			expect(row.drydockDays).toBeNull();
+		});
+
+		it("states the drydock cadence per hull of the type", () => {
+			const [row] = raukkFleetRows(
+				[
+					{
+						shipTypeId: "3000x1000-standard",
+						count: 2,
+						designName: undefined,
+						shipMinutesPerDay: 1440,
+						utilization: 0.5,
+						// 0.4 % per day over both hulls, 0.2 % each
+						damagePerDay: 0.004,
+						keys: ["a>CX"],
+					},
+				],
+				profileOf,
+				2400
+			);
+
+			expect(row.wearUnknown).toBe(false);
+			expect(row.damagePercentPerDay).toBeCloseTo(0.2, 10);
+			// 0.8 / 0.002
+			expect(row.drydockDays).toBeCloseTo(400, 10);
+			// (0.004 / 0.8) * 2400, over ALL hulls of the type
+			expect(row.repairCostPerDay).toBeCloseTo(12, 10);
+		});
+
+		it("keeps an unknown wear unknown instead of eternal", () => {
+			const [row] = raukkFleetRows(
+				[
+					{
+						shipTypeId: "3000x1000-standard",
+						count: 2,
+						designName: undefined,
+						shipMinutesPerDay: 1440,
+						utilization: 0.5,
+						// a stored result predating the wear rollup
+						damagePerDay: null,
+						keys: ["a>CX"],
+					},
+				],
+				profileOf,
+				2400
+			);
+
+			expect(row.wearUnknown).toBe(true);
+			expect(row.drydockDays).toBeNull();
+			expect(row.damagePercentPerDay).toBeNull();
+			expect(row.repairCostPerDay).toBeNull();
+		});
+
+		it("prices no wear without a repair bill cost", () => {
+			const [row] = raukkFleetRows(
+				[
+					{
+						shipTypeId: "3000x1000-standard",
+						count: 1,
+						designName: undefined,
+						shipMinutesPerDay: 720,
+						utilization: 0.5,
+						damagePerDay: 0.004,
+						keys: ["a>CX"],
+					},
+				],
+				profileOf
+			);
+
+			expect(row.drydockDays).toBeCloseTo(200, 10);
+			expect(row.repairCostPerDay).toBeNull();
 		});
 	});
 

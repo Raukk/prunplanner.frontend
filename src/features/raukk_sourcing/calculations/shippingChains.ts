@@ -706,6 +706,7 @@ function emptyChainShipping(
 		tripsPerDay: 0,
 		costPerTrip: 0,
 		repairCostPerTrip: 0,
+		damagePerTrip: 0,
 		dailyCost: 0,
 		roundTripMinutes: 0,
 		shippingFraction: 0,
@@ -827,8 +828,8 @@ export function calculateChainShipping(
 
 	const hired: boolean = chain.lmRatePerTrip !== undefined;
 
-	/** Own fleet cost per trip, per leg */
-	const legRepair: number[] = legs.map((leg, index) => {
+	/** Hull damage per trip, per leg; a hired chain wears no own hull */
+	const legDamage: number[] = legs.map((leg, index) => {
 		if (hired) return 0;
 
 		const gate: IRaukkGateLegCost | null = pricing[index].gate;
@@ -838,14 +839,18 @@ export function calculateChainShipping(
 		 * shipping-calibration.md section 4 and NO per parsec damage:
 		 * the ship never flies those parsecs, the gate does.
 		 */
-		const damage: number =
+		return (
 			(gate !== null
 				? gate.damage
 				: pricing[index].effectiveParsecs *
-					pricing[index].damagePerParsec) + profile.damagePerStlBlock;
-
-		return (damage / RAUKK_REPAIR_AT_DAMAGE) * repairBillCost;
+					pricing[index].damagePerParsec) + profile.damagePerStlBlock
+		);
 	});
+
+	/** Own fleet repair cost per trip, per leg */
+	const legRepair: number[] = legDamage.map(
+		(damage) => (damage / RAUKK_REPAIR_AT_DAMAGE) * repairBillCost
+	);
 
 	const ownLegCost: number[] = legs.map(
 		(leg, index) =>
@@ -1039,6 +1044,7 @@ export function calculateChainShipping(
 		gate: pricing[index].gate,
 		costPerTrip: legCostPerTrip[index],
 		repairCostPerTrip: legRepair[index],
+		damagePerTrip: legDamage[index],
 		dailyCost: tripsPerDay * legCostPerTrip[index],
 		roundTripMinutes: legMinutes[index],
 	}));
@@ -1049,6 +1055,7 @@ export function calculateChainShipping(
 		tripsPerDay,
 		costPerTrip,
 		repairCostPerTrip: legRepair.reduce((sum, value) => sum + value, 0),
+		damagePerTrip: legDamage.reduce((sum, value) => sum + value, 0),
 		dailyCost,
 		roundTripMinutes,
 		shippingFraction,

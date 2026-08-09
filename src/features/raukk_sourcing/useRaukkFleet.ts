@@ -58,6 +58,12 @@ export function useRaukkFleet() {
 						shipTypeId: lane.shipTypeId,
 						tripsPerDay: lane.tripsPerDay,
 						roundTripMinutes: lane.roundTripMinutes,
+						// a pre wear-rollup snapshot stays undefined, the
+						// rollup reports the types wear as unknown then
+						damagePerDay:
+							lane.damagePerTrip === undefined
+								? undefined
+								: lane.tripsPerDay * lane.damagePerTrip,
 					});
 				})
 		);
@@ -77,6 +83,7 @@ export function useRaukkFleet() {
 					shipTypeId: chain.profileId,
 					tripsPerDay: 1,
 					roundTripMinutes: chain.shipMinutesPerDay,
+					damagePerDay: chain.damagePerDay,
 				});
 			}
 		);

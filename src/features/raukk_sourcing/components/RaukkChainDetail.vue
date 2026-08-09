@@ -19,6 +19,10 @@
 		raukkChainSplitComparison,
 		raukkChainStorageWarnings,
 	} from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
+	import {
+		IRaukkShipWear,
+		raukkWearOf,
+	} from "@/features/raukk_sourcing/calculations/shippingWear";
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
@@ -111,6 +115,25 @@
 		return raukkChainLegRows(shipping, props.stopNames, legFuel.value);
 	}
 
+	/**
+	 * Wear of one loop, null while it takes no damage — a hired chain
+	 * wears no own hull and an empty loop flies nothing worth stating.
+	 *
+	 * @author raukk
+	 *
+	 * @param {IRaukkChainShipping} shipping Costing of the loop
+	 * @returns {IRaukkShipWear | null} Wear of the loop, null without any
+	 */
+	function wearOf(shipping: IRaukkChainShipping): IRaukkShipWear | null {
+		if (shipping.damagePerTrip <= 0) return null;
+
+		return raukkWearOf(
+			shipping.damagePerTrip,
+			shipping.tripsPerDay,
+			props.repairBillCost
+		);
+	}
+
 	function storageWarnings(
 		shipping: IRaukkChainShipping
 	): IRaukkChainStorageWarning[] {
@@ -156,6 +179,35 @@
 				<PTag v-if="costing.hired" size="sm" type="secondary">
 					{{ $t("raukk_sourcing.chains.detail.hired") }}
 				</PTag>
+				<PTooltip v-if="wearOf(costing) !== null">
+					<template #trigger>
+						<span class="text-white/60 hover:cursor-help">
+							{{
+								$t("raukk_sourcing.chains.detail.wear", {
+									damage: formatNumber(
+										wearOf(costing)!.damagePerTrip * 100
+									),
+									trips: formatNumber(
+										wearOf(costing)!.tripsUntilRepair
+									),
+									days: formatNumber(
+										wearOf(costing)!.daysUntilRepair
+									),
+								})
+							}}
+						</span>
+					</template>
+					{{
+						$t("raukk_sourcing.chains.detail.wear_tooltip", {
+							cost: formatNumber(
+								wearOf(costing)!.repairCostPerTrip
+							),
+							daily: formatNumber(
+								wearOf(costing)!.repairCostPerDay
+							),
+						})
+					}}
+				</PTooltip>
 			</div>
 
 			<PTable striped>

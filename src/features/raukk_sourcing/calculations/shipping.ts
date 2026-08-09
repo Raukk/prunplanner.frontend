@@ -156,11 +156,33 @@ export function calculateRepairBillCost(
 }
 
 /**
- * Ship repair cost of one round trip.
+ * Hull damage of one round trip, as a fraction of full condition.
  *
  * Damage accrues per parsec flown and per sublight block, both legs of
- * the round trip counted; the resulting share of the repair budget is
- * charged as that share of a full bill.
+ * the round trip counted. The single damage figure the repair cost
+ * charges and every wear display states — never a second formula.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkRoute} route One way route
+ * @param {IRaukkResolvedShipProfile} profile Ship profile
+ * @returns {number} Damage fraction per round trip
+ */
+export function calculateTripDamage(
+	route: IRaukkRoute,
+	profile: IRaukkResolvedShipProfile
+): number {
+	return (
+		2 * route.parsecs * profile.damagePerParsec +
+		2 * profile.damagePerStlBlock
+	);
+}
+
+/**
+ * Ship repair cost of one round trip.
+ *
+ * The trips damage ({@link calculateTripDamage}) burns its share of the
+ * repair budget and is charged as that share of a full bill.
  *
  * @author raukk
  *
@@ -174,11 +196,10 @@ export function calculateRepairCostPerTrip(
 	profile: IRaukkResolvedShipProfile,
 	repairBillCost: number
 ): number {
-	const tripDamage: number =
-		2 * route.parsecs * profile.damagePerParsec +
-		2 * profile.damagePerStlBlock;
-
-	return (tripDamage / RAUKK_REPAIR_AT_DAMAGE) * repairBillCost;
+	return (
+		(calculateTripDamage(route, profile) / RAUKK_REPAIR_AT_DAMAGE) *
+		repairBillCost
+	);
 }
 
 /**
@@ -559,6 +580,7 @@ function emptyPairShipping(pairKey: string): IRaukkPairShipping {
 		tripsPerDay: 0,
 		costPerTrip: 0,
 		repairCostPerTrip: 0,
+		damagePerTrip: 0,
 		dailyCost: 0,
 		roundTripMinutes: 0,
 		shippingFraction: 0,
@@ -735,10 +757,16 @@ export function calculatePairShipping(
 	let tripsPerDay: number = 0;
 	let dailyCost: number = 0;
 	let repairCost: number = 0;
+	let damage: number = 0;
 	let shipMinutes: number = 0;
 	let shippingFraction: number | null = 0;
 
 	legs.forEach((leg) => {
+		// a hired lane wears someone elses hull, that is a hard zero —
+		// the same reasoning that zeroes its shipping fraction below
+		const damagePerTrip: number = hired
+			? 0
+			: calculateTripDamage(pair.route, leg.profile);
 		const repairCostPerTrip: number = hired
 			? 0
 			: calculateRepairCostPerTrip(
@@ -804,6 +832,7 @@ export function calculatePairShipping(
 		tripsPerDay += leg.tripsPerDay;
 		dailyCost += legDailyCost;
 		repairCost += leg.tripsPerDay * repairCostPerTrip;
+		damage += leg.tripsPerDay * damagePerTrip;
 		shipMinutes += leg.tripsPerDay * roundTripMinutes;
 		shippingFraction =
 			shippingFraction === null || legFraction === null
@@ -819,6 +848,7 @@ export function calculatePairShipping(
 			tripsPerDay: leg.tripsPerDay,
 			costPerTrip,
 			repairCostPerTrip,
+			damagePerTrip,
 			dailyCost: legDailyCost,
 			roundTripMinutes,
 			shippingFraction: legFraction,
@@ -835,6 +865,7 @@ export function calculatePairShipping(
 		tripsPerDay,
 		costPerTrip: tripsPerDay > 0 ? dailyCost / tripsPerDay : 0,
 		repairCostPerTrip: tripsPerDay > 0 ? repairCost / tripsPerDay : 0,
+		damagePerTrip: tripsPerDay > 0 ? damage / tripsPerDay : 0,
 		dailyCost,
 		// trip weighted, so `trips × minutes` stays the ship time of the
 		// whole lane however many hulls its legs put on it

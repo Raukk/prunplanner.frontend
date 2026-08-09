@@ -344,6 +344,38 @@ describe("Raukk Sourcing: Shipping", () => {
 			);
 		});
 
+		it("states the trip damage the repair cost charges", () => {
+			const result: IRaukkPairShipping = calculatePairShipping(
+				pair([], [ticker("ORE", 500, 1, 0.5)]),
+				config,
+				REPAIR_BILL_COST,
+				caps
+			);
+
+			// 2 * 10 * 0.001 + 2 * 0.002
+			expect(result.damagePerTrip).toBeCloseTo(0.024, 10);
+			expect(result.legs[0].damagePerTrip).toBeCloseTo(0.024, 10);
+			// the repair charge is exactly that damage share of the bill
+			expect(result.repairCostPerTrip).toBeCloseTo(
+				(result.damagePerTrip / RAUKK_REPAIR_AT_DAMAGE) *
+					REPAIR_BILL_COST,
+				10
+			);
+		});
+
+		it("wears no own hull on a hired lane", () => {
+			const result: IRaukkPairShipping = calculatePairShipping(
+				pair([], [ticker("ORE", 500, 1, 0.5)]),
+				{ ...config, lmRates: { pair: 500 } },
+				REPAIR_BILL_COST,
+				caps
+			);
+
+			expect(result.hired).toBe(true);
+			expect(result.damagePerTrip).toBe(0);
+			expect(result.repairCostPerTrip).toBe(0);
+		});
+
 		it("keeps oversubscribed imports on more than one trip per day", () => {
 			// 3000 t on a 1000 t hull: three loads a day
 			const result: IRaukkPairShipping = calculatePairShipping(
