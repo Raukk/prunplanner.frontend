@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
+import axios from "axios";
 import AxiosMockAdapter from "axios-mock-adapter";
 
-import { callFIOPlanetFees, fioApiService } from "@/features/api/fioData.api";
+import {
+	callFIOPlanetFees,
+	fioApiService,
+	FIOApiService,
+} from "@/features/api/fioData.api";
+import { FIOPlanetFeeSchema } from "@/features/api/schemas/fioData.schemas";
 
 // test data
 import fio_planet from "@/tests/test_data/fio_planet_zv759c.json";
@@ -51,5 +57,41 @@ describe("FIO Data API Calls", async () => {
 		mock.onGet("/planet/XX-000x").reply(404);
 
 		await expect(callFIOPlanetFees("XX-000x")).rejects.toThrowError();
+	});
+
+	it("sends no non-safelisted headers, whatever the global axios carries", async () => {
+		// ApiService owns the global axios instance and puts no-cache
+		// headers on every GET. Those are not CORS-safelisted, so FIO
+		// rejects them in preflight and every fee call fails in the
+		// browser. axios.create() snapshots the defaults, so the client
+		// has to be built while they are polluted, exactly as it is at
+		// runtime: ApiService's module is evaluated first.
+		const polluted = {
+			"Cache-Control": "no-cache, no-store, must-revalidate",
+			Pragma: "no-cache",
+			Expires: "0",
+		};
+		Object.assign(axios.defaults.headers.get, polluted);
+
+		try {
+			const service = new FIOApiService();
+			let sent: Record<string, unknown> = {};
+			new AxiosMockAdapter(service.client)
+				.onGet("/planet/ZV-759c")
+				.reply((cfg) => {
+					sent = { ...cfg.headers };
+					return [200, fio_planet];
+				});
+
+			await service.get("/planet/ZV-759c", FIOPlanetFeeSchema);
+
+			const names = Object.keys(sent).map((n) => n.toLowerCase());
+			expect(names).not.toContain("cache-control");
+			expect(names).not.toContain("pragma");
+			expect(names).not.toContain("expires");
+		} finally {
+			for (const name of Object.keys(polluted))
+				delete axios.defaults.headers.get[name];
+		}
 	});
 });

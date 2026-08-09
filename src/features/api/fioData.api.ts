@@ -20,7 +20,7 @@ import { IFIOPlanetFees } from "@/features/api/fioData.types";
  * @class FIOApiService
  * @typedef {FIOApiService}
  */
-class FIOApiService {
+export class FIOApiService {
 	// needs to be public for axios-mock-adapter
 	public readonly client: AxiosInstance;
 
@@ -29,6 +29,17 @@ class FIOApiService {
 			baseURL: config.FIO_BASE_URL,
 			timeout: 15_000,
 		});
+
+		// raukk: ApiService uses the global axios instance and writes
+		// no-cache headers into axios.defaults.headers.get, which this
+		// instance inherits at create time. Cache-Control, Pragma and
+		// Expires are not CORS-safelisted, so sending them turns every
+		// FIO GET into a preflight that rest.fnar.net rejects — its
+		// Access-Control-Allow-Headers does not list them. Assign fresh
+		// objects instead of deleting keys: the inherited buckets may
+		// still be the global ones and PRUNplanner needs its no-cache.
+		this.client.defaults.headers.get = {};
+		this.client.defaults.headers.common = {};
 	}
 
 	/**
