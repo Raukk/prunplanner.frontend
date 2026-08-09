@@ -496,6 +496,29 @@ LM rate and ship assignment are pair-keyed.
 3. **Read-only v1**: no assignment pickers in the scoped view; it
    links to `/shipping` for edits.
 
+## Round 17 (WO-3: utilization spillover display)
+
+1. **Spillover is an opt-in DISPLAY mode** (2026-08-09): the fleet
+   section gains a "Show spillover" toggle, persisted account-globally
+   as `fleetSpillover` (defaulted off, in persist.pick and the export
+   schema like the fleet slice). Flipping it stales nothing — it is a
+   way of reading the utilization rollup, not an input.
+2. **v1 moves raw ship-minutes 1:1** between types, a stated
+   approximation: the same work costs different minutes on a different
+   hull, and re-costing on the recipient hull is explicitly out of
+   scope for v1 (candidate for a v2).
+3. **Proportional fill, donors keep the remainder**: recipients absorb
+   overflow proportionally to their spare minutes; count-0 types take
+   no part; overflow past the total spare stays on the donors, whose
+   numbers stay red and uncapped. The donor/no-spill boundary is the
+   over-flag epsilon (`RAUKK_EPSILON_EQUAL`), so a type a hair over
+   100% neither reads as over nor spills.
+4. **Rendering**: donor bar draws full and prints its residual (red
+   only while still > 100%); recipient appends an amber segment
+   (`amber-400`, the established warning tone) and prints the combined
+   number with an "own X % + spilled Y %" note. Toggle off renders
+   exactly as before. See shipping-fleet.md, "Utilization spillover".
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,

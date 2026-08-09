@@ -100,6 +100,12 @@ export const useRaukkSourcingStore = defineStore(
 		const fleet: Ref<Record<string, IRaukkFleetShip>> = ref({});
 		/** Key: lane pair key or chain key. Absent means auto. */
 		const assignments: Ref<Record<string, string>> = ref({});
+		/**
+		 * Fleet page spillover display on/off. Account global like the
+		 * fleet itself, and a pure DISPLAY mode: nothing recomputes and
+		 * nothing goes stale when it flips.
+		 */
+		const fleetSpillover: Ref<boolean> = ref(false);
 		/** Account global, like the shipping configuration next to it */
 		const chainConfig: Ref<IRaukkChainConfig> = ref(
 			raukkDefaultChainConfig()
@@ -125,6 +131,7 @@ export const useRaukkSourcingStore = defineStore(
 			chainResults.value = {};
 			fleet.value = {};
 			assignments.value = {};
+			fleetSpillover.value = false;
 			chainConfig.value = raukkDefaultChainConfig();
 			depots.value = {};
 		}
@@ -765,6 +772,20 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Turns the fleet pages spillover display on or off.
+		 *
+		 * Deliberately marks NOTHING stale, exactly like a fleet count:
+		 * spillover is a way of READING the utilization rollup — no cost,
+		 * no trip and no snapshot value depends on it.
+		 * @author raukk
+		 *
+		 * @param {boolean} enabled Spillover display on
+		 */
+		function setFleetSpillover(enabled: boolean): void {
+			fleetSpillover.value = enabled;
+		}
+
+		/**
 		 * Marks one planet as a DEPOT, or patches the depot it already is.
 		 *
 		 * A depot is a routing anchor: chains may be cut at it exactly as
@@ -1222,6 +1243,7 @@ export const useRaukkSourcingStore = defineStore(
 				chainResults: inertClone(chainResults.value),
 				fleet: inertClone(fleet.value),
 				assignments: inertClone(assignments.value),
+				fleetSpillover: fleetSpillover.value,
 				chainConfig: inertClone(chainConfig.value),
 				depots: inertClone(depots.value),
 			};
@@ -1271,6 +1293,9 @@ export const useRaukkSourcingStore = defineStore(
 			chainResults.value = validated.chainResults;
 			fleet.value = validated.fleet;
 			assignments.value = validated.assignments;
+			// raukk: absent in every payload written before the spillover
+			// display existed, the schema defaults it off
+			fleetSpillover.value = validated.fleetSpillover;
 			chainConfig.value = validated.chainConfig;
 			// raukk: absent in every payload written before depots existed
 			depots.value = validated.depots;
@@ -1286,6 +1311,7 @@ export const useRaukkSourcingStore = defineStore(
 			chainResults,
 			fleet,
 			assignments,
+			fleetSpillover,
 			chainConfig,
 			depots,
 			// reset
@@ -1328,6 +1354,7 @@ export const useRaukkSourcingStore = defineStore(
 			setChainConfig,
 			setFleetShip,
 			deleteFleetShip,
+			setFleetSpillover,
 			setDepot,
 			deleteDepot,
 			setAssignment,
@@ -1348,6 +1375,7 @@ export const useRaukkSourcingStore = defineStore(
 				"chainResults",
 				"fleet",
 				"assignments",
+				"fleetSpillover",
 				"chainConfig",
 				"depots",
 			],

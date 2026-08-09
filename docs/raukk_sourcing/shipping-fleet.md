@@ -94,6 +94,44 @@ Verified against user BTF runs (ZV-759c → ANT, 4 pc, both hulls):
 - Per-plan shipping fraction remains (sum of the plan's own lanes)
   but the fleet page is the account-level truth.
 
+## Utilization spillover (WO-3)
+
+Opt-in display mode on the fleet section ("Show spillover"), persisted
+account-globally (`fleetSpillover` on raukkSourcingStore, defaulted
+off). When a type is over 100%, its overflow ship-minutes are
+NOTIONALLY redistributed onto owned types with spare capacity —
+"this work fits in the fleet overall, but on the wrong hulls". A
+reading only: assignments, costs and snapshots never move, and with
+the toggle off everything renders exactly as before.
+
+- Pure math: `calculations/shippingFleetSpillover.ts`
+  (`raukkFleetSpillover`), taking the utilization rollup and returning
+  per type `{ capacityMinutes, ownMinutes, spilledInMinutes,
+  spilledOutMinutes, residualOverflowMinutes }`. Display shaping in
+  `shippingFleetDisplay.ts` (`raukkFleetSpilloverRows`,
+  `raukkSpilloverBarWidths`); `RaukkFleetSection.vue` stays thin
+  wiring.
+- v1 transfers RAW ship-minutes 1:1. Knowingly approximate: minutes do
+  not convert exactly across hulls (speed/cargo differ, the same work
+  costs different minutes on a different hull). The work is NOT
+  re-costed on the recipient hull; the section's info text states the
+  approximation.
+- A donor is a type over 100% by more than the over-flag epsilon
+  (`RAUKK_EPSILON_EQUAL`) — a type a hair over neither reads as over
+  nor spills. Recipients are filled proportionally to their spare
+  minutes (`max(0, capacity − own)`). Count-0 types take no part:
+  no capacity to receive with, no number a spill could relieve.
+  If total overflow exceeds total spare, the remainder stays on the
+  donors (proportionally) and their numbers stay red and uncapped.
+- Donor row: bar draws full (100%), the printed number is the RESIDUAL
+  percentage after spilling — 100% when everything fit, red only while
+  still past 100%. Recipient row: own load in the usual green, the
+  spilled share appended as an amber (`amber-400`, the established
+  raukk warning tone) segment; printed number is the combined
+  percentage with a secondary "own X % + spilled Y %" note. The
+  combined segments never draw past the track; numbers are never
+  clamped; nothing ever blocks.
+
 ## Store (C2)
 
 - `fleet[shipTypeId]`: `{ count, displayName? }` on

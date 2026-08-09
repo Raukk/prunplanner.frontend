@@ -24,6 +24,7 @@ import {
 	RAUKK_FTL_REACTOR,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 import { IRaukkFleetUtilization } from "@/features/raukk_sourcing/calculations/shippingFleet";
+import { IRaukkFleetSpillover } from "@/features/raukk_sourcing/calculations/shippingFleetSpillover";
 
 /**
  * Bay code of every hull the model knows, by cargo hold.
@@ -45,6 +46,26 @@ export const RAUKK_BAY_CODE_BY_HULL: Record<string, string> = {
 	"1000x3000": "VCB",
 };
 
+/**
+ * Spillover overlay of one fleet row, present only while the spillover
+ * display is on and the row owns at least one hull.
+ *
+ * All percentages are UNCAPPED readings — the bar width helpers cap
+ * separately, exactly as the base row splits number and bar.
+ */
+export interface IRaukkFleetRowSpill {
+	/** Own load in percent, the base (green) bar segment */
+	ownPercent: number;
+	/** Notionally received share in percent, the amber appended segment */
+	spilledInPercent: number;
+	/** The number the row prints: combined for a recipient, residual for a donor */
+	printedPercent: number;
+	/** Red + bold: only a donor whose residual is still past 100% */
+	over: boolean;
+	/** The row received spilled work and states "own X % + spilled Y %" */
+	received: boolean;
+}
+
 /** One ship type as the fleet table renders it */
 export interface IRaukkFleetRow {
 	shipTypeId: string;
@@ -64,6 +85,8 @@ export interface IRaukkFleetRow {
 	over: boolean;
 	/** Number of lanes and chains assigned to this type */
 	assignedCount: number;
+	/** Spillover overlay, absent with the display off or no hull owned */
+	spill?: IRaukkFleetRowSpill;
 }
 
 /** One piece of fleet advice, rolled up over the whole account */
@@ -293,4 +316,103 @@ export function raukkUtilizationBarWidth(utilization: number | null): number {
 	if (utilization === null || !Number.isFinite(utilization)) return 0;
 
 	return Math.min(Math.max(utilization, 0), 1) * 100;
+}
+
+/**
+ * Dresses the fleet rows with their spillover overlay.
+ *
+ * A DONOR — a type that handed overflow away or kept a residual — draws
+ * a full bar and prints its RESIDUAL percentage: 100% when everything
+ * fit elsewhere, its uncapped remainder in red when the fleet as a
+ * whole is short. A RECIPIENT prints the combined percentage and states
+ * the split; every other row prints exactly what it prints today. A
+ * count-0 row gets no overlay at all — no hull, no denominator, the
+ * null convention carries through.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkFleetRow[]} rows Fleet rows, spillover off
+ * @param {IRaukkFleetSpillover[]} spillover Redistribution per ship type
+ * @returns {IRaukkFleetRow[]} The same rows, overlay attached
+ */
+export function raukkFleetSpilloverRows(
+	rows: IRaukkFleetRow[],
+	spillover: IRaukkFleetSpillover[]
+): IRaukkFleetRow[] {
+	const byType: Map<string, IRaukkFleetSpillover> = new Map(
+		spillover.map((entry) => [entry.shipTypeId, entry])
+	);
+
+	return rows.map((row) => {
+		const entry: IRaukkFleetSpillover | undefined = byType.get(
+			row.shipTypeId
+		);
+
+		if (
+			entry === undefined ||
+			entry.capacityMinutes <= 0 ||
+			row.utilizationPercent === null
+		)
+			return row;
+
+		if (
+			entry.spilledOutMinutes > 0 ||
+			entry.residualOverflowMinutes > 0
+		) {
+			const printedPercent: number =
+				((entry.capacityMinutes + entry.residualOverflowMinutes) /
+					entry.capacityMinutes) *
+				100;
+
+			return {
+				...row,
+				spill: {
+					ownPercent: 100,
+					spilledInPercent: 0,
+					printedPercent,
+					over: printedPercent / 100 > 1 + RAUKK_EPSILON_EQUAL,
+					received: false,
+				},
+			};
+		}
+
+		const spilledInPercent: number =
+			(entry.spilledInMinutes / entry.capacityMinutes) * 100;
+
+		return {
+			...row,
+			spill: {
+				ownPercent: row.utilizationPercent,
+				spilledInPercent,
+				printedPercent: row.utilizationPercent + spilledInPercent,
+				over: row.over,
+				received: entry.spilledInMinutes > 0,
+			},
+		};
+	});
+}
+
+/**
+ * Widths of the two spillover bar segments, together never past the
+ * track: the own segment caps at the full bar, the spilled one at
+ * whatever the own segment left over — the same "a bar cannot draw past
+ * its track" rule {@link raukkUtilizationBarWidth} states, applied to
+ * the pair.
+ *
+ * @author raukk
+ *
+ * @param {number} ownPercent Own load in percent, uncapped
+ * @param {number} spilledInPercent Spilled-in share in percent, uncapped
+ * @returns {{ own: number; spilled: number }} Segment widths, 0 to 100
+ */
+export function raukkSpilloverBarWidths(
+	ownPercent: number,
+	spilledInPercent: number
+): { own: number; spilled: number } {
+	const own: number = Math.min(Math.max(ownPercent, 0), 100);
+
+	return {
+		own,
+		spilled: Math.min(Math.max(spilledInPercent, 0), 100 - own),
+	};
 }

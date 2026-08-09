@@ -210,6 +210,11 @@
 		"add": "Add Type",
 		"add_placeholder": "Add a ship type",
 		"empty": "No ships in the fleet yet — add a type below, then assign lanes and chains to it.",
+		"spillover": {
+			"toggle": "Show spillover",
+			"info": "Overflow past 100% is notionally moved onto your types with spare capacity and shown as an amber segment on their bars: the work fits in the fleet overall, just on the wrong hulls. An over-booked type then draws a full bar and prints what's left after spilling — red only when the fleet as a whole is short. This is a reading, not a re-assignment, and it's approximate: minutes move 1:1 between types, but the same work costs different minutes on a different hull.",
+			"split": "own {own} % + spilled {spilled} %"
+		},
 		"advisories": {
 			"title": "Fleet Advice",
 			"row": "{suggested}: {assignments} assignment(s) now on {current}, every {visit} d → {suggestedVisit} d."
