@@ -253,3 +253,29 @@ anywhere in the repo. Not retroactive.
   every sibling uses `h4 font-bold py-3` plus one; the capacity plane
   colored its dots by cargo class with no key at all. `empire.md` and
   the shipping page intro now point at both.
+- 2026-08-09: Shipping page split into sections (user request — the page
+  is overloaded, tab it like the plan tools). Was one scroll with every
+  section mounted and none collapsible: config bar, Fleet, Chains,
+  Automatic chains, Hub/spoke, Depots, Visualisations. Now a sticky
+  strip of six — Settings · Fleet · Chains · Depots · Visuals ·
+  Calibration — following the PlanView tool-tab shape, with a one-shot
+  `?section=` deep link stripped via `router.replace` exactly as
+  `?tool=` is. Rules live in `calculations/shippingSections.ts`, so the
+  gate and the fallbacks are testable without mounting the page.
+  KEPT ALIVE, not `v-if`: every section holds unsaved local state — the
+  chain editor's entire draft only reaches the store on save, plus the
+  add-ship / add-depot pickers, expanded rows and delete confirmations —
+  so remounting on a tab click would discard it silently. There is a
+  regression test that fails without the KeepAlive. KeepAlive caches
+  COMPONENT children with ONE root only, which is why Fleet, Chain and
+  Depot sections gained a wrapping div, and why the config bar and the
+  calibration editor were extracted into RaukkShippingSettingsSection /
+  RaukkShippingCalibrationSection instead of staying inline markup.
+  Cost is unchanged: the old page had every section mounted at once
+  anyway, and now only visited ones are.
+  Fleet is the DEFAULT section on purpose — every existing in-app link
+  to `/shipping` (oversub fleet rows and marks, the grid's ship link,
+  the sourcing tool's ship-time link, the two "Manage fleet & routes"
+  buttons) is fleet-oriented, so none of them needed retargeting.
+  Calibration stopped being a show/hide button in the config bar;
+  `shipping.show_calibration` / `hide_calibration` deleted.

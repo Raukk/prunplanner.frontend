@@ -1,5 +1,6 @@
 <script setup lang="ts">
-	import { computed, ComputedRef, onMounted, ref, Ref } from "vue";
+	import { computed, ComputedRef, onMounted, ref, Ref, watch } from "vue";
+	import { useRoute, useRouter } from "vue-router";
 
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
@@ -17,7 +18,8 @@
 	import { useRaukkShippingOptions } from "@/features/raukk_sourcing/useRaukkShippingOptions";
 
 	// Components
-	import RaukkShipProfileEditor from "@/features/raukk_sourcing/components/RaukkShipProfileEditor.vue";
+	import RaukkShippingSettingsSection from "@/features/raukk_sourcing/components/RaukkShippingSettingsSection.vue";
+	import RaukkShippingCalibrationSection from "@/features/raukk_sourcing/components/RaukkShippingCalibrationSection.vue";
 	import RaukkFleetSection from "@/features/raukk_sourcing/components/RaukkFleetSection.vue";
 	import RaukkChainSection from "@/features/raukk_sourcing/components/RaukkChainSection.vue";
 	import RaukkDepotSection from "@/features/raukk_sourcing/components/RaukkDepotSection.vue";
@@ -27,17 +29,17 @@
 	import { calculateRepairBillCost } from "@/features/raukk_sourcing/calculations/shipping";
 	import { RAUKK_FUEL_TICKERS } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 	import {
-		RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
-		RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
-	} from "@/features/raukk_sourcing/calculations/shippingCadence";
-	import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
+		RaukkShippingSection,
+		raukkShippingResolveSection,
+		raukkShippingSectionFromQuery,
+		raukkShippingSections,
+	} from "@/features/raukk_sourcing/calculations/shippingSections";
 
 	// UI
-	import { PButton, PCheckbox, PInputNumber, PSelect, PTooltip } from "@/ui";
+	import { PButton, PButtonGroup, PTooltip } from "@/ui";
 
 	// Types & Interfaces
 	import {
-		IRaukkShipProfile,
 		IRaukkShippingConfig,
 		IRaukkSnapshot,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -79,12 +81,7 @@
 			: calculateRepairBillCost(refResolvePrice.value)
 	);
 
-	const { profiles, profileOptions, shipTypeOptions, anchorOptions } =
-		useRaukkShippingOptions();
-
-	const overriddenIds: ComputedRef<string[]> = computed(() =>
-		Object.keys(sourcingStore.shipProfiles)
-	);
+	const { shipTypeOptions } = useRaukkShippingOptions();
 
 	/**
 	 * Days each planet's storage bridges, the chain storage cross-check
@@ -119,69 +116,48 @@
 		}));
 	});
 
-	function toggleEnabled(enabled: boolean): void {
-		sourcingStore.setShippingConfig({ enabled });
-	}
-
-	function changeDefaultProfile(profileId: string): void {
-		sourcingStore.setShippingConfig({ defaultProfileId: profileId });
-	}
-
-	function changeSameSystemFlatCost(value: number | null | undefined): void {
-		sourcingStore.setShippingConfig({ sameSystemFlatCost: value ?? 0 });
-	}
-
-	/**
-	 * Stores an account cadence default, days per visit. An empty or non
-	 * positive input goes back to the shipped default rather than storing
-	 * a cap of zero, which would mean "visit infinitely often".
+	/*
+	 * Section tabs
 	 *
-	 * @author raukk
-	 *
-	 * @param {number | null | undefined} value Days per visit
+	 * This page used to be one long scroll — config bar, then Fleet,
+	 * Chains, Automatic chains, Hub/spoke, Depots and Visualisations, all
+	 * mounted at once and none of them collapsible, which left the
+	 * visualisations at the bottom effectively unreachable. It is now the
+	 * PlanView tool-tab shape: a sticky strip, one section shown at a
+	 * time, `?section=` deep linkable.
 	 */
-	function changeCadenceInOut(value: number | null | undefined): void {
-		sourcingStore.setShippingConfig({
-			cadenceInOutDays:
-				value !== null && value !== undefined && value > 0
-					? value
-					: RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
-		});
+
+	const route = useRoute();
+	const router = useRouter();
+
+	const refSection: Ref<RaukkShippingSection> = ref(
+		raukkShippingSectionFromQuery(route.query.section, config.value.enabled)
+	);
+
+	// one-shot deep link, the `?tool=` precedent in PlanView: strip the
+	// param so a back-nav or a reload cannot resurrect a section the user
+	// has since tabbed away from
+	if ("section" in route.query) {
+		const { section: _section, ...cleanQuery } = route.query;
+		void router.replace({ query: cleanQuery });
 	}
 
-	/**
-	 * Stores the account workforce cadence default, days per visit.
-	 *
-	 * @author raukk
-	 *
-	 * @param {number | null | undefined} value Days per visit
-	 */
-	function changeCadenceWorkforce(value: number | null | undefined): void {
-		sourcingStore.setShippingConfig({
-			cadenceWorkforceDays:
-				value !== null && value !== undefined && value > 0
-					? value
-					: RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
-		});
-	}
+	/** Sections the strip offers — only Settings while shipping is off */
+	const sections: ComputedRef<RaukkShippingSection[]> = computed(() =>
+		raukkShippingSections(config.value.enabled)
+	);
 
-	function changeAnchorMode(mode: string): void {
-		sourcingStore.setShippingConfig({ cxAnchorMode: mode });
-	}
-
-	function changeProfile(
-		profileId: string,
-		patch: Partial<IRaukkShipProfile>
-	): void {
-		sourcingStore.setShipProfile(profileId, patch);
-	}
-
-	function resetProfile(profileId: string): void {
-		sourcingStore.resetShipProfile(profileId);
-	}
-
-	/** Calibration table is long, it starts folded away */
-	const refShowCalibration: Ref<boolean> = ref(false);
+	// switching shipping off from the Settings tab must not strand the
+	// page on a tab that no longer exists
+	watch(
+		() => config.value.enabled,
+		(enabled: boolean) => {
+			refSection.value = raukkShippingResolveSection(
+				refSection.value,
+				enabled
+			);
+		}
+	);
 
 	/*
 	 * Chain result recomputation
@@ -226,112 +202,48 @@
 </script>
 
 <template>
-	<h2 class="pb-3 text-white/80 font-bold text-lg">
-		{{ $t("raukk_sourcing.shipping.title") }}
-	</h2>
+	<!-- Header: title, intro and the one page-level action. Scrolls
+	 away; the section strip below it is what pins. -->
+	<div class="flex flex-row flex-wrap justify-between gap-3">
+		<h2 class="pb-3 text-white/80 font-bold text-lg">
+			{{ $t("raukk_sourcing.shipping.title") }}
+		</h2>
+		<PTooltip v-if="config.enabled">
+			<template #trigger>
+				<PButton
+					type="primary"
+					:loading="refRecomputing"
+					:disabled="refRecomputing"
+					@click="recomputeChains">
+					{{ $t("raukk_sourcing.shipping_page.recompute") }}
+				</PButton>
+			</template>
+			{{ $t("raukk_sourcing.shipping_page.recompute_tooltip") }}
+		</PTooltip>
+	</div>
 	<div class="text-white/50 pb-3">
 		{{ $t("raukk_sourcing.shipping_page.info") }}
 	</div>
 
+	<!-- Section strip, sticky. Bleeds through the view's px-6 so a
+	 section scrolling under it cannot show past its edges. -->
 	<div
-		class="border rounded-[3px] border-white/20 p-3 flex flex-row flex-wrap gap-3 child:my-auto">
-		<PCheckbox
-			:checked="config.enabled"
-			@update:checked="(v) => toggleEnabled(v === true)" />
-		<div class="font-bold">
-			{{ $t("raukk_sourcing.shipping.enabled") }}
-		</div>
-
-		<template v-if="config.enabled">
-			<div class="font-bold pl-3">
-				{{ $t("raukk_sourcing.shipping.default_profile") }}
-			</div>
-			<PSelect
-				class="w-60!"
-				:value="config.defaultProfileId"
-				:options="profileOptions"
-				@update:value="(v) => changeDefaultProfile(String(v))" />
-
-			<div class="font-bold pl-3">
-				{{ $t("raukk_sourcing.shipping.same_system_cost") }}
-			</div>
-			<PInputNumber
-				class="min-w-30"
-				decimals
-				:min="0"
-				:value="config.sameSystemFlatCost"
-				@update:value="changeSameSystemFlatCost" />
-
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.shipping.cadence_in_out") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.shipping.cadence_tooltip") }}
-			</PTooltip>
-			<PInputNumber
-				class="min-w-25"
-				:min="1"
-				:value="
-					config.cadenceInOutDays ?? RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS
-				"
-				@update:value="changeCadenceInOut" />
-
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.shipping.cadence_workforce") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.shipping.cadence_tooltip") }}
-			</PTooltip>
-			<PInputNumber
-				class="min-w-25"
-				:min="1"
-				:value="
-					config.cadenceWorkforceDays ??
-					RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS
-				"
-				@update:value="changeCadenceWorkforce" />
-
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.cx_anchor.label") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.cx_anchor.tooltip") }}
-			</PTooltip>
-			<PSelect
-				class="w-40!"
-				:value="config.cxAnchorMode ?? RAUKK_CX_ANCHOR_NEAREST"
-				:options="anchorOptions"
-				@update:value="(v) => changeAnchorMode(String(v))" />
-
+		class="sticky top-0 z-900 -mx-6 px-6 py-3 bg-(--app-bg) border-b border-white/10 flex flex-row flex-wrap gap-3">
+		<PButtonGroup class="flex-wrap">
 			<PButton
-				type="secondary"
-				@click="refShowCalibration = !refShowCalibration">
-				{{
-					refShowCalibration
-						? $t("raukk_sourcing.shipping.hide_calibration")
-						: $t("raukk_sourcing.shipping.show_calibration")
-				}}
+				v-for="section in sections"
+				:key="`RAUKKSHIPSECTION#${section}`"
+				:type="refSection === section ? 'primary' : 'secondary'"
+				size="sm"
+				:title="
+					$t(
+						`raukk_sourcing.shipping_page.sections.${section}_tooltip`
+					)
+				"
+				@click="() => (refSection = section)">
+				{{ $t(`raukk_sourcing.shipping_page.sections.${section}`) }}
 			</PButton>
-
-			<PTooltip>
-				<template #trigger>
-					<PButton
-						type="primary"
-						:loading="refRecomputing"
-						:disabled="refRecomputing"
-						@click="recomputeChains">
-						{{ $t("raukk_sourcing.shipping_page.recompute") }}
-					</PButton>
-				</template>
-				{{ $t("raukk_sourcing.shipping_page.recompute_tooltip") }}
-			</PTooltip>
-		</template>
+		</PButtonGroup>
 	</div>
 
 	<div v-if="refChainErrors.length > 0" class="pt-3 flex flex-col">
@@ -343,34 +255,38 @@
 		</span>
 	</div>
 
-	<div v-if="!config.enabled" class="pt-3 text-white/50">
-		{{ $t("raukk_sourcing.shipping.disabled_info") }}
-	</div>
+	<!--
+	 One section at a time, but KEPT ALIVE once visited. Every section
+	 holds unsaved local state — the chain editor's entire draft, which
+	 only reaches the store on save, plus the add-ship and add-depot
+	 pickers, expanded rows and delete confirmations — so a `v-if`
+	 remount on a tab click would discard it silently. Nothing here
+	 mounts side effects, and the old page had all of them mounted at
+	 once anyway, so keeping the visited ones alive costs no more than
+	 it used to.
 
-	<template v-else>
-		<div v-if="refShowCalibration" class="pt-3">
-			<div class="text-white/50 pb-3">
-				{{ $t("raukk_sourcing.shipping.calibration_info") }}
-			</div>
-			<RaukkShipProfileEditor
-				:profiles="profiles"
-				:overridden-ids="overriddenIds"
-				:default-profile-id="config.defaultProfileId"
-				:fuel-prices="fuelPrices"
-				@update:profile="changeProfile"
-				@reset:profile="resetProfile" />
-		</div>
+	 KeepAlive caches COMPONENT children only; every branch below must
+	 stay a component, never a wrapping div, or it silently falls out
+	 of the cache.
+	-->
+	<KeepAlive>
+		<RaukkShippingSettingsSection v-if="refSection === 'settings'" />
 
-		<RaukkFleetSection :repair-bill-cost="repairBillCost" />
+		<RaukkFleetSection
+			v-else-if="refSection === 'fleet'"
+			:repair-bill-cost="repairBillCost" />
 
 		<RaukkChainSection
+			v-else-if="refSection === 'chains'"
 			:fuel-prices="fuelPrices"
 			:repair-bill-cost="repairBillCost"
 			:ship-type-options="shipTypeOptions"
 			:storage-days="storageDays" />
 
-		<RaukkDepotSection />
+		<RaukkDepotSection v-else-if="refSection === 'depots'" />
 
-		<RaukkShippingVisualsSection />
-	</template>
+		<RaukkShippingVisualsSection v-else-if="refSection === 'visuals'" />
+
+		<RaukkShippingCalibrationSection v-else :fuel-prices="fuelPrices" />
+	</KeepAlive>
 </template>
