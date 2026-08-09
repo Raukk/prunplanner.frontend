@@ -8,6 +8,10 @@
 	// Composables
 	import { useRaukkDepotCosts } from "@/features/raukk_sourcing/useRaukkDepotCosts";
 
+	// Calculations
+	import { resolveSystemId } from "@/features/raukk_sourcing/calculations/routeDistance";
+	import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippingDepots";
+
 	// Util
 	import { formatNumber } from "@/util/numbers";
 
@@ -29,21 +33,58 @@
 
 	const refAddPlanet: Ref<string | null> = ref(null);
 
-	/** Planet ids already marked, the add field refuses them again */
-	const known: ComputedRef<Set<string>> = computed(
-		() => new Set(rows.value.map((row) => row.planetNaturalId))
+	/** What the add field holds, trimmed as the store would store it */
+	const entered: ComputedRef<string> = computed(() =>
+		(refAddPlanet.value ?? "").trim()
 	);
 
-	const canAdd: ComputedRef<boolean> = computed(() => {
-		const entered: string = (refAddPlanet.value ?? "").trim().toUpperCase();
+	/**
+	 * Planet ids already marked, the add field refuses them again.
+	 *
+	 * Keyed exactly as the store keys them: `ZV-307c` and `zv-307c` are one
+	 * depot, so the second spelling has to be refused rather than silently
+	 * patch the first one and leave the row count unchanged.
+	 */
+	const known: ComputedRef<Set<string>> = computed(
+		() =>
+			new Set(
+				rows.value.map((row) => raukkDepotStopKey(row.planetNaturalId))
+			)
+	);
 
-		return entered !== "" && !known.value.has(entered);
+	const isKnown: ComputedRef<boolean> = computed(
+		() =>
+			entered.value !== "" &&
+			known.value.has(raukkDepotStopKey(entered.value))
+	);
+
+	const canAdd: ComputedRef<boolean> = computed(
+		() => entered.value !== "" && !isKnown.value
+	);
+
+	/**
+	 * Whether the routing index knows the planet at all.
+	 *
+	 * A depot it cannot place is no anchor — `raukkChainAnchors` drops it
+	 * silently — so a typo would otherwise sit in the table looking marked
+	 * while no chain ever cuts there.
+	 */
+	function isRouted(stopRef: string): boolean {
+		return resolveSystemId(stopRef) !== null;
+	}
+
+	/** Why the add button is off, or what the entry will not do */
+	const addHint: ComputedRef<string> = computed(() => {
+		if (entered.value === "") return "empty";
+		if (isKnown.value) return "known";
+
+		return isRouted(entered.value) ? "" : "unrouted";
 	});
 
 	function addDepot(): void {
 		if (!canAdd.value) return;
 
-		sourcingStore.setDepot(refAddPlanet.value as string);
+		sourcingStore.setDepot(entered.value);
 		refAddPlanet.value = null;
 	}
 
@@ -111,6 +152,17 @@
 							type="secondary">
 							{{ $t("raukk_sourcing.depots.unused") }}
 						</PTag>
+						<PTooltip v-if="!isRouted(row.planetNaturalId)">
+							<template #trigger>
+								<PTag
+									size="sm"
+									type="error"
+									class="hover:cursor-help">
+									{{ $t("raukk_sourcing.depots.unrouted") }}
+								</PTag>
+							</template>
+							{{ $t("raukk_sourcing.depots.unrouted_tooltip") }}
+						</PTooltip>
 					</div>
 				</td>
 				<td class="text-right">
@@ -159,6 +211,15 @@
 							@click="addDepot">
 							{{ $t("raukk_sourcing.depots.add") }}
 						</PButton>
+						<span
+							v-if="addHint !== ''"
+							:class="
+								addHint === 'empty'
+									? 'text-white/50'
+									: 'text-red-400'
+							">
+							{{ $t(`raukk_sourcing.depots.hint.${addHint}`) }}
+						</span>
 					</div>
 				</td>
 			</tr>

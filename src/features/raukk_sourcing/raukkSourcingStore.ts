@@ -802,10 +802,16 @@ export const useRaukkSourcingStore = defineStore(
 		 * Marks one planet as a DEPOT, or patches the depot it already is.
 		 *
 		 * A depot is a routing anchor: chains may be cut at it exactly as
-		 * they are cut at an exchange, so every chain result is computed
-		 * with different anchors from here on and goes stale. It is NOT a
-		 * market — nothing is priced, sourced or stored there — so nothing
-		 * outside the chains moves.
+		 * they are cut at an exchange, so MARKING one computes every chain
+		 * with a different anchor list from here on and stales the lot. It
+		 * is NOT a market — nothing is priced, sourced or stored there —
+		 * so nothing outside the chains moves.
+		 *
+		 * Patching the rent of a depot the store already knows stales
+		 * NOTHING: the rent is no input of the chain math at all, it is
+		 * summed at read time next to the chain costs
+		 * (`useRaukkDepotCosts`). Same rule the ship count follows — a
+		 * knob that moves no stored number leaves the results alone.
 		 *
 		 * A non finite weekly rent is refused rather than stored, the rule
 		 * every numeric knob of this store follows: `NaN` travels into the
@@ -841,7 +847,8 @@ export const useRaukkSourcingStore = defineStore(
 						: undefined,
 			};
 
-			markAllChainsStale();
+			// the anchor list only changed if the planet is new to it
+			if (known === undefined) markAllChainsStale();
 		}
 
 		/**

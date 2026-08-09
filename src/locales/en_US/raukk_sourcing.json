@@ -414,9 +414,16 @@
 		"daily_cost": "ȼ / Day",
 		"chains": "Chains",
 		"unused": "Unused",
+		"unrouted": "Unknown Planet",
+		"unrouted_tooltip": "No system of the route index carries this id, so no chain can be cut here — check the spelling, e.g. ZV-307c.",
 		"remove": "Remove",
 		"add": "Add Depot",
 		"add_placeholder": "Planet id, e.g. ZV-307c",
+		"hint": {
+			"empty": "Type a planet id to enable Add Depot.",
+			"known": "That planet is already a depot.",
+			"unrouted": "No planet of that id is known — it would anchor nothing."
+		},
 		"empty": "No depots yet. Mark a gate hub or a warehouse planet as one when two ships should meet there instead of flying to the exchange.",
 		"rollup": {
 			"chains": "Chains ȼ / Day",
