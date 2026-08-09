@@ -4,6 +4,8 @@
 		ComputedRef,
 		defineAsyncComponent,
 		nextTick,
+		onBeforeUnmount,
+		onMounted,
 		PropType,
 		ref,
 		Ref,
@@ -302,7 +304,72 @@
 			key != refShowTool.value
 				? (refShowTool.value = key)
 				: (refShowTool.value = null);
+			// raukk: the toolbar is sticky, so a tool can be opened while
+			// scrolled far down and would render off-screen above.
+			nextTick(scrollToolIntoView);
 		});
+	}
+
+	/*
+	 * Sticky Toolbar
+	 *
+	 * The status bar sticks at the very top, the toolbar parks directly
+	 * below it and the material i/o column below both. Heights are
+	 * measured instead of hardcoded, both bars wrap on narrow screens.
+	 */
+
+	const refStatusBarElement: Ref<HTMLElement | null> = ref(null);
+	const refToolbarElement: Ref<HTMLElement | null> = ref(null);
+	const refToolViewElement: Ref<HTMLElement | null> = ref(null);
+
+	const refStatusBarHeight: Ref<number> = ref(0);
+	const refToolbarHeight: Ref<number> = ref(0);
+
+	const compToolbarStickyStyle: ComputedRef<Record<string, string>> =
+		computed(() => ({ top: `${refStatusBarHeight.value}px` }));
+	const compMaterialIOStickyStyle: ComputedRef<Record<string, string>> =
+		computed(() => ({
+			top: `${refStatusBarHeight.value + refToolbarHeight.value}px`,
+		}));
+
+	let stickyResizeObserver: ResizeObserver | null = null;
+
+	onMounted(() => {
+		if (typeof ResizeObserver === "undefined") return;
+
+		stickyResizeObserver = new ResizeObserver(() => {
+			refStatusBarHeight.value =
+				refStatusBarElement.value?.offsetHeight ?? 0;
+			refToolbarHeight.value = refToolbarElement.value?.offsetHeight ?? 0;
+		});
+
+		if (refStatusBarElement.value)
+			stickyResizeObserver.observe(refStatusBarElement.value);
+		if (refToolbarElement.value)
+			stickyResizeObserver.observe(refToolbarElement.value);
+	});
+
+	onBeforeUnmount(() => {
+		stickyResizeObserver?.disconnect();
+		stickyResizeObserver = null;
+	});
+
+	/**
+	 * Scrolls the tool view below the sticky bars, but only if it opened
+	 * above the current viewport position. Does nothing if the panel is
+	 * already visible.
+	 */
+	function scrollToolIntoView(): void {
+		const element: HTMLElement | null = refToolViewElement.value;
+		if (!element || typeof window === "undefined") return;
+
+		const stickyOffset: number =
+			refStatusBarHeight.value + refToolbarHeight.value;
+		const target: number =
+			element.getBoundingClientRect().top + window.scrollY - stickyOffset;
+
+		if (window.scrollY <= target) return;
+		window.scrollTo({ top: target, behavior: "smooth" });
 	}
 
 	/*
@@ -661,7 +728,7 @@
 		:planet-natural-id="planetData.planet_natural_id" />
 	<div class="@container">
 		<div
-			class="grid grid-cols-1 grid-rows-[repeat(5,auto)] md:grid-cols-[auto_1fr_auto] gap-x-3">
+			class="grid grid-cols-1 grid-rows-[repeat(6,auto)] md:grid-cols-[auto_1fr_auto] gap-x-3">
 			<!-- Plan Name & Selector -->
 			<div
 				class="p-3 row-1 col-1 flex flex-row flex-wrap gap-x-3 pt-3 pb-3 md:pb-0 @6xl:pb-3 items-baseline">
@@ -679,6 +746,7 @@
 			</div>
 			<!-- Status Bar (sticky) -->
 			<div
+				ref="refStatusBarElement"
 				class="row-3 md:row-2 md:col-span-full @6xl:row-1 @6xl:col-span-1 w-full md:w-auto justify-self-start md:justify-self-center my-auto p-3 sticky top-0 z-1000 bg-(--app-bg) md:rounded-b-lg">
 				<PlanStatusBar
 					:area-data="result.area"
@@ -758,194 +826,192 @@
 				<!-- empty div to maintain layout -->
 				<div v-else class="@[1290px]:w-112.5" />
 			</div>
-			<!-- Tools Container -->
-			<div class="row-4 md:col-span-3">
-				<!-- Toolbar -->
+			<!-- Toolbar (sticky, parks below the status bar) -->
+			<div
+				ref="refToolbarElement"
+				:style="compToolbarStickyStyle"
+				class="row-4 md:col-span-3 sticky z-900 bg-(--app-bg) flex flex-wrap grow @3xl:justify-end border-y border-white/10 gap-3 py-3 child:my-auto px-3">
+				<PButton
+					:type="
+						refShowTool === 'configuration'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('configuration')">
+					<template #icon>
+						<SettingsSharp />
+					</template>
+					{{ $t("plan.components.configuration.label") }}
+				</PButton>
+				<PButton
+					v-if="userStore.isLoggedIn"
+					:type="refShowTool === 'popr' ? 'primary' : 'secondary'"
+					@click="toggleTool('popr')">
+					{{ $t("plan.tools.labels.popr") }}
+				</PButton>
+				<PButton
+					:type="
+						refShowTool === 'visitation-frequency'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('visitation-frequency')">
+					{{ $t("plan.tools.labels.visitation_frequency") }}
+				</PButton>
+				<PButton
+					:type="
+						refShowTool === 'construction-cart'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('construction-cart')">
+					{{ $t("plan.tools.labels.construction_cart") }}
+				</PButton>
+				<PButton
+					:type="
+						refShowTool === 'supply-cart' ? 'primary' : 'secondary'
+					"
+					@click="toggleTool('supply-cart')">
+					{{ $t("plan.tools.labels.supply_cart") }}
+				</PButton>
+				<PButton
+					:type="
+						refShowTool === 'repair-analysis'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('repair-analysis')">
+					{{ $t("plan.tools.labels.repair_analysis") }}
+				</PButton>
+				<!-- raukk: sourcing tool -->
+				<PButton
+					:type="
+						refShowTool === 'raukk-sourcing'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('raukk-sourcing')">
+					{{ $t("raukk_sourcing.title") }}
+				</PButton>
+			</div>
+			<!-- Tool View -->
+			<div
+				ref="refToolViewElement"
+				class="row-5 md:col-span-3 transition-discrete transition-opacity duration-500"
+				:class="
+					!refShowTool
+						? 'opacity-0 overflow-hidden h-0!'
+						: 'px-6 py-3 opacity-100 border-b border-white/10'
+				">
 				<div
-					class="flex flex-wrap grow @3xl:justify-end border-y border-white/10 gap-3 py-3 child:my-auto px-3">
-					<PButton
-						:type="
-							refShowTool === 'configuration'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('configuration')">
-						<template #icon>
-							<SettingsSharp />
-						</template>
-						{{ $t("plan.components.configuration.label") }}
-					</PButton>
-					<PButton
-						v-if="userStore.isLoggedIn"
-						:type="refShowTool === 'popr' ? 'primary' : 'secondary'"
-						@click="toggleTool('popr')">
-						{{ $t("plan.tools.labels.popr") }}
-					</PButton>
-					<PButton
-						:type="
-							refShowTool === 'visitation-frequency'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('visitation-frequency')">
-						{{ $t("plan.tools.labels.visitation_frequency") }}
-					</PButton>
-					<PButton
-						:type="
-							refShowTool === 'construction-cart'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('construction-cart')">
-						{{ $t("plan.tools.labels.construction_cart") }}
-					</PButton>
-					<PButton
-						:type="
-							refShowTool === 'supply-cart'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('supply-cart')">
-						{{ $t("plan.tools.labels.supply_cart") }}
-					</PButton>
-					<PButton
-						:type="
-							refShowTool === 'repair-analysis'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('repair-analysis')">
-						{{ $t("plan.tools.labels.repair_analysis") }}
-					</PButton>
-					<!-- raukk: sourcing tool -->
-					<PButton
-						:type="
-							refShowTool === 'raukk-sourcing'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('raukk-sourcing')">
-						{{ $t("raukk_sourcing.title") }}
-					</PButton>
-				</div>
-				<!-- Tool View -->
-				<div
-					class="transition-discrete transition-opacity duration-500"
-					:class="
-						!refShowTool
-							? 'opacity-0 overflow-hidden h-0!'
-							: 'px-6 py-3 opacity-100 border-b border-white/10'
-					">
-					<div
-						v-if="refShowTool === 'configuration'"
-						class="flex flex-wrap sm:justify-center-safe gap-6">
-						<div class="flex flex-col min-w-75">
-							<h2 class="text-white/80 font-bold text-lg pb-3">
-								{{ $t("plan.components.configuration.label") }}
-							</h2>
+					v-if="refShowTool === 'configuration'"
+					class="flex flex-wrap sm:justify-center-safe gap-6">
+					<div class="flex flex-col min-w-75">
+						<h2 class="text-white/80 font-bold text-lg pb-3">
+							{{ $t("plan.components.configuration.label") }}
+						</h2>
 
-							<div
-								class="flex flex-col gap-y-3 sm:border sm:border-white/10 sm:rounded sm:p-3">
-								<PlanConfiguration
-									:disabled="disabled"
-									:plan-name="planName"
-									:empire-options="refEmpireList"
-									:active-empire="computedActiveEmpire"
-									:plan-empires="planEmpires"
-									@update:active-empire="
-										(empireUuid: string) => {
-											refEmpireUuid = empireUuid;
-											refCXUuid =
-												findEmpireCXUuid(empireUuid);
-										}
-									"
-									@update:plan-name="handleChangePlanName" />
-								<PlanArea
-									:disabled="disabled"
-									:area-data="result.area"
-									:planet-natural-id="
-										planetData.planet_natural_id
-									"
-									@update:permits="handleUpdatePermits" />
-								<PlanBonuses
-									:disabled="disabled"
-									:corphq="result.corphq"
-									:cogc="result.cogc"
-									:planet-natural-id="
-										planetData.planet_natural_id
-									"
-									@update:corphq="handleUpdateCorpHQ"
-									@update:cogc="handleUpdateCOGC" />
-							</div>
-						</div>
-						<div>
-							<h2 class="text-white/80 font-bold text-lg pb-3">
-								{{ $t("plan.components.infrastructure.label") }}
-							</h2>
-							<div
-								class="sm:border sm:border-white/10 sm:rounded sm:p-3">
-								<PlanInfrastructure
-									:disabled="disabled"
-									:infrastructure-data="result.infrastructure"
-									:auto-optimize-habs="refAutoOptimizeHabs"
-									:hab-optimize-forced="habOptimizeForced"
-									:hab-optimize-goal="habOptimizeGoal"
-									:planet-natural-id="
-										planetData.planet_natural_id
-									"
-									@update:infrastructure="
-										handleUpdateInfrastructure
-									"
-									@update:auto-optimize-habs="
-										(v: boolean, goal: HabSolverGoal) => {
-											refAutoOptimizeHabs = v;
-											trackEvent(
-												'plan_tool_optimize_habitation_active',
-												{ active: v }
-											);
-											applyOptimizeHabs(goal, false);
-										}
-									"
-									@optimize-habs="
-										(goal: HabSolverGoal) =>
-											applyOptimizeHabs(goal, true)
-									" />
-							</div>
-						</div>
-						<div>
-							<h2 class="text-white/80 font-bold text-lg pb-3">
-								{{ $t("plan.components.experts.label") }}
-							</h2>
-							<div
-								class="sm:border sm:border-white/10 sm:rounded sm:p-3">
-								<PlanExperts
-									:disabled="disabled"
-									:expert-data="result.experts"
-									:planet-natural-id="
-										planetData.planet_natural_id
-									"
-									@update:expert="handleUpdateExpert" />
-							</div>
+						<div
+							class="flex flex-col gap-y-3 sm:border sm:border-white/10 sm:rounded sm:p-3">
+							<PlanConfiguration
+								:disabled="disabled"
+								:plan-name="planName"
+								:empire-options="refEmpireList"
+								:active-empire="computedActiveEmpire"
+								:plan-empires="planEmpires"
+								@update:active-empire="
+									(empireUuid: string) => {
+										refEmpireUuid = empireUuid;
+										refCXUuid =
+											findEmpireCXUuid(empireUuid);
+									}
+								"
+								@update:plan-name="handleChangePlanName" />
+							<PlanArea
+								:disabled="disabled"
+								:area-data="result.area"
+								:planet-natural-id="
+									planetData.planet_natural_id
+								"
+								@update:permits="handleUpdatePermits" />
+							<PlanBonuses
+								:disabled="disabled"
+								:corphq="result.corphq"
+								:cogc="result.cogc"
+								:planet-natural-id="
+									planetData.planet_natural_id
+								"
+								@update:corphq="handleUpdateCorpHQ"
+								@update:cogc="handleUpdateCOGC" />
 						</div>
 					</div>
-					<Suspense v-else-if="refShowTool && compViewToolMeta">
-						<template #default>
-							<component
-								:is="compViewToolComponent"
-								v-bind="compViewToolMeta.props"
-								v-on="compViewToolMeta.listeners" />
-						</template>
-						<template #fallback>
-							<div class="w-full text-center py-5">
-								<PSpin />
-							</div>
-						</template>
-					</Suspense>
+					<div>
+						<h2 class="text-white/80 font-bold text-lg pb-3">
+							{{ $t("plan.components.infrastructure.label") }}
+						</h2>
+						<div
+							class="sm:border sm:border-white/10 sm:rounded sm:p-3">
+							<PlanInfrastructure
+								:disabled="disabled"
+								:infrastructure-data="result.infrastructure"
+								:auto-optimize-habs="refAutoOptimizeHabs"
+								:hab-optimize-forced="habOptimizeForced"
+								:hab-optimize-goal="habOptimizeGoal"
+								:planet-natural-id="
+									planetData.planet_natural_id
+								"
+								@update:infrastructure="
+									handleUpdateInfrastructure
+								"
+								@update:auto-optimize-habs="
+									(v: boolean, goal: HabSolverGoal) => {
+										refAutoOptimizeHabs = v;
+										trackEvent(
+											'plan_tool_optimize_habitation_active',
+											{ active: v }
+										);
+										applyOptimizeHabs(goal, false);
+									}
+								"
+								@optimize-habs="
+									(goal: HabSolverGoal) =>
+										applyOptimizeHabs(goal, true)
+								" />
+						</div>
+					</div>
+					<div>
+						<h2 class="text-white/80 font-bold text-lg pb-3">
+							{{ $t("plan.components.experts.label") }}
+						</h2>
+						<div
+							class="sm:border sm:border-white/10 sm:rounded sm:p-3">
+							<PlanExperts
+								:disabled="disabled"
+								:expert-data="result.experts"
+								:planet-natural-id="
+									planetData.planet_natural_id
+								"
+								@update:expert="handleUpdateExpert" />
+						</div>
+					</div>
 				</div>
+				<Suspense v-else-if="refShowTool && compViewToolMeta">
+					<template #default>
+						<component
+							:is="compViewToolComponent"
+							v-bind="compViewToolMeta.props"
+							v-on="compViewToolMeta.listeners" />
+					</template>
+					<template #fallback>
+						<div class="w-full text-center py-5">
+							<PSpin />
+						</div>
+					</template>
+				</Suspense>
 			</div>
 			<!-- Main Plan View -->
 			<div
-				class="p-3 row-5 col-span-full grid grid-cols-1 @[1290px]:grid-cols-[auto_450px] pt-3 gap-3">
+				class="p-3 row-6 col-span-full grid grid-cols-1 @[1290px]:grid-cols-[auto_450px] pt-3 gap-3">
 				<div>
 					<div
 						class="flex flex-row flex-wrap sm:justify-center-safe gap-6">
@@ -1000,7 +1066,7 @@
 					</div>
 				</div>
 				<div>
-					<div class="sticky top-12">
+					<div class="sticky" :style="compMaterialIOStickyStyle">
 						<h2
 							class="text-white/80 font-bold text-lg pb-3 flex justify-between child:my-auto">
 							<div>
