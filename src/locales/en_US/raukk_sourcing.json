@@ -31,7 +31,8 @@
 		"base_fraction": "Base fraction: {value}",
 		"base_fraction_tooltip": "Base permits this product chain occupies: the plan's own base plus, per source plan, the cost-weighted share of that source's output drawn here, times the source's own base fraction. Fully using this base and half of another one gives 1.50. High values mean the chain ties up several bases — often cheaper to buy than to build.",
 		"shipping_fraction": "Ship time: {value}",
-		"shipping_fraction_tooltip": "Ship time this plan's own route pairs occupy: trips per day times round-trip time, divided by a full day of the ships available on the profile. 100 % means one ship flies for this plan around the clock, and a figure past it — shown in red — means the lanes need more ships. Lanes flown by a hired LM carrier count as 0 %."
+		"shipping_fraction_tooltip": "Ship time this plan's own route pairs occupy: trips per day times round-trip time, divided by a full day of the ships available on the profile. 100 % means one ship flies for this plan around the clock, and a figure past it — shown in red — means the lanes need more ships. Lanes flown by a hired LM carrier count as 0 %.",
+		"shipping_fraction_link_hint": "Click to manage the fleet and its routes."
 	},
 	"inputs_title": "Inputs",
 	"inputs": {
@@ -103,6 +104,29 @@
 		"recompute_tooltip": "Re-costs every chain from the stored snapshot flows. To refresh the snapshots themselves, use the sourcing tool of a plan.",
 		"chain_error": "Chain '{name}': {message}",
 		"auto_chain_error": "Automatic chains: {message}"
+	},
+	"base_transport": {
+		"title": "Transport for this base",
+		"info": "Every stored lane and chain touching this base, with the figures the account Shipping page shows. Read-only: assignments and rates are edited there.",
+		"empty": "No stored transport touches this base yet — compute a snapshot first, chains are managed on the Shipping page.",
+		"lanes_title": "Lanes",
+		"chains_title": "Chains",
+		"route": "Route",
+		"route_exchange": "This base ⇄ exchange",
+		"route_inbound": "{name} → this base",
+		"route_outbound": "This base → {name}",
+		"bucket": "Cargo",
+		"ship_type": "Ship Type",
+		"cadence": "Visit Cadence",
+		"round_trip": "Round Trip",
+		"round_trip_minutes": "{minutes} min",
+		"hired": "Hired",
+		"chain": "Chain",
+		"auto": "auto",
+		"not_computed": "not computed",
+		"stale": "stale",
+		"no_lanes": "No stored lanes touch this base.",
+		"no_chains": "No stored chains touch this base."
 	},
 	"shipping": {
 		"title": "Shipping",

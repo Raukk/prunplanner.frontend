@@ -478,7 +478,25 @@ LM rate and ship assignment are pair-keyed.
    unknown keys on import, so a re-imported payload would silently have
    lost the field.
 
-## Round 16 (WO-3: utilization spillover display)
+## Round 16 (base-scoped transport view, WO-2)
+
+1. **The per-plan transport view exists now** (base-transport.md),
+   settling the "open, NOT decided" item of round 15.2 — as a
+   collapsible "Transport for this base" section on the Sourcing tool
+   next to the Shipping section, NOT a new route. The account page
+   stays the truth; the section is a filtered read of the same stored
+   snapshot/chain state (the `useRaukkFleet` rule: never recompute
+   live).
+2. **Touching** — a lane touches the base when the base is either side
+   of its pair key (owner or counterpart plan uuid; the exchange lane
+   touches its owner alone); a chain when any hop's origin or
+   destination is the base's planet, i.e. stop membership, checked over
+   authored stops, unsplit and split costings, with `memberPlanUuids`
+   as the frozen-result fallback.
+3. **Read-only v1**: no assignment pickers in the scoped view; it
+   links to `/shipping` for edits.
+
+## Round 17 (WO-3: utilization spillover display)
 
 1. **Spillover is an opt-in DISPLAY mode** (2026-08-09): the fleet
    section gains a "Show spillover" toggle, persisted account-globally
@@ -503,5 +521,6 @@ LM rate and ship assignment are pair-keyed.
 
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
-shipping-fleet.md for fleet & calibration, and
-shipping-cadence-plan.md for the cadence redesign phases.
+shipping-fleet.md for fleet & calibration,
+shipping-cadence-plan.md for the cadence redesign phases, and
+base-transport.md for the base-scoped transport view.

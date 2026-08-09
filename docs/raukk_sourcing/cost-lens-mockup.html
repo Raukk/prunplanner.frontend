@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cost Lens — Report Mockup</title>
+<style>
+	:root {
+		color-scheme: light;
+		--page: #f9f9f7;
+		--surface: #fcfcfb;
+		--ink: #0b0b0b;
+		--ink-2: #52514e;
+		--muted: #898781;
+		--grid: #e1e0d9;
+		--hairline: rgba(11, 11, 11, 0.1);
+		--accent: #2a78d6;
+		--c-input: #2a78d6;
+		--c-workforce: #1baf7a;
+		--c-repair: #eb6834;
+		--c-shipping: #4a3aa7;
+		--c-fees: #898781;
+		--good: #006300;
+		--bad: #d03b3b;
+		--warn: #a36a00;
+		--focus: #0b0b0b;
+	}
+	@media (prefers-color-scheme: dark) {
+		:root:where(:not([data-theme="light"])) {
+			color-scheme: dark;
+			--page: #0d0d0d;
+			--surface: #1a1a19;
+			--ink: #ffffff;
+			--ink-2: #c3c2b7;
+			--muted: #898781;
+			--grid: #2c2c2a;
+			--hairline: rgba(255, 255, 255, 0.1);
+			--accent: #3987e5;
+			--c-input: #3987e5;
+			--c-workforce: #199e70;
+			--c-repair: #d95926;
+			--c-shipping: #9085e9;
+			--c-fees: #898781;
+			--good: #0ca30c;
+			--bad: #e66767;
+			--warn: #c98500;
+			--focus: #ffffff;
+		}
+	}
+	:root[data-theme="dark"] {
+		color-scheme: dark;
+		--page: #0d0d0d;
+		--surface: #1a1a19;
+		--ink: #ffffff;
+		--ink-2: #c3c2b7;
+		--muted: #898781;
+		--grid: #2c2c2a;
+		--hairline: rgba(255, 255, 255, 0.1);
+		--accent: #3987e5;
+		--c-input: #3987e5;
+		--c-workforce: #199e70;
+		--c-repair: #d95926;
+		--c-shipping: #9085e9;
+		--c-fees: #898781;
+		--good: #0ca30c;
+		--bad: #e66767;
+		--warn: #c98500;
+		--focus: #ffffff;
+	}
+	* { box-sizing: border-box; }
+	body {
+		margin: 0;
+		background: var(--page);
+		color: var(--ink);
+		font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+	}
+	main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; }
+	.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+	.num { font-variant-numeric: tabular-nums; }
+
+	/* ---------- header ---------- */
+	header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; margin-bottom: 6px; }
+	header.top h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+	.mockchip {
+		font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+		color: var(--warn); border: 1px solid currentColor; border-radius: 3px;
+		padding: 1px 7px;
+	}
+	.picker { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+	.picker select {
+		background: var(--surface); color: var(--ink);
+		border: 1px solid var(--hairline); border-radius: 4px; padding: 5px 8px; font: inherit;
+	}
+	.basisline { font-size: 12px; color: var(--muted); margin: 0 0 16px; }
+	.basisline b { color: var(--ink-2); font-weight: 550; }
+
+	.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 10px; }
+	.tile {
+		background: var(--surface); border: 1px solid var(--hairline); border-radius: 6px;
+		padding: 10px 14px 12px;
+	}
+	.tile .lbl { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+	.tile .val { font-size: 22px; font-weight: 620; margin-top: 2px; }
+	.tile .sub { font-size: 12px; color: var(--ink-2); }
+	.tile.click { cursor: pointer; }
+	.tile.click:hover { border-color: var(--accent); }
+	.verdict {
+		background: var(--surface); border: 1px solid var(--hairline); border-left: 3px solid var(--accent);
+		border-radius: 6px; padding: 10px 14px; margin-bottom: 22px; font-size: 14px; color: var(--ink-2);
+	}
+	.verdict b { color: var(--ink); font-weight: 600; }
+
+	/* ---------- layout ---------- */
+	.duo { display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; align-items: start; }
+	@media (max-width: 900px) { .duo { grid-template-columns: 1fr; } }
+	section.panel {
+		background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px;
+		padding: 14px 16px 16px; min-width: 0;
+	}
+	section.panel h2 { font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
+	section.panel .explain { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+
+	/* ---------- tabs & back ---------- */
+	.viewrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+	.tabs { display: inline-flex; border: 1px solid var(--hairline); border-radius: 5px; overflow: hidden; }
+	.tabs button {
+		font: inherit; font-size: 12px; padding: 4px 14px; border: 0; cursor: pointer;
+		background: transparent; color: var(--ink-2);
+	}
+	.tabs button.on { background: color-mix(in srgb, var(--accent) 15%, var(--surface)); color: var(--ink); font-weight: 600; }
+	.backbtn {
+		display: none; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+		background: var(--surface); color: var(--ink); border: 1px solid var(--accent);
+		border-radius: 5px; padding: 4px 12px;
+	}
+	.backbtn:hover { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+
+	/* ---------- sankey ---------- */
+	#sankeywrap { display: none; overflow-x: auto; }
+	#sankey { width: 100%; min-width: 640px; height: auto; display: block; }
+	#sankey .snode { cursor: pointer; }
+	#sankey .slink { pointer-events: none; }
+	#sankey text { font: 600 11px system-ui, sans-serif; fill: var(--ink); }
+	#sankey text.sval { font-weight: 400; fill: var(--ink-2); font-size: 10px; }
+
+	/* ---------- breadcrumb ---------- */
+	.crumbbar { display: flex; height: 14px; border-radius: 3px; overflow: hidden; margin: 6px 0 4px; border: 1px solid var(--hairline); }
+	.crumbbar .seg { min-width: 8px; cursor: pointer; border-right: 2px solid var(--surface); }
+	.crumbbar .seg:last-child { border-right: 0; }
+	.crumbtxt { font-size: 12px; color: var(--ink-2); margin-bottom: 8px; }
+	.crumbtxt a { color: var(--accent); cursor: pointer; text-decoration: none; }
+	.crumbtxt a:hover { text-decoration: underline; }
+	.ctx {
+		font-size: 12px; padding: 6px 10px; border-radius: 4px; margin-bottom: 10px;
+		background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+		border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+		color: var(--ink-2);
+	}
+	.ctx b { color: var(--ink); }
+
+	/* ---------- icicle ---------- */
+	.icicle { height: 540px; display: block; min-width: 580px; user-select: none; }
+	#panelA { overflow-x: auto; }
+	.nrow { display: flex; min-height: 0; padding-bottom: 2px; }
+	.kids { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+	.cell {
+		width: 138px; flex: 0 0 138px; margin: 0 2px 0 0; border-radius: 3px;
+		padding: 3px 6px; overflow: hidden; position: relative; cursor: default;
+		display: flex; flex-direction: column; justify-content: center; gap: 0;
+		outline: none;
+	}
+	.cell:focus-visible { box-shadow: 0 0 0 2px var(--focus); z-index: 2; }
+	.cell .t { font-size: 11px; line-height: 1.15; font-weight: 620; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.cell .v { font-size: 11px; opacity: 0.85; white-space: nowrap; }
+	.cell.tiny .t, .cell.tiny .v { display: none; }
+	.cell.short .v { display: none; }
+	.cell .chev { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 10px; opacity: 0.7; }
+	/* category × internal/external */
+	.cat-input    { --c: var(--c-input); }
+	.cat-workforce{ --c: var(--c-workforce); }
+	.cat-repair   { --c: var(--c-repair); }
+	.cat-shipping { --c: var(--c-shipping); }
+	.cat-fees     { --c: var(--c-fees); }
+	.cell.ext { background: var(--c); color: #fff; }
+	.cell.ext.cat-workforce, .cell.ext.cat-repair, .cell.ext.cat-fees { color: #0b0b0b; }
+	.cell.int {
+		background: color-mix(in srgb, var(--c) 20%, var(--surface));
+		border-left: 3px solid var(--c); color: var(--ink); cursor: zoom-in;
+	}
+	.cell.loop {
+		background: color-mix(in srgb, var(--c) 12%, var(--surface));
+		border: 1px dashed var(--c); border-left: 3px solid var(--c);
+		color: var(--ink-2); cursor: help;
+	}
+	.cell.rollup { background: color-mix(in srgb, var(--muted) 16%, var(--surface)); color: var(--ink-2); cursor: zoom-in; border-left: 3px dotted var(--muted); }
+	.cell.dim { opacity: 0.3; }
+	.cell.hit { box-shadow: 0 0 0 2px var(--focus); z-index: 1; }
+	.cell .below {
+		position: absolute; left: 0; bottom: 0; height: 3px; width: 100%;
+		background: repeating-linear-gradient(90deg, var(--focus) 0 4px, transparent 4px 8px);
+	}
+	.selchip {
+		display: none; font-size: 12px; margin: 8px 0 0; padding: 5px 10px; border-radius: 4px;
+		background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+		border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); color: var(--ink-2);
+	}
+	.selchip b { color: var(--ink); }
+	.selchip a { color: var(--accent); cursor: pointer; margin-left: 8px; }
+
+	/* legend: composite (internal + external per category) */
+	.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 11px; color: var(--ink-2); }
+	.legend .li { display: flex; align-items: center; gap: 5px; }
+	.legend .sw { width: 13px; height: 13px; border-radius: 2px; }
+	.legend .sw.int { border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) 20%, var(--surface)); }
+	.legend .sw.ext { background: var(--c); }
+
+	/* ---------- pareto ---------- */
+	.prow { display: grid; grid-template-columns: 82px 1fr 62px 40px; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 4px; cursor: pointer; }
+	.prow:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+	.prow.on { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+	.prow .tick { font-size: 11px; font-weight: 600; line-height: 1.15; }
+	.prow .bar { height: 14px; border-radius: 2px 3px 3px 2px; min-width: 2px; }
+	.prow .amt { font-size: 12px; text-align: right; }
+	.prow .cum { font-size: 11px; color: var(--muted); text-align: right; }
+	.phead { display: grid; grid-template-columns: 82px 1fr 62px 40px; gap: 8px; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); padding: 0 4px 4px; }
+	.recon { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--grid); font-size: 12px; color: var(--ink-2); }
+	.recon .ok { color: var(--good); font-weight: 600; }
+
+	/* ---------- table ---------- */
+	.tablewrap { overflow-x: auto; margin-top: 16px; }
+	table { border-collapse: collapse; width: 100%; min-width: 860px; font-size: 13px; }
+	th { font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); }
+	th.r, td.r { text-align: right; }
+	td { padding: 4px 10px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+	tr.trow:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+	tr.dimrow td { opacity: 0.35; }
+	.caret { display: inline-block; width: 16px; cursor: pointer; color: var(--muted); font-size: 10px; user-select: none; }
+	.caret.none { cursor: default; visibility: hidden; }
+	.comp { display: inline-flex; align-items: center; gap: 6px; }
+	.dot { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 9px; }
+	.dot.int { background: color-mix(in srgb, var(--c) 22%, var(--surface)); border-left: 3px solid var(--c); width: 6px; }
+	.dot.ext { background: var(--c); }
+	.sharebar { position: relative; height: 10px; background: color-mix(in srgb, var(--grid) 60%, transparent); border-radius: 2px; width: 110px; }
+	.sharebar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--c); }
+	.chip { font-size: 11px; border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+	.chip.save { color: var(--good); border: 1px solid color-mix(in srgb, var(--good) 45%, transparent); }
+	.chip.lose { color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); }
+	.chip.covg { color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent); }
+	.chip.loopc { color: var(--muted); border: 1px dashed var(--muted); }
+	.src { font-size: 12px; color: var(--ink-2); }
+	.tbtn {
+		font: inherit; font-size: 12px; background: var(--surface); color: var(--ink-2);
+		border: 1px solid var(--hairline); border-radius: 4px; padding: 4px 10px; cursor: pointer;
+	}
+	.tbtn:hover { border-color: var(--accent); color: var(--ink); }
+
+	/* ---------- tooltip ---------- */
+	#tip {
+		position: fixed; z-index: 10; pointer-events: none; display: none; max-width: 300px;
+		background: var(--surface); color: var(--ink); border: 1px solid var(--hairline);
+		border-radius: 6px; padding: 9px 11px; font-size: 12px;
+		box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+	}
+	#tip .big { font-size: 14px; font-weight: 650; }
+	#tip .sec { color: var(--ink-2); margin-top: 3px; }
+	#tip .ter { color: var(--muted); margin-top: 3px; font-size: 11px; }
+
+	/* ---------- notes ---------- */
+	details.notes { margin-top: 28px; font-size: 13px; color: var(--ink-2); }
+	details.notes summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+	details.notes li { margin: 5px 0; }
+	@media (prefers-reduced-motion: no-preference) {
+		.cell, .prow, .tile { transition: opacity 0.15s, box-shadow 0.15s, border-color 0.15s; }
+	}
+	/* on dark surfaces every categorical step is mid-lightness — dark ink wins on all of them */
+	@media (prefers-color-scheme: dark) {
+		:root:where(:not([data-theme="light"])) .cell.ext { color: #0b0b0b; }
+	}
+	:root[data-theme="dark"] .cell.ext { color: #0b0b0b; }
+</style>
+</head>
+<body>
+<main>
+	<header class="top">
+		<h1>Cost Lens</h1>
+		<span class="mockchip">Mockup · illustrative numbers</span>
+		<div class="picker">
+			<label for="prod" style="font-size:12px;color:var(--muted)">Product</label>
+			<select id="prod">
+				<option selected>SF — Fuel · Montem Refinery</option>
+				<option disabled>RAT — Rations · Katoa Farms</option>
+				<option disabled>BSE — Basic Structural Elements · Promitor Prefabs</option>
+			</select>
+		</div>
+	</header>
+	<p class="basisline">Prices: <b>AI1 ask · updated 2 h ago</b> (click to change in the real tool) · internal costs from plan snapshots, oldest <b>2 h</b></p>
+
+	<div class="stats">
+		<div class="tile"><div class="lbl">Cost per unit</div><div class="val num" id="stCost"></div><div class="sub num" id="stDaily"></div></div>
+		<div class="tile"><div class="lbl">Output</div><div class="val num">480<span style="font-size:13px;color:var(--muted)"> SF/day</span></div><div class="sub">1 recipe · 2 buildings</div></div>
+		<div class="tile"><div class="lbl">Ends up external</div><div class="val num" id="stExt"></div><div class="sub">market buys + shipping + fees</div></div>
+		<div class="tile click" id="stDriver" title="Click to trace this material in the chart"><div class="lbl">Top external driver</div><div class="val" id="stDriverVal"></div><div class="sub" id="stDriverSub"></div></div>
+	</div>
+	<div class="verdict" id="verdict"></div>
+
+	<div class="duo">
+		<section class="panel" id="panelA">
+			<h2>Composition — where each ¤ of one SF comes from</h2>
+			<p class="explain">Size = share of cost. Tinted shapes are made by your bases — click to open them (Blocks) or trace them (Flow). Solid shapes are money leaving the empire.</p>
+			<div class="viewrow">
+				<div class="tabs" id="tabs"><button data-v="blocks" class="on">Blocks</button><button data-v="flow">Flow</button></div>
+				<button class="backbtn" id="backbtn">← Back</button>
+			</div>
+			<div class="crumbbar" id="crumbbar"></div>
+			<div class="crumbtxt" id="crumbtxt"></div>
+			<div class="ctx" id="ctx" style="display:none"></div>
+			<div class="icicle" id="icicle"></div>
+			<div id="sankeywrap"><svg id="sankey" viewBox="0 0 960 560" preserveAspectRatio="xMidYMid meet"></svg></div>
+			<div class="selchip" id="selchip"></div>
+			<div class="legend" id="legend"></div>
+		</section>
+
+		<section class="panel">
+			<h2>Where the money goes</h2>
+			<p class="explain">The same costs as the chart, added up per material across every branch and base. Click a row to trace it.</p>
+			<div class="phead"><span>Item</span><span></span><span style="text-align:right">¤ / SF</span><span style="text-align:right">cum %</span></div>
+			<div id="pareto"></div>
+			<div class="recon" id="recon"></div>
+		</section>
+	</div>
+
+	<section class="panel" style="margin-top:16px">
+		<div style="display:flex;align-items:baseline;gap:12px">
+			<h2 style="flex:1">Table — exact numbers</h2>
+			<button class="tbtn" id="expandAll">Expand all</button>
+			<button class="tbtn" id="csvBtn">Copy CSV</button>
+		</div>
+		<p class="explain">Same tree as the chart, with per-day totals and market comparison. “Self-supplied” shows how much of a material your empire makes vs. uses.</p>
+		<div class="tablewrap">
+			<table>
+				<thead><tr>
+					<th>Component</th><th class="r">¤ / SF</th><th class="r">% of total</th><th>Share</th>
+					<th class="r">¤ / day</th><th>Source</th><th>vs market</th><th>Flags</th>
+				</tr></thead>
+				<tbody id="tbody"></tbody>
+			</table>
+		</div>
+	</section>
+
+	<details class="notes">
+		<summary>Design notes — what the persona reviews changed</summary>
+		<ul>
+			<li><b>All ¤ stay per 1 SF, at every zoom level.</b> The pinned blue context line states it each time you drill in (casual-player fix for “100% of what?”).</li>
+			<li><b>Tooltips lead with one number</b> — the contribution to the final unit; the item’s own unit cost is secondary.</li>
+			<li><b>Reconciliation is visible</b>: Pareto total + cycle snapshots = chart root = header, shown with a tie-out line (min-maxer requirement).</li>
+			<li><b>vs-market delta on every internal node</b> — the “should this branch exist?” answer. BSE is deliberately shown costing <i>more</i> than buying it.</li>
+			<li><b>Loops</b> (H2O → RAT → H2O) are cut at the repeat and shown as a tinted dashed ↺ leaf whose tooltip explains the converged snapshot cost in one sentence.</li>
+			<li><b>Coverage</b> is phrased as “self-supplied N% — the rest is bought” instead of a bare badge.</li>
+			<li><b>Icicle over sunburst/circle-packing/treemap</b>: aligned lengths are the only encoding that shows part-to-whole truthfully at this depth; packing wastes 20–35% of area and lies about shares. Shared materials (the DAG-ness) are recovered through the Pareto cross-highlight instead of a sankey.</li>
+			<li><b>Slivers</b> under ~1.5% roll into a zoomable “· n more” block; no minimum widths on real segments, no log scales.</li>
+			<li>Production fees appear as their own unavoidable external category (pending the separate fees investigation).</li>
+			<li><b>Flow tab</b>: a sankey-style ribbon view of the same tree (per-column merge of repeated materials), for the “accounting app” reading. Blocks stays the drill-down view; Flow is the shape-of-the-empire view. Both share the same selection — click a node to trace it.</li>
+			<li><b>Marginal shortfall pricing</b>: when a plan covers only part of empire demand (BSE at 60%), the covered share is priced at true cost and the remainder appears as a separate solid “CX top-up” line priced at market — so internal vs CX money is never blended in one number.</li>
+			<li><b>Backing out</b>: ← Back button (one level), clickable breadcrumbs (any level), and Esc (clears trace first, then steps back).</li>
+		</ul>
+	</details>
+</main>
+<div id="tip"></div>
+
+<script>
+	"use strict";
+	// ---------- illustrative data model ----------
+	// Plans = internal producers. shares must sum to 1; costs derive from parent, so every view reconciles.
+	const PLANS = {
+		AMM: { name: "Umbra Chem", unitCost: 68.2, cx: 82.4, perOut: 0.5,
+			shares: [["N","input","market",0.29],["H2O","input","plan",0.12],["WF","workforce","group",0.24],["REP","repair","group",0.18],["FEE","fees","leaf",0.10],["SHIP","shipping","leaf",0.07]] },
+		H2O: { name: "Montem Wells", unitCost: 0.62, cx: 0.84, perOut: 6.8,
+			shares: [["WF","workforce","group",0.55],["REP","repair","group",0.28],["FEE","fees","leaf",0.17]] },
+		RAT: { name: "Katoa Farms", unitCost: 3.42, cx: 4.1, perOut: 1.2,
+			shares: [["GRN","input","market",0.27],["BEA","input","market",0.17],["NUT","input","market",0.12],["H2O","input","plan",0.15],["WF","workforce","group",0.17],["REP","repair","group",0.07],["FEE","fees","leaf",0.05]] },
+		BSE: { name: "Promitor Prefabs", unitCost: 212, cx: 199, coverage: 0.6, perOut: 0.02,
+			shares: [["FE","input","market",0.38],["LST","input","market",0.17],["WF","workforce","group",0.22],["REP","repair","group",0.13],["FEE","fees","leaf",0.10]] },
+	};
+	const WF_MIX = [["RAT","workforce","plan",0.30],["DW","workforce","market",0.22],["COF","workforce","market",0.16],["OVE","workforce","market",0.14],["PWO","workforce","market",0.18]];
+	const REP_ROOT = [["BSE","repair","plan",0.33],["BBH","repair","market",0.25],["BDE","repair","market",0.22],["MCG","repair","market",0.20]];
+	const REP_MIX = [["BSE","repair","plan",0.40],["BBH","repair","market",0.35],["MCG","repair","market",0.25]];
+	const ROOT_KIDS = [["AMM","input","plan",34.10],["GAL","input","market",18.70],["WF","workforce","group",14.20],["REP","repair","group",12.60],["SHIP","shipping","leaf",8.30],["FEE","fees","leaf",4.50]];
+	const UNITS_DAY = 480, PRODUCT = "SF";
+	let nid = 0;
+
+	function groupLabel(t) { return t === "WF" ? "Workforce upkeep" : "Building repair"; }
+	function leafLabel(t) { return t === "SHIP" ? "Shipping" : "Production fees"; }
+
+	function build(ticker, cat, kind, cost, path, isRoot) {
+		const n = { id: "n" + (nid++), ticker, cat, cost, kind, children: null, plan: null, label: ticker };
+		if (kind === "plan") {
+			const p = PLANS[ticker]; n.plan = p;
+			if (path.includes(ticker)) { n.kind = "loop"; return n; }
+			const np = path.concat(ticker);
+			n.children = p.shares.flatMap(([t, c, k, f]) => {
+				if (k === "group") return [build(t, c, "group", cost * f, np, false)];
+				if (k === "leaf") return [build(t, c === "shipping" || t === "SHIP" ? "shipping" : c, "leaf", cost * f, np, false)];
+				return mkSplit(t, c, k, cost * f, np);
+			});
+		} else if (kind === "group") {
+			n.label = groupLabel(ticker);
+			const mix = ticker === "WF" ? WF_MIX : (isRoot ? REP_ROOT : REP_MIX);
+			n.children = mix.flatMap(([t, c, k, f]) => mkSplit(t, c, k, cost * f, path));
+		} else if (kind === "leaf") {
+			n.label = leafLabel(ticker); n.cat = ticker === "SHIP" ? "shipping" : "fees";
+		}
+		return n;
+	}
+	// coverage shortfall: the un-covered share is priced at CX and split out as its own node
+	function mkSplit(t, c, k, cc, path) {
+		if (k === "plan" && PLANS[t] && PLANS[t].coverage && !path.includes(t)) {
+			const p = PLANS[t], iv = p.coverage * p.unitCost, mv = (1 - p.coverage) * p.cx, fI = iv / (iv + mv);
+			const intN = build(t, c, "plan", cc * fI, path, false);
+			const mktN = { id: "n" + (nid++), ticker: t, cat: c, cost: cc * (1 - fI), kind: "market",
+				children: null, plan: null, label: t + " · CX top-up", topup: true, topupPct: 1 - p.coverage };
+			return [intN, mktN];
+		}
+		return [build(t, c, k, cc, path, false)];
+	}
+	const ROOT = { id: "root", ticker: PRODUCT, label: PRODUCT + " — Fuel", cat: "input", kind: "root",
+		cost: ROOT_KIDS.reduce((s, k) => s + k[3], 0),
+		children: ROOT_KIDS.map(([t, c, k, cost]) => {
+			if (k === "group") return build(t, c, "group", cost, [PRODUCT], t === "REP");
+			if (k === "leaf") return build(t, c, "leaf", cost, [PRODUCT], false);
+			return build(t, c, k, cost, [PRODUCT], false);
+		}) };
+
+	// ---------- aggregations ----------
+	const extAgg = new Map(); let cycleTotal = 0; const occByTicker = new Map();
+	(function walk(n, path) {
+		const key = n.kind === "leaf" ? n.label : n.ticker;
+		if (!occByTicker.has(key)) occByTicker.set(key, []);
+		occByTicker.get(key).push({ node: n, path });
+		if (n.kind === "market" || n.kind === "leaf") {
+			const e = extAgg.get(key) || { key, cat: n.cat, total: 0, count: 0 };
+			e.total += n.cost; e.count++; extAgg.set(key, e);
+		} else if (n.kind === "loop") { cycleTotal += n.cost; }
+		(n.children || []).forEach((c) => walk(c, path.concat(n.ticker)));
+	})(ROOT, []);
+	const paretoRows = [...extAgg.values()].sort((a, b) => b.total - a.total);
+	const extTotal = paretoRows.reduce((s, r) => s + r.total, 0);
+
+	const fmt = (v, d = 2) => "¤" + v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+	const pct = (v) => (100 * v / ROOT.cost).toFixed(1) + "%";
+
+	// ---------- header ----------
+	document.getElementById("stCost").textContent = fmt(ROOT.cost) + " / SF";
+	document.getElementById("stDaily").textContent = fmt(ROOT.cost * UNITS_DAY, 0) + " per day";
+	document.getElementById("stExt").textContent = (100 * extTotal / ROOT.cost).toFixed(1) + "%";
+	const topDrv = paretoRows[0];
+	document.getElementById("stDriverVal").textContent = topDrv.key;
+	document.getElementById("stDriverSub").textContent = fmt(topDrv.total) + " / SF · " + pct(topDrv.total);
+	document.getElementById("verdict").innerHTML =
+		"Fuel costs <b>" + fmt(ROOT.cost) + "/u</b> — biggest single external cost is <b>GAL bought on AI1 (" + pct(extAgg.get("GAL").total) + ")</b>. " +
+		"Making <b>AMM</b> yourself beats buying it (<b>saves ¤14.20/u</b> of AMM), but <b>BSE</b> currently costs <b>6% more</b> than the CX price — and you only make <b>60%</b> of what you use; the bought remainder is split out as its own <b>CX top-up</b> line.";
+
+	// ---------- state ----------
+	let rootNode = ROOT, crumbs = [ROOT], selected = null;
+	const CATC = { input: "var(--c-input)", workforce: "var(--c-workforce)", repair: "var(--c-repair)", shipping: "var(--c-shipping)", fees: "var(--c-fees)" };
+
+	// ---------- tooltip ----------
+	const tip = document.getElementById("tip");
+	function showTip(ev, html) { tip.innerHTML = html; tip.style.display = "block"; moveTip(ev); }
+	function moveTip(ev) {
+		const w = tip.offsetWidth, h = tip.offsetHeight;
+		let x = ev.clientX + 14, y = ev.clientY + 12;
+		if (x + w > innerWidth - 8) x = ev.clientX - w - 10;
+		if (y + h > innerHeight - 8) y = ev.clientY - h - 10;
+		tip.style.left = x + "px"; tip.style.top = y + "px";
+	}
+	function hideTip() { tip.style.display = "none"; }
+	function tipHTML(n) {
+		let h = "<div class='big'>" + n.label + (n.plan ? " · " + n.plan.name : "") + "</div>";
+		h += "<div class='sec'>adds <b>" + fmt(n.cost) + "</b> to each SF (" + pct(n.cost) + " of total)</div>";
+		if (n.plan && n.kind !== "loop") {
+			const p = n.plan, d = p.cx - p.unitCost;
+			h += "<div class='sec'>costs " + fmt(p.unitCost) + " each to make · CX " + fmt(p.cx) +
+				(d >= 0 ? " → <b style='color:var(--good)'>saving " + fmt(d) + "/u</b>" : " → <b style='color:var(--bad)'>" + fmt(-d) + "/u more than buying</b>") + "</div>";
+			if (p.coverage) h += "<div class='ter'>You make " + Math.round(p.coverage * 100) + "% of what you use — the rest is bought at CX.</div>";
+			h += "<div class='ter'>Click to open its own breakdown.</div>";
+		}
+		if (n.kind === "market" && n.topup) h += "<div class='sec'>bought at market · AI1 ask</div><div class='ter'>CX top-up: your bases only cover " + Math.round((1 - n.topupPct) * 100) + "% of what you use of " + n.ticker + " — this is the bought remainder, priced at CX.</div>";
+		else if (n.kind === "market") h += "<div class='sec'>bought at market · AI1 ask</div>";
+		if (n.kind === "loop") h += "<div class='ter'>↺ Cycle: " + n.ticker + " appears again inside its own chain. Cost shown is the converged snapshot value (2 h old) — no further drill-down to avoid infinite regress.</div>";
+		const occ = occByTicker.get(n.kind === "leaf" ? n.label : n.ticker);
+		if (occ && occ.length > 1) {
+			const t = occ.reduce((s, o) => s + o.node.cost, 0);
+			h += "<div class='ter'>also appears in " + (occ.length - 1) + " other branch" + (occ.length > 2 ? "es" : "") + " · all together " + fmt(t) + " (" + pct(t) + ")</div>";
+		}
+		return h;
+	}
+
+	// ---------- icicle ----------
+	const MAXDEPTH = 4, ROLLUP_FRAC = 0.015;
+	function subtreeHasTicker(n, key) {
+		if ((n.kind === "leaf" ? n.label : n.ticker) === key) return true;
+		return (n.children || []).some((c) => subtreeHasTicker(c, key));
+	}
+	function renderIcicle() {
+		const host = document.getElementById("icicle"); host.innerHTML = "";
+		host.appendChild(cellFor(rootNode, 1, 540, 0, true));
+		renderCrumbs(); renderSelChip();
+	}
+	function cellFor(n, share, pxH, depth, isCur) {
+		const row = document.createElement("div"); row.className = "nrow"; row.style.height = (share * 100) + "%";
+		const c = document.createElement("div");
+		c.className = "cell cat-" + n.cat + " " +
+			(n.kind === "loop" ? "loop" : n.kind === "rollup" ? "rollup" : n.kind === "plan" || n.kind === "root" ? "int" : n.kind === "group" ? "int" : "ext");
+		if (pxH < 16) c.classList.add("tiny"); else if (pxH < 32) c.classList.add("short");
+		c.tabIndex = 0;
+		const selKey = n.kind === "leaf" ? n.label : n.ticker;
+		if (selected) {
+			if (selKey === selected) c.classList.add("hit");
+			else if (!subtreeHasTicker(n, selected)) c.classList.add("dim");
+			else if (n.children && depth >= MAXDEPTH - 1) {
+				const b = document.createElement("i"); b.className = "below"; c.appendChild(b);
+			}
+		}
+		const t = document.createElement("div"); t.className = "t";
+		t.textContent = n.kind === "rollup" ? "· " + n.children.length + " more" : n.label;
+		const v = document.createElement("div"); v.className = "v num";
+		v.textContent = fmt(n.cost) + " · " + pct(n.cost);
+		c.appendChild(t); c.appendChild(v);
+		const expandable = n.children && n.children.length && n.kind !== "root";
+		if (expandable && depth === MAXDEPTH - 1) { const ch = document.createElement("span"); ch.className = "chev"; ch.textContent = "»"; c.appendChild(ch); }
+		else if (expandable && !isCur) { const ch = document.createElement("span"); ch.className = "chev"; ch.textContent = "›"; c.appendChild(ch); }
+		c.addEventListener("mouseenter", (e) => showTip(e, n.kind === "rollup" ? "<div class='big'>" + n.children.length + " small items</div><div class='sec'>together " + fmt(n.cost) + " (" + pct(n.cost) + ") — click to zoom in</div>" : tipHTML(n)));
+		c.addEventListener("mousemove", moveTip);
+		c.addEventListener("mouseleave", hideTip);
+		c.addEventListener("click", (e) => { e.stopPropagation(); hideTip(); nodeClick(n, isCur); });
+		c.addEventListener("keydown", (e) => { if (e.key === "Enter") { hideTip(); nodeClick(n, isCur); } });
+		row.appendChild(c);
+		if (n.children && depth < MAXDEPTH - 1 + (isCur ? 1 : 0) && depth < MAXDEPTH) {
+			const kids = document.createElement("div"); kids.className = "kids";
+			let shown = n.children.filter((k) => k.cost / rootNode.cost >= ROLLUP_FRAC);
+			const small = n.children.filter((k) => k.cost / rootNode.cost < ROLLUP_FRAC);
+			if (small.length === 1) shown = n.children.slice();
+			shown.forEach((k) => kids.appendChild(cellFor(k, k.cost / n.cost, pxH * (k.cost / n.cost), depth + 1, false)));
+			if (small.length > 1) {
+				const r = { id: "r" + n.id, ticker: "…", label: "small items", cat: "fees", kind: "rollup",
+					cost: small.reduce((s, k) => s + k.cost, 0), children: small };
+				kids.appendChild(cellFor(r, r.cost / n.cost, pxH * (r.cost / n.cost), depth + 1, false));
+			}
+			row.appendChild(kids);
+		}
+		return row;
+	}
+	function nodeClick(n, isCur) {
+		if ((n.kind === "plan" || n.kind === "group" || n.kind === "rollup") && n.children && !isCur) {
+			crumbs.push(n); rootNode = n; renderIcicle();
+		} else if (n.kind === "market" || n.kind === "leaf" || n.kind === "loop") {
+			setSelected(n.kind === "leaf" ? n.label : n.ticker);
+		}
+	}
+	function renderCrumbs() {
+		const bar = document.getElementById("crumbbar"), txt = document.getElementById("crumbtxt"), ctx = document.getElementById("ctx");
+		bar.innerHTML = ""; txt.innerHTML = "";
+		bar.style.display = crumbs.length > 1 ? "flex" : "none";
+		document.getElementById("backbtn").style.display = crumbs.length > 1 ? "inline-block" : "none";
+		crumbs.forEach((c, i) => {
+			const s = document.createElement("div"); s.className = "seg";
+			s.style.flex = String(c.cost); s.style.background = i === 0 ? "var(--grid)" : CATC[c.cat];
+			if (i === crumbs.length - 1 && i > 0) s.style.outline = "2px solid var(--focus)";
+			s.title = c.label + " · " + pct(c.cost) + " of total";
+			s.addEventListener("click", () => { crumbs = crumbs.slice(0, i + 1); rootNode = c; renderIcicle(); });
+			bar.appendChild(s);
+			const a = document.createElement(i === crumbs.length - 1 ? "b" : "a");
+			a.textContent = c.label;
+			if (i < crumbs.length - 1) a.addEventListener("click", () => { crumbs = crumbs.slice(0, i + 1); rootNode = c; renderIcicle(); });
+			txt.appendChild(a);
+			if (i < crumbs.length - 1) txt.appendChild(document.createTextNode("  ›  "));
+		});
+		if (crumbs.length > 1) {
+			const n = rootNode;
+			ctx.style.display = "block";
+			ctx.innerHTML = "Inside: <b>" + n.label + (n.plan ? " — " + n.plan.name : "") + "</b> · all ¤ are still per 1 SF · this branch = <b>" + fmt(n.cost) + " (" + pct(n.cost) + ")</b> of total";
+		} else ctx.style.display = "none";
+	}
+	// legend (composite: internal + external per category)
+	(function legend() {
+		const L = document.getElementById("legend");
+		const cats = [["input", "Recipe inputs"], ["workforce", "Workforce"], ["repair", "Repair"], ["shipping", "Shipping"], ["fees", "Fees"]];
+		cats.forEach(([c, lbl]) => {
+			const li = document.createElement("div"); li.className = "li cat-" + c;
+			li.innerHTML = "<span class='sw int cat-" + c + "'></span><span class='sw ext cat-" + c + "'></span> " + lbl;
+			L.appendChild(li);
+		});
+		const li = document.createElement("div"); li.className = "li";
+		li.innerHTML = "<span style='color:var(--muted)'>tinted = made by you (opens) · solid = external · dashed ↺ = cycle</span>";
+		L.appendChild(li);
+	})();
+
+	// ---------- selection ----------
+	function setSelected(key) { selected = selected === key ? null : key; renderIcicle(); renderPareto(); renderTable(); renderSankey(); }
+	function renderSelChip() {
+		const el = document.getElementById("selchip");
+		if (!selected) { el.style.display = "none"; return; }
+		const occ = occByTicker.get(selected) || [];
+		const t = occ.reduce((s, o) => s + o.node.cost, 0);
+		el.style.display = "block";
+		el.innerHTML = "<b>" + selected + "</b> appears in <b>" + occ.length + "</b> branch" + (occ.length > 1 ? "es" : "") + " · together <b>" + fmt(t) + "</b> (" + pct(t) + " of SF cost)<a id='clearSel'>clear ✕</a>";
+		document.getElementById("clearSel").addEventListener("click", () => setSelected(selected));
+	}
+	document.addEventListener("keydown", (e) => {
+		if (e.key !== "Escape") return;
+		if (selected) setSelected(selected);
+		else if (crumbs.length > 1) goBack();
+	});
+	function goBack() {
+		if (crumbs.length > 1) { crumbs.pop(); rootNode = crumbs[crumbs.length - 1]; renderIcicle(); }
+	}
+	document.getElementById("backbtn").addEventListener("click", goBack);
+
+	// ---------- view tabs ----------
+	let viewMode = "blocks";
+	document.getElementById("tabs").addEventListener("click", (e) => {
+		const b = e.target.closest("button"); if (!b) return;
+		viewMode = b.dataset.v;
+		document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
+		const flow = viewMode === "flow";
+		document.getElementById("icicle").style.display = flow ? "none" : "block";
+		document.getElementById("sankeywrap").style.display = flow ? "block" : "none";
+		["crumbbar", "crumbtxt", "ctx"].forEach((id) => { document.getElementById(id).style.display = flow ? "none" : ""; });
+		document.getElementById("backbtn").style.display = flow ? "none" : (crumbs.length > 1 ? "inline-block" : "none");
+		if (flow) renderSankey(); else renderIcicle();
+	});
+
+	// ---------- sankey (flow view) ----------
+	const SDEPTH = 5, SVGNS = "http://www.w3.org/2000/svg";
+	const CATHEX = () => {
+		const cs = getComputedStyle(document.documentElement);
+		return { input: cs.getPropertyValue("--c-input").trim(), workforce: cs.getPropertyValue("--c-workforce").trim(),
+			repair: cs.getPropertyValue("--c-repair").trim(), shipping: cs.getPropertyValue("--c-shipping").trim(), fees: cs.getPropertyValue("--c-fees").trim() };
+	};
+	function sankeyData() {
+		const cols = [], links = new Map();
+		(function add(n, depth, parentKey) {
+			if (depth >= SDEPTH) return;
+			const col = cols[depth] || (cols[depth] = new Map());
+			const key = n.kind === "loop" ? "↺ " + n.ticker : n.label;
+			let e = col.get(key);
+			if (!e) { e = { key, label: key, cat: n.cat, kind: n.kind, ticker: n.ticker, value: 0, node: n }; col.set(key, e); }
+			e.value += n.cost;
+			if (parentKey !== null) {
+				const lk = depth + "|" + parentKey + "|" + key;
+				const l = links.get(lk) || { d: depth, s: parentKey, t: key, value: 0, cat: n.cat };
+				l.value += n.cost; links.set(lk, l);
+			}
+			if (n.children && depth < SDEPTH - 1) n.children.forEach((c) => add(c, depth + 1, key));
+		})(ROOT, 0, null);
+		return { cols, links: [...links.values()] };
+	}
+	function renderSankey() {
+		const svg = document.getElementById("sankey");
+		if (document.getElementById("sankeywrap").style.display === "none" || !svg) return;
+		svg.innerHTML = "";
+		const { cols, links } = sankeyData();
+		const W = 960, H = 560, NW = 12, PAD = 7, TOP = 14;
+		const maxPads = Math.max(...cols.map((c) => c.size)) * PAD;
+		const scale = (H - 2 * TOP - maxPads) / ROOT.cost;
+		const colX = (i) => 8 + i * ((W - 120) / (cols.length - 1));
+		const HEX = CATHEX();
+		cols.forEach((col, i) => {
+			let y = TOP;
+			col.forEach((e) => { e.x = colX(i); e.y = y; e.h = Math.max(2.5, e.value * scale); e.oOut = 0; e.oIn = 0; y += e.h + PAD; });
+		});
+		const matches = (e) => !selected || e.ticker === selected || e.label === selected || (e.node && subtreeHasTicker(e.node, selected));
+		// ribbons under nodes
+		links.forEach((l) => {
+			const s = cols[l.d - 1].get(l.s), t = cols[l.d].get(l.t);
+			const h = l.value * scale, sy = s.y + s.oOut, ty = t.y + t.oIn;
+			s.oOut += h; t.oIn += h;
+			const x0 = s.x + NW, x1 = t.x, mx = (x0 + x1) / 2;
+			const p = document.createElementNS(SVGNS, "path");
+			p.setAttribute("d", "M" + x0 + "," + sy + " C" + mx + "," + sy + " " + mx + "," + ty + " " + x1 + "," + ty +
+				" L" + x1 + "," + (ty + h) + " C" + mx + "," + (ty + h) + " " + mx + "," + (sy + h) + " " + x0 + "," + (sy + h) + " Z");
+			p.setAttribute("fill", HEX[l.cat] || HEX.fees);
+			const on = !selected || (matches(t) || t.label === selected);
+			p.setAttribute("fill-opacity", on ? "0.42" : "0.08");
+			p.setAttribute("class", "slink");
+			svg.appendChild(p);
+		});
+		// nodes + labels
+		cols.forEach((col, i) => {
+			col.forEach((e) => {
+				const g = document.createElementNS(SVGNS, "g"); g.setAttribute("class", "snode");
+				const r = document.createElementNS(SVGNS, "rect");
+				r.setAttribute("x", e.x); r.setAttribute("y", e.y); r.setAttribute("width", NW); r.setAttribute("height", e.h);
+				r.setAttribute("rx", 2);
+				const hex = HEX[e.cat] || HEX.fees;
+				const internal = e.kind === "plan" || e.kind === "group" || e.kind === "root" || e.kind === "loop";
+				r.setAttribute("fill", hex);
+				if (internal) { r.setAttribute("fill-opacity", "0.35"); r.setAttribute("stroke", hex); r.setAttribute("stroke-width", "1.5"); if (e.kind === "loop") r.setAttribute("stroke-dasharray", "3 2"); }
+				const dimmed = selected && !matches(e);
+				g.setAttribute("opacity", dimmed ? "0.22" : "1");
+				const ti = document.createElementNS(SVGNS, "title");
+				ti.textContent = e.label + " — " + fmt(e.value) + " per SF (" + pct(e.value) + ")" + (internal ? " · made by you" : " · external");
+				g.appendChild(ti); g.appendChild(r);
+				if (e.h >= 8 || e.value / ROOT.cost > 0.02) {
+					const tx = document.createElementNS(SVGNS, "text");
+					tx.setAttribute("x", e.x + NW + 5); tx.setAttribute("y", Math.min(e.y + e.h / 2 + 4, H - 4));
+					tx.textContent = e.label;
+					g.appendChild(tx);
+					if (e.h >= 22) {
+						const tv = document.createElementNS(SVGNS, "text"); tv.setAttribute("class", "sval");
+						tv.setAttribute("x", e.x + NW + 5); tv.setAttribute("y", Math.min(e.y + e.h / 2 + 16, H - 4));
+						tv.textContent = fmt(e.value) + " · " + pct(e.value);
+						g.appendChild(tv);
+					}
+				}
+				g.addEventListener("click", () => setSelected(e.kind === "loop" ? e.ticker : (e.node && e.node.kind === "leaf" ? e.label : e.ticker)));
+				svg.appendChild(g);
+			});
+		});
+	}
+	document.getElementById("stDriver").addEventListener("click", () => { if (selected !== topDrv.key) setSelected(topDrv.key); });
+
+	// ---------- pareto ----------
+	function renderPareto() {
+		const host = document.getElementById("pareto"); host.innerHTML = "";
+		let cum = 0; const max = paretoRows[0].total;
+		paretoRows.forEach((r) => {
+			cum += r.total;
+			const row = document.createElement("div");
+			row.className = "prow" + (selected === r.key ? " on" : "");
+			row.innerHTML = "<span class='tick " + (r.key.length <= 3 ? "mono" : "") + "'>" + r.key + "</span>" +
+				"<span class='bar cat-" + r.cat + "' style='width:" + (100 * r.total / max) + "%;background:" + CATC[r.cat] + "'></span>" +
+				"<span class='amt num'>" + fmt(r.total) + "</span><span class='cum num'>" + (100 * cum / extTotal).toFixed(0) + "%</span>";
+			row.addEventListener("click", () => setSelected(r.key));
+			row.addEventListener("mouseenter", (e) => showTip(e, "<div class='big'>" + r.key + "</div><div class='sec'>" + fmt(r.total) + " of every SF (" + pct(r.total) + ") — summed across " + r.count + " place" + (r.count > 1 ? "s" : "") + " in the tree</div><div class='ter'>click to trace where it hides in the chart</div>"));
+			row.addEventListener("mousemove", moveTip);
+			row.addEventListener("mouseleave", hideTip);
+			host.appendChild(row);
+		});
+		const d = ROOT.cost - extTotal - cycleTotal;
+		document.getElementById("recon").innerHTML =
+			"External total <b class='num'>" + fmt(extTotal) + "</b> + cycle snapshots <b class='num'>" + fmt(cycleTotal) + "</b> = <b class='num'>" + fmt(extTotal + cycleTotal) + "</b>" +
+			" <span class='ok'>✓ ties out with cost/unit</span> <span class='num' style='color:var(--muted)'>(Δ " + fmt(Math.abs(d), 4) + ")</span>";
+	}
+
+	// ---------- table ----------
+	const openRows = new Set(["root"]);
+	ROOT.children.forEach((c) => openRows.add(c.id));
+	function renderTable() {
+		const tb = document.getElementById("tbody"); tb.innerHTML = "";
+		function emit(n, depth) {
+			const tr = document.createElement("tr"); tr.className = "trow cat-" + n.cat;
+			const selKey = n.kind === "leaf" ? n.label : n.ticker;
+			if (selected && selKey !== selected && !subtreeHasTicker(n, selected)) tr.classList.add("dimrow");
+			const open = openRows.has(n.id), hasKids = n.children && n.children.length;
+			const src = n.kind === "market" ? "market · AI1 ask" : n.kind === "loop" ? "cycle snapshot" :
+				n.plan ? "plan · " + n.plan.name : n.kind === "leaf" ? (n.cat === "fees" ? "local government" : "commissioned") : "—";
+			let vs = "";
+			if (n.plan && n.kind !== "loop") {
+				const d = n.plan.cx - n.plan.unitCost;
+				vs = d >= 0 ? "<span class='chip save num'>−" + fmt(d) + "/u vs CX</span>" : "<span class='chip lose num'>+" + fmt(-d) + "/u vs CX</span>";
+			}
+			let flags = "";
+			if (n.plan && n.plan.coverage && n.kind !== "loop") flags += "<span class='chip covg'>self-supplied " + Math.round(n.plan.coverage * 100) + "%</span> ";
+			if (n.topup) flags += "<span class='chip covg'>CX top-up " + Math.round(n.topupPct * 100) + "%</span> ";
+			if (n.kind === "loop") flags += "<span class='chip loopc'>↺ cycle</span>";
+			tr.innerHTML =
+				"<td style='padding-left:" + (10 + depth * 20) + "px'><span class='caret" + (hasKids ? "" : " none") + "'>" + (open ? "▼" : "▶") + "</span>" +
+				"<span class='comp'><span class='dot " + (n.kind === "market" || n.kind === "leaf" ? "ext" : "int") + " cat-" + n.cat + "'></span>" +
+				"<span class='" + (n.ticker.length <= 3 && n.kind !== "group" && n.kind !== "leaf" ? "mono" : "") + "'>" + n.label + "</span></span></td>" +
+				"<td class='r num'>" + fmt(n.cost) + "</td><td class='r num'>" + pct(n.cost) + "</td>" +
+				"<td><span class='sharebar cat-" + n.cat + "'><i style='width:" + (100 * n.cost / ROOT.cost) + "%'></i></span></td>" +
+				"<td class='r num'>" + fmt(n.cost * UNITS_DAY, 0) + "</td>" +
+				"<td class='src'>" + src + "</td><td>" + vs + "</td><td>" + flags + "</td>";
+			if (hasKids) tr.querySelector(".caret").addEventListener("click", (e) => { e.stopPropagation(); open ? openRows.delete(n.id) : openRows.add(n.id); renderTable(); });
+			tr.addEventListener("mouseenter", (e) => { if (n.id !== "root") showTip(e, tipHTML(n)); });
+			tr.addEventListener("mousemove", moveTip);
+			tr.addEventListener("mouseleave", hideTip);
+			tb.appendChild(tr);
+			if (open && hasKids) n.children.forEach((k) => emit(k, depth + 1));
+		}
+		ROOT.children.forEach((c) => emit(c, 0));
+	}
+	document.getElementById("expandAll").addEventListener("click", () => {
+		(function all(n) { openRows.add(n.id); (n.children || []).forEach(all); })(ROOT); renderTable();
+	});
+	document.getElementById("csvBtn").addEventListener("click", (e) => {
+		const lines = ["path,component,category,kind,source,cost_per_unit,pct_of_total,cost_per_day"];
+		(function emit(n, path) {
+			const p = path ? path + " > " + n.label : n.label;
+			if (n.id !== "root") lines.push([JSON.stringify(p), n.label, n.cat, n.kind, n.plan ? n.plan.name : n.kind, n.cost.toFixed(4), (100 * n.cost / ROOT.cost).toFixed(2), (n.cost * UNITS_DAY).toFixed(2)].join(","));
+			(n.children || []).forEach((k) => emit(k, p));
+		})(ROOT, "");
+		navigator.clipboard.writeText(lines.join("\n")).then(
+			() => { e.target.textContent = "Copied ✓"; },
+			() => { e.target.textContent = "Clipboard blocked"; }
+		).finally(() => setTimeout(() => (e.target.textContent = "Copy CSV"), 1500));
+	});
+
+	renderIcicle(); renderPareto(); renderTable();
+</script>
+
+</body>
+</html>

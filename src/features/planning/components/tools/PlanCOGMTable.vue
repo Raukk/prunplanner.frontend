@@ -113,6 +113,15 @@
 					<span class="pl-1 font-light text-white/50"> ȼ </span>
 				</td>
 			</tr>
+			<tr>
+				<td class="border-r">
+					{{ $t("plan.tools.cogm.table.production_fee") }}
+				</td>
+				<td colspan="3" class="font-bold">
+					{{ formatNumber(data.productionFee) }}
+					<span class="pl-1 font-light text-white/50"> ȼ </span>
+				</td>
+			</tr>
 			<tr class="child:border-t-2!">
 				<td class="border-r">
 					{{ $t("plan.tools.cogm.table.total_cost") }}
