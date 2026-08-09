@@ -182,13 +182,79 @@ Their 'KI-439' tab logs ~70 real (not BTF) flights between two planets
 of one system with orbital phase angles, which is the dataset for
 same-system transit timing.
 
-## 7. What to model
+## 7. The simulator
 
-- Add the stellar term to the STL damage law next to the meteoroid
-  term, keyed on the leg's anchor planet: `C x Sunlight x a^2 x (1/a -
-  1/(a+d))`, with `Sunlight` and `a` from FIO planet data.
-- `C ~ 3.0e-6` unshielded; apply BPT/APT and BRP/ARP/SRP as
-  multiplicative reductions (their 3.34x confirms multiplicativity).
-- Section 6's "ANTARES I ANOMALY / not modeled; flag Antares-anchored
-  lanes" can be retired once the geometry caveat of section 5 is
-  priced as a floor.
+`src/features/raukk_sourcing/calculations/shippingDamage.ts` prices a
+trip leg by leg. Five terms, all fitted against the 25 transcribed
+flights of `btf_star_damage.json` and `btf_flights.json`:
+
+| term | law | source |
+|---|---|---|
+| wear | `2.2e-10 %/km` | section 4, two campaigns |
+| meteoroid | `5.5e-10 %/km` per unit density | section 4, two campaigns |
+| jump | `0.001 % per parsec` | 22 legs, zero variance |
+| recharge | `0.017 % per event` | 15 legs, zero variance, 65% reactor |
+| stellar | `C x L x integral(ds/r^2)`, `C = 3.546e-6` | sections 1-3 |
+| landing | `0.01192 x sqrt(km) x P^1.15 / (P^1.15 + 38^1.15)` | 15 landings, 13 planets |
+
+The landing term is a refit of the community candidate in section 6 —
+same shape, and their coefficient was uniformly ~1.9x high against
+this data. Median error 4%.
+
+Two shipped assets back it: `raukk_stellar.json` (698 systems,
+luminosity and meteoroid density) and `raukk_pressure.json` (4,576
+planets). Orbit radii come from the existing `raukk_orbits.json`.
+
+Shielding is multiplicative per damage type, from the component table
+of `repair_and_damage.json`. Heat and radiation are merged into one
+`stellar` type: the panel prints a single damage figure per leg, so
+their split is not measurable from flight data.
+
+### 7.1 Accuracy, measured
+
+Replaying all 25 flights with no per-trip tuning:
+
+| slice | result |
+|---|---|
+| trips where stellar < 25% of total | median 3%, worst 6.3% |
+| all 25 trips | median 12%, 19 of 25 within 20% |
+| observed inside the geometry band | 19 of 25 |
+
+So the 5% target holds for the four deterministic terms and for any
+trip the stellar term does not dominate. It does NOT hold on close-in
+bright-star lanes, and the reason is section 5: the warp point's
+direction sets how near the star the leg passes, the panel does not
+print it, and it moves the stellar term by a factor of ~3. No amount
+of fitting removes an unobserved variable.
+
+That is why `raukkLegDamage` returns a BAND — `expected` averaged over
+an isotropic direction, `low`/`high` its 10th and 90th percentiles.
+For a stellar-dominated lane the band is the honest answer and the
+point estimate is not.
+
+### 7.2 Getting a real lane to 5%
+
+`raukkCalibrateStellar` back-solves an anchor's coefficient from one
+observed leg; pass the result to `raukkTripDamage` via
+`stellarCoefficients`. One flown leg pins that anchor's geometry and
+takes the rest of its lane to a few percent, which is the practical
+route for the handful of hot lanes an empire actually runs.
+
+## 8. What would close the gap
+
+Two flights, in this order:
+
+1. **UNCONFOUND THE SHIP.** In batch 11 each blueprint flew only one
+   direction, so ship and leg type are 100% confounded and the 11%
+   split between them cannot be attributed. Fly ONE blueprint both
+   ways on a single pair.
+2. **PIN THE GEOMETRY.** Same ship and lane, flown at several
+   different times so the planet's orbital phase moves against the
+   fixed warp point. The spread across those runs measures the
+   direction term directly, and its correlation with the leg's own km
+   would give a predictor the panel does have.
+
+Section 6 of shipping-calibration.md can then retire "ANTARES I
+ANOMALY / not modeled; flag Antares-anchored lanes" outright. Until
+then it should point at this document and price hot lanes from the
+band rather than the point.
