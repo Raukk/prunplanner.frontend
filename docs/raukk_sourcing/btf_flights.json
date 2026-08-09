@@ -9,8 +9,8 @@
 		"parsecs": "`parsecsShown` is the panel's rounded figure; `parsecsReal` is the euclidean distance over fio_systemstars.json divided by ParsecLength 12."
 	},
 	"settings": {
-		"fuelUsage": "Low but NOT MIN: the handle sits ~3-5% along its travel on every run. The panel prints no number; the user reports ~0.05. Identical on all fifteen flights.",
-		"reactorUsage": "65% on all fifteen flights (the panel's third tick). CHRG is 4m53s everywhere, which corroborates a single setting.",
+		"fuelUsage": "The GAME DEFAULT, 0.05 (user, 2026-08-09) — what a player who never touches the slider is flying. The panel prints no number and the handle renders near MIN, which is why section 10 first read it as 'low but not MIN'. Batch 10 confirms the budget: 5% of a 1,500 unit tank is 75, and a whole same-system transit leg burned 78 to 89.",
+		"reactorUsage": "65% on all fifteen flights (the panel's third tick, next to the 66% game default). CHRG is 4m53s everywhere, which corroborates a single setting.",
 		"inventory": "0t on every flight.",
 		"condition": "100%.",
 		"ftlPreferences": "least jumps, gateways off."
@@ -28,7 +28,11 @@
 			"structuralElements": 46,
 			"commandBridge": "Command Bridge MK1",
 			"crewQuarters": "Crew Quarters (Small)",
-			"ftlEmitters": { "small": 2, "medium": 3, "large": 0 },
+			"ftlEmitters": {
+				"small": 2,
+				"medium": 3,
+				"large": 0
+			},
 			"vortex": "not required",
 			"habitationModules": "not required"
 		},
@@ -1224,6 +1228,333 @@
 				"km": 3634,
 				"damagePercent": 0.033,
 				"stlFuel": 42
+			}
+		]
+	},
+	"batch10": {
+		"note": "Same-system mass sweep, ZV-759c (Deimos) -> ZV-759b (Vulcan), 0 parsecs, so a pure sublight trip with one TRA leg instead of a DEP/JMP/APP chain. Three blueprints flown first as SCB 500t/500m3 holds and then rebuilt as WCB 3000t/1000m3, at rising cargo. Fuel slider and reactor at the GAME DEFAULTS, which the user states are 0.05 and 66% (the reactor reads `--` here: no jump, no charge). Small STL tank, 1,500 units, on every run. The inventory figures are read off the slider and are approximate; the TO leg is 4,085 km on all six, so `impliedAccelerationMax` = 2 x 4,085 km / TO^2 is exact and `impliedGrossMassTons` follows from the 125,000 t*m/s2 of the standard engine.",
+		"blueprintPanel": {
+			"blueprint": "BP-UOXO-2500 (WCB build, BUFFER 149)",
+			"cargoCapacity": "3000t / 1000m3",
+			"gFactorMax": 8,
+			"accelerationMaxEmpty": 78.5,
+			"ftlSpeedMaxParsecPerHour": 3.0,
+			"operatingEmptyMassTons": 1147,
+			"volumeM3": 1488,
+			"layout": "Standard STL Engine, Small STL Fuel Tank Kit, Standard FTL Reactor, Small FTL Fuel Tank Kit, High-load Cargo Bay Kit, Basic Hull Plate, no shielding, 71 structural elements, Command Bridge MK1, Crew Quarters (Small), 2 small + 1 medium + 1 large FTL emitter",
+			"estimatedBuildTime": "~22h"
+		},
+		"flights": [
+			{
+				"id": "b10-01",
+				"blueprint": "BP-JCLJ-8517",
+				"origin": "ZV-759c",
+				"destination": "ZV-759b",
+				"cargoHold": "SCB 500t/500m3",
+				"inventory": "0t",
+				"impliedAccelerationMax": 78.31,
+				"impliedGrossMassTons": 1596,
+				"totals": {
+					"seconds": 16030,
+					"durationExact": true,
+					"km": 186560632,
+					"parsecsShown": 0,
+					"damagePercent": 0.098,
+					"stlFuel": 151,
+					"ftlFuel": 0
+				},
+				"legs": [
+					{
+						"i": 0,
+						"type": "TO",
+						"to": "Antares II - Deimos (orbit)",
+						"seconds": 323,
+						"durationExact": true,
+						"km": 4085,
+						"damagePercent": null,
+						"stlFuel": 37
+					},
+					{
+						"i": 1,
+						"type": "TRA",
+						"to": "Antares II - Vulcan (orbit)",
+						"seconds": 15360,
+						"durationExact": false,
+						"km": 186552695,
+						"damagePercent": 0.072,
+						"stlFuel": 78
+					},
+					{
+						"i": 2,
+						"type": "LND",
+						"to": "Antares II - Vulcan",
+						"seconds": 314,
+						"durationExact": true,
+						"km": 3851,
+						"damagePercent": 0.025,
+						"stlFuel": 36
+					}
+				],
+				"buffer": 142
+			},
+			{
+				"id": "b10-02",
+				"blueprint": "BP-OCON-3635",
+				"origin": "ZV-759c",
+				"destination": "ZV-759b",
+				"cargoHold": "SCB 500t/500m3",
+				"inventory": "~200t (slider read)",
+				"impliedAccelerationMax": 78.31,
+				"impliedGrossMassTons": 1596,
+				"totals": {
+					"seconds": 16052,
+					"durationExact": true,
+					"km": 186542606,
+					"parsecsShown": 0,
+					"damagePercent": 0.1,
+					"stlFuel": 153,
+					"ftlFuel": 0
+				},
+				"legs": [
+					{
+						"i": 0,
+						"type": "TO",
+						"to": "Antares II - Deimos (orbit)",
+						"seconds": 323,
+						"durationExact": true,
+						"km": 4085,
+						"damagePercent": null,
+						"stlFuel": 37
+					},
+					{
+						"i": 1,
+						"type": "TRA",
+						"to": "Antares II - Vulcan (orbit)",
+						"seconds": 15360,
+						"durationExact": false,
+						"km": 186534069,
+						"damagePercent": 0.072,
+						"stlFuel": 78
+					},
+					{
+						"i": 2,
+						"type": "LND",
+						"to": "Antares II - Vulcan",
+						"seconds": 337,
+						"durationExact": true,
+						"km": 4452,
+						"damagePercent": 0.027,
+						"stlFuel": 38
+					}
+				],
+				"buffer": 141
+			},
+			{
+				"id": "b10-03",
+				"blueprint": "BP-UOXO-2500",
+				"origin": "ZV-759c",
+				"destination": "ZV-759b",
+				"cargoHold": "SCB 500t/500m3",
+				"inventory": "~400t (slider read)",
+				"impliedAccelerationMax": 78.31,
+				"impliedGrossMassTons": 1596,
+				"totals": {
+					"seconds": 15844,
+					"durationExact": true,
+					"km": 186744541,
+					"parsecsShown": 0,
+					"damagePercent": 0.097,
+					"stlFuel": 151,
+					"ftlFuel": 0
+				},
+				"legs": [
+					{
+						"i": 0,
+						"type": "TO",
+						"to": "Antares II - Deimos (orbit)",
+						"seconds": 323,
+						"durationExact": true,
+						"km": 4085,
+						"damagePercent": null,
+						"stlFuel": 37
+					},
+					{
+						"i": 1,
+						"type": "TRA",
+						"to": "Antares II - Vulcan (orbit)",
+						"seconds": 15180,
+						"durationExact": false,
+						"km": 186736845,
+						"damagePercent": 0.072,
+						"stlFuel": 79
+					},
+					{
+						"i": 2,
+						"type": "LND",
+						"to": "Antares II - Vulcan",
+						"seconds": 304,
+						"durationExact": true,
+						"km": 3611,
+						"damagePercent": 0.025,
+						"stlFuel": 35
+					}
+				],
+				"buffer": 140
+			},
+			{
+				"id": "b10-04",
+				"blueprint": "BP-JCLJ-8517",
+				"origin": "ZV-759c",
+				"destination": "ZV-759b",
+				"cargoHold": "WCB 3000t/1000m3",
+				"inventory": "0t",
+				"impliedAccelerationMax": 78.31,
+				"impliedGrossMassTons": 1596,
+				"totals": {
+					"seconds": 16031,
+					"durationExact": true,
+					"km": 186462611,
+					"parsecsShown": 0,
+					"damagePercent": 0.098,
+					"stlFuel": 152,
+					"ftlFuel": 0
+				},
+				"legs": [
+					{
+						"i": 0,
+						"type": "TO",
+						"to": "Antares II - Deimos (orbit)",
+						"seconds": 323,
+						"durationExact": true,
+						"km": 4085,
+						"damagePercent": null,
+						"stlFuel": 37
+					},
+					{
+						"i": 1,
+						"type": "TRA",
+						"to": "Antares II - Vulcan (orbit)",
+						"seconds": 15360,
+						"durationExact": false,
+						"km": 186454448,
+						"damagePercent": 0.072,
+						"stlFuel": 78
+					},
+					{
+						"i": 2,
+						"type": "LND",
+						"to": "Antares II - Vulcan",
+						"seconds": 323,
+						"durationExact": true,
+						"km": 4077,
+						"damagePercent": 0.026,
+						"stlFuel": 37
+					}
+				],
+				"buffer": 148
+			},
+			{
+				"id": "b10-05",
+				"blueprint": "BP-OCON-3635",
+				"origin": "ZV-759c",
+				"destination": "ZV-759b",
+				"cargoHold": "WCB 3000t/1000m3",
+				"inventory": "~1,500t (slider read)",
+				"impliedAccelerationMax": 45.23,
+				"impliedGrossMassTons": 2764,
+				"totals": {
+					"seconds": 24547,
+					"durationExact": true,
+					"km": 177474410,
+					"parsecsShown": 0,
+					"damagePercent": 0.103,
+					"stlFuel": 179,
+					"ftlFuel": 0
+				},
+				"legs": [
+					{
+						"i": 0,
+						"type": "TO",
+						"to": "Antares II - Deimos (orbit)",
+						"seconds": 425,
+						"durationExact": true,
+						"km": 4085,
+						"damagePercent": null,
+						"stlFuel": 48
+					},
+					{
+						"i": 1,
+						"type": "TRA",
+						"to": "Antares II - Vulcan (orbit)",
+						"seconds": 23700,
+						"durationExact": false,
+						"km": 177466302,
+						"damagePercent": 0.069,
+						"stlFuel": 83
+					},
+					{
+						"i": 2,
+						"type": "LND",
+						"to": "Antares II - Vulcan",
+						"seconds": 421,
+						"durationExact": true,
+						"km": 4023,
+						"damagePercent": 0.034,
+						"stlFuel": 48
+					}
+				],
+				"buffer": 147
+			},
+			{
+				"id": "b10-06",
+				"blueprint": "BP-UOXO-2500",
+				"origin": "ZV-759c",
+				"destination": "ZV-759b",
+				"cargoHold": "WCB 3000t/1000m3",
+				"inventory": "~1,800-3,000t (slider read)",
+				"impliedAccelerationMax": 29.31,
+				"impliedGrossMassTons": 4265,
+				"totals": {
+					"seconds": 33338,
+					"durationExact": true,
+					"km": 168178459,
+					"parsecsShown": 0,
+					"damagePercent": 0.105,
+					"stlFuel": 205,
+					"ftlFuel": 0
+				},
+				"legs": [
+					{
+						"i": 0,
+						"type": "TO",
+						"to": "Antares II - Deimos (orbit)",
+						"seconds": 528,
+						"durationExact": true,
+						"km": 4085,
+						"damagePercent": null,
+						"stlFuel": 60
+					},
+					{
+						"i": 1,
+						"type": "TRA",
+						"to": "Antares II - Vulcan (orbit)",
+						"seconds": 32280,
+						"durationExact": false,
+						"km": 168170772,
+						"damagePercent": 0.065,
+						"stlFuel": 89
+					},
+					{
+						"i": 2,
+						"type": "LND",
+						"to": "Antares II - Vulcan",
+						"seconds": 496,
+						"durationExact": true,
+						"km": 3602,
+						"damagePercent": 0.04,
+						"stlFuel": 56
+					}
+				]
 			}
 		]
 	}

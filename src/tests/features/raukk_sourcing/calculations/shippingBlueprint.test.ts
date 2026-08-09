@@ -135,21 +135,32 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 			expect(seed.seededFields).toContain("stlBlockMinutesEmpty");
 		});
 
-		it("charges cargo only what the acceleration actually loses", () => {
+		it("charges cargo once it pulls the ship off the ceiling", () => {
 			const seed: IRaukkBlueprintSeed = raukkBlueprintSeed(stats);
 
 			/*
-			 * 5,000 t drops accelMax from 59.8 to 15.0 m/s², which stretches
-			 * the surface hop but leaves both transit legs on the ceiling.
-			 * batch 1 measured the same thing: 43m47s empty and loaded.
+			 * 5,000 t on a 1,672 t hull drops accelMax from 59.8 to 15.0
+			 * m/s², which is far enough to leave the fuel saver's ceiling
+			 * behind — so the loaded block runs about half again as long.
+			 * Cargo is free only while the ceiling still binds, which is
+			 * what the g-capped case below shows.
 			 */
 			expect(seed.stlBlockMinutesLoaded).toBeGreaterThan(
-				seed.stlBlockMinutesEmpty
-			);
-			expect(seed.stlBlockMinutesLoaded).toBeLessThan(
-				seed.stlBlockMinutesEmpty * 1.1
+				1.4 * seed.stlBlockMinutesEmpty
 			);
 			expect(seed.seededFields).toContain("stlBlockMinutesLoaded");
+		});
+
+		it("leaves a light load free while the ceiling still binds", () => {
+			const seed: IRaukkBlueprintSeed = raukkBlueprintSeed({
+				...stats,
+				hull: { cargoWeight: 500, cargoVolume: 500 },
+			});
+
+			// batch 10 flew 0, 200 and 400 t at an identical 4h16m
+			expect(seed.stlBlockMinutesLoaded).toBeLessThan(
+				1.02 * seed.stlBlockMinutesEmpty
+			);
 		});
 
 		it("lets MIN cost the loaded ship its whole day", () => {
@@ -183,12 +194,13 @@ describe("Raukk Shipping: Blueprint Seed", () => {
 
 			/*
 			 * The slider is a BUDGET, not a throttle: 25 % of the 3,500
-			 * unit MSL burned 874 units per transit leg on batch 1, whatever
-			 * the engine, the mass or the distance. A block flies two of
-			 * them, plus its slider-blind surface hop.
+			 * unit MSL burned 874 units on a whole transit leg of batch 1.
+			 * A block flies two HALF legs — a departure and an approach at
+			 * 0.49 and 0.63 of that budget (§13.2) — plus its slider-blind
+			 * surface hop.
 			 */
-			expect(fast.stlFuelPerBlock).toBeGreaterThan(2 * 875);
-			expect(fast.stlFuelPerBlock).toBeLessThan(2 * 875 + 60);
+			expect(fast.stlFuelPerBlock).toBeGreaterThan(1.12 * 875);
+			expect(fast.stlFuelPerBlock).toBeLessThan(1.12 * 875 + 60);
 			expect(fast.stlFuelPerBlock).toBeGreaterThan(min.stlFuelPerBlock);
 			// MIN is the other operating point: two flat 40 unit budgets
 			expect(min.stlFuelPerBlock).toBeGreaterThan(2 * 40);

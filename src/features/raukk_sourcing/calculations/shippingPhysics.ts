@@ -184,18 +184,41 @@ export const RAUKK_STL_SLIDER_MAX: number = 0.25;
  * Fuel slider position every profile is derived on unless it says
  * otherwise.
  *
- * USER DECISION (2026-08-09). CAVEAT, and it is the largest open
- * uncertainty in this file: the in-game slider prints no number, and the
- * two flights that were measured against a stated ~5 % (§10 and batch 9)
- * both burned about 2.2 % of their tank per transit leg. Either the
- * eyeballed 5 % is really ~2.2 %, or the budget is not the whole tank
- * fraction. The single slider sweep of §11.8 settles it; until then this
- * constant runs ~1.7× optimistic on sublight time for anything that
- * reaches its engine's top speed.
+ * The GAME'S OWN DEFAULT, which is what a player who does not go looking
+ * for the slider is flying (user, 2026-08-09), and batch 10 confirms the
+ * budget it buys: a same-system transit leg on a 1,500 unit tank burned
+ * 78 to 89 units, against the 75 this fraction of that tank states.
  *
  * @author raukk
  */
 export const RAUKK_DEFAULT_STL_SLIDER: number = 0.05;
+
+/**
+ * What a transit leg spends, as a share of the slider's budget, by the
+ * KIND of leg it is (calibration §13.2).
+ *
+ * A same-system TRA leg is a whole point-to-point flight and spends the
+ * whole budget — batch 10's six runs come out at 1.04 to 1.19 times it,
+ * drifting up with mass. A DEP or an APP is half such a flight, one end
+ * of it, and spends accordingly: batch 9's fifteen DEP legs burned
+ * 36.87 units on average against a 75 unit budget, and its fifteen APP
+ * legs 47.27. Those two shares ARE the DEP/APP asymmetry §11.2 could not
+ * explain — an outbound leg leaves from rest and an inbound one arrives
+ * at it, and the game charges them differently.
+ *
+ * @author raukk
+ */
+export const RAUKK_TRANSIT_BUDGET_SHARE: Record<
+	"transit" | "departure" | "approach",
+	number
+> = {
+	transit: 1,
+	departure: 0.49,
+	approach: 0.63,
+};
+
+/** Which end of a flight a transit leg is, see the budget shares */
+export type RAUKK_TRANSIT_LEG = keyof typeof RAUKK_TRANSIT_BUDGET_SHARE;
 
 /**
  * Fuel a transit leg burns at the MIN slider position, units
@@ -424,17 +447,32 @@ export function raukkSurfaceLegFuel(
  *
  * @author raukk
  *
+ * A DEP or an APP leg is half a flight and spends a smaller share of it,
+ * see {@link RAUKK_TRANSIT_BUDGET_SHARE}.
+ *
+ * @author raukk
+ *
  * @param {number} tankCapacity Sublight tank, fuel units
  * @param {number} sliderFraction Slider, 0 for MIN
+ * @param {RAUKK_TRANSIT_LEG} [leg] Kind of leg, a whole flight by default
  * @returns {number} Fuel units spent on the leg
  */
 export function raukkTransitFuel(
 	tankCapacity: number,
-	sliderFraction: number
+	sliderFraction: number,
+	leg: RAUKK_TRANSIT_LEG = "transit"
 ): number {
+	const share: number = RAUKK_TRANSIT_BUDGET_SHARE[leg];
+
+	/*
+	 * MIN is its own regime and the share does not apply to it: batch 1
+	 * spent 38 to 49 units on whole TRA legs there and batches 4 and 9
+	 * spent 37 to 46 on half legs. One flat budget covers both.
+	 */
 	if (sliderFraction <= 0) return RAUKK_STL_MIN_REGIME_FUEL;
 
 	return (
+		share *
 		Math.min(sliderFraction, RAUKK_STL_SLIDER_MAX) *
 		Math.max(tankCapacity, 0)
 	);
@@ -701,25 +739,59 @@ export function raukkStlBlock(input: IRaukkStlBlockInput): IRaukkStlBlock {
 	const stationKm: number =
 		input.stationTransitKm ?? RAUKK_REFERENCE_STATION_TRANSIT_KM;
 
-	const transitFuel: number = raukkTransitFuel(
-		input.tankCapacity,
-		input.sliderFraction
-	);
-	const cruise: number = raukkCruiseSpeed(
-		transitFuel,
-		input.accelerationMax,
-		input.fuelRatePerSecond,
-		input.topSpeedKmPerSecond
-	);
+	/**
+	 * Seconds and fuel of one transit leg of a given kind and length.
+	 *
+	 * Both ends of the block are HALF flights — a departure out of one
+	 * system and an approach into the other — and the game charges the
+	 * two differently, so each carries its own budget share.
+	 */
+	function transit(km: number, leg: RAUKK_TRANSIT_LEG): [number, number] {
+		const fuel: number = raukkTransitFuel(
+			input.tankCapacity,
+			input.sliderFraction,
+			leg
+		);
+
+		return [
+			raukkTransitSeconds(
+				km,
+				raukkCruiseSpeed(
+					fuel,
+					input.accelerationMax,
+					input.fuelRatePerSecond,
+					input.topSpeedKmPerSecond
+				)
+			),
+			fuel,
+		];
+	}
+
+	/*
+	 * Which end is which depends on the direction flown: outbound the
+	 * planet leg is the departure and the station leg the approach,
+	 * inbound the other way round. One block stands for either, so it
+	 * takes the mean of the two — which is exactly right for the round
+	 * trip the chain math prices, and unbiased for a single leg.
+	 */
+	const [planetOut, fuelOut] = transit(planetKm, "departure");
+	const [planetIn] = transit(planetKm, "approach");
+	const [stationOut, fuelIn] = transit(stationKm, "approach");
+	const [stationIn] = transit(stationKm, "departure");
+
+	const planetTransitSeconds: number = (planetOut + planetIn) / 2;
+	const stationTransitSeconds: number = (stationOut + stationIn) / 2;
 
 	const surfaceSeconds: number = raukkSurfaceLegSeconds(
 		surfaceKm,
 		input.accelerationMax
 	);
-	const planetTransitSeconds: number = raukkTransitSeconds(planetKm, cruise);
-	const stationTransitSeconds: number = raukkTransitSeconds(
-		stationKm,
-		cruise
+
+	const cruise: number = raukkCruiseSpeed(
+		raukkTransitFuel(input.tankCapacity, input.sliderFraction),
+		input.accelerationMax,
+		input.fuelRatePerSecond,
+		input.topSpeedKmPerSecond
 	);
 
 	return {
@@ -729,7 +801,8 @@ export function raukkStlBlock(input: IRaukkStlBlockInput): IRaukkStlBlock {
 		seconds: surfaceSeconds + planetTransitSeconds + stationTransitSeconds,
 		fuel:
 			raukkSurfaceLegFuel(input.fuelRatePerSecond, surfaceSeconds) +
-			2 * transitFuel,
+			fuelOut +
+			fuelIn,
 		damage: raukkStlBlockDamage(
 			input.meteoroidDensity,
 			planetKm,

@@ -109,18 +109,17 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			);
 
 			/*
-			 * §11.6: 67.3 M km planet side and 20.8 M km station side, both
-			 * at the fuel saver's 9,550 km/s ceiling on the default slider,
-			 * plus a surface hop. Loading 5,000 t only stretches the hop.
+			 * §11.6: 67.3 M km planet side and 20.8 M km station side, plus
+			 * a surface hop. Empty, the fuel saver sits on its 9,550 km/s
+			 * ceiling and nothing can be faster; 5,000 t on a 1,850 t hull
+			 * pulls it well off that ceiling (§13.3), so the loaded block
+			 * runs far longer.
 			 */
 			expect(preset.stlBlockMinutesEmpty).toBeGreaterThan(
 				88_100_000 / 9_550 / 60
 			);
 			expect(preset.stlBlockMinutesLoaded).toBeGreaterThan(
-				preset.stlBlockMinutesEmpty
-			);
-			expect(preset.stlBlockMinutesLoaded).toBeLessThan(
-				preset.stlBlockMinutesEmpty * 1.1
+				1.4 * preset.stlBlockMinutesEmpty
 			);
 		});
 
@@ -180,14 +179,14 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			// 105 FTL units over 18 pc, batch 7 reproduces it at 268 / 46
 			expect(quick.ftlFuelPerParsec).toBeCloseTo(105 / 18, 10);
 			/*
-			 * §11.2: a block flies two transit legs, each spending the
-			 * slider's whole budget out of the profile's own tank — 175
-			 * units at the default 5 % of a 3,500 unit MSL — plus the
-			 * slider-blind surface hop.
+			 * §11.2 and §13.2: a block flies a departure and an approach,
+			 * spending 0.49 and 0.63 of the slider's budget — 175 units at
+			 * the default 5 % of a 3,500 unit MSL — plus the slider-blind
+			 * surface hop.
 			 */
 			[standard, quick].forEach((preset) => {
-				expect(preset.stlFuelPerBlock).toBeGreaterThan(2 * 175);
-				expect(preset.stlFuelPerBlock).toBeLessThan(2 * 175 + 80);
+				expect(preset.stlFuelPerBlock).toBeGreaterThan(1.12 * 175);
+				expect(preset.stlFuelPerBlock).toBeLessThan(1.12 * 175 + 80);
 			});
 		});
 
@@ -202,8 +201,8 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			expect(small.ftlFuelPerParsec).toBe(
 				RAUKK_FTL_FUEL_UNITS_PER_PARSEC
 			);
-			expect(small.stlFuelPerBlock).toBeGreaterThan(2 * 75);
-			expect(small.stlFuelPerBlock).toBeLessThan(2 * 75 + 40);
+			expect(small.stlFuelPerBlock).toBeGreaterThan(1.12 * 75);
+			expect(small.stlFuelPerBlock).toBeLessThan(1.12 * 75 + 40);
 		});
 	});
 

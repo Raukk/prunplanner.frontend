@@ -770,3 +770,120 @@ STILL OPEN, and the first is now the biggest:
   what it would take: a warp point per system pair plus the body's
   orbital drift over the flight.
 - Repair bill from the ship's BOM (§6).
+
+## 13. Batch 10 — the mass sweep, and the slider settled (2026-08-09)
+
+Source: six BTF runs in two user screenshots, transcribed into the
+`batch10` block of `btf_flights.json` (leg sums check against every
+printed total, 6/6). ZV-759c (Deimos) -> ZV-759b (Vulcan): SAME SYSTEM,
+0 parsecs, so one TRA leg instead of the DEP/JMP/APP chain of batch 9.
+The three blueprints of batch 9 flown first as SCB 500t/500m3 holds and
+then rebuilt as WCB 3000t/1000m3, at rising cargo. Small 1,500 unit STL
+tank throughout. Fuel slider and reactor at the GAME DEFAULTS.
+
+The BP-UOXO-2500 blueprint panel was captured this time: 3000t/1000m3,
+G-factor 8, acceleration 78.5 m/s2, FTL speed 3.0 pc/h, operating empty
+mass 1,147 t, 1,488 m3, Basic plate, Standard engine, 71 structural
+elements.
+
+The TO leg is 4,085 km on all six, so `√(2d/a)` inverts it exactly and
+the gross mass follows from the engine's thrust:
+
+| run | hold | TO | accelMax | gross | TRA | cruise | fuel |
+|---|---|---|---|---|---|---|---|
+| b10-01 | SCB 0t | 5m23s | 78.3 | 1,596 | 4h16m | 12,145 | 78 |
+| b10-02 | SCB ~200t | 5m23s | 78.3 | 1,596 | 4h16m | 12,144 | 78 |
+| b10-03 | SCB ~400t | 5m23s | 78.3 | 1,596 | 4h13m | 12,302 | 79 |
+| b10-04 | WCB 0t | 5m23s | 78.3 | 1,596 | 4h16m | 12,139 | 78 |
+| b10-05 | WCB ~1,500t | 7m05s | 45.2 | 2,764 | 6h35m | 7,488 | 83 |
+| b10-06 | WCB ~3,000t | 8m48s | 29.3 | 4,265 | 8h58m | 5,210 | 89 |
+
+### 13.1 The slider IS 5 %, and it is the game's own default
+
+The user states 0.05 fuel and 66 % reactor are what the game ships with,
+so they are what anyone who does not go hunting for the slider flies.
+Batch 10 confirms the budget outright: 5 % of a 1,500 unit tank is 75
+units, and a whole transit leg burned 78 to 89. Section 11.2's worry —
+that the eyeballed 5 % was really 2.2 % — is dead, and 13.2 explains
+where the factor of two it was chasing actually came from.
+
+### 13.2 DEP and APP are HALF legs — the asymmetry, explained
+
+A same-system TRA is a whole point-to-point flight and spends the whole
+budget. A DEP or an APP is one end of such a flight, and spends less.
+Against the same 75 unit budget, on the same tank and slider:
+
+| leg | mean burn | share of budget | n |
+|---|---|---|---|
+| DEP | 36.87 | 0.49 | 15 (batch 9) |
+| APP | 47.27 | 0.63 | 15 (batch 9) |
+| TRA | 80.83 | 1.08 | 6 (batch 10) |
+
+That IS the DEP/APP asymmetry §11.2 could not account for: outbound legs
+ran 5,773-5,797 km/s and inbound ones 6,537-7,723, and the reason is
+simply that the game hands them different budgets. Speed follows fuel
+through the §11.2 law either way. The TRA share drifting above 1 with
+mass (1.04 empty, 1.19 at 3,000 t) is unexplained and small.
+
+### 13.3 Cargo matters, but only once it leaves the g-cap behind
+
+The user's own reading of §11.2, and the sweep confirms it. Cruise speed
+is `fuel × accelMax / (34 × ratedBurn)` capped by the engine, and cargo
+enters only through `accelMax` — which a hull's g rating pins flat until
+the cargo is heavy enough to matter:
+
+- 0 t, 200 t and 400 t on a 1,596 t g-capped ship: 4h16m, 4h16m, 4h13m.
+  Identical. The first 400 t are FREE.
+- 1,500 t: 6h35m. 3,000 t: 8h58m. Once `thrust / grossMass` falls below
+  the 8 g cap, every tonne costs.
+
+The predicted cruise speed lands within 1.3 % to 1.8 % of observed on
+all six, low each time — one consistent bias, not scatter:
+
+| gross | fuel | observed | `fuel × a / (34 × rate)` |
+|---|---|---|---|
+| 1,596 | 78 | 12,145 | 11,977 |
+| 2,764 | 83 | 7,488 | 7,361 |
+| 4,265 | 89 | 5,210 | 5,114 |
+
+A 34.0 constant fitted on batch 9's half legs reads 33.5 on these whole
+ones; the difference is inside the spread §11.2 already quotes.
+
+### 13.4 What else these six confirm
+
+- SURFACE LEGS, again and at three accelerations: `√(2d/a)` and
+  `7.55 × rated × seconds` reproduce all twelve TO and LND legs to the
+  printed second and unit (LND predictions 314/337/304/323/422/496 s
+  against 314/337/304/323/421/496).
+- THE METEOROID LAW, on same-system legs where nothing else can
+  interfere: 0.072 % predicted 0.074, 0.069 predicted 0.071, 0.065
+  predicted 0.067 — a flat 0.97x across a 168 M to 187 M km range.
+- LANDING DAMAGE GROWS WITH MASS. Same planet, same ship: 0.025 % at
+  1,596 t, 0.034 at 2,764, 0.040 at 4,265. §6's per-planet term is
+  really a per-planet AND per-mass term.
+
+### 13.5 As implemented
+
+- `RAUKK_DEFAULT_STL_SLIDER` keeps its 0.05 and loses its caveat.
+- `RAUKK_TRANSIT_BUDGET_SHARE` is new: 1 / 0.49 / 0.63 for TRA / DEP /
+  APP. MIN keeps one flat budget for all three, which is what batches 1,
+  4 and 9 measure there.
+- `raukkStlBlock` flies its planet side and station side legs as a
+  departure and an approach, averaged over both orientations — exactly
+  right for the round trip the chain math prices, unbiased for one leg.
+
+Against batch 9's fifteen planet↔CX trips, now at the game default
+rather than at MIN:
+
+| | round 1 | round 2 | round 3 |
+|---|---|---|---|
+| time | 0.59x | 1.02x | **1.00x** (0.80-1.17) |
+| STL fuel | 0.97x | 0.96x | **0.99x** (0.66-1.22) |
+| damage | 0.39x | 0.63x | 0.63x (0.44-0.95) |
+
+Damage is unchanged and still entirely the Antares anomaly: remove the
+Antares Station leg from both sides and the model sits at 1.08x.
+
+Still open, in order: the Antares term (§11.5), per-planet AND per-mass
+landing damage (§13.4), real per-leg distances (§11.6), and the repair
+bill from the BOM (§6).
