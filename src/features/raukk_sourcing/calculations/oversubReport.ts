@@ -412,10 +412,10 @@ export function raukkOversubFleetRows(
  *
  * @author raukk
  *
- * @param {IRaukkOversubRow[]} rows Report rows, any mix of kinds
- * @returns {IRaukkOversubRow[]} Sorted copy
+ * @param {T[]} rows Report rows, any mix of kinds
+ * @returns {T[]} Sorted copy
  */
-export function raukkOversubSort(rows: IRaukkOversubRow[]): IRaukkOversubRow[] {
+export function raukkOversubSort<T extends IRaukkOversubRow>(rows: T[]): T[] {
 	/** Utilization as a sort key, null ranking as +∞ */
 	function utilizationOf(row: IRaukkOversubRow): number {
 		return row.utilization ?? Number.POSITIVE_INFINITY;
