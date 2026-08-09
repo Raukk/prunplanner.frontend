@@ -350,7 +350,8 @@ describe("raukkOversubGridProducers", () => {
 
 		expect(producers[0].anyOver).toBe(true);
 		expect(producers[0].anyStale).toBe(true);
-		expect(producers[0].worstUtilization).toBeCloseTo(0.55, 9);
+		// MCG at 90 / 100 beats RAT at 55 / 100
+		expect(producers[0].worstUtilization).toBeCloseTo(0.9, 9);
 		expect(producers[1].anyOver).toBe(false);
 	});
 });

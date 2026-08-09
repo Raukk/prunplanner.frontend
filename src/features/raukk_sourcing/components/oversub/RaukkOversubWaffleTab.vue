@@ -73,6 +73,7 @@
 		},
 		/** Shared percent axis domain — unused here: waffle rows carry
 		 * their own quantum, the registry contract stays */
+		// eslint-disable-next-line vue/no-unused-properties
 		axisMax: {
 			type: Number,
 			required: true,
@@ -579,9 +580,7 @@
 										layout.row.shipTypeId)
 							}}
 						</span>
-						<span
-							v-if="layout.row.netPerDay <= 0"
-							class="wbadge">
+						<span v-if="layout.row.netPerDay <= 0" class="wbadge">
 							{{
 								$t(
 									layout.row.kind === "fleet"
@@ -590,9 +589,7 @@
 								)
 							}}
 						</span>
-						<span
-							v-if="layout.row.anyStale"
-							class="wbadge stale">
+						<span v-if="layout.row.anyStale" class="wbadge stale">
 							◷ {{ $t(`${I18N}.badges.stale`) }}
 						</span>
 						<span class="wq">
@@ -610,9 +607,7 @@
 								·
 								{{
 									$t(`${WF}.quantum_net`, {
-										net: formatNumber(
-											layout.row.netPerDay
-										),
+										net: formatNumber(layout.row.netPerDay),
 										unit: layout.row.unit,
 										squares: layout.netSquares,
 									})
@@ -636,7 +631,8 @@
 							}}
 							·
 							{{ formatNumber(layout.row.subscribedPerDay) }} /
-							{{ formatNumber(Math.max(layout.row.netPerDay, 0))
+							{{
+								formatNumber(Math.max(layout.row.netPerDay, 0))
 							}}
 							{{ layout.row.unit }}
 						</span>
@@ -663,9 +659,7 @@
 							<span
 								v-else-if="cell.type === 'selfClip'"
 								class="wclip gray"
-								@mouseenter="
-									onCellEnter(cell, layout, $event)
-								"
+								@mouseenter="onCellEnter(cell, layout, $event)"
 								@mouseleave="onLeave">
 								{{
 									$t(`${WF}.self_clip`, {
@@ -702,9 +696,7 @@
 										: undefined
 								"
 								@click="onCellClick(cell)"
-								@mouseenter="
-									onCellEnter(cell, layout, $event)
-								"
+								@mouseenter="onCellEnter(cell, layout, $event)"
 								@mouseleave="onLeave"></span>
 						</template>
 					</div>

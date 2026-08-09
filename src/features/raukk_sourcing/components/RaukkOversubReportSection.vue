@@ -33,6 +33,13 @@
 	import ComputingProgress from "@/layout/components/ComputingProgress.vue";
 	import RaukkOversubTable from "@/features/raukk_sourcing/components/RaukkOversubTable.vue";
 	import RaukkOversubLedgerTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubLedgerTab.vue";
+	import RaukkOversubMatrixTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubMatrixTab.vue";
+	import RaukkOversubBeeswarmTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubBeeswarmTab.vue";
+	import RaukkOversubDumbbellTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubDumbbellTab.vue";
+	import RaukkOversubWaffleTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubWaffleTab.vue";
+	import RaukkOversubGridTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubGridTab.vue";
+	import RaukkOversubBlocksTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubBlocksTab.vue";
+	import RaukkOversubBubblesTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubBubblesTab.vue";
 	import RaukkOversubLegend from "@/features/raukk_sourcing/components/oversub/RaukkOversubLegend.vue";
 	import RaukkOversubTooltip from "@/features/raukk_sourcing/components/oversub/RaukkOversubTooltip.vue";
 
@@ -359,6 +366,41 @@
 			key: "ledger",
 			labelKey: "raukk_sourcing.oversub_report.tabs.ledger",
 			component: RaukkOversubLedgerTab,
+		},
+		{
+			key: "matrix",
+			labelKey: "raukk_sourcing.oversub_report.tabs.matrix",
+			component: RaukkOversubMatrixTab,
+		},
+		{
+			key: "beeswarm",
+			labelKey: "raukk_sourcing.oversub_report.tabs.beeswarm",
+			component: RaukkOversubBeeswarmTab,
+		},
+		{
+			key: "dumbbell",
+			labelKey: "raukk_sourcing.oversub_report.tabs.dumbbell",
+			component: RaukkOversubDumbbellTab,
+		},
+		{
+			key: "waffle",
+			labelKey: "raukk_sourcing.oversub_report.tabs.waffle",
+			component: RaukkOversubWaffleTab,
+		},
+		{
+			key: "grid",
+			labelKey: "raukk_sourcing.oversub_report.tabs.grid",
+			component: RaukkOversubGridTab,
+		},
+		{
+			key: "blocks",
+			labelKey: "raukk_sourcing.oversub_report.tabs.blocks",
+			component: RaukkOversubBlocksTab,
+		},
+		{
+			key: "bubbles",
+			labelKey: "raukk_sourcing.oversub_report.tabs.bubbles",
+			component: RaukkOversubBubblesTab,
 		},
 	];
 

@@ -36,10 +36,7 @@ export interface IRaukkBeePoint {
  * @param {number} gap Vertical step of the scan
  * @returns {number[]} Vertical offset per point, same order
  */
-export function raukkBeeDodge(
-	points: IRaukkBeePoint[],
-	gap: number
-): number[] {
+export function raukkBeeDodge(points: IRaukkBeePoint[], gap: number): number[] {
 	const placed: { x: number; y: number; r: number }[] = [];
 
 	return points.map((point) => {

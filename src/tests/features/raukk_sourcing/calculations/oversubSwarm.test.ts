@@ -40,10 +40,10 @@ describe("Raukk Oversubscription: Swarm & Waffle Layout", () => {
 		});
 
 		it("dodges coincident points apart without overlap", () => {
-			const points: IRaukkBeePoint[] = Array.from(
-				{ length: 6 },
-				() => ({ x: 50, r: 6 })
-			);
+			const points: IRaukkBeePoint[] = Array.from({ length: 6 }, () => ({
+				x: 50,
+				r: 6,
+			}));
 
 			const ys: number[] = raukkBeeDodge(points, 5);
 			const placed = points.map((point, index) => ({
@@ -140,9 +140,7 @@ describe("Raukk Oversubscription: Swarm & Waffle Layout", () => {
 
 		it("distributes fractional squares by largest remainder", () => {
 			// 7.6 + 2.9 + 1.5 = 12 squares; .9 then .6 round up
-			expect(raukkWaffleAlloc([76, 29, 15], 10)).toStrictEqual([
-				8, 3, 1,
-			]);
+			expect(raukkWaffleAlloc([76, 29, 15], 10)).toStrictEqual([8, 3, 1]);
 		});
 
 		it("keeps every part within one square of its true value", () => {
@@ -164,9 +162,7 @@ describe("Raukk Oversubscription: Swarm & Waffle Layout", () => {
 		});
 
 		it("keeps a zero part at zero squares", () => {
-			expect(raukkWaffleAlloc([50, 0, 50], 1)).toStrictEqual([
-				50, 0, 50,
-			]);
+			expect(raukkWaffleAlloc([50, 0, 50], 1)).toStrictEqual([50, 0, 50]);
 		});
 
 		it("breaks remainder ties by index, deterministically", () => {

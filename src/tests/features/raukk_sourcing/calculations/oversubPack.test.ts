@@ -395,19 +395,11 @@ describe("raukkOversubPackInner", () => {
 	});
 
 	it("one circle per item, radius ∝ √share with a 4px floor", () => {
-		const circles = raukkOversubPackInner(
-			amounts,
-			100,
-			(value) => value
-		);
+		const circles = raukkOversubPackInner(amounts, 100, (value) => value);
 
 		expect(circles).toHaveLength(4);
-		expect(circles[0].radius).toBeCloseTo(
-			Math.sqrt(50 / 100) * 100 * 0.72
-		);
-		expect(circles[1].radius).toBeCloseTo(
-			Math.sqrt(30 / 100) * 100 * 0.72
-		);
+		expect(circles[0].radius).toBeCloseTo(Math.sqrt(50 / 100) * 100 * 0.72);
+		expect(circles[1].radius).toBeCloseTo(Math.sqrt(30 / 100) * 100 * 0.72);
 
 		const tiny: IRaukkPackInnerCircle<number>[] = raukkOversubPackInner(
 			[1000, 1],
@@ -418,11 +410,7 @@ describe("raukkOversubPackInner", () => {
 	});
 
 	it("circles end up inside the host circle", () => {
-		const circles = raukkOversubPackInner(
-			amounts,
-			100,
-			(value) => value
-		);
+		const circles = raukkOversubPackInner(amounts, 100, (value) => value);
 
 		circles.forEach((circle) => {
 			const fromCenter: number = Math.sqrt(
@@ -433,11 +421,7 @@ describe("raukkOversubPackInner", () => {
 	});
 
 	it("circles never overlap after relaxation", () => {
-		const circles = raukkOversubPackInner(
-			amounts,
-			100,
-			(value) => value
-		);
+		const circles = raukkOversubPackInner(amounts, 100, (value) => value);
 
 		for (let i = 0; i < circles.length; i++)
 			for (let j = i + 1; j < circles.length; j++) {
@@ -451,23 +435,15 @@ describe("raukkOversubPackInner", () => {
 	});
 
 	it("a zero total still yields circles at the radius floor", () => {
-		const circles = raukkOversubPackInner(
-			[0, 0],
-			50,
-			(value) => value
-		);
+		const circles = raukkOversubPackInner([0, 0], 50, (value) => value);
 
 		expect(circles).toHaveLength(2);
-		circles.forEach((circle) =>
-			expect(circle.radius).toBeCloseTo(4)
-		);
+		circles.forEach((circle) => expect(circle.radius).toBeCloseTo(4));
 	});
 
 	it("is deterministic", () => {
 		expect(
 			raukkOversubPackInner(amounts, 100, (value) => value)
-		).toStrictEqual(
-			raukkOversubPackInner(amounts, 100, (value) => value)
-		);
+		).toStrictEqual(raukkOversubPackInner(amounts, 100, (value) => value));
 	});
 });

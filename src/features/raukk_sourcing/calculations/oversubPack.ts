@@ -323,7 +323,8 @@ export function raukkOversubPackField(
 
 		groups.forEach((group, groupIndex) => {
 			const gx: number =
-				zone.x0 + (zoneWidth * ((groupIndex % columns) + 0.5)) / columns;
+				zone.x0 +
+				(zoneWidth * ((groupIndex % columns) + 0.5)) / columns;
 			const gy: number =
 				30 +
 				(height - 60) *
@@ -379,10 +380,7 @@ export function raukkOversubPackField(
 			}
 
 			a.x = Math.min(Math.max(a.x, a.zx0 + a.radius), a.zx1 - a.radius);
-			a.y = Math.min(
-				Math.max(a.y, 24 + a.radius),
-				height - a.radius - 6
-			);
+			a.y = Math.min(Math.max(a.y, 24 + a.radius), height - a.radius - 6);
 		}
 	}
 

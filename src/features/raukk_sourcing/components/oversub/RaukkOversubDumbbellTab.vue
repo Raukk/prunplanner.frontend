@@ -72,6 +72,7 @@
 		},
 		/** Shared percent axis domain — unused here: the dumbbell runs
 		 * on absolute per-unit scales, the registry contract stays */
+		// eslint-disable-next-line vue/no-unused-properties
 		axisMax: {
 			type: Number,
 			required: true,
@@ -126,12 +127,7 @@
 		};
 
 		const result: IDumbbellGroup[] = [
-			build(
-				"materials",
-				"u/d",
-				props.tickerRows,
-				props.softTickerRows
-			),
+			build("materials", "u/d", props.tickerRows, props.softTickerRows),
 		];
 
 		if (props.shippingEnabled)
@@ -287,8 +283,7 @@
 				text:
 					segments.length > TOOLTIP_SEGMENT_LIMIT
 						? `${top} · ${t(`${D}.tooltip_more`, {
-								count:
-									segments.length - TOOLTIP_SEGMENT_LIMIT,
+								count: segments.length - TOOLTIP_SEGMENT_LIMIT,
 							})}`
 						: top,
 				tone: "muted",
@@ -456,9 +451,7 @@
 							<template v-else>
 								<div
 									class="dline"
-									:class="
-										deltaOf(row) < 0 ? 'def' : 'head'
-									"
+									:class="deltaOf(row) < 0 ? 'def' : 'head'"
 									:style="{
 										left: `${pctOf(
 											Math.min(
@@ -509,9 +502,7 @@
 							<!-- Δ printed uncapped; direction never
 							 color-alone: deficits always carry ▲ -->
 							<span class="u">
-								<span
-									v-if="hasNoScalePlace(row)"
-									class="defc">
+								<span v-if="hasNoScalePlace(row)" class="defc">
 									{{
 										$t(`${D}.delta_over`, {
 											delta: formatNumber(

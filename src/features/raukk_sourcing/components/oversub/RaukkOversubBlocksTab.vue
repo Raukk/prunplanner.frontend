@@ -84,8 +84,10 @@
 			type: Object as PropType<IRaukkOversubConsumerSlots>,
 			required: true,
 		},
-		/** Shared axis domain in percent — unused here, area is the
-		 * encoding and every printed % stays uncapped anyway */
+		/** Shared axis domain in percent — part of the viz tab contract;
+		 * unused here, area is the encoding and every printed % stays
+		 * uncapped anyway */
+		// eslint-disable-next-line vue/no-unused-properties
 		axisMax: {
 			type: Number,
 			required: true,
@@ -174,9 +176,7 @@
 
 		if (refMode.value === "abs") return Math.max(row.subscribedPerDay, 1);
 
-		return row.utilization === null
-			? 1.5
-			: Math.max(row.utilization, 0.05);
+		return row.utilization === null ? 1.5 : Math.max(row.utilization, 0.05);
 	}
 
 	const branches: ComputedRef<IBlocksBranch[]> = computed(() => {
@@ -284,7 +284,8 @@
 		h: number,
 		level: BlocksLevel
 	): IBlocksBox {
-		const headroom: boolean = refView.value === "headroom" && level !== "full";
+		const headroom: boolean =
+			refView.value === "headroom" && level !== "full";
 		const noDenom: boolean = row.netPerDay <= 0 || row.utilization === null;
 
 		const box: IBlocksBox = {
@@ -520,7 +521,9 @@
 	}
 
 	/** Row tooltip: capacity arithmetic, load, verdict and age */
-	function rowTooltipLines(row: IRaukkOversubRow): IRaukkOversubTooltipLine[] {
+	function rowTooltipLines(
+		row: IRaukkOversubRow
+	): IRaukkOversubTooltipLine[] {
 		const lines: IRaukkOversubTooltipLine[] = [];
 
 		if (row.kind === "ticker")
@@ -893,14 +896,8 @@
 						height="7"
 						patternUnits="userSpaceOnUse"
 						patternTransform="rotate(45)">
-						<rect
-							width="7"
-							height="7"
-							fill="rgba(199,0,57,0.12)" />
-						<rect
-							width="3"
-							height="7"
-							fill="rgba(199,0,57,0.55)" />
+						<rect width="7" height="7" fill="rgba(199,0,57,0.12)" />
+						<rect width="3" height="7" fill="rgba(199,0,57,0.55)" />
 					</pattern>
 				</defs>
 
@@ -963,7 +960,11 @@
 												: 'none'
 									"
 									:stroke-width="
-										box.headroom ? 0.8 : box.noDenom ? 0.9 : 0
+										box.headroom
+											? 0.8
+											: box.noDenom
+												? 0.9
+												: 0
 									"
 									rx="2" />
 								<rect

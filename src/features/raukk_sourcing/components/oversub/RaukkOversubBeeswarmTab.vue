@@ -1,5 +1,12 @@
 <script setup lang="ts">
-	import { computed, ComputedRef, CSSProperties, PropType, Ref, ref } from "vue";
+	import {
+		computed,
+		ComputedRef,
+		CSSProperties,
+		PropType,
+		Ref,
+		ref,
+	} from "vue";
 
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
@@ -14,7 +21,6 @@
 	// Calculations
 	import {
 		RAUKK_OVERSUB_OTHER_KEY,
-		RAUKK_OVERSUB_STATUS_COLORS,
 		raukkOversubFoldSegments,
 	} from "@/features/raukk_sourcing/calculations/oversubDisplay";
 	import { raukkBeeDodge } from "@/features/raukk_sourcing/calculations/oversubSwarm";
@@ -172,14 +178,14 @@
 	}
 
 	/** Dot fill and stroke: red = over, else the blue utilization ramp */
-	function dotColors(row: IRaukkOversubRow): { fill: string; stroke: string } {
+	function dotColors(row: IRaukkOversubRow): {
+		fill: string;
+		stroke: string;
+	} {
 		if (row.over)
 			return { fill: "rgba(199, 0, 57, 0.42)", stroke: "#c70039" };
 
-		const alpha: number = Math.min(
-			1,
-			0.12 + 0.55 * (row.utilization ?? 0)
-		);
+		const alpha: number = Math.min(1, 0.12 + 0.55 * (row.utilization ?? 0));
 
 		return {
 			fill: `rgba(57, 135, 229, ${alpha.toFixed(3)})`,
@@ -189,8 +195,10 @@
 
 	/** The lanes to render; a lane without rows renders nothing */
 	const lanes: ComputedRef<IBeeLane[]> = computed(() => {
-		const laneRows: { key: "materials" | "fleet"; rows: IRaukkOversubRow[] }[] =
-			[{ key: "materials", rows: props.tickerRows }];
+		const laneRows: {
+			key: "materials" | "fleet";
+			rows: IRaukkOversubRow[];
+		}[] = [{ key: "materials", rows: props.tickerRows }];
 
 		if (props.shippingEnabled)
 			laneRows.push({ key: "fleet", rows: props.fleetRows });
@@ -223,7 +231,10 @@
 				const withUtilization: IRaukkOversubRow[] = lane.rows
 					.filter((row) => row.utilization !== null)
 					.slice()
-					.sort((first, second) => first.utilization! - second.utilization!);
+					.sort(
+						(first, second) =>
+							first.utilization! - second.utilization!
+					);
 				const points: IRaukkBeePoint[] = withUtilization.map((row) => ({
 					x: xOf(row.utilization!),
 					r: radiusOf(row),
@@ -236,8 +247,7 @@
 					y: cy + offsets[i],
 					r: points[i].r,
 					clipped:
-						row.utilization! * 100 >
-						props.axisMax + OVER_TOLERANCE,
+						row.utilization! * 100 > props.axisMax + OVER_TOLERANCE,
 					...dotColors(row),
 				}));
 
@@ -302,7 +312,8 @@
 	/** The open row, null while nothing drills down */
 	const openRow: ComputedRef<IRaukkOversubRow | null> = computed(
 		() =>
-			allRows.value.find((row) => rowKey(row) === refOpenKey.value) ?? null
+			allRows.value.find((row) => rowKey(row) === refOpenKey.value) ??
+			null
 	);
 
 	/** Dimmed ~30% while another consumer holds the selection */
@@ -719,7 +730,9 @@
 						{{ $t(`${B}.gutter`) }}
 					</text>
 
-					<template v-for="(lane, laneIndex) in lanes" :key="lane.key">
+					<template
+						v-for="(lane, laneIndex) in lanes"
+						:key="lane.key">
 						<line
 							v-if="laneIndex > 0"
 							:x1="0"
@@ -845,7 +858,10 @@
 								:stroke-dasharray="
 									rowKey(dot.row) === refOpenKey ? '' : '4 3'
 								" />
-							<text class="bt" :x="dot.x + dot.r + 6" :y="dot.y + 1">
+							<text
+								class="bt"
+								:x="dot.x + dot.r + 6"
+								:y="dot.y + 1">
 								{{ rowShortLabel(dot.row) }}
 							</text>
 							<text
@@ -884,9 +900,7 @@
 							</RouterLink>
 							— {{ $t(`${B}.detail_title`) }}
 						</span>
-						<a
-							class="bdetclose"
-							@click="() => (refOpenKey = null)">
+						<a class="bdetclose" @click="() => (refOpenKey = null)">
 							{{ $t(`${B}.detail_close`) }}
 						</a>
 					</div>
@@ -967,10 +981,14 @@
 										:style="{
 											width: `${detailPct(100)}%`,
 										}"
-										@mouseenter="onRowEnter(openRow, $event)"
+										@mouseenter="
+											onRowEnter(openRow, $event)
+										"
 										@mouseleave="onLeave"></div>
 									<div
-										v-for="(placed, index) in detailSegments"
+										v-for="(
+											placed, index
+										) in detailSegments"
 										:key="index"
 										class="lseg"
 										:class="{
@@ -1016,21 +1034,27 @@
 									{{
 										openRow.kind === "fleet"
 											? $t(`${I18N}.utilization_na`)
-											: $t(`${I18N}.ledger.net_negative`, {
-													net: formatNumber(
-														openRow.netPerDay
-													),
-												})
+											: $t(
+													`${I18N}.ledger.net_negative`,
+													{
+														net: formatNumber(
+															openRow.netPerDay
+														),
+													}
+												)
 									}}
 								</b>
 								<span class="u">
 									{{
-										$t(`${I18N}.ledger.subscribed_absolute`, {
-											subscribed: formatNumber(
-												openRow.subscribedPerDay
-											),
-											unit: openRow.unit,
-										})
+										$t(
+											`${I18N}.ledger.subscribed_absolute`,
+											{
+												subscribed: formatNumber(
+													openRow.subscribedPerDay
+												),
+												unit: openRow.unit,
+											}
+										)
 									}}
 								</span>
 							</template>
@@ -1050,7 +1074,9 @@
 											subscribed: formatNumber(
 												openRow.subscribedPerDay
 											),
-											net: formatNumber(openRow.netPerDay),
+											net: formatNumber(
+												openRow.netPerDay
+											),
 										})
 									}}
 								</span>
@@ -1074,7 +1100,9 @@
 											subscribed: formatNumber(
 												openRow.subscribedPerDay
 											),
-											net: formatNumber(openRow.netPerDay),
+											net: formatNumber(
+												openRow.netPerDay
+											),
 										})
 									}}
 								</span>
@@ -1093,7 +1121,9 @@
 
 <style scoped>
 	svg text {
-		font: 11px system-ui, sans-serif;
+		font:
+			11px system-ui,
+			sans-serif;
 		fill: rgba(255, 255, 255, 0.75);
 		pointer-events: none;
 	}
