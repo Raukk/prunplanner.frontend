@@ -19,7 +19,10 @@
 	import { PTooltip } from "@/ui";
 
 	// Types & Interfaces
-	import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
+	import {
+		IRaukkSnapshot,
+		IRaukkTickerSource,
+	} from "@/features/raukk_sourcing/raukkSourcing.types";
 
 	/** Daily cost difference below which the note is omitted */
 	const HIDE_BELOW_DELTA: number = 0.005;
@@ -74,9 +77,27 @@
 				: undefined
 	);
 
-	/** Effective ȼ/u of this input at the snapshots sourcing config */
+	/**
+	 * Source this row was priced with, undefined while it has none. A
+	 * snapshot written before the configuration was embedded carries no
+	 * sources at all and counts as unsourced.
+	 * @author raukk
+	 */
+	const localSource: ComputedRef<IRaukkTickerSource | undefined> = computed(
+		() => localSnapshot.value?.config?.sources[props.ticker]
+	);
+
+	/**
+	 * Effective ȼ/u of this input at the snapshots sourcing config, only
+	 * for rows that actually HAVE a source. `inputPrices` holds every
+	 * input, market bought ones included, and those are priced at the very
+	 * CX preference the number above already shows — the freight on top of
+	 * it is not a sourcing decision and must not read as "our price".
+	 * @author raukk
+	 */
 	const localUnitPrice: ComputedRef<number | undefined> = computed(() => {
-		if (props.delta >= 0) return undefined;
+		if (props.delta >= 0 || localSource.value === undefined)
+			return undefined;
 
 		return localSnapshot.value?.inputPrices?.[props.ticker];
 	});
