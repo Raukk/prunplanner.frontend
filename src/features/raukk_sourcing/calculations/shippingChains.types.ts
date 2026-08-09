@@ -256,6 +256,8 @@ export interface IRaukkChainLegResult extends IRaukkChainLeg {
 	gate: IRaukkGateLegCost | null;
 	costPerTrip: number;
 	repairCostPerTrip: number;
+	/** Hull damage per trip as a fraction, 0 when hired */
+	damagePerTrip: number;
 	dailyCost: number;
 	roundTripMinutes: number;
 }
@@ -324,6 +326,8 @@ export interface IRaukkChainShipping {
 	tripsPerDay: number;
 	costPerTrip: number;
 	repairCostPerTrip: number;
+	/** Hull damage per trip summed over the legs, 0 when hired */
+	damagePerTrip: number;
 	dailyCost: number;
 	roundTripMinutes: number;
 	/** Ship time share of this chain, 0 when hired */

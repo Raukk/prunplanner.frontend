@@ -41,6 +41,9 @@ export interface IRaukkFleetLoadEntry {
 	shipTypeId: string;
 	tripsPerDay: number;
 	roundTripMinutes: number;
+	/** Hull damage per day this work inflicts, `undefined` on stored
+	 * results frozen before the wear rollup existed */
+	damagePerDay?: number;
 }
 
 /** Capacity claim on one ship type */
@@ -60,6 +63,16 @@ export interface IRaukkFleetUtilization {
 	 * legal and mean "more ships or a bigger ship".
 	 */
 	utilization: number | null;
+	/**
+	 * Hull damage per day over ALL assigned work of the type.
+	 *
+	 * `null` as soon as ONE assigned entry predates the wear rollup and
+	 * carries no damage figure — a sum that silently skips an unknown
+	 * term would understate the wear, the exact reasoning of the plan
+	 * wide shipping fraction. A type without any assigned work knows its
+	 * wear perfectly: zero.
+	 */
+	damagePerDay: number | null;
 	/** Keys of the work assigned to this type */
 	keys: string[];
 }
@@ -150,6 +163,8 @@ export function raukkFleetUtilization(
 ): IRaukkFleetUtilization[] {
 	const minutes: Record<string, number> = {};
 	const keys: Record<string, string[]> = {};
+	const damage: Record<string, number> = {};
+	const damageUnknown: Set<string> = new Set();
 
 	entries.forEach((entry) => {
 		const claimed: number =
@@ -158,6 +173,13 @@ export function raukkFleetUtilization(
 
 		minutes[entry.shipTypeId] = (minutes[entry.shipTypeId] ?? 0) + claimed;
 		keys[entry.shipTypeId] = [...(keys[entry.shipTypeId] ?? []), entry.key];
+
+		if (entry.damagePerDay === undefined)
+			damageUnknown.add(entry.shipTypeId);
+		else
+			damage[entry.shipTypeId] =
+				(damage[entry.shipTypeId] ?? 0) +
+				Math.max(entry.damagePerDay, 0);
 	});
 
 	const shipTypeIds: string[] = Object.keys(fleet).sort();
@@ -175,6 +197,9 @@ export function raukkFleetUtilization(
 				count > 0
 					? shipMinutesPerDay / (MINUTES_PER_DAY * count)
 					: null,
+			damagePerDay: damageUnknown.has(shipTypeId)
+				? null
+				: (damage[shipTypeId] ?? 0),
 			// one lane contributes one entry per LEG since the cadence
 			// model, and several legs may fly the same type
 			keys: Array.from(new Set(keys[shipTypeId] ?? [])),

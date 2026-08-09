@@ -206,6 +206,10 @@ export interface IRaukkSnapshotLane {
 	roundTripMinutes: number;
 	/** A hired lane claims none of the own fleets time */
 	hired: boolean;
+	/** Hull damage per trip as a fraction, 0 when hired. Absent on
+	 * snapshots frozen before the wear rollup — the fleet page then
+	 * reports the types wear as unknown rather than as zero. */
+	damagePerTrip?: number;
 }
 
 /** ȼ per unit a chain charges one flow it claimed */
@@ -285,6 +289,10 @@ export interface IRaukkChainResult {
 	 * because a split chain flies two loops and no single trip count
 	 * times round trip time reproduces their sum. */
 	shipMinutesPerDay: number;
+	/** Hull damage per day over everything applied, 0 when hired. Absent
+	 * on results computed before the wear rollup — the fleet page then
+	 * reports the types wear as unknown rather than as zero. */
+	damagePerDay?: number;
 	/** Claimed flows, stated with the endpoints their member plans
 	 * authored: a split rewrites a flow into two exchange legs, but the
 	 * plan that owns it still knows only the original lane. */

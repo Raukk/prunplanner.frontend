@@ -361,6 +361,8 @@ export interface IRaukkLegShipping {
 	tripsPerDay: number;
 	costPerTrip: number;
 	repairCostPerTrip: number;
+	/** Hull damage per round trip as a fraction, 0 when hired */
+	damagePerTrip: number;
 	dailyCost: number;
 	roundTripMinutes: number;
 	/** Ship time share of this leg, `null` without a ship count */
@@ -395,6 +397,8 @@ export interface IRaukkPairShipping {
 	costPerTrip: number;
 	/** Trip weighted mean over the legs */
 	repairCostPerTrip: number;
+	/** Hull damage per trip, trip weighted mean over the legs */
+	damagePerTrip: number;
 	/** ȼ per day of the whole round trip */
 	dailyCost: number;
 	roundTripMinutes: number;

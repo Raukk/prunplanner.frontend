@@ -178,6 +178,55 @@ describe("Raukk Shipping: Fleet", () => {
 
 			expect(rows[0].shipMinutesPerDay).toBe(0);
 		});
+
+		it("sums the assigned wear per ship type", () => {
+			const rows = raukkFleetUtilization({ WCB: { count: 2 } }, [
+				{
+					key: "a>CX",
+					shipTypeId: "WCB",
+					tripsPerDay: 2,
+					roundTripMinutes: 600,
+					damagePerDay: 0.004,
+				},
+				{
+					key: "chain:c1",
+					shipTypeId: "WCB",
+					tripsPerDay: 1,
+					roundTripMinutes: 240,
+					damagePerDay: 0.001,
+				},
+			]);
+
+			expect(rows[0].damagePerDay).toBeCloseTo(0.005, 10);
+		});
+
+		it("reports the wear unknown once one entry predates it", () => {
+			const rows = raukkFleetUtilization({ WCB: { count: 2 } }, [
+				{
+					key: "a>CX",
+					shipTypeId: "WCB",
+					tripsPerDay: 2,
+					roundTripMinutes: 600,
+					damagePerDay: 0.004,
+				},
+				// a stored result frozen before the wear rollup
+				{
+					key: "chain:c1",
+					shipTypeId: "WCB",
+					tripsPerDay: 1,
+					roundTripMinutes: 240,
+				},
+			]);
+
+			// a sum that skipped the unknown term would understate the wear
+			expect(rows[0].damagePerDay).toBeNull();
+		});
+
+		it("knows an idle types wear perfectly: zero", () => {
+			const rows = raukkFleetUtilization({ LCB: { count: 1 } }, []);
+
+			expect(rows[0].damagePerDay).toBe(0);
+		});
 	});
 
 	describe("raukkOwnedHullCandidates", () => {

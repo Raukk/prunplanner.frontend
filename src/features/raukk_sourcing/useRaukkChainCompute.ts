@@ -699,6 +699,7 @@ async function computeOneAutoChain(
 		dailyCost: shipping.dailyCost,
 		shippingFraction: shipping.shippingFraction,
 		shipMinutesPerDay: shipping.tripsPerDay * shipping.roundTripMinutes,
+		damagePerDay: shipping.tripsPerDay * shipping.damagePerTrip,
 		flows: claimed,
 		perUnit: mergedPerUnit(claimed),
 		memberPlanUuids: autoChain.memberPlanUuids,
@@ -893,6 +894,10 @@ async function computeOneChain(
 		),
 		shipMinutesPerDay: applied.results.reduce(
 			(sum, result) => sum + result.tripsPerDay * result.roundTripMinutes,
+			0
+		),
+		damagePerDay: applied.results.reduce(
+			(sum, result) => sum + result.tripsPerDay * result.damagePerTrip,
 			0
 		),
 		flows: claimed,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, ComputedRef, ref, Ref } from "vue";
+	import { computed, ComputedRef, PropType, ref, Ref } from "vue";
 
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
@@ -15,6 +15,7 @@
 	import RaukkCalibrationModal from "@/features/raukk_sourcing/components/RaukkCalibrationModal.vue";
 
 	// Calculations
+	import { RAUKK_REPAIR_BILL } from "@/features/raukk_sourcing/calculations/shipping";
 	import {
 		raukkBayCode,
 		raukkFleetAdvisoryRows,
@@ -38,6 +39,7 @@
 		PSelect,
 		PTable,
 		PTag,
+		PTooltip,
 	} from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
@@ -49,11 +51,23 @@
 	} from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 	import { IRaukkShipProfile } from "@/features/raukk_sourcing/raukkSourcing.types";
 
+	const props = defineProps({
+		/** ȼ of one full ship repair bill, 0 while unpriced — the drydock
+		 * column then states the cadence without a ȼ per day figure */
+		repairBillCost: {
+			type: Number as PropType<number>,
+			required: false,
+			default: 0,
+		},
+	});
+
 	const { utilization, advisories } = useRaukkFleet();
 
 	const rows: ComputedRef<IRaukkFleetRow[]> = computed(() =>
-		raukkFleetRows(utilization.value, (shipTypeId: string) =>
-			sourcingStore.getShipProfile(shipTypeId)
+		raukkFleetRows(
+			utilization.value,
+			(shipTypeId: string) => sourcingStore.getShipProfile(shipTypeId),
+			props.repairBillCost
 		)
 	);
 
@@ -170,6 +184,11 @@
 		refCalibrateShipTypeId.value = shipTypeId;
 		refShowCalibration.value = true;
 	}
+
+	/** The full repair bill, spelled out for the drydock tooltip */
+	const billLabel: string = Object.entries(RAUKK_REPAIR_BILL)
+		.map(([ticker, units]) => `${units} ${ticker}`)
+		.join(" · ");
 </script>
 
 <template>
@@ -205,13 +224,18 @@
 				</th>
 				<th>{{ $t("raukk_sourcing.fleet.utilization") }}</th>
 				<th class="text-right!">
+					{{ $t("raukk_sourcing.fleet.drydock") }}
+				</th>
+				<th class="text-right!">
 					{{ $t("raukk_sourcing.fleet.assigned") }}
 				</th>
 				<th></th>
 			</tr>
 		</thead>
 		<tbody>
-			<tr v-for="row in displayRows" :key="`RAUKKFLEET#${row.shipTypeId}`">
+			<tr
+				v-for="row in displayRows"
+				:key="`RAUKKFLEET#${row.shipTypeId}`">
 				<td>
 					<PTag size="sm" type="secondary">
 						{{ row.bayCode ?? "—" }}
@@ -326,6 +350,41 @@
 					</div>
 				</td>
 				<td class="text-right text-white/60">
+					<PTooltip v-if="row.drydockDays !== null">
+						<template #trigger>
+							<span class="hover:cursor-help">
+								{{
+									$t("raukk_sourcing.fleet.drydock_days", {
+										days: formatNumber(row.drydockDays),
+									})
+								}}
+							</span>
+						</template>
+						{{
+							$t("raukk_sourcing.fleet.drydock_tooltip", {
+								damage: formatNumber(
+									row.damagePercentPerDay ?? 0
+								),
+								bill: billLabel,
+							})
+						}}
+						<template v-if="row.repairCostPerDay !== null">
+							{{
+								$t("raukk_sourcing.fleet.drydock_cost", {
+									daily: formatNumber(row.repairCostPerDay),
+								})
+							}}
+						</template>
+					</PTooltip>
+					<PTooltip v-else-if="row.wearUnknown">
+						<template #trigger>
+							<span class="hover:cursor-help">—</span>
+						</template>
+						{{ $t("raukk_sourcing.fleet.drydock_unknown") }}
+					</PTooltip>
+					<span v-else>—</span>
+				</td>
+				<td class="text-right text-white/60">
 					{{ row.assignedCount }}
 				</td>
 				<td>
@@ -346,12 +405,12 @@
 				</td>
 			</tr>
 			<tr v-if="rows.length === 0">
-				<td colspan="7" class="text-center text-white/50">
+				<td colspan="8" class="text-center text-white/50">
 					{{ $t("raukk_sourcing.fleet.empty") }}
 				</td>
 			</tr>
 			<tr>
-				<td colspan="7">
+				<td colspan="8">
 					<div class="flex flex-row flex-wrap gap-3 child:my-auto">
 						<PSelect
 							class="w-80!"

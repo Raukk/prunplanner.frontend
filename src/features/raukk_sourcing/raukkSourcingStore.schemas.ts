@@ -302,6 +302,8 @@ export const RaukkChainResultSchema = z.object({
 	dailyCost: z.number(),
 	shippingFraction: z.number(),
 	shipMinutesPerDay: z.number(),
+	// absent on results computed before the wear rollup
+	damagePerDay: z.number().optional(),
 	flows: z.array(RaukkChainFlowCostSchema).default([]),
 	perUnit: z.record(z.string(), z.number()).default({}),
 	memberPlanUuids: z.array(z.string()).default([]),
@@ -336,6 +338,8 @@ export const RaukkSnapshotLaneSchema = z.object({
 	tripsPerDay: z.number(),
 	roundTripMinutes: z.number(),
 	hired: z.boolean(),
+	// absent on snapshots frozen before the wear rollup
+	damagePerTrip: z.number().optional(),
 });
 
 export const RaukkPlanConfigSchema = z.object({
