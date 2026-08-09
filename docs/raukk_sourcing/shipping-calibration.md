@@ -294,9 +294,14 @@ Batch 7 — reactor sweep (KI-840c -> ANT, 46pc, HCB-FTL, 5000t):
 ## 8. Open items
 
 - Antares near-star damage term (flag lanes; no data source for
-  per-type damage — user-confirmed unavailable).
+  per-type damage — user-confirmed unavailable). Section 10 adds a
+  third sighting at 10.3x and a flight plan to fit it.
 - CHRG damage ship-size dependence (minor).
-- LND damage per planet (planetary property lookup candidate).
+- LND damage per planet (planetary property lookup candidate). Section
+  10 measures a fourth planet and finds the term missing from the model
+  entirely.
+- Slider positions between MIN and 25%, and the distance dependence of
+  a transit leg — both opened by section 10.
 - HCB through a gate (confirm volume-independent traversal at
   5,684 m3).
 - FIO API key -> pull /sites/gateways, refresh raukk_gates.json.
@@ -381,3 +386,126 @@ DEFERRED, and why:
 - Everything already listed in §8: the Antares near-star term, CHRG
   damage by ship size, per-planet LND damage, the HCB gate run and the
   FIO gateway pull.
+
+## 10. Batch 8 — live SFC check of the model (2026-08-09)
+
+Source: user screenshot of the in-game SHIP FLIGHT CONTROL panel, not
+BTF. WCB-std BP-EXRX-5540 (ENG, 931t empty, LHP -> 10g cap, MSL 3,500u
+STL tank, 2,000u FTL tank), 2,318t gross (1,387t cargo, load factor
+0.46), fuel slider a small non-MIN setting (user reports ~5%, the panel
+prints no number), reactor 66%, "least jumps", Antares Station (ZV-307)
+-> Antares II - Vulcan (ZV-759b). Totals 4h36m01s / 86,461,515 km /
+4 pc / 0.129% / 203 STL + 18 FTL.
+
+| # | leg | km | time | damage | STL fuel |
+|---|---|---|---|---|---|
+| 0 | DEP ZV-307 orbit | 18,375,009 | 40m21s | 0.063% | 75 (+18 FTL) |
+| 1 | JMP ZV-759 orbit | 4 pc | 1h44m | 0.004% | -- |
+| 2 | APP ZV-759b orbit | 68,082,873 | 2h05m | 0.030% | 86 |
+| 3 | LND ZV-759b | 3,634 | 6m08s | 0.033% | 42 |
+
+Densities: ZV-307 0.20325, ZV-759 0.32333 (raukk_meteoroid.json).
+accelMax at 2,318t = 125,000 / 2,318 = 53.93 m/s2 (cap not reached).
+
+### 10.1 What held
+
+- FTL jump damage: 0.004% over 3.93 real pc = 0.00102 %/pc against the
+  0.0011 of section 6. Confirmed.
+- STL damage law away from Antares: the APP leg predicts 0.0271% at
+  density 0.32333, observed 0.030% (+11%). Confirmed.
+- LND fuel = 7.55 x rated x seconds: predicts 41.7u, observed 42u.
+- FTL fuel per parsec: profile 4.67 u/pc x 3.93 = 18.3u, observed 18u.
+- minutesPerParsec: 4 pc in 1h44m = 26.0 min/pc observed against the
+  27.5 the WCB-std profile carries (+5.8%, conservative). Also
+  reproduces section 3's "4pc / 1h44m at 2.8 pc/h" exactly, so a
+  standard reactor at 66% jumps at the same speed the MIN reference
+  did.
+
+### 10.2 What did not
+
+Model prediction for this one-way trip against the observation:
+
+| | model | observed | error |
+|---|---|---|---|
+| time | 148 min | 276 min | -46% |
+| damage | 0.0509% | 0.129% | -61% |
+| STL fuel | 123u | 203u | -39% |
+| FTL fuel | 18.3u | 18u | +2% |
+
+Causes, in order of size:
+
+1. THE BLOCK HAS NO DISTANCE (already deferred in section 9). This trip
+   flew 86.5M km sublight against the 25M km reference block, and the
+   block's shape is wrong too: a station -> planet trip is TWO transit
+   legs plus one LND, not one transit plus two TO/LND.
+2. LND DAMAGE IS NOT MODELLED AT ALL. 0.033% here — 65% of what the
+   whole reference block is charged. Still the per-planet unknown of
+   section 8.
+3. THE ANTARES ANOMALY, third independent sighting and the strongest
+   yet: the DEP leg out of Antares Station runs 10.3x the density law
+   (0.063% observed vs 0.0061% predicted, 0.00343 %/Mkm). Batch 4's
+   ZV-307c -> ANT ran 2.5x, section 6's APP legs ~24x. The pattern is
+   consistent with a term that grows towards the star: ANT orbits at
+   33.6M km and this leg is the shortest, innermost of the three.
+4. `damagePerStlBlock` is baked at the reference density 3.28 while the
+   consumers scale only the PARSEC term by path density — exactly
+   backwards to section 6. In these two low-density systems (0.20,
+   0.32) the block term is ~10x too high on its own, which is the only
+   reason the total is merely 2.5x low instead of 5x.
+
+### 10.3 The slider is continuous, and the fuel law is physical
+
+Section 1.1's "two operating points and nothing in between" was drawn
+from MIN plus 25/50/MAX, and all three of the latter sit ON the speed
+cap. This flight sits between them and breaks both halves of it:
+
+- Speed. Writing the cruise speed as V = d / t, batch 5's engine sweep
+  at 50% gives V = 2,290 x sqrt(accelMax) for every engine but the FSE
+  (1,235, i.e. the documented 1.9x cap). This flight gives 1,034 (DEP)
+  and 1,236 (APP), and fitting `t = d/V + c` across the two legs gives
+  V = 1,333 x sqrt(accelMax) with a 9.1 min fixed overhead — 58% of cap
+  speed. MIN runs 722-995. So the slider moves cruise speed
+  CONTINUOUSLY; it is not a two-point switch, and the fast-regime
+  constant 10,800 (which encodes cap speed) is ~1.7x too fast for a 5%
+  slider.
+- Fuel. `fraction x tank` predicts 175u per transit leg at 5%; the legs
+  burned 75u and 86u. What does fit, across both ships, three masses,
+  two engines and MIN plus this setting, is
+
+      transit fuel = C x ratedBurn x V / accelMax,  C = 35 (33-39)
+
+  i.e. fuel tracks the Dv the leg buys, not the distance — which is
+  also why MIN legs of 148M, 416M and 832M km all cost 37-46u. Above
+  ~25% the ship burns the whole slider budget anyway while the speed
+  saturates, so `fraction x tank` stays right THERE and only there.
+- TO/LND time. `t = sqrt(2 x legKm / accelMax)` gives 367.1s for this
+  LND against 368s observed. Under that reading the 3,130-3,300
+  "constant" of section 1.3 is sqrt(2 x d) for VH-331a's own
+  surface-to-orbit distance (implied 4,800-5,250 km) and is therefore
+  per planet, not universal. One data point; the LND km column of a few
+  more planets settles it.
+
+### 10.4 What to fly next
+
+Ordered by how much of the model each unblocks:
+
+1. SLIDER LAW. Same ship, same Antares Station -> ZV-759b trip, at MIN
+   / this setting / 10% / 20% / 25%. Gives V(slider) directly, and the
+   25% run settles per-leg vs per-trip budget on its own (two transit
+   legs: 1,750u means per leg, 875u means per trip).
+2. DISTANCE LAW. Same ship and slider, three same-system legs of very
+   different length and no jump: ZV-759b -> ZV-759a, -> ZV-759c, and
+   the longest pair available. One density (0.32333), so time-vs-km and
+   damage-vs-km both come out clean.
+3. ANTARES TERM. Same ship and slider, Antares Station -> ZV-307a
+   (a = 67,292 Mm), -> ZV-307b (106,786), -> ZV-307c (173,992), and
+   ZV-307c -> station for the reverse. Station sits at 33,603 Mm; if
+   %/Mkm falls with mean distance from the star the term is heat and
+   the four points fit its exponent.
+4. LND PER PLANET. The LND row (km, time, damage) for the same ship on
+   ZV-307a/b/c and ZV-759b. Tests sqrt(2d/a) and starts the per-planet
+   damage table in one go.
+5. JUMP OVERHEAD. Same ship and reactor, one 1-2 pc jump and one 10+ pc
+   jump. Section 3's 4pc-vs-14pc points come from different reactor
+   settings, so per-jump overhead and per-parsec time are still
+   confounded.
