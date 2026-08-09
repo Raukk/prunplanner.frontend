@@ -1,5 +1,6 @@
 <script setup lang="ts">
 	import { PropType, ref, Ref } from "vue";
+	import { RouteLocationRaw } from "vue-router";
 
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
@@ -86,6 +87,22 @@
 		});
 	}
 
+	/**
+	 * Router target of one plan link, opening the sourcing tool via the
+	 * PlanView `?tool=` deep link. Non-plan paths (fleet → /shipping)
+	 * pass through untouched.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string} path Plain path the report built
+	 * @returns {RouteLocationRaw} Target the RouterLink navigates to
+	 */
+	function planLinkTarget(path: string): RouteLocationRaw {
+		return path.startsWith("/plan/")
+			? { path, query: { tool: "raukk-sourcing" } }
+			: path;
+	}
+
 	/** Share of one claim against the row's net, "—" without one */
 	function shareLabel(row: IRaukkOversubRow, amountPerDay: number): string {
 		if (row.netPerDay <= 0)
@@ -146,7 +163,11 @@
 					<td>
 						<RouterLink
 							class="text-prunplanner hover:underline"
-							:to="`/plan/${row.planetNaturalId}/${row.producerPlanUuid}`">
+							:to="
+								planLinkTarget(
+									`/plan/${row.planetNaturalId}/${row.producerPlanUuid}`
+								)
+							">
 							{{ row.producerPlanName }}
 						</RouterLink>
 					</td>
@@ -236,7 +257,7 @@
 									segment.navTarget !== null
 								"
 								class="text-prunplanner hover:underline"
-								:to="segment.navTarget">
+								:to="planLinkTarget(segment.navTarget)">
 								{{ segmentLabel(segment) }}
 							</RouterLink>
 							<span v-else class="text-white/50">
@@ -425,7 +446,7 @@
 										segment.navTarget !== null
 									"
 									class="text-prunplanner hover:underline"
-									:to="segment.navTarget">
+									:to="planLinkTarget(segment.navTarget)">
 									{{ segmentLabel(segment) }}
 								</RouterLink>
 								<span v-else class="text-white/50">

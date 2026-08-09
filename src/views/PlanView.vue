@@ -94,7 +94,8 @@
 		ContentCopySharp,
 		SettingsSharp,
 	} from "@vicons/material";
-	import { onBeforeRouteLeave } from "vue-router";
+	// raukk: useRoute for the one-shot ?tool= deep link
+	import { onBeforeRouteLeave, useRoute } from "vue-router";
 
 	const props = defineProps({
 		disabled: {
@@ -117,6 +118,9 @@
 			default: undefined,
 		},
 	});
+
+	// raukk: captured before the awaits below, composables need sync setup
+	const route = useRoute();
 
 	const refPlanData: Ref<IPlan> = ref(inertClone(props.planData));
 	const refEmpireList: Ref<IPlanEmpireElement[] | undefined> = ref(
@@ -237,6 +241,35 @@
 	const refShowTool: Ref<toolOptions> = ref(null);
 	if (!refPlanData.value.uuid) {
 		refShowTool.value = "configuration";
+	}
+
+	// raukk: one-shot ?tool= deep link. Runs here as plan data and login
+	// state are resolved by now; only known tools on saved plans apply
+	// (the unsaved-plan rule above wins) and "popr" needs a login — its
+	// toolbar button is hidden otherwise. The param is always stripped
+	// via router.replace so back-nav/reload cannot resurrect the tool.
+	const deepLinkTools: Exclude<toolOptions, null>[] = [
+		"configuration",
+		"visitation-frequency",
+		"repair-analysis",
+		"popr",
+		"supply-cart",
+		"construction-cart",
+		"raukk-sourcing",
+	];
+	if ("tool" in route.query) {
+		const queryTool = route.query.tool;
+		if (
+			refPlanData.value.uuid &&
+			typeof queryTool === "string" &&
+			deepLinkTools.includes(queryTool as Exclude<toolOptions, null>) &&
+			(queryTool !== "popr" || userStore.isLoggedIn)
+		) {
+			refShowTool.value = queryTool as Exclude<toolOptions, null>;
+			trackEvent("plan_tool_view", { name: refShowTool.value });
+		}
+		const { tool: _tool, ...cleanQuery } = route.query;
+		router.replace({ query: cleanQuery });
 	}
 
 	function toggleTool(key: toolOptions): void {
