@@ -310,6 +310,58 @@
 	.bubhead b { font-weight: 650; }
 	.bubhead .prodlink { color: var(--ink-2); }
 
+	/* ---------- beeswarm tab ---------- */
+	#beewrap { overflow-x: auto; }
+	#beesvg { display: block; min-width: 760px; width: 100%; height: auto; animation: fadein 0.18s ease-out; }
+	#beesvg text { font: 11px system-ui, sans-serif; fill: var(--ink-2); pointer-events: none; }
+	#beesvg .bt { font-weight: 650; fill: var(--ink); }
+	#beesvg .bsm { font-size: 9.5px; fill: var(--muted); }
+	#beesvg .bpct-over { fill: var(--neg-text); font-weight: 650; }
+	#beesvg .node { cursor: pointer; }
+
+	/* ---------- dumbbell tab ---------- */
+	.drow {
+		display: grid; grid-template-columns: 216px minmax(280px, 1fr) 190px;
+		gap: 0 12px; align-items: center; min-height: 34px; padding: 3px 0;
+	}
+	.daxis { display: grid; grid-template-columns: 216px minmax(280px, 1fr) 190px; gap: 0 12px; height: 16px; font-size: 10px; color: var(--muted); margin-bottom: 2px; }
+	.daxisbar { position: relative; height: 100%; margin-left: 56px; }
+	.daxisbar .tick { position: absolute; bottom: 0; transform: translateX(-50%); }
+	.dbar { position: relative; height: 24px; margin-left: 56px; cursor: pointer; }
+	.dtrack { position: absolute; left: 0; right: 0; top: 11px; height: 2px; background: var(--surface-2); }
+	.dline { position: absolute; top: 10px; height: 4px; border-radius: 2px; }
+	.dline.head { background: rgba(120, 190, 120, 0.65); }
+	.dline.def { background: var(--neg); }
+	.ddot { position: absolute; top: 6px; width: 12px; height: 12px; border-radius: 50%; transform: translateX(-50%); z-index: 1; }
+	.ddot.netd { background: var(--surface); border: 2px solid #c3c2b7; }
+	.ddot.subd { background: rgb(var(--ramp)); }
+	.ddot.subd.over { background: var(--neg); }
+	.dgut {
+		position: absolute; right: calc(100% + 3px); top: 4px; bottom: 4px; width: 46px;
+		background: var(--hatch-gray); border: 1px solid rgba(137, 135, 129, 0.6); border-radius: 1px;
+	}
+	.dval { font-size: 12px; text-align: right; white-space: nowrap; }
+	.dval .u { display: block; font-size: 10.5px; color: var(--muted); font-weight: 400; }
+	.dval .free { color: #8fce8f; }
+	.dval .defc { color: var(--neg-text); font-weight: 650; }
+
+	/* ---------- waffle tab ---------- */
+	.wrow { margin: 8px 0 18px; }
+	.whead { font-size: 12.5px; display: flex; gap: 8px 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 5px; }
+	.whead .q { color: var(--muted); font-size: 11.5px; }
+	.whead .upct { font-size: 12px; }
+	.wgrid { display: flex; flex-wrap: wrap; gap: 2px; max-width: 660px; align-items: center; }
+	.wsq { width: 12px; height: 12px; border-radius: 1px; cursor: pointer; position: relative; flex: 0 0 12px; }
+	.wsq.dim { opacity: 0.25; }
+	.wsq.selfq { background: var(--hatch-gray); border: 1px solid rgba(137, 135, 129, 0.5); cursor: default; }
+	.wsq.freeq { background: var(--surface-2); cursor: default; }
+	.wsq.overq { background: var(--neg); }
+	.wsq.tri::after { content: "▲"; position: absolute; inset: 0; color: #fff; font-size: 8px; line-height: 12px; text-align: center; }
+	.wbound { width: 3px; height: 16px; background: rgba(255, 255, 255, 0.75); border-radius: 1px; flex: 0 0 3px; }
+	.wbound.origin { background: var(--muted); height: 14px; }
+	.wclip { color: var(--neg-text); font-size: 11px; font-weight: 650; margin-left: 4px; white-space: nowrap; }
+	.wclip.gray { color: var(--muted); font-weight: 400; }
+
 	/* shared svg text for the two new tabs */
 	#blocksvg text, #bubsvg text, #bubdetail text {
 		font: 11px system-ui, sans-serif; fill: var(--ink-2); pointer-events: none;
@@ -382,6 +434,9 @@
 		<button data-t="map">Map</button>
 		<button data-t="blocks">Blocks</button>
 		<button data-t="bubbles">Bubbles</button>
+		<button data-t="beeswarm">Beeswarm</button>
+		<button data-t="dumbbell">Dumbbell</button>
+		<button data-t="waffle">Waffle</button>
 	</div>
 
 	<section class="panel" id="pane"></section>
@@ -416,6 +471,36 @@
 				bubbles label on hover only, and the drill-down renders as a
 				detail panel below the field rather than a literal in-place
 				expansion.</li>
+			<li>Beeswarm shares one utilization axis (dimensionless) but keeps
+				two size lanes so u/d and ship-min/d radii never share a scale.
+				The dodge is a deterministic greedy scan (sorted by
+				utilization, alternating vertical offsets), not a force
+				simulation. Rows past the 250% axis cap pin at the torn edge
+				with the uncapped % printed; null-utilization rows sit in the
+				hatched gutter, never on the axis. The click drill-down is a
+				single-row mini-ledger below the field, not an in-place zoom.</li>
+			<li>Dumbbell uses one absolute linear scale per unit group
+				(materials u/d, fleet ship-min/d — never shared). Line color
+				states direction but never alone: the Δ is printed uncapped
+				and the deficit carries ▲. Net ≤ 0 / no-ships rows park the
+				hollow capacity dot in the hatched gutter left of the origin
+				with a badge; the subscribed dot stays on the real scale.</li>
+			<li>Waffle squares are a rounded approximation — the per-row
+				quantum targets 50–100 squares for capacity, largest-remainder
+				allocation keeps each consumer within one square of its true
+				value, and printed numbers stay exact and uncapped. Long tails
+				clip: the self-reserve block caps at 12 hatched squares and
+				overflow caps near 250% of capacity, both with the true counts
+				printed at the clip. Overflow squares go flat red (consumer
+				identity moves to the tooltip). Only the top 8 rows render by
+				default — waffles are tall — with a show-all fold.</li>
+			<li>Blocks gained a load / headroom view toggle: headroom sizes
+				boxes by max(net − subscribed, 0) ÷ net (dimensionless, so
+				honest across units); over and no-denominator rows get a
+				fixed minimal hatched box — zero headroom never earns area.
+				The sizing toggle (share / absolute) applies to load view
+				only, and the full row zoom keeps the load composition in
+				either view.</li>
 		</ul>
 	</details>
 </main>
@@ -544,7 +629,8 @@
 	const state = {
 		problemsOnly: true, query: "", staleOnly: false, sort: "utilization",
 		tab: "table", sel: null, trace: null, open: new Set(), computing: false,
-		blocksZoom: [], blocksMode: "share", bubbleOpen: null,
+		blocksZoom: [], blocksMode: "share", blocksView: "load",
+		bubbleOpen: null, beeOpen: null, waffleAll: false,
 	};
 
 	// selection key for a segment: slotted consumer id | "other" | "external"
@@ -680,6 +766,8 @@
 			state.blocksZoom.pop(); renderPane();
 		} else if (state.tab === "bubbles" && state.bubbleOpen) {
 			state.bubbleOpen = null; renderPane();
+		} else if (state.tab === "beeswarm" && state.beeOpen) {
+			state.beeOpen = null; renderPane();
 		} else if (state.sel) setSel(state.sel);
 	});
 
@@ -1473,6 +1561,13 @@
 		return "#6b6a64"; // fleet lane/chain claims — not consumers
 	}
 	function blocksValue(r) {
+		if (state.blocksView === "headroom") {
+			// headroom share: max(net − subscribed, 0) ÷ net — dimensionless,
+			// comparable across u/d and ship-min/d. No headroom (over) or no
+			// denominator → fixed minimal hatched box: zero never earns area.
+			const hs = headroomShare(r.net, r.subscribed);
+			return hs === null ? 0.08 : Math.max(hs, 0.08);
+		}
 		if (state.blocksMode === "abs") return Math.max(r.subscribed, 1);
 		// draw share: subscribed ÷ net. No denominator → fixed nominal area;
 		// the box is fully hatched, so area never claims a utilization.
