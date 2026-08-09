@@ -414,9 +414,10 @@ export const RaukkSourcingExportSchema = z.object({
 	chainResults: z.record(z.string(), RaukkChainResultSchema).default({}),
 	fleet: z.record(z.string(), RaukkFleetShipSchema).default({}),
 	assignments: z.record(z.string(), z.string()).default({}),
-	// raukk: fleet page spillover display flag, defaulted off — every
-	// payload written before the display existed knows nothing of it
-	fleetSpillover: z.boolean().default(false),
+	// raukk: fleet page spillover display flag, defaulted on — every
+	// payload written before the display existed knows nothing of it,
+	// while an explicitly persisted false always wins over the default
+	fleetSpillover: z.boolean().default(true),
 	chainConfig: RaukkChainConfigSchema.prefault({}),
 	// raukk: depots, keyed by planet natural id. Defaulted for the very
 	// same reason the five v2 slices are: every payload written before

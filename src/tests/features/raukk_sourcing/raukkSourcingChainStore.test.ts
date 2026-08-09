@@ -434,11 +434,12 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		it("toggles the spillover display without staling anything", () => {
 			store.setSnapshot("source", makeSnapshot("A", "ZV-759b"));
 
-			expect(store.fleetSpillover).toBe(false);
-
-			store.setFleetSpillover(true);
-
+			// defaulted on for a fresh store
 			expect(store.fleetSpillover).toBe(true);
+
+			store.setFleetSpillover(false);
+
+			expect(store.fleetSpillover).toBe(false);
 			// a display mode, not an input: nothing recomputes
 			expect(store.snapshots.source.stale).toBe(false);
 		});
@@ -692,7 +693,9 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			store.setFleetShip("WCB", { count: 3, designName: "FSE_WCB_QCR" });
 			store.setAssignment(raukkChainAssignmentKey("c1"), "WCB");
 			store.setChainConfig({ densityRef: 2.5 });
-			store.setFleetSpillover(true);
+			// against the on-default: an explicitly persisted false must
+			// survive the round trip, never be overwritten by the default
+			store.setFleetSpillover(false);
 
 			const exported: string = store.exportJSON();
 			const before = JSON.parse(
@@ -709,10 +712,10 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.chains).toStrictEqual({});
 			expect(store.chainConfig).toStrictEqual(raukkDefaultChainConfig());
 			expect(store.depots).toStrictEqual({});
-			expect(store.fleetSpillover).toBe(false);
+			expect(store.fleetSpillover).toBe(true);
 
 			store.importJSON(exported);
-			expect(store.fleetSpillover).toBe(true);
+			expect(store.fleetSpillover).toBe(false);
 
 			expect(
 				JSON.parse(
@@ -730,7 +733,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		it("imports a v2.0 payload that predates chains and the fleet", () => {
 			store.setChain({ chainId: "c1", stops: ["A", "B"] });
 			store.setFleetShip("WCB", { count: 3 });
-			store.setFleetSpillover(true);
+			store.setFleetSpillover(false);
 
 			// exactly what the shipped v2.0 exportJSON produced
 			store.importJSON(
@@ -755,8 +758,8 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.assignments).toStrictEqual({});
 			expect(store.chainConfig).toStrictEqual(raukkDefaultChainConfig());
 			expect(store.depots).toStrictEqual({});
-			// absent before the spillover display existed, defaults off
-			expect(store.fleetSpillover).toBe(false);
+			// absent before the spillover display existed, defaults on
+			expect(store.fleetSpillover).toBe(true);
 		});
 
 		it("defaults the phase 2 fields of an older payload", () => {
