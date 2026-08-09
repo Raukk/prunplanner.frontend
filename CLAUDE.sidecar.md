@@ -116,3 +116,15 @@ anywhere in the repo. Not retroactive.
   now one shared exported constant `RAUKK_SNAPSHOT_EQUAL_EPSILON` =
   1e-6. A settled pass must count as materially unchanged or the final
   pass re-flags the rest of the loop.
+- 2026-08-09: Plan tool tabs are sticky (user request — open/close a
+  tool while working further down the plan). The toolbar and the tool
+  view are now separate grid items of PlanView's header grid (rows 4
+  and 5, main view moved to row 6): a sticky grid item is constrained
+  to the grid container, not its own row, so only a direct grid child
+  keeps sticking past its own section — that is also why the status
+  bar already worked. Sticky offsets (toolbar below the status bar,
+  material i/o column below both) are measured with a ResizeObserver
+  instead of hardcoded, both bars wrap on narrow screens; this
+  replaced the material i/o column's hardcoded `top-12`. Opening a
+  tool while scrolled down scrolls the panel into view, it would
+  otherwise render off-screen above.
