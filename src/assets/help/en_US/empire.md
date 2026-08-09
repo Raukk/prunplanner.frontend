@@ -4,4 +4,6 @@ In addition to tracking production, the empire automatically calculates your **d
 
 The **Empire Material I/O** view shows how much of each material your empire produces and where. You can filter consumables in or out, or focus purely on load balancing, comparing production and consumption at a glance.
 
-Finally, the **Empire Analysis** provides charts that break down your profits by plans and materials. You can also explore what your empire net produces or consumes, as well as which materials are produced or consumed exclusively.
+The **Empire Analysis** provides charts that break down your profits by plans and materials. You can also explore what your empire net produces or consumes, as well as which materials are produced or consumed exclusively.
+
+Finally, the **Oversubscription** view is where you check that your supply chains actually add up: every producer whose subscribed draws approach or exceed what it can make, plus the committed time of your fleet. Alongside the plain table it offers a set of visualisations of the same rows — hover a tab to see what each one answers, and pick the one that suits the question. Account-wide freight has its own visualisations on the **Visuals** tab of the **Shipping** page.

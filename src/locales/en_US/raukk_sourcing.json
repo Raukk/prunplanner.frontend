@@ -101,7 +101,23 @@
 	},
 	"shipping_page": {
 		"view_title": "Shipping",
-		"info": "Fleet, routes and depots of the whole account. Everything here is account-global; the per-plan pieces — sources, local market rates and the plan CX anchor — stay on each plan's Sourcing tool.",
+		"info": "Fleet, routes and depots of the whole account, one section at a time. Everything here is account-global; the per-plan pieces — sources, local market rates and the plan CX anchor — stay on each plan's Sourcing tool.",
+		"sections": {
+			"settings": "Settings",
+			"defaults": "Defaults",
+			"fleet": "Fleet",
+			"chains": "Chains",
+			"depots": "Depots",
+			"visuals": "Visuals",
+			"calibration": "Calibration",
+			"settings_tooltip": "Account-wide shipping switches: whether shipping is charged at all, the default ship profile, cadences and the CX anchor rule.",
+			"defaults_tooltip": "Where every base sources each input group by default, set once instead of base by base. Independent of the shipping switch.",
+			"fleet_tooltip": "Every ship the account commits, its wear and its share of the repair bill.",
+			"chains_tooltip": "Routes the cargo actually flies — authored chains, the automatic ones and the hub/spoke rollup.",
+			"depots_tooltip": "Planets that act as ship homes and handover points.",
+			"visuals_tooltip": "The account's freight drawn out: a star map of every lane, and weight against volume per trip versus a bay's hold.",
+			"calibration_tooltip": "Per-hull figures behind every cost on this page — speeds, fuel burn and hold sizes."
+		},
 		"manage_link": "Manage fleet & routes",
 		"recompute": "Recompute Chains",
 		"recompute_tooltip": "Re-costs every chain from the stored snapshot flows. It never touches the snapshots — use Recompute Snapshots for those.",
@@ -144,8 +160,6 @@
 		"cadence_in_out": "Days/Visit In-Out",
 		"cadence_workforce": "Days/Visit Workforce",
 		"cadence_tooltip": "Account default for the maximum days between two deliveries of that cargo class. Repair materials follow each plan's own repair day. Every plan may override all three. The cap binds the shipping, not the storage: a hold needing longer to fill flies partly loaded, and a partial trip pays a full trip.",
-		"show_calibration": "Show Calibration",
-		"hide_calibration": "Hide Calibration",
 		"calibration_info": "Calibration constants per hull and FTL reactor, pre-filled from recorded test flights. Cost per parsec and per sublight block are left empty on purpose: an empty field follows the profile's fuel burn at the current FF and SF price. Type a number to override one, empty it again to go back to the derived value. Edited profiles override the preset until reset.",
 		"derived_tooltip": "Empty: derived from this profile's fuel burn times the current FF (per parsec) or SF (per sublight block) price. Any number you enter — zero included — wins.",
 		"stl_only_tooltip": "A hull built without an FTL drive and reactor — roughly a quarter cheaper. It can only leave its system through a GATE, which drops it straight into the destination orbit, so it serves same-system lanes and lanes whose every inter-system hop is a gate. A lane without such a route is an error, not a slower route: the ship cannot fly it. The FTL constants are greyed out for such a profile and kept as they are.",
@@ -475,7 +489,18 @@
 			"blocks": "Blocks",
 			"bubbles": "Bubbles",
 			"map": "Map",
-			"starmap": "Star Map"
+			"starmap": "Star Map",
+			"table_tooltip": "The numbers themselves — every row with its capacity, its subscribers and a recompute button.",
+			"ledger_tooltip": "Bar per row: how much of a producer's capacity each consumer takes, and by how much the overdrawn ones run past it.",
+			"matrix_tooltip": "Heatmap of rows against consumer plans — spot at a glance which plan is leaning on everything.",
+			"beeswarm_tooltip": "Every row as one dot on a shared utilization axis — where the empire's load sits overall, and which rows are outliers.",
+			"dumbbell_tooltip": "Capacity against subscribed for each row, so the size of the gap — headroom or deficit — is the length of the line.",
+			"waffle_tooltip": "One square per unit of capacity, coloured by who takes it — the most literal picture of where a producer's output goes.",
+			"grid_tooltip": "Producer against consumer adjacency with margin totals — who supplies whom, across the whole empire at once.",
+			"blocks_tooltip": "Treemap: box area is the subscribed volume, so the biggest draws in the empire are the biggest boxes.",
+			"bubbles_tooltip": "Packed circles per row — compare subscribed volume within a unit, and open one to see its consumers nested inside.",
+			"map_tooltip": "Flow diagram: producers on the left, consumers on the right, ribbon thickness the draw between them.",
+			"starmap_tooltip": "The empire drawn spatially — plans as nodes, supply flows as edges, so distance and clustering are visible."
 		},
 		"legend": {
 			"other": "Other ({count} plans)",
@@ -757,8 +782,11 @@
 	},
 	"visuals": {
 		"title": "Visualisations",
+		"info": "The account's frozen freight, drawn two ways: where the cargo actually flies, and whether a bay can carry it.",
 		"tab_map": "Freight star map",
 		"tab_plane": "Weight / volume plane",
+		"tab_map_tooltip": "Every lane on the real system coordinates — which stops carry the tonnage, which gates the freight passes.",
+		"tab_plane_tooltip": "Every lane as one dot of weight against volume per trip, against the selected bay's hold — which cargo needs a bigger ship, and which dimension binds.",
 		"empty": "No frozen flows yet. Recompute the plans with shipping enabled and the account's cargo shows up here."
 	},
 	"shipping_map": {

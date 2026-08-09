@@ -54,6 +54,7 @@
 		raukkOversubFilter,
 	} from "@/features/raukk_sourcing/calculations/oversubDisplay";
 	import { raukkBayCode } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
+	import { RAUKK_VIZ_CSS_VARS } from "@/features/raukk_sourcing/calculations/raukkVizPalette";
 
 	// UI
 	import {
@@ -358,7 +359,8 @@
 	 * emits "flip-problems-only" (empty state), reads selection through
 	 * `useRaukkOversubSelection()` and drives the shared tooltip through
 	 * `useRaukkOversubTooltip()`. Adding a tab is one import plus one
-	 * entry here.
+	 * entry here — with its `tabs.<key>_tooltip` line, since the labels
+	 * are chart-form names and name no question on their own.
 	 */
 	interface IRaukkOversubVizTab {
 		key: string;
@@ -419,6 +421,11 @@
 		},
 	];
 
+	/** Hover line of one tab button, saying what the view answers */
+	function tabTooltip(key: string): string {
+		return t(`raukk_sourcing.oversub_report.tabs.${key}_tooltip`);
+	}
+
 	/** Active tab: "table" or a viz tab key. Only it mounts. */
 	const refActiveTab: Ref<string> = ref("table");
 
@@ -433,8 +440,10 @@
 		axisMax: axisMax.value,
 	}));
 
-	/** Status color tokens as CSS vars on the section root */
+	/** Status colors plus the shared viz palette, as CSS vars on the
+	 * section root — every tab's scoped styles read them from here */
 	const sectionStyle: CSSProperties = {
+		...RAUKK_VIZ_CSS_VARS,
 		"--roversub-over": RAUKK_OVERSUB_STATUS_COLORS.over,
 		"--roversub-over-text": RAUKK_OVERSUB_STATUS_COLORS.overText,
 		"--roversub-stale": RAUKK_OVERSUB_STATUS_COLORS.stale,
@@ -494,10 +503,11 @@
 		 tab mounts (v-if), so recompute writes never re-render hidden
 		 views -->
 		<div class="pb-3">
-			<PButtonGroup>
+			<PButtonGroup class="flex-wrap">
 				<PButton
 					:type="refActiveTab === 'table' ? 'primary' : 'secondary'"
 					size="sm"
+					:title="tabTooltip('table')"
 					@click="() => (refActiveTab = 'table')">
 					{{ $t("raukk_sourcing.oversub_report.tabs.table") }}
 				</PButton>
@@ -506,10 +516,16 @@
 					:key="tab.key"
 					:type="refActiveTab === tab.key ? 'primary' : 'secondary'"
 					size="sm"
+					:title="tabTooltip(tab.key)"
 					@click="() => (refActiveTab = tab.key)">
 					{{ $t(tab.labelKey) }}
 				</PButton>
 			</PButtonGroup>
+		</div>
+		<!-- the labels are chart forms; the active one says what it is
+		 for in prose, so picking a view is not a guessing game -->
+		<div class="pb-3 text-xs text-white/50">
+			{{ tabTooltip(refActiveTab) }}
 		</div>
 
 		<!-- recompute strip: progress while the shared chain recompute

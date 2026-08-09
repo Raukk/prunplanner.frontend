@@ -33,6 +33,15 @@
 		raukkOversubPackField,
 		raukkOversubPackInner,
 	} from "@/features/raukk_sourcing/calculations/oversubPack";
+	import { raukkOversubBlueRamp } from "@/features/raukk_sourcing/calculations/oversubMatrix";
+	import {
+		RAUKK_VIZ_ACCENT,
+		RAUKK_VIZ_ALERT,
+		RAUKK_VIZ_INK,
+		RAUKK_VIZ_INK_RGB,
+		RAUKK_VIZ_RAMP,
+		RAUKK_VIZ_SURFACE,
+	} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
 
 	// Util
 	import { relativeFromDate } from "@/util/date";
@@ -53,6 +62,12 @@
 		IRaukkOversubTickerRow,
 	} from "@/features/raukk_sourcing/calculations/oversubReport.types";
 	import { IRaukkOversubTooltipLine } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+
+	/** Washes of the two hatch patterns this view declares */
+	const INK_HATCH_BACK: string = `rgba(${RAUKK_VIZ_INK_RGB}, 0.1)`;
+	const INK_HATCH_BAR: string = `rgba(${RAUKK_VIZ_INK_RGB}, 0.5)`;
+	const ALERT_HATCH_BACK: string = `rgba(${RAUKK_VIZ_ALERT.rgb}, 0.12)`;
+	const ALERT_HATCH_BAR: string = `rgba(${RAUKK_VIZ_ALERT.rgb}, 0.55)`;
 
 	const props = defineProps({
 		/** Materials rows, filtered and sorted by the section */
@@ -203,21 +218,19 @@
 
 	/** Bubble fill along the blue utilization ramp, red on over */
 	function bubbleFill(row: IRaukkOversubRow): string {
-		if (row.utilization === null) return "#1e1e1e";
-		if (row.over) return "rgba(199,0,57,0.38)";
+		if (row.utilization === null) return RAUKK_VIZ_SURFACE.inert;
+		if (row.over) return `rgba(${RAUKK_VIZ_ALERT.rgb}, 0.38)`;
 
-		const alpha: number = Math.min(
-			1,
-			0.1 + 0.5 * Math.max(row.utilization, 0)
-		);
-		return `rgba(57,135,229,${alpha.toFixed(3)})`;
+		// the ONE ramp — the same utilization must not read deeper in
+		// the Matrix than it does here
+		return raukkOversubBlueRamp(row.utilization);
 	}
 
 	/** Bubble stroke, matching the fill's verdict */
 	function bubbleStroke(row: IRaukkOversubRow): string {
-		if (row.utilization === null) return "#898781";
-		if (row.over) return "var(--roversub-over)";
-		return "rgba(57,135,229,0.85)";
+		if (row.utilization === null) return RAUKK_VIZ_INK.base;
+		if (row.over) return RAUKK_VIZ_ALERT.solid;
+		return RAUKK_VIZ_RAMP.stroke;
 	}
 
 	/** Uncapped percent readout of one bubble */
@@ -607,14 +620,8 @@
 							height="7"
 							patternUnits="userSpaceOnUse"
 							patternTransform="rotate(45)">
-							<rect
-								width="7"
-								height="7"
-								fill="rgba(137,135,129,0.10)" />
-							<rect
-								width="3"
-								height="7"
-								fill="rgba(137,135,129,0.5)" />
+							<rect width="7" height="7" :fill="INK_HATCH_BACK" />
+							<rect width="3" height="7" :fill="INK_HATCH_BAR" />
 						</pattern>
 					</defs>
 
@@ -640,7 +647,7 @@
 							:y1="6"
 							:x2="zone.x0"
 							:y2="H - 6"
-							stroke="#2c2c2a"
+							:stroke="RAUKK_VIZ_SURFACE.rule"
 							stroke-dasharray="3 5" />
 					</template>
 
@@ -665,7 +672,7 @@
 							:fill="bubbleFill(node.row)"
 							:stroke="
 								refOpenKey === rowKey(node.row)
-									? '#c0e219'
+									? RAUKK_VIZ_ACCENT.solid
 									: bubbleStroke(node.row)
 							"
 							:stroke-width="
@@ -758,11 +765,11 @@
 								<rect
 									width="7"
 									height="7"
-									fill="rgba(199,0,57,0.12)" />
+									:fill="ALERT_HATCH_BACK" />
 								<rect
 									width="3"
 									height="7"
-									fill="rgba(199,0,57,0.55)" />
+									:fill="ALERT_HATCH_BAR" />
 							</pattern>
 						</defs>
 
@@ -787,14 +794,14 @@
 								:cx="DCX"
 								:cy="DCY"
 								:r="Math.min(detail.rNet, detail.rSub)"
-								fill="#252525" />
+								:fill="RAUKK_VIZ_SURFACE.chip" />
 							<!-- dashed net ring -->
 							<circle
 								:cx="DCX"
 								:cy="DCY"
 								:r="detail.rNet"
 								fill="none"
-								stroke="#c3c2b7"
+								:stroke="RAUKK_VIZ_INK.bright"
 								stroke-dasharray="4 4"
 								stroke-width="1.2"
 								@mouseenter="onNetRingEnter(detail.row, $event)"
@@ -816,7 +823,7 @@
 											? 0.6
 											: 0.9
 								"
-								stroke="#030707"
+								:stroke="RAUKK_VIZ_SURFACE.page"
 								stroke-width="1"
 								:class="
 									circle.item.key === 'external'

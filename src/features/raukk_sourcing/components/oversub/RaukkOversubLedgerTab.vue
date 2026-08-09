@@ -812,7 +812,7 @@
 		top: 0;
 		bottom: 0;
 		right: 0;
-		background: rgba(199, 0, 57, 0.08);
+		background: rgba(var(--rviz-alert-rgb), 0.08);
 	}
 	.lrule {
 		position: absolute;
@@ -852,11 +852,11 @@
 		right: calc(100% + 3px);
 		top: 5px;
 		bottom: 5px;
-		border: 1px solid rgba(137, 135, 129, 0.6);
+		border: 1px solid rgba(var(--rviz-ink-rgb), 0.6);
 		border-radius: 1px;
 		background: repeating-linear-gradient(
 			45deg,
-			rgba(137, 135, 129, 0.55) 0 3px,
+			rgba(var(--rviz-ink-rgb), 0.55) 0 3px,
 			transparent 3px 7px
 		);
 	}
@@ -871,10 +871,10 @@
 		bottom: 7px;
 		left: 0;
 		border-radius: 2px;
-		border: 1px solid rgba(199, 0, 57, 0.5);
+		border: 1px solid rgba(var(--rviz-alert-rgb), 0.5);
 		background: repeating-linear-gradient(
 			45deg,
-			rgba(199, 0, 57, 0.55) 0 3px,
+			rgba(var(--rviz-alert-rgb), 0.55) 0 3px,
 			transparent 3px 7px
 		);
 	}
@@ -887,7 +887,7 @@
 		border-radius: 3px;
 		border: 1px solid currentColor;
 		color: var(--roversub-over-text);
-		background: #212529;
+		background: var(--rviz-chip);
 		white-space: nowrap;
 	}
 	.lval {
