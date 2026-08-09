@@ -87,7 +87,10 @@ These supersede the matching decisions above.
    FTL fuel, CHRG 1m15s between jumps, per-jump times 6pc/1h07m,
    11pc/4h15m, 14pc/5h29m, 6pc/2h32m, 9pc/3h23m.
 6. **Damage/repair: deferred pending user data.** Users normally
-   repair at ~80% damage. Damage per parsec varies by system
+   repair at ~80% damage. **CORRECTED 2026-08-09 (calibration §14):
+   that is 80% CONDITION, i.e. 20% DAMAGE.** The two readings are
+   four times apart and round 3 below inherited the wrong one; see
+   the correction under round 3 item 1. Damage per parsec varies by system
    (micro-meteor density), and VERIFIED: no such field exists in
    our data (planets carry only pressure/surface/temperature/
    fertility/gravity; systems only positions/connections/type). So
@@ -104,7 +107,15 @@ These supersede the matching decisions above.
    repair bill = fixed (12 MFK + 8 FLP) + LHP/SSC scaling roughly
    linearly with damage (≈3 each at 4.5%, ≈11 each at 80%). Users
    repair at ~80% damage, so per-trip ship-repair cost =
-   (trip damage % ÷ 80%) × priced full bill. Trip damage comes from
+   (trip damage % ÷ 80%) × priced full bill.
+   **CORRECTED 2026-08-09 (calibration §14).** The quantities were
+   right and the threshold wrong: the real law is
+   `ceil(componentCount × damage × 0.75 × shieldRelief)`, and this
+   round's own two observations fall straight out of it on the 71
+   structural elements that hull carries — `ceil(71 × 0.045 × 0.75)`
+   is the 3 seen at 4.5% damage, `ceil(71 × 0.20 × 0.75)` the 11
+   seen at what was recalled as "80%". So the ÷80% divisor is ÷20%,
+   and every repair cost this app charged was FOUR TIMES too low. Trip damage comes from
    the per-leg damage numbers (flat per-parsec constant + per-STL-
    leg constant; no per-system variation, see Round 2 item 6).
 2. **STL legs: constant length.** Assume the sublight legs in and

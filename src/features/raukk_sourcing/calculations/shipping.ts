@@ -17,6 +17,15 @@ import {
 	raukkGateOnlyPath,
 	raukkStlOnlyCandidates,
 } from "@/features/raukk_sourcing/calculations/shippingStl";
+import {
+	RAUKK_DEFAULT_REPAIR_BOM,
+	RAUKK_REPAIR_AT_DAMAGE,
+	raukkRepairBill,
+	raukkRepairBillCost,
+} from "@/features/raukk_sourcing/calculations/shippingRepair";
+
+// Re-exported so the threshold keeps its historical import site
+export { RAUKK_REPAIR_AT_DAMAGE };
 
 // Types & Interfaces
 import { IRaukkRoute } from "@/features/raukk_sourcing/calculations/routeDistance";
@@ -51,33 +60,25 @@ const CARGO_BUCKETS: RAUKK_CARGO_BUCKET[] = [
 const MINUTES_PER_DAY: number = 24 * 60;
 
 /**
- * Damage share at which players repair their ships.
- *
- * A trip costs the fraction of a full repair bill it burns of this
- * budget: half a percent of damage on a 80% repair cycle is 1/160th of
- * the bill.
- *
- * @author raukk
- */
-export const RAUKK_REPAIR_AT_DAMAGE: number = 0.8;
-
-/**
  * Repair bill of one full repair cycle, in units per ticker.
  *
- * Observed at ~80% damage: MFK and FLP are fixed components, LHP and SSC
- * scale with damage and land at roughly eleven each. Deliberate v1
- * limitation: these tickers are priced through the snapshots resolver
- * but their quantities are NOT booked into draws or edges, so they take
- * part in neither the cycle guard nor the base fraction.
+ * DERIVED as of round 4 from the default build and the repair law of
+ * `shippingRepair.ts`, rather than the four numbers round 3 read off one
+ * hull. It reproduces that observation exactly — `LHP 11`, `SSC 11`,
+ * `MFK 12`, `FLP 8` — because the observation was always the law applied
+ * to a 71 element hull at a fifth of condition lost; only the threshold
+ * it was filed under was wrong. See {@link RAUKK_REPAIR_AT_DAMAGE}.
+ *
+ * Deliberate v1 limitation, unchanged: these tickers are priced through
+ * the snapshots resolver but their quantities are NOT booked into draws
+ * or edges, so they take part in neither the cycle guard nor the base
+ * fraction.
  *
  * @author raukk
  */
-export const RAUKK_REPAIR_BILL: Record<string, number> = {
-	LHP: 11,
-	SSC: 11,
-	MFK: 12,
-	FLP: 8,
-};
+export const RAUKK_REPAIR_BILL: Record<string, number> = raukkRepairBill(
+	RAUKK_DEFAULT_REPAIR_BOM
+);
 
 /** Empty load, used for empty directions and every short circuit */
 function emptyLoad(): IRaukkDirectionLoad {
@@ -149,10 +150,7 @@ export function calculateDirectionLoad(
 export function calculateRepairBillCost(
 	resolvePrice: IRaukkShippingPriceResolver
 ): number {
-	return Object.entries(RAUKK_REPAIR_BILL).reduce(
-		(sum, [ticker, units]) => sum + units * resolvePrice(ticker),
-		0
-	);
+	return raukkRepairBillCost(RAUKK_REPAIR_BILL, resolvePrice);
 }
 
 /**

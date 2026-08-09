@@ -887,3 +887,118 @@ Antares Station leg from both sides and the model sits at 1.08x.
 Still open, in order: the Antares term (§11.5), per-planet AND per-mass
 landing damage (§13.4), real per-leg distances (§11.6), and the repair
 bill from the BOM (§6).
+
+## 14. The community repair calculator (2026-08-09)
+
+Source: the PrUn community ship repair / damage calculator the user
+shared (RNGzero, with credits to the PrUn Community Tools Discord,
+lowstrife, Archiel, AEM and neke86), read cell by cell INCLUDING its
+formulas and transcribed into `docs/raukk_sourcing/repair_and_damage.json`.
+Two things live in it, one of which we did not know existed.
+
+### 14.1 The repair bill, and a four-times error of our own
+
+    count = ceil(componentCount × damage × 0.75 × factor)
+
+with `factor` = `shieldRelief` for the hull plate and the structural
+elements and a flat 0.662 for each shield, plus a flat MFK 12 and FLP 8
+whatever the ship and the damage. `shieldRelief = 1 − Σ relief`, where a
+basic shield relieves 0.05, an ARP 0.10 and an APT, AWH or SRP 0.15 —
+the shield takes the damage the plate would have.
+
+Verified against both of the calculator's worked ships: a 90 plate LHP
+hull at 20 % damage takes 14 plates and bills 61,360 ȼ, and its fully
+shielded AHP ship 253,860 ȼ. Both reproduce exactly.
+
+THE THRESHOLD WAS WRONG, and had been since the first shipping commit.
+`RAUKK_REPAIR_AT_DAMAGE` was 0.8, from rounds 2 and 3 of
+shipping-decisions.md reading "players repair at 80 %" as 80 % DAMAGE
+rather than 80 % CONDITION. Round 3's own observations settle it against
+the law above, on the 71 structural elements that hull's blueprint panel
+states:
+
+| observed | law | damage it implies |
+|---|---|---|
+| LHP 3, SSC 3 at 95.446 % condition | `ceil(71 × 0.045 × 0.75)` = 3 | 4.5 % ✓ |
+| LHP 11, SSC 11 at "80 %" | `ceil(71 × 0.20 × 0.75)` = 11 | 20 % |
+| — | `ceil(71 × 0.80 × 0.75)` = 43 | 80 % ✗ |
+
+So the quantities were always right and only the divisor was wrong, and
+the app has been charging **a quarter** of the repair cost it should.
+That is the single largest number this whole campaign has moved.
+
+### 14.2 Damage is FOUR types, not one
+
+    base   = tripDamage × (1 − plateModifier − droneModifier)
+    wear   = base × wearShare
+    meteor = base × meteorShare × (1 − whippleReduction)
+    heat   = base × heatShare   × (1 − heatReduction)
+    rad    = base × radShare    × (1 − radReduction)
+
+The general modifiers reduce the WHOLE trip; each shield reduces only
+its own type. The modifier values match the drydock table of §2.3
+exactly, LHP included at its −10 % (it RAISES damage).
+
+The shares were measured by differencing — fly a lane bare, then re-fly
+with one shield type installed at a time — for 36 lanes at each of the
+three fuel settings, all on an HCB at full load. They swing hard by
+lane: `Ant → Ice Station` is 44 % heat, `Mor → Hrt` 98 % wear,
+`Ant → Eos` 77 % radiation.
+
+This is what §11.4's "meteoroid law" really is. Our
+`km × (2.2e-10 + 5.5e-10 × density)` was fitted to TOTAL damage, so its
+density coefficient absorbed all four types at once. It fits totals well
+(0.91-1.19× across six systems) and it is fine for a hull with no
+shielding — which is what the app assumes — but it cannot price a
+shield, it has no wear term, and it is why Antares looks anomalous: heat
+is a separate term we folded into density.
+
+### 14.3 As implemented
+
+- `shippingRepair.ts` is new and holds the whole §14.1 law: the two
+  shares, the relief table, the flat pair, the BOM shape and the
+  bill. `RAUKK_REPAIR_BILL` is now DERIVED from it for the default
+  build and comes out at the round 3 quantities unchanged, so every
+  consumer and every UI label keeps working.
+- `RAUKK_REPAIR_AT_DAMAGE` is 0.2.
+- PRICES ARE NEVER HARDCODED. The module knows quantities only; each
+  ticker is resolved through the app's existing price resolver, which is
+  fed from the API — the calculator's own ȼ figures are recorded in the
+  JSON purely as the snapshot that let us verify the law.
+- The price loaders now take `RAUKK_REPAIR_TICKERS` — every ticker a
+  bill COULD contain — instead of the tickers of the default bill, so a
+  profile that fits a whipple array is not left with an unpriced
+  component.
+
+NOT implemented, deliberately: the §14.2 damage-type split. It replaces
+`damagePerStlBlock` with four terms and gives profiles real shield
+slots, which changes the stored profile shape and touches the chain
+math, the fleet UI and the calibration modal. It is the natural next
+round and the data for it is already in the repo.
+
+## 15. Open items, as of 2026-08-09
+
+Ordered by what each is worth. Everything above this line is landed,
+tested and sourced; everything below is known-unknown.
+
+1. **The damage-type split** (§14.2). Data in hand, model not written.
+   Unlocks shield components and probably retires the Antares anomaly as
+   a heat term rather than a mystery.
+2. **The Antares excess** (§11.5). Direction dependent, 5× to 12× the
+   density law on legs at Antares Station. Flag lanes anchored there and
+   price them off observed flights until §14.2 lands.
+3. **Landing damage** (§6, §13.4). Per planet AND per mass — the same
+   ship on the same planet took 0.025 % at 1,596 t and 0.040 % at
+   4,265 t. Modelled as a flat 0.018 % placeholder.
+4. **Real per-leg distances** (§11.6). The block uses two averages, 67.3
+   M km planet side and 20.8 M km station side. A real figure needs a
+   warp point per system pair plus the body's orbital drift over the
+   flight, both of which §11.6 characterises.
+5. **The DEP/APP speed asymmetry beyond its budget** (§13.2). The 0.49
+   and 0.63 shares are measured, not explained.
+6. **The hull plate count** (§14.1). The one repair input nothing
+   derives; §2.3 has the component table a ship designer would need.
+7. **`minutesPerParsec` from the panel** (§11.3). A two parameter fit to
+   three observations. More hulls would firm it up.
+8. **Repair materials are not booked into draws or edges** — the v1
+   limitation of `RAUKK_REPAIR_BILL`, untouched by round 4.

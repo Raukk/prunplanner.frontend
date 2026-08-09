@@ -196,10 +196,10 @@ describe("Raukk Shipping: Fleet Display", () => {
 
 			expect(row.wearUnknown).toBe(false);
 			expect(row.damagePercentPerDay).toBeCloseTo(0.2, 10);
-			// 0.8 / 0.002
-			expect(row.drydockDays).toBeCloseTo(400, 10);
-			// (0.004 / 0.8) * 2400, over ALL hulls of the type
-			expect(row.repairCostPerDay).toBeCloseTo(12, 10);
+			// 0.2 / 0.002 = 100 trips to the repair threshold
+			expect(row.drydockDays).toBeCloseTo(100, 10);
+			// (0.004 / 0.2) * 2400, over ALL hulls of the type
+			expect(row.repairCostPerDay).toBeCloseTo(48, 10);
 		});
 
 		it("keeps an unknown wear unknown instead of eternal", () => {
@@ -242,7 +242,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 				profileOf
 			);
 
-			expect(row.drydockDays).toBeCloseTo(200, 10);
+			expect(row.drydockDays).toBeCloseTo(50, 10);
 			expect(row.repairCostPerDay).toBeNull();
 		});
 	});

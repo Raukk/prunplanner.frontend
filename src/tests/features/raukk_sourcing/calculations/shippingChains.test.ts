@@ -605,7 +605,7 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 			const blocks: number = 3 * profile.stlBlockCost;
 			const damage: number =
 				40 * profile.damagePerParsec + 3 * profile.damagePerStlBlock;
-			const repair: number = (damage / 0.8) * REPAIR_BILL;
+			const repair: number = (damage / 0.2) * REPAIR_BILL;
 
 			expect(result.costPerTrip).toBeCloseTo(
 				distance + blocks + repair,
@@ -1000,7 +1000,7 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 			expect(result.legs[0].costPerTrip).toBeCloseTo(
 				30 +
 					profile.stlBlockCost +
-					(profile.damagePerStlBlock / 0.8) * REPAIR_BILL,
+					(profile.damagePerStlBlock / 0.2) * REPAIR_BILL,
 				10
 			);
 		});
@@ -1060,7 +1060,7 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 					profile.stlBlockCost +
 					((20 * profile.damagePerParsec +
 						profile.damagePerStlBlock) /
-						0.8) *
+						0.2) *
 						REPAIR_BILL,
 				10
 			);
@@ -1080,7 +1080,7 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 			expect(result.legs[0].costPerTrip).toBeCloseTo(
 				21 +
 					profile.stlBlockCost +
-					(profile.damagePerStlBlock / 0.8) * REPAIR_BILL,
+					(profile.damagePerStlBlock / 0.2) * REPAIR_BILL,
 				10
 			);
 		});
@@ -1101,7 +1101,7 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 			expect(result.legs[0].sameSystemMode).toBe("free");
 			expect(result.legs[0].costPerTrip).toBeCloseTo(
 				profile.stlBlockCost +
-					(profile.damagePerStlBlock / 0.8) * REPAIR_BILL,
+					(profile.damagePerStlBlock / 0.2) * REPAIR_BILL,
 				10
 			);
 		});
@@ -1150,7 +1150,7 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 			expect(result.legs[0].repairCostPerTrip).toBeCloseTo(
 				((10 * profile.damagePerParsec +
 					2 * profile.damagePerStlBlock) /
-					0.8) *
+					0.2) *
 					REPAIR_BILL,
 				10
 			);
