@@ -23,6 +23,20 @@ import {
 } from "@/features/raukk_sourcing/calculations/shippingStl";
 // raukk: a gate measures the SHIP, not its cargo hold
 import { raukkHullVolumeM3 } from "@/features/raukk_sourcing/calculations/shippingHullVolume";
+import {
+	RAUKK_DEFAULT_REPAIR_BOM,
+	RAUKK_REPAIR_AT_DAMAGE,
+	raukkRepairBill,
+	raukkRepairBillCost,
+} from "@/features/raukk_sourcing/calculations/shippingRepair";
+
+/*
+ * The threshold's definition moved to `shippingRepair.ts` — a leaf
+ * module the bill law needs it in too, and importing it back from here
+ * would be a cycle. Re-exported so its historical import site still
+ * works; the reasoning behind the 0.2 is unchanged and lives with it.
+ */
+export { RAUKK_REPAIR_AT_DAMAGE };
 
 // Types & Interfaces
 import {
@@ -61,38 +75,26 @@ const CARGO_BUCKETS: RAUKK_CARGO_BUCKET[] = [
 const MINUTES_PER_DAY: number = 24 * 60;
 
 /**
- * Damage share at which players repair their ships.
- *
- * Players repair at 80% CONDITION, which is 20% accumulated damage:
- * lower makes the ship slow, higher wastes materials on a bill whose
- * fixed components are paid whatever the damage.
- *
- * A trip costs the fraction of a full repair bill it burns of this
- * budget: half a percent of damage on a 20% damage repair cycle is
- * 1/40th of the bill.
- *
- * @author raukk
- */
-export const RAUKK_REPAIR_AT_DAMAGE: number = 0.2;
-
-/**
  * Repair bill of one full repair cycle, in units per ticker.
  *
  * Observed at 80% condition — the {@link RAUKK_REPAIR_AT_DAMAGE} cycle
- * this bill belongs to: MFK and FLP are fixed components, LHP and SSC
- * scale with damage and land at roughly eleven each. Deliberate v1
- * limitation: these tickers are priced through the snapshots resolver
- * but their quantities are NOT booked into draws or edges, so they take
- * part in neither the cycle guard nor the base fraction.
+ * this bill belongs to — and now DERIVED from that same cycle through
+ * the BOM law of `shippingRepair.ts` rather than carried as four fixed
+ * numbers. It reproduces the observation exactly: `ceil(71 × 0.20 ×
+ * 0.75)` is the eleven LHP and eleven SSC seen on a hull whose panel
+ * states 71 structural elements, and MFK and FLP are fixed components
+ * paid whatever the damage.
+ *
+ * Deliberate v1 limitation, unchanged: these tickers are priced through
+ * the snapshots resolver but their quantities are NOT booked into draws
+ * or edges, so they take part in neither the cycle guard nor the base
+ * fraction.
  *
  * @author raukk
  */
-export const RAUKK_REPAIR_BILL: Record<string, number> = {
-	LHP: 11,
-	SSC: 11,
-	MFK: 12,
-	FLP: 8,
-};
+export const RAUKK_REPAIR_BILL: Record<string, number> = raukkRepairBill(
+	RAUKK_DEFAULT_REPAIR_BOM
+);
 
 /** Empty load, used for empty directions and every short circuit */
 function emptyLoad(): IRaukkDirectionLoad {
@@ -164,10 +166,7 @@ export function calculateDirectionLoad(
 export function calculateRepairBillCost(
 	resolvePrice: IRaukkShippingPriceResolver
 ): number {
-	return Object.entries(RAUKK_REPAIR_BILL).reduce(
-		(sum, [ticker, units]) => sum + units * resolvePrice(ticker),
-		0
-	);
+	return raukkRepairBillCost(RAUKK_REPAIR_BILL, resolvePrice);
 }
 
 /**

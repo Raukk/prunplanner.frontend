@@ -10,6 +10,7 @@ import {
 	RAUKK_POSITION_UNITS_PER_PARSEC,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import { createChainStaticData } from "@/features/raukk_sourcing/calculations/shippingChainData";
+import { raukkStlBlockDamage } from "@/features/raukk_sourcing/calculations/shippingPhysics";
 import { raukkNearestCalibration } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
 // Types & Interfaces
@@ -213,25 +214,27 @@ describe("Raukk Sourcing: Shipping Calibration", () => {
 	});
 
 	describe("damage", () => {
-		it("recovers the density normalized damage per parsec", () => {
-			const result: IRaukkCalibrationResult = calibrate();
-
+		it("recovers the flat damage per parsec", () => {
 			/*
-			 * 0.088% and 0.099% over 4 parsecs at the reference density,
-			 * each MINUS the seeded sublight block of the meteoroid law:
-			 * one block per flight, so what a jump costs is the remainder.
+			 * Two flights over 4 parsecs at the reference density, each
+			 * MINUS the seeded sublight block of the meteoroid law: one
+			 * block per flight, so what a jump costs is the remainder.
+			 * calibration §11.4 puts the density on the BLOCK and leaves
+			 * the jump term flat, so at the reference density the block is
+			 * removed whole.
 			 */
+			const result: IRaukkCalibrationResult = calibrate(
+				{ ...emptyFlight, damagePercent: 0.25 },
+				{ ...loadedFlight, damagePercent: 0.26 }
+			);
 			const block: number = result.constants.damagePerStlBlock;
 
-			expect(block).toBeCloseTo(
-				(25_000_000 * (2.2e-10 + 5.5e-10 * 3.28)) / 100,
-				12
-			);
+			expect(block).toBeCloseTo(raukkStlBlockDamage(3.28), 12);
 			expect(
 				residual(result, "damagePerParsec").estimates[0]
-			).toBeCloseTo((0.00088 - block) / 4, 12);
+			).toBeCloseTo((0.0025 - block) / 4, 12);
 			expect(result.constants.damagePerParsec).toBeCloseTo(
-				((0.00088 - block) / 4 + (0.00099 - block) / 4) / 2,
+				((0.0025 - block) / 4 + (0.0026 - block) / 4) / 2,
 				12
 			);
 			expect(result.warnings).toContain("damage-per-stl-block-seeded");

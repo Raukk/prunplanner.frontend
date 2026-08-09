@@ -21,8 +21,8 @@ import { raukkSplitCargoBuckets } from "@/features/raukk_sourcing/calculations/c
 import {
 	calculateRepairBillCost,
 	calculateShipping,
-	RAUKK_REPAIR_BILL,
 } from "@/features/raukk_sourcing/calculations/shipping";
+import { RAUKK_REPAIR_TICKERS } from "@/features/raukk_sourcing/calculations/shippingRepair";
 import { buildShippingPairs } from "@/features/raukk_sourcing/calculations/shippingPairs";
 import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippingDepots";
 import {
@@ -196,7 +196,7 @@ function collectRelevantTickers(
 	);
 
 	if (withShipRepair) {
-		Object.keys(RAUKK_REPAIR_BILL).forEach((ticker) => tickers.add(ticker));
+		RAUKK_REPAIR_TICKERS.forEach((ticker: string) => tickers.add(ticker));
 		tickers.add(RAUKK_FUEL_TICKERS.ftl);
 		tickers.add(RAUKK_FUEL_TICKERS.stl);
 	}

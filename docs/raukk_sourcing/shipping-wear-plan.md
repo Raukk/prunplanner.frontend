@@ -53,6 +53,11 @@ shipping-fleet.md (fleet, profiles, blueprint seeding).
   which is 20 % accumulated damage (see shipping-decisions.md round
   21; the constant read 0.8 until then and every repair number was
   off by 4x).
+- The bill is no longer four fixed numbers: `shippingRepair.ts` derives
+  it from the ship's BOM as `ceil(componentCount × damage × 0.75 ×
+  shieldRelief)` plus a flat MFK 12 and FLP 8, which reproduces the
+  observation above on the 71 structural elements that hull carries.
+  See shipping-calibration.md §14.
 - `calculateRepairBillCost` prices the bill through the snapshot's
   price resolver (CX/sourced prices like any other ticker).
 - `calculateRepairCostPerTrip` charges each round trip the share of
