@@ -537,6 +537,26 @@
 				The sizing toggle (share / absolute) applies to load view
 				only, and the full row zoom keeps the load composition in
 				either view.</li>
+			<li>Star Map coordinates are invented flat 2D positions keyed by
+				planet id (a positions map, ~4 fake systems); the real
+				implementation would place nodes from the pathfinding system
+				coordinates. Node area uses total subscribed volume touching
+				the plan (its rows' subscriptions plus its draws) inside the
+				u/d domain only. Edges aggregate all tickers per
+				producer&nbsp;→&nbsp;consumer pair; fleet routes come from the
+				stored lane/chain route endpoints (an additive
+				<code>route</code> field on the sample fleet segs). Pan/zoom is
+				plain viewBox math, no library. Problems-only dims healthy
+				nodes and edges to ~25% instead of hiding them — spatial
+				context matters.</li>
+			<li>Grid aggregates all tickers per producer&nbsp;→&nbsp;consumer
+				pair (per-ticker numbers stay in the tooltip, uncapped in the
+				margins). Diagonal self cells never render flow — self-draws
+				come off the top — so they carry a hatched ⌂ glyph with the
+				absolute self-reserve; producers with zero self-reserve keep no
+				diagonal column. The fleet matrix is separate (ship types ×
+				lanes/chains) because fleet claims are per lane/chain, not per
+				plan, and ship-min/d never shares the materials domain.</li>
 		</ul>
 	</details>
 </main>
@@ -3304,10 +3324,7 @@
 			const extTotal = pairs.filter((p) => p.ext)
 				.reduce((s, p) => s + p.total, 0);
 			let maxPair = 1;
-			pairs.forEach((p) => {
-				if (!p.ext) maxPair = Math.max(maxPair, p.total);
-				else maxPair = Math.max(maxPair, p.total);
-			});
+			pairs.forEach((p) => { maxPair = Math.max(maxPair, p.total); });
 			const sqSide = (v) => (6 + 20 * Math.sqrt(v / maxPair)).toFixed(1);
 			const cellTip = (a, toName, p, ext) =>
 				"<div class='big'>" + a.name + " → " + toName + "</div>" +
@@ -3543,6 +3560,8 @@
 		else if (state.tab === "beeswarm") renderBeeswarm(pane, S);
 		else if (state.tab === "dumbbell") renderDumbbell(pane, S);
 		else if (state.tab === "waffle") renderWaffle(pane, S);
+		else if (state.tab === "starmap") renderStarMap(pane, S);
+		else if (state.tab === "grid") renderGrid(pane, S);
 		else renderBubbles(pane, S);
 		if (state.computing) pane.classList.add("computing");
 	}
