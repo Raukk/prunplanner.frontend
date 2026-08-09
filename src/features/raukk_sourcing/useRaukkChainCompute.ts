@@ -14,7 +14,10 @@ import {
 	RAUKK_CX_SYSTEM_ID_BY_CODE,
 } from "@/features/raukk_sourcing/calculations/shippingChains";
 import { raukkStlOnlyCandidates } from "@/features/raukk_sourcing/calculations/shippingStl";
-import { raukkStopsServeDepot } from "@/features/raukk_sourcing/calculations/shippingDepots";
+import {
+	raukkDepotStopKey,
+	raukkStopsServeDepot,
+} from "@/features/raukk_sourcing/calculations/shippingDepots";
 import {
 	raukkAutoChainDemand,
 	raukkAutoChainReason,
@@ -534,9 +537,13 @@ async function computeAutoChains(
 	chainConfig: IRaukkChainConfig,
 	loadPrices: IRaukkChainPriceLoader
 ): Promise<IRaukkChainResult[]> {
+	const sourcingStore = useRaukkSourcingStore();
+
 	const autoChains: IRaukkAutoChain[] = raukkBuildAutoChains({
 		flows: unclaimedAccountFlows(claimedFlowIds, claimedLanes),
 		anchorOf: planetAnchorLookup(shippingConfig),
+		isDepot: (stopRef: string): boolean =>
+			sourcingStore.depots[raukkDepotStopKey(stopRef)] !== undefined,
 		capDaysOf: (planUuid: string | undefined, bucket: RAUKK_CARGO_BUCKET) =>
 			planCapDays(planUuid, bucket, shippingConfig),
 		chainConfig,

@@ -743,6 +743,50 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 		});
 	});
 
+	describe("a base standing on a depot", () => {
+		beforeEach(() => {
+			store.setShippingConfig({ enabled: true });
+		});
+
+		it("pays no exchange freight, and owns no lane to pay it on", async () => {
+			// control: the same plan without the depot really does ship
+			const { snapshot: control } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			expect(control.outputs.ALO.breakdown.shipping).toBeGreaterThan(0);
+			expect((control.lanes ?? []).map((lane) => lane.pairKey)).toContain(
+				"consumer>CX"
+			);
+
+			store.setDepot(CONSUMER_PLANET);
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// handed over at the warehouse next door: no lane, no freight
+			expect(snapshot.lanes ?? []).toStrictEqual([]);
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBe(0);
+			expect(snapshot.outputs.ALO.costPerUnit).toBeCloseTo(
+				control.outputs.ALO.breakdown.inputs,
+				10
+			);
+		});
+
+		it("still pays for a haul from another planet", async () => {
+			withSource();
+			store.setDepot(CONSUMER_PLANET);
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// the ORE really is flown here from ZV-194a, depot or not
+			expect(snapshot.draws).toStrictEqual({ source: { ORE: 100 } });
+		});
+	});
+
 	describe("exchange hub/spoke", () => {
 		/** Lane keys of a snapshot, in the order the pairs were built */
 		function laneKeys(snapshot: IRaukkSnapshot): string[] {

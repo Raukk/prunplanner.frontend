@@ -654,6 +654,28 @@ a pure routing anchor into the place non-FTL ships live.
    shared profile, ticking `stlOnly` on the LCB turned every LCB in
    the account into an STL hull, so the two builds could never be owned
    side by side. They are different ship types and now say so.
+5. **The builder RESTOCKS a depot, and that is a leg** (user decision,
+   closing the hole decision 2 opened): a depot stop always qualifies as
+   an auto chain stop whatever its share, and is exempt from
+   `RAUKK_AUTO_CHAIN_MIN_STOPS`, so `CX → depot → CX` is derived. The
+   minimum's own justification is what makes the exemption sound — it
+   exists because a one stop loop is the exchange lane that plan flies
+   anyway, and a base on a depot flies no such lane since decision 2.
+   Without the exemption its cargo would be neither flown nor charged.
+   The share test is skipped for the same reason: failing it normally
+   sends a base to the hub/spoke listing, which for a depot base means
+   nowhere. Anchoring OTHER bases at a depot instead of their exchange
+   was considered and NOT done — flow endpoints name the exchange, so
+   re-anchoring without re-targeting the flows claims nothing, and
+   re-targeting them needs a transshipment volume the model has no
+   notion of. Chain splitting at depot anchors (round 12) already gives
+   the gate-side/FTL handover that motivated it.
+
+Rent, for the record (user, 2026-08-09): a depot is normally cheap or
+free — most capacity comes from STO storage, which has no upkeep once
+built, and a rented warehouse runs a few thousand ȼ per week for ~10 kt.
+Cargo merely flowing through needs none. The field stays, defaulting to
+zero; it is not a number worth agonising over.
 
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
