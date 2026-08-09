@@ -835,10 +835,10 @@
 	}
 	/* self-reserve squares: hatched, pre-origin, never a consumer */
 	.wsq.selfq {
-		border: 1px solid rgba(137, 135, 129, 0.5);
+		border: 1px solid rgba(var(--rviz-ink-rgb), 0.5);
 		background: repeating-linear-gradient(
 			45deg,
-			rgba(137, 135, 129, 0.55) 0 3px,
+			rgba(var(--rviz-ink-rgb), 0.55) 0 3px,
 			transparent 3px 7px
 		);
 	}
@@ -866,7 +866,7 @@
 		flex: 0 0 3px;
 	}
 	.wbound.origin {
-		background: rgba(137, 135, 129, 0.9);
+		background: rgba(var(--rviz-ink-rgb), 0.9);
 		height: 14px;
 	}
 	.wclip {
@@ -884,7 +884,7 @@
 		display: inline-block;
 		padding-top: 4px;
 		font-size: 12px;
-		color: var(--color-prunplanner, #c0e219);
+		color: var(--rviz-accent);
 		cursor: pointer;
 	}
 	.wmore:hover {

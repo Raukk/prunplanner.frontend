@@ -44,6 +44,13 @@ export interface IRaukkFleetLoadEntry {
 	/** Hull damage per day this work inflicts, `undefined` on stored
 	 * results frozen before the wear rollup existed */
 	damagePerDay?: number;
+	/**
+	 * The stored result this work comes from is flagged stale: the
+	 * assignment is what the LAST compute chose, not what the current
+	 * fleet would choose. Absent reads as current, the convention of
+	 * every optional field on a stored result.
+	 */
+	stale?: boolean;
 }
 
 /** Capacity claim on one ship type */
@@ -75,6 +82,13 @@ export interface IRaukkFleetUtilization {
 	damagePerDay: number | null;
 	/** Keys of the work assigned to this type */
 	keys: string[];
+	/**
+	 * Keys of that work whose stored result is flagged stale. A type
+	 * still holding stale work is showing the assignment of the last
+	 * compute — after a fleet change that is exactly the work the next
+	 * recompute may move somewhere else.
+	 */
+	staleKeys: string[];
 }
 
 /**
@@ -163,6 +177,7 @@ export function raukkFleetUtilization(
 ): IRaukkFleetUtilization[] {
 	const minutes: Record<string, number> = {};
 	const keys: Record<string, string[]> = {};
+	const staleKeys: Record<string, string[]> = {};
 	const damage: Record<string, number> = {};
 	const damageUnknown: Set<string> = new Set();
 
@@ -173,6 +188,12 @@ export function raukkFleetUtilization(
 
 		minutes[entry.shipTypeId] = (minutes[entry.shipTypeId] ?? 0) + claimed;
 		keys[entry.shipTypeId] = [...(keys[entry.shipTypeId] ?? []), entry.key];
+
+		if (entry.stale)
+			staleKeys[entry.shipTypeId] = [
+				...(staleKeys[entry.shipTypeId] ?? []),
+				entry.key,
+			];
 
 		if (entry.damagePerDay === undefined)
 			damageUnknown.add(entry.shipTypeId);
@@ -203,6 +224,7 @@ export function raukkFleetUtilization(
 			// one lane contributes one entry per LEG since the cadence
 			// model, and several legs may fly the same type
 			keys: Array.from(new Set(keys[shipTypeId] ?? [])),
+			staleKeys: Array.from(new Set(staleKeys[shipTypeId] ?? [])),
 		};
 	});
 }

@@ -44,6 +44,11 @@
 		raukkStarZoomView,
 	} from "@/features/raukk_sourcing/calculations/oversubStarMap";
 
+	import {
+		RAUKK_VIZ_INK,
+		RAUKK_VIZ_SURFACE,
+	} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
+
 	// UI
 	import { PButton, PButtonGroup, PCheckbox } from "@/ui";
 
@@ -447,7 +452,7 @@
 		<div
 			v-else
 			class="overflow-hidden rounded border border-white/10"
-			style="background: #050a0d">
+			:style="{ background: RAUKK_VIZ_SURFACE.plot }">
 			<svg
 				ref="refSvg"
 				class="block w-full h-auto touch-none"
@@ -467,7 +472,7 @@
 					:cy="ring.y"
 					:r="ring.radius"
 					fill="none"
-					stroke="#1b2530"
+					:stroke="RAUKK_VIZ_SURFACE.rule"
 					stroke-width="1" />
 
 				<!-- gate links, underneath the freight they inform -->
@@ -570,7 +575,7 @@
 							:y="pointOf(`gate:${planet}`)!.y - 4"
 							width="8"
 							height="8"
-							fill="#050a0d"
+							:fill="RAUKK_VIZ_SURFACE.plot"
 							:stroke="RAUKK_MAP_GATE_COLORS.limited"
 							stroke-width="1.6">
 							<title>
@@ -597,7 +602,7 @@
 								:y="pointOf(stop.stopRef)!.y - nodeRadius(stop)"
 								:width="nodeRadius(stop) * 2"
 								:height="nodeRadius(stop) * 2"
-								fill="#050a0d"
+								:fill="RAUKK_VIZ_SURFACE.plot"
 								stroke="#ffffff"
 								stroke-width="2"
 								:transform="`rotate(45 ${pointOf(stop.stopRef)!.x} ${pointOf(stop.stopRef)!.y})`" />
@@ -610,8 +615,8 @@
 								"
 								:width="nodeRadius(stop) * 2"
 								:height="nodeRadius(stop) * 1.6"
-								fill="#050a0d"
-								stroke="#c3c2b7"
+								:fill="RAUKK_VIZ_SURFACE.plot"
+								:stroke="RAUKK_VIZ_INK.bright"
 								stroke-width="2"
 								stroke-dasharray="3 2.4" />
 							<circle
@@ -619,8 +624,8 @@
 								:cx="pointOf(stop.stopRef)!.x"
 								:cy="pointOf(stop.stopRef)!.y"
 								:r="nodeRadius(stop)"
-								fill="#050a0d"
-								stroke="#c3c2b7"
+								:fill="RAUKK_VIZ_SURFACE.plot"
+								:stroke="RAUKK_VIZ_INK.bright"
 								stroke-width="2" />
 
 							<title>
@@ -679,8 +684,8 @@
 <style scoped>
 	svg text.smap {
 		font-size: 10.5px;
-		fill: #ffffff;
-		stroke: #050a0d;
+		fill: rgba(255, 255, 255, 0.92);
+		stroke: var(--rviz-plot);
 		stroke-width: 3.5px;
 		paint-order: stroke;
 		stroke-linejoin: round;

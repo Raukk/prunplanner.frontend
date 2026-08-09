@@ -137,7 +137,7 @@
 	.roversub-hatch {
 		background: repeating-linear-gradient(
 			45deg,
-			rgba(199, 0, 57, 0.55) 0 3px,
+			rgba(var(--rviz-alert-rgb), 0.55) 0 3px,
 			transparent 3px 7px
 		);
 	}

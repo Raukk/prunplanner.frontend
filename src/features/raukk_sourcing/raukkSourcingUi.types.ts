@@ -32,8 +32,11 @@ export interface IRaukkInputRow {
 	buckets: IRaukkInputBuckets;
 	/** Net production/workforce demand plus repair demand per day */
 	unitsPerDay: number;
-	/** Configured source, undefined falls back to the CX preference */
+	/** Effective source, undefined falls back to the CX preference */
 	source: IRaukkTickerSource | undefined;
+	/** The source is the account wide bucket default, this plan stores
+	 * none of its own for the ticker */
+	fromDefault: boolean;
 	/** Effective price of one unit at the configured source */
 	price: number;
 	/** Units of this row that actually ride a route pair and pay
@@ -85,6 +88,9 @@ export interface IRaukkSourceOption {
 	/** Base fraction of the producer(s) snapshot, undefined when none of
 	 * them stores one yet */
 	baseFraction?: number;
+	/** Share of this plans need the producers cover, only on the market
+	 * top up aggregate — the rest of its price is the market price */
+	coverage?: number;
 }
 
 /** Everything the price resolver needs, free of store and Pinia access */
@@ -95,6 +101,13 @@ export interface IRaukkPriceResolverContext {
 	/** Plans existing CX preference price, the market default */
 	getDefaultPrice: (ticker: string) => number;
 	getProducers: (ticker: string) => IRaukkProducerOption[];
+	/** Daily need of the consuming plan, the market top up aggregate
+	 * blends against it. Absent: that aggregate prices as a plain
+	 * average, nothing else reads it. */
+	getDemand?: (ticker: string) => number;
+	/** Daily draw every OTHER plan holds against the producer pool, the
+	 * second half of the top up denominator */
+	getOthersDrawn?: (ticker: string) => number;
 }
 
 /** Input of the source dropdown option builder */
@@ -110,6 +123,10 @@ export interface IRaukkSourceOptionInput {
 	) => IRaukkSubscription;
 	/** Base fractions of the options come from the stored snapshots */
 	snapshots: Record<string, IRaukkSnapshot>;
+	/** CX preference price of the ticker, the market half of the market
+	 * top up aggregates blended price. Absent: that option prices as a
+	 * plain average. */
+	marketPrice?: number;
 }
 
 /** Minimal plan result shape the input table rows are built from */

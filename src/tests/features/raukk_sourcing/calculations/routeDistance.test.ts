@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 // Calculations
 import {
@@ -21,9 +21,11 @@ import {
 	nearestCx,
 	nearestNeighbor,
 	parsecDistance,
+	raukkPlannedGateLinks,
 	resolveSystemId,
 	routeBetween,
 	routePath,
+	setRaukkPlannedGateLinks,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 
 /** Real system ids of the reference flight ZV-307 to ZV-759 */
@@ -932,6 +934,176 @@ describe("Raukk Sourcing: Route Distance", () => {
 				10
 			);
 			expect(jumpCount(SYSTEM_ZV307, SYSTEM_IA158!)).toBe(6);
+		});
+	});
+
+	describe("straight line distance", () => {
+		const index: IRaukkRouteDistance = createRouteDistance(
+			tieGraph,
+			RAUKK_CX_SYSTEM_IDS,
+			[]
+		);
+
+		it("ignores the network the route has to follow", () => {
+			// BB-001 to BB-006 is 200 units of flying over the corner at
+			// BB-004, and sqrt(60² + 80² + 100²) ≈ 141.42 units of gap
+			expect(
+				index.straightLineParsecs!("sys-BB-001", "sys-BB-006")
+			).toBeCloseTo(
+				Math.sqrt(20000) / RAUKK_POSITION_UNITS_PER_PARSEC,
+				9
+			);
+			expect(
+				index.parsecDistance("sys-BB-001", "sys-BB-006")
+			).toBeCloseTo(200 / RAUKK_POSITION_UNITS_PER_PARSEC, 9);
+		});
+
+		it("is zero within one system and null for unknowns", () => {
+			expect(
+				index.straightLineParsecs!("sys-BB-001", "sys-BB-001")
+			).toBe(0);
+			expect(index.straightLineParsecs!("nope", "sys-BB-001")).toBeNull();
+		});
+
+		it("measures unconnected systems all the same", () => {
+			// nothing routes to a system with no connection, the gap
+			// itself is still a number a planned gate can bridge
+			const split: IRaukkRouteDistance = createRouteDistance(
+				[
+					system("SL-001", [0, 0, 0], []),
+					system("SL-002", [120, 0, 0], []),
+				],
+				RAUKK_CX_SYSTEM_IDS,
+				[]
+			);
+
+			expect(split.route("sys-SL-001", "sys-SL-002")).toBeNull();
+			expect(
+				split.straightLineParsecs!("sys-SL-001", "sys-SL-002")
+			).toBeCloseTo(10, 9);
+		});
+	});
+
+	describe("planned gate links", () => {
+		/** A link nobody built: NC1 straight to the far Antares gate end */
+		const planned: IRaukkGateLink = {
+			a: "OT-580b",
+			aName: "Planned",
+			b: "IA-158b",
+			bName: "Planned",
+			aGate: {
+				id: "planned-a",
+				fee: 4000,
+				cur: "AIC",
+				maxM3: 6000,
+				jumps24h: 0,
+				up: "",
+				est: "",
+			},
+			bGate: {
+				id: "planned-b",
+				fee: 4000,
+				cur: "AIC",
+				maxM3: 6000,
+				jumps24h: 0,
+				up: "",
+				est: "",
+			},
+			maxTraversalM3: 6000,
+			hcbCapable: true,
+			planned: true,
+		};
+
+		const IA158: string = resolveSystemId("IA-158b")!;
+
+		afterEach(() => {
+			// module level registry: every other test routes on today's
+			// network, so nothing may leak out of this block
+			setRaukkPlannedGateLinks([]);
+		});
+
+		it("starts empty, the transcribed network alone", () => {
+			expect(raukkPlannedGateLinks()).toStrictEqual([]);
+		});
+
+		it("is flown once registered, and flagged as planned", () => {
+			const before: IRaukkMultiModalPath | null = fastestRoutePath(
+				SYSTEM_NC1,
+				IA158
+			);
+
+			setRaukkPlannedGateLinks([planned]);
+
+			const after: IRaukkMultiModalPath | null = fastestRoutePath(
+				SYSTEM_NC1,
+				IA158
+			);
+
+			expect(after!.minutes).toBeLessThan(before!.minutes);
+			expect(after!.hops).toHaveLength(1);
+			expect(after!.hops[0]).toMatchObject({
+				kind: "gate",
+				gateId: "planned-a",
+				planned: true,
+			});
+			// transcribed hops carry no such flag
+			expect(before!.hops.every((hop) => hop.planned === undefined)).toBe(
+				true
+			);
+		});
+
+		it("forces the planned flag on whatever it is handed", () => {
+			setRaukkPlannedGateLinks([{ ...planned, planned: undefined }]);
+
+			expect(raukkPlannedGateLinks()[0].planned).toBe(true);
+			expect(
+				fastestRoutePath(SYSTEM_NC1, IA158)!.hops[0].planned
+			).toBe(true);
+		});
+
+		it("is barred by usePlannedGates, transcribed gates stay", () => {
+			setRaukkPlannedGateLinks([planned]);
+
+			const today: IRaukkMultiModalPath | null = fastestRoutePath(
+				SYSTEM_NC1,
+				IA158,
+				{ usePlannedGates: false }
+			);
+
+			expect(today!.hops.some((hop) => hop.planned === true)).toBe(false);
+			expect(today!.minutes).toBe(
+				fastestRoutePath(SYSTEM_NC1, IA158, {
+					usePlannedGates: false,
+					useGates: true,
+				})!.minutes
+			);
+			// the ZV-307c corridor is transcribed, it must still fly
+			expect(
+				fastestRoutePath(SYSTEM_ZV307, IA158, {
+					usePlannedGates: false,
+				})!.gateHops
+			).toBe(1);
+		});
+
+		it("clears again when the set is replaced by an empty one", () => {
+			setRaukkPlannedGateLinks([planned]);
+			const planWay: number = fastestRoutePath(SYSTEM_NC1, IA158)!.minutes;
+
+			setRaukkPlannedGateLinks([]);
+
+			expect(raukkPlannedGateLinks()).toStrictEqual([]);
+			expect(
+				fastestRoutePath(SYSTEM_NC1, IA158)!.minutes
+			).toBeGreaterThan(planWay);
+		});
+
+		it("leaves the FTL only metrics alone", () => {
+			const before: number | null = parsecDistance(SYSTEM_NC1, IA158);
+
+			setRaukkPlannedGateLinks([planned]);
+
+			expect(parsecDistance(SYSTEM_NC1, IA158)).toBe(before);
+			expect(routePath(SYSTEM_NC1, IA158)).not.toHaveProperty("hops");
 		});
 	});
 });

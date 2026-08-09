@@ -24,6 +24,20 @@ export interface IRaukkShipHull {
 	cargoWeight: number;
 	/** Cargo volume capacity in m³ */
 	cargoVolume: number;
+	/**
+	 * Volume of the SHIP, m³ — not of its cargo hold.
+	 *
+	 * The figure a gate measures: the in-game blueprint screen states it
+	 * as "SHIP OVERVIEW → VOLUME", separately from "CARGO → VOLUME
+	 * CAPACITY", and a gate's clearance is compared against this one. A
+	 * 5,000 m³ hold rides in a ship of about 5,837 m³.
+	 *
+	 * Absent means DERIVE, see `raukkHullVolumeM3`: the derivation is a
+	 * fit against real blueprints and a good default, while this field is
+	 * the figure the user read off their own ship and is always believed
+	 * over it.
+	 */
+	hullVolumeM3?: number;
 }
 
 /**
@@ -376,6 +390,20 @@ export interface IRaukkLegShipping {
 	repairCostPerTrip: number;
 	/** Hull damage per round trip as a fraction, 0 when hired */
 	damagePerTrip: number;
+	/**
+	 * ȼ per trip the OWN fleet would charge for this leg, stated even
+	 * while the lane is hired: the hire comparison is what hiring buys,
+	 * so it needs the counterfactual and not the rate that replaced it.
+	 */
+	ownCostPerTrip: number;
+	/**
+	 * Hull damage per round trip the OWN fleet would take, stated even
+	 * while hired, for the same reason as {@link ownCostPerTrip} — part
+	 * of what hiring buys is the wear the own hulls are spared.
+	 */
+	ownDamagePerTrip: number;
+	/** Units this leg moves per day, both directions summed */
+	unitsPerDay: number;
 	dailyCost: number;
 	roundTripMinutes: number;
 	/** Ship time share of this leg, `null` without a ship count */

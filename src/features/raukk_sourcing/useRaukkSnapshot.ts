@@ -21,8 +21,8 @@ import { raukkSplitCargoBuckets } from "@/features/raukk_sourcing/calculations/c
 import {
 	calculateRepairBillCost,
 	calculateShipping,
-	RAUKK_REPAIR_BILL,
 } from "@/features/raukk_sourcing/calculations/shipping";
+import { RAUKK_REPAIR_TICKERS } from "@/features/raukk_sourcing/calculations/shippingRepair";
 import { buildShippingPairs } from "@/features/raukk_sourcing/calculations/shippingPairs";
 import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippingDepots";
 import {
@@ -45,12 +45,18 @@ import {
 	buildInputRows,
 	buildSourceOptions,
 	createRaukkPriceResolver,
+	inputDemandPerDay,
 	isAggregateSource,
 	outputsSettled,
 	resolveCxExchangeCode,
 	splitAggregateDraws,
 	withFuelDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
+import {
+	classifyInputBuckets,
+	defaultedTickers,
+	resolveEffectiveSources,
+} from "@/features/raukk_sourcing/raukkSourcingDefaults";
 import { raukkFuelUnitsPerDay } from "@/features/raukk_sourcing/calculations/shippingFuel";
 import { raukkStorageFilledDays } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 import {
@@ -74,6 +80,7 @@ import {
 	IRaukkSnapshot,
 	IRaukkSnapshotLane,
 	IRaukkTickerSource,
+	RAUKK_SOURCE_BUCKET,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import {
 	IRaukkCadenceCaps,
@@ -189,12 +196,46 @@ function collectRelevantTickers(
 	);
 
 	if (withShipRepair) {
-		Object.keys(RAUKK_REPAIR_BILL).forEach((ticker) => tickers.add(ticker));
+		RAUKK_REPAIR_TICKERS.forEach((ticker: string) => tickers.add(ticker));
 		tickers.add(RAUKK_FUEL_TICKERS.ftl);
 		tickers.add(RAUKK_FUEL_TICKERS.stl);
 	}
 
 	return Array.from(tickers).sort();
+}
+
+/**
+ * Daily units EVERY OTHER plan draws from the producer pool of a ticker.
+ *
+ * The denominator half of the market top up aggregate: what the pool
+ * already owes elsewhere, the consuming plans own stored draw removed so
+ * its need is not counted twice — the very rule the source dropdown
+ * states as "x % others".
+ *
+ * @author raukk
+ *
+ * @param {ReturnType<typeof useRaukkSourcingStore>} store Sourcing Store
+ * @param {string | undefined} consumerPlanUuid Consuming Plan Uuid
+ * @param {string} ticker Material Ticker
+ * @returns {number} Units per day drawn by other plans
+ */
+function othersDrawnPerDay(
+	store: ReturnType<typeof useRaukkSourcingStore>,
+	consumerPlanUuid: string | undefined,
+	ticker: string
+): number {
+	return store.producersOf(ticker).reduce((sum, producer) => {
+		const subscription = store.subscription(producer.planUuid, ticker);
+
+		const own: number =
+			consumerPlanUuid === undefined
+				? 0
+				: (subscription.byPlan.find(
+						(entry) => entry.planUuid === consumerPlanUuid
+					)?.unitsPerDay ?? 0);
+
+		return sum + Math.max(0, subscription.totalDrawnPerDay - own);
+	}, 0);
 }
 
 /** Everything one shipping computation needs beyond the store */
@@ -780,6 +821,9 @@ function buildPlanLanes(shipping: IRaukkShippingResult): IRaukkSnapshotLane[] {
 			roundTripMinutes: leg.roundTripMinutes,
 			hired: pair.hired,
 			damagePerTrip: leg.damagePerTrip,
+			ownCostPerTrip: leg.ownCostPerTrip,
+			ownDamagePerTrip: leg.ownDamagePerTrip,
+			unitsPerDay: leg.unitsPerDay,
 		}))
 	);
 }
@@ -991,14 +1035,6 @@ export async function computePlanSnapshot(
 			context.planUuid
 		);
 
-		const resolver: IRaukkPriceResolver = createRaukkPriceResolver({
-			sources: config.sources,
-			getExchange: (ticker: string) => prices.exchangePrices[ticker],
-			getDefaultPrice: (ticker: string) =>
-				prices.defaultPrices[ticker] ?? 0,
-			getProducers,
-		});
-
 		const repairBuildings: IRaukkRepairBuilding[] =
 			context.planResult.production.buildings.map((building) => ({
 				name: building.name,
@@ -1018,6 +1054,40 @@ export async function computePlanSnapshot(
 				repairBuildings,
 				config.repairDay
 			).total;
+
+		/*
+		 * The account wide bucket defaults are merged in before anything
+		 * is priced, so the whole pipeline — resolver, shipping, rows and
+		 * the frozen config alike — sees ONE set of sources: the effective
+		 * ones. Which bucket a ticker sits in is a property of the plan,
+		 * so the classification is frozen onto the snapshot as well.
+		 */
+		const inputBuckets: Record<string, RAUKK_SOURCE_BUCKET[]> =
+			classifyInputBuckets(context.planResult, repairUnitsPerDay);
+
+		// cloned: the merged entries are frozen onto the snapshot, and a
+		// reactive proxy out of the store cannot be structured cloned
+		config.sources = resolveEffectiveSources(
+			config.sources,
+			inputBuckets,
+			inertClone(sourcingStore.sourcingDefaults)
+		);
+
+		const demandPerDay: IRaukkMaterialUnits = inputDemandPerDay(
+			context.planResult,
+			repairUnitsPerDay
+		);
+
+		const resolver: IRaukkPriceResolver = createRaukkPriceResolver({
+			sources: config.sources,
+			getExchange: (ticker: string) => prices.exchangePrices[ticker],
+			getDefaultPrice: (ticker: string) =>
+				prices.defaultPrices[ticker] ?? 0,
+			getProducers,
+			getDemand: (ticker: string) => demandPerDay[ticker] ?? 0,
+			getOthersDrawn: (ticker: string) =>
+				othersDrawnPerDay(sourcingStore, context.planUuid, ticker),
+		});
 
 		const shippingInput: IRaukkShippingInput = {
 			planUuid: context.planUuid,
@@ -1119,6 +1189,7 @@ export async function computePlanSnapshot(
 				context.planUuid
 			),
 			inputPrices,
+			inputBuckets,
 			sellPrices,
 			...(shippingConfig.enabled
 				? {
@@ -1250,16 +1321,6 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		return sourcingStore.producersOf(ticker);
 	}
 
-	const resolver: ComputedRef<IRaukkPriceResolver> = computed(() =>
-		createRaukkPriceResolver({
-			sources: config.value.sources,
-			getExchange: (ticker: string) => exchangePrices.value[ticker],
-			getDefaultPrice: (ticker: string) =>
-				defaultPrices.value[ticker] ?? 0,
-			getProducers,
-		})
-	);
-
 	const repairBuildings: ComputedRef<IRaukkRepairBuilding[]> = computed(() =>
 		context.planResult.value.production.buildings.map((building) => ({
 			name: building.name,
@@ -1275,6 +1336,63 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 				repairBuildings.value,
 				config.value.repairDay
 			).total
+	);
+
+	/** Buckets every sourcable ticker of this plan sits in */
+	const inputBuckets: ComputedRef<Record<string, RAUKK_SOURCE_BUCKET[]>> =
+		computed(() =>
+			classifyInputBuckets(
+				context.planResult.value,
+				repairUnitsPerDay.value
+			)
+		);
+
+	/**
+	 * Sources the plan is really priced with: its own entries, with the
+	 * account wide bucket defaults merged into every ticker that has none.
+	 * Everything downstream — resolver, shipping, rows — reads this, never
+	 * the stored map, so the tool shows what a computation would freeze.
+	 */
+	const effectiveSources: ComputedRef<Record<string, IRaukkTickerSource>> =
+		computed(() =>
+			resolveEffectiveSources(
+				config.value.sources,
+				inputBuckets.value,
+				// detached for the same reason `computePlanSnapshot` detaches
+				// them: a merged entry travels into cloned structures
+				inertClone(sourcingStore.sourcingDefaults)
+			)
+		);
+
+	/** Tickers whose source is the account default, not an own entry */
+	const followsDefault: ComputedRef<Set<string>> = computed(() =>
+		defaultedTickers(
+			config.value.sources,
+			inputBuckets.value,
+			sourcingStore.sourcingDefaults
+		)
+	);
+
+	/** Daily need per ticker, the market top up aggregate blends on it */
+	const demandPerDay: ComputedRef<IRaukkMaterialUnits> = computed(() =>
+		inputDemandPerDay(context.planResult.value, repairUnitsPerDay.value)
+	);
+
+	const resolver: ComputedRef<IRaukkPriceResolver> = computed(() =>
+		createRaukkPriceResolver({
+			sources: effectiveSources.value,
+			getExchange: (ticker: string) => exchangePrices.value[ticker],
+			getDefaultPrice: (ticker: string) =>
+				defaultPrices.value[ticker] ?? 0,
+			getProducers,
+			getDemand: (ticker: string) => demandPerDay.value[ticker] ?? 0,
+			getOthersDrawn: (ticker: string) =>
+				othersDrawnPerDay(
+					sourcingStore,
+					context.planUuid.value,
+					ticker
+				),
+		})
 	);
 
 	const shippingConfig: ComputedRef<IRaukkShippingConfig> = computed(
@@ -1297,7 +1415,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		resolver: resolver.value,
 		getProducers,
 		shippingConfig: shippingConfig.value,
-		sources: config.value.sources,
+		sources: effectiveSources.value,
 		localSales: config.value.localSales ?? {},
 		repairUnitsPerDay: repairUnitsPerDay.value,
 		dimensionOf: (ticker: string) => dimensions.value[ticker],
@@ -1364,11 +1482,12 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		buildInputRows(
 			context.planResult.value,
 			repairCost.value.materialUnitsPerDay,
-			config.value.sources,
+			effectiveSources.value,
 			resolver.value,
 			shipping.value.inbound,
 			(ticker: string) => defaultPrices.value[ticker] ?? 0,
-			fuelUnitsPerDay.value
+			fuelUnitsPerDay.value,
+			followsDefault.value
 		)
 	);
 
@@ -1414,15 +1533,14 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		const seen: Set<string> = new Set();
 		const result: IRaukkProducerOption[] = [];
 
-		Object.entries(config.value.sources).forEach(([ticker, source]) => {
+		Object.entries(effectiveSources.value).forEach(([ticker, source]) => {
 			if (source.mode !== "plan") return;
 
 			getProducers(ticker)
 				.filter(
 					(producer) =>
 						producer.planUuid !== context.planUuid.value &&
-						(source.sourcePlanUuid === "AGG_AVG" ||
-							source.sourcePlanUuid === "AGG_MAX" ||
+						(isAggregateSource(source.sourcePlanUuid) ||
 							source.sourcePlanUuid === producer.planUuid)
 				)
 				.forEach((producer) => {
@@ -1461,6 +1579,8 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 			producers: getProducers(ticker),
 			subscriptionOf: sourcingStore.subscription,
 			snapshots: sourcingStore.snapshots,
+			// the market half of the market top up aggregates price
+			marketPrice: defaultPrices.value[ticker] ?? 0,
 		});
 	}
 
@@ -1558,6 +1678,8 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 
 	return {
 		config,
+		effectiveSources,
+		inputBuckets,
 		shippingConfig,
 		caps,
 		shipping,
