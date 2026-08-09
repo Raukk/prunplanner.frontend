@@ -13,6 +13,7 @@ import {
 	IRaukkShipProfile,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
+	IRaukkSourcingDefaults,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 
 /** A single plan offering `ticker` as an output of its snapshot */
@@ -62,4 +63,7 @@ export interface IRaukkExportPayload {
 	chainConfig: IRaukkChainConfig;
 	/** raukk: depot planets by natural id, absent before depots existed */
 	depots: Record<string, IRaukkDepot>;
+	/** raukk: account wide default source per input bucket, absent before
+	 * the defaults existed */
+	sourcingDefaults: IRaukkSourcingDefaults;
 }

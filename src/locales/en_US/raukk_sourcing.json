@@ -77,7 +77,8 @@
 		"AVG7D": "Average 7d",
 		"AVG30D": "Average 30d",
 		"MANUAL": "Manual",
-		"default": "CX Preference"
+		"default": "Default (account/CX)",
+		"cx": "CX Preference (pinned)"
 	},
 	"local_price": {
 		"absolute": "ȼ/u",
@@ -94,7 +95,9 @@
 		"agg_avg": "All producers (weighted avg)",
 		"agg_max": "Highest-cost producer",
 		"self": "Own output",
-		"stale": "stale snapshot"
+		"stale": "stale snapshot",
+		"agg_avg_mkt": "All producers (weighted avg + market top-up)",
+		"pooled": "from own bases"
 	},
 	"shipping_page": {
 		"view_title": "Shipping",
@@ -806,5 +809,19 @@
 		"legend_outside": "A ringed point overflows it and needs a bigger bay or a shorter cadence",
 		"legend_diagonal": "Above the diagonal the cargo is volume bound, below it weight bound",
 		"legend_clamped": "A point pinned to the plot edge reaches beyond the axis — its tooltip carries the real figure"
+	},
+	"defaults": {
+		"title": "Sourcing Defaults",
+		"tooltip": "Default source of every base at once, per input group: a ticker without its own setting on a base follows the default of its group. \"All producers (weighted avg + market top-up)\" charges the share your own bases actually cover at their weighted average and buys the rest at the market price — bases producing two thirds of your rations pay two thirds average and one third market. A per-base setting always wins; pick \"CX Preference (pinned)\" on a row to opt that one ticker out.",
+		"none": "No default (CX preference)",
+		"row_marker": "(default)",
+		"row_marker_tooltip": "Follows the account default of this input group, this base stores no setting of its own.",
+		"confirm_title": "Replace the settings on every base?",
+		"confirm_text": "{tickers} ticker setting(s) on {plans} base(s) override this default. Replacing drops them, so those bases follow the account default from here on.",
+		"confirm_apply": "Replace everywhere",
+		"confirm_keep": "Keep per-base settings",
+		"info": "Default source of every base at once, per input group. A ticker without its own setting on a base follows the default of its group — rations, drinking water and the repair materials are configured once here instead of base by base. Changing a default marks every stored snapshot stale.",
+		"note": "Account defaults —",
+		"note_link": "manage"
 	}
 }
