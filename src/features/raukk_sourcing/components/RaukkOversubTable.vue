@@ -105,7 +105,9 @@
 		<thead>
 			<tr>
 				<th></th>
-				<th>{{ $t("raukk_sourcing.oversub_report.columns.ticker") }}</th>
+				<th>
+					{{ $t("raukk_sourcing.oversub_report.columns.ticker") }}
+				</th>
 				<th>
 					{{ $t("raukk_sourcing.oversub_report.columns.producer") }}
 				</th>
@@ -122,7 +124,9 @@
 					{{ $t("raukk_sourcing.oversub_report.columns.subscribed") }}
 				</th>
 				<th>
-					{{ $t("raukk_sourcing.oversub_report.columns.utilization") }}
+					{{
+						$t("raukk_sourcing.oversub_report.columns.utilization")
+					}}
 				</th>
 				<th>{{ $t("raukk_sourcing.oversub_report.columns.flags") }}</th>
 			</tr>
@@ -161,18 +165,23 @@
 							⌂</span
 						>
 					</td>
-					<td class="text-right">{{ formatNumber(row.netPerDay) }}</td>
+					<td class="text-right">
+						{{ formatNumber(row.netPerDay) }}
+					</td>
 					<td class="text-right">
 						{{ formatNumber(row.subscribedPerDay) }}
 					</td>
 					<td>
-						<div class="flex flex-row gap-x-2 child:my-auto min-w-40">
+						<div
+							class="flex flex-row gap-x-2 child:my-auto min-w-40">
 							<div
 								class="w-full bg-gray-800 size-2 rounded-full overflow-hidden">
 								<div
 									class="h-full transition-all duration-300 ease-out"
 									:class="
-										row.over ? 'bg-negative' : 'bg-prunplanner'
+										row.over
+											? 'bg-negative'
+											: 'bg-prunplanner'
 									"
 									:style="{
 										width: `${raukkUtilizationBarWidth(row.utilization)}%`,
@@ -180,7 +189,9 @@
 							</div>
 							<span
 								class="text-nowrap"
-								:class="row.over ? 'text-negative font-bold' : ''">
+								:class="
+									row.over ? 'text-negative font-bold' : ''
+								">
 								{{
 									row.utilization === null
 										? $t(
@@ -272,7 +283,9 @@
 					<th></th>
 					<th>
 						{{
-							$t("raukk_sourcing.oversub_report.columns.ship_type")
+							$t(
+								"raukk_sourcing.oversub_report.columns.ship_type"
+							)
 						}}
 					</th>
 					<th>
@@ -289,7 +302,9 @@
 					</th>
 					<th class="text-right!">
 						{{
-							$t("raukk_sourcing.oversub_report.columns.subscribed")
+							$t(
+								"raukk_sourcing.oversub_report.columns.subscribed"
+							)
 						}}
 					</th>
 					<th>
@@ -359,7 +374,9 @@
 								<span
 									class="text-nowrap"
 									:class="
-										row.over ? 'text-negative font-bold' : ''
+										row.over
+											? 'text-negative font-bold'
+											: ''
 									">
 									{{
 										row.utilization === null
@@ -373,7 +390,10 @@
 						</td>
 						<td>
 							<div class="flex flex-row gap-x-1">
-								<PTag v-if="row.anyStale" size="sm" type="warning">
+								<PTag
+									v-if="row.anyStale"
+									size="sm"
+									type="warning">
 									{{
 										$t(
 											"raukk_sourcing.oversub_report.badges.stale"

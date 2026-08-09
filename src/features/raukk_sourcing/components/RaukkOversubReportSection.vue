@@ -82,7 +82,9 @@
 		if (refProblemsOnly.value && !isProblem(row)) return false;
 		if (refStaleOnly.value && !row.anyStale) return false;
 
-		const query: string = (refTickerFilter.value ?? "").trim().toUpperCase();
+		const query: string = (refTickerFilter.value ?? "")
+			.trim()
+			.toUpperCase();
 		if (query === "") return true;
 
 		if (row.kind === "ticker")
@@ -147,8 +149,10 @@
 				return [
 					row.shipTypeId,
 					`${
-						raukkBayCode(profile.cargoWeight, profile.cargoVolume) ??
-						"—"
+						raukkBayCode(
+							profile.cargoWeight,
+							profile.cargoVolume
+						) ?? "—"
 					} · ${profile.name}`,
 				];
 			})

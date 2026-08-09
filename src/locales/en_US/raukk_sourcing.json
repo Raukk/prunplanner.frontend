@@ -409,5 +409,56 @@
 			"rent_tooltip": "Warehouse rent of every depot a chain calls at, weekly rent divided by seven. Charged ONCE per depot and day however many chains visit it — it is the warehouse standing there, not a docking fee.",
 			"total": "Shipping ȼ / Day"
 		}
+	},
+	"oversub_report": {
+		"title": "Oversubscription",
+		"info": "Where this empire is overdrawn: every producer and ticker whose subscribed draws approach or exceed its net capacity, plus the committed ship time of the fleet. Read-only — rows link to the owning plan, fleet rows to the Shipping page.",
+		"tabs": {
+			"table": "Table"
+		},
+		"filters": {
+			"problems_only": "Problems only",
+			"stale_only": "Stale only",
+			"ticker_placeholder": "Filter ticker",
+			"sort": "Sort",
+			"sort_options": {
+				"utilization": "Utilization",
+				"producer": "Producer",
+				"ticker": "Ticker"
+			}
+		},
+		"groups": {
+			"materials": "Materials",
+			"fleet": "Fleet",
+			"fleet_note": "account-wide"
+		},
+		"columns": {
+			"ticker": "Ticker",
+			"producer": "Producer",
+			"ship_type": "Ship Type",
+			"design": "Design",
+			"gross": "Gross",
+			"self": "Self",
+			"net": "Net",
+			"subscribed": "Subscribed",
+			"utilization": "Utilization",
+			"flags": "Flags"
+		},
+		"self_marker_tooltip": "This producer draws its own output; the self draw comes off the top of its capacity before any subscriber counts.",
+		"utilization_na": "n/a",
+		"badges": {
+			"stale": "Stale",
+			"no_net_capacity": "no net capacity",
+			"no_ships": "no ships"
+		},
+		"breakdown": {
+			"share": "{share} % of net",
+			"share_na": "—",
+			"external": "outside this empire ({count} plans)"
+		},
+		"empty": {
+			"materials": "No material rows — nothing subscribes beyond its producer, or the filters hide every row.",
+			"fleet": "No fleet rows — the fleet holds no ship types, or the filters hide every row."
+		}
 	}
 }
