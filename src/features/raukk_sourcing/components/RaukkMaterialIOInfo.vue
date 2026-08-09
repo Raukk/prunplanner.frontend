@@ -8,6 +8,9 @@
 	import { computed, ComputedRef } from "vue";
 	import { useRoute } from "vue-router";
 
+	import { useI18n } from "vue-i18n";
+	const { t } = useI18n();
+
 	// Stores
 	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
@@ -118,6 +121,75 @@
 		return count > 0 ? `${count}` : undefined;
 	});
 
+	/**
+	 * Plan view path of the source, undefined for an aggregate and for a
+	 * source whose snapshot vanished: both name no single base to open.
+	 * @author raukk
+	 */
+	const localSourceLink: ComputedRef<string | undefined> = computed(() => {
+		const source: IRaukkTickerSource | undefined = localSource.value;
+
+		if (
+			props.delta >= 0 ||
+			source === undefined ||
+			source.mode !== "plan" ||
+			isAggregateSource(source.sourcePlanUuid)
+		)
+			return undefined;
+
+		const snapshot: IRaukkSnapshot | undefined =
+			raukkSourcingStore.snapshots[source.sourcePlanUuid];
+
+		if (!snapshot) return undefined;
+
+		return `/plan/${snapshot.planetNaturalId}/${source.sourcePlanUuid}`;
+	});
+
+	/**
+	 * Share of the SOURCE's output that all plans together draw from it,
+	 * undefined while the row is not drawn from a plan at all. Aggregates
+	 * pool the whole producer set, exactly as their price and their
+	 * dropdown percentages do, so the pooled draw is measured against the
+	 * pooled output rather than against any single producer.
+	 * @author raukk
+	 */
+	const localSourcePct: ComputedRef<number | undefined> = computed(() => {
+		const source: IRaukkTickerSource | undefined = localSource.value;
+
+		if (props.delta >= 0 || source === undefined || source.mode !== "plan")
+			return undefined;
+
+		if (!isAggregateSource(source.sourcePlanUuid))
+			return raukkSourcingStore.subscription(
+				source.sourcePlanUuid,
+				props.ticker
+			).pctOfOutput;
+
+		const producers = raukkSourcingStore.producersOf(props.ticker);
+
+		const unitsTotal: number = producers.reduce(
+			(sum, producer) => sum + producer.unitsPerDay,
+			0
+		);
+
+		if (unitsTotal <= 0) return undefined;
+
+		const drawnTotal: number = producers.reduce(
+			(sum, producer) =>
+				sum +
+				raukkSourcingStore.subscription(producer.planUuid, props.ticker)
+					.totalDrawnPerDay,
+			0
+		);
+
+		return drawnTotal / unitsTotal;
+	});
+
+	/** Source is drawn beyond what it produces, this plan included */
+	const localSourceOversubscribed: ComputedRef<boolean> = computed(
+		() => (localSourcePct.value ?? 0) > 1
+	);
+
 	/** Draws other plans hold against this row's output */
 	const localSubscription: ComputedRef<IRaukkSubscription | undefined> =
 		computed(() => {
@@ -141,22 +213,63 @@
 	const localOversubscribed: ComputedRef<boolean> = computed(
 		() => (localSubscription.value?.pctOfOutput ?? 0) > 1
 	);
+
+	/**
+	 * Label of the input annotation. An oversubscribed source carries its
+	 * drawn share, the same number the output side of this very component
+	 * shows — without it the row states where the material comes from but
+	 * not that the plans upstream of it are already promised more than
+	 * that source makes.
+	 * @author raukk
+	 */
+	const localSourceText: ComputedRef<string> = computed(() => {
+		const percent: string = formatNumber((localSourcePct.value ?? 0) * 100);
+
+		if (localIsAggregate.value)
+			return localSourceOversubscribed.value
+				? t("raukk_matio.sourced_aggregate_oversubscribed", {
+						count: localSourceLabel.value,
+						percent,
+					})
+				: t("raukk_matio.sourced_aggregate", {
+						count: localSourceLabel.value,
+					});
+
+		return localSourceOversubscribed.value
+			? t("raukk_matio.sourced_oversubscribed", {
+					plan: localSourceLabel.value,
+					percent,
+				})
+			: t("raukk_matio.sourced", { plan: localSourceLabel.value });
+	});
 </script>
 
 <template>
 	<PTooltip v-if="localSourceLabel">
 		<template #trigger>
-			<span class="pl-1 text-xs text-white/40 hover:cursor-help">
-				{{
-					localIsAggregate
-						? $t("raukk_matio.sourced_aggregate", {
-								count: localSourceLabel,
-							})
-						: $t("raukk_matio.sourced", { plan: localSourceLabel })
-				}}
+			<router-link
+				v-if="localSourceLink"
+				:to="localSourceLink"
+				class="pl-1 text-xs hover:underline"
+				:class="
+					localSourceOversubscribed ? 'text-negative' : 'text-white/40'
+				">
+				{{ localSourceText }}
+			</router-link>
+			<span
+				v-else
+				class="pl-1 text-xs hover:cursor-help"
+				:class="
+					localSourceOversubscribed ? 'text-negative' : 'text-white/40'
+				">
+				{{ localSourceText }}
 			</span>
 		</template>
-		{{ $t("raukk_matio.sourced_tooltip") }}
+		{{
+			localSourceOversubscribed
+				? $t("raukk_matio.sourced_oversubscribed_tooltip")
+				: $t("raukk_matio.sourced_tooltip")
+		}}
 	</PTooltip>
 	<PTooltip v-else-if="localSubscription">
 		<template #trigger>

@@ -57,7 +57,24 @@ export const RaukkTickerSourceSchema = z.discriminatedUnion("mode", [
 		mode: z.literal("local"),
 		price: RaukkLocalPriceSchema,
 	}),
+	z.object({
+		// raukk: the plans CX preference price, stated explicitly so the
+		// ticker opts out of the account wide bucket default
+		mode: z.literal("cx"),
+	}),
 ]);
+
+/**
+ * raukk: account wide default source per input bucket. Every bucket is
+ * optional — an absent one means the bucket keeps following the CX
+ * preference price — and the whole object is absent in every payload
+ * written before the defaults existed.
+ */
+export const RaukkSourcingDefaultsSchema = z.object({
+	workforce: RaukkTickerSourceSchema.optional(),
+	repair: RaukkTickerSourceSchema.optional(),
+	production: RaukkTickerSourceSchema.optional(),
+});
 
 export const RaukkFtlReactorSchema = z.enum(["standard", "quick-charge"]);
 
@@ -191,6 +208,32 @@ export const RaukkDepotSchema = z.object({
 	weeklyCostAic: z.number().nonnegative().optional(),
 });
 
+/**
+ * One gate the user PLANNED: one going up, or one they wish existed.
+ *
+ * raukk: fee and clearance are non negative and default to the shipped
+ * gut numbers, so a payload written by a future version that drops one of
+ * them still imports. `enabled` defaults OFF — importing a backup must
+ * never silently re-route an account over gates that do not exist.
+ */
+export const RaukkPlannedGateSchema = z.object({
+	id: z.string().min(1),
+	name: z.string().optional(),
+	planetA: z.string().min(1),
+	planetB: z.string().min(1),
+	fee: z.number().nonnegative().default(4000),
+	// raukk: upgrade levels of EACH end, capped as the game caps them.
+	// They replace the free-form clearance the first version stored, which
+	// stays readable as an optional legacy field
+	capacityUpgrades: z.number().int().min(0).max(5).default(0),
+	volumeUpgrades: z.number().int().min(0).max(3).default(0),
+	rangeUpgrades: z.number().int().min(0).max(3).default(0),
+	maxM3: z.number().nonnegative().optional(),
+	enabled: z.boolean().default(false),
+	status: z.enum(["construction", "proposed"]).default("proposed"),
+	note: z.string().optional(),
+});
+
 /** Account wide chain knobs, every field defaulted like the v1 config */
 export const RaukkChainConfigSchema = z.object({
 	cxSplitDetourParsecs: z.number().default(6),
@@ -311,6 +354,10 @@ export const RaukkChainResultSchema = z.object({
 	// derived chains: absent on every result written before phase 2 and
 	// on every user authored chain
 	auto: z.boolean().optional(),
+	// absent on every result written before the reason existed; an
+	// unknown value simply reads as "no reason stated" rather than
+	// failing the users whole import
+	autoReason: z.enum(["supply", "partial", "neighbours"]).optional(),
 	capDays: z.number().positive().optional(),
 	advisories: z.array(RaukkFleetAdvisorySchema).default([]),
 });
@@ -380,6 +427,14 @@ export const RaukkSnapshotSchema = z.object({
 	draws: z.record(z.string(), z.record(z.string(), z.number())),
 	config: RaukkPlanConfigSchema.optional(),
 	baseFraction: z.number().optional(),
+	// raukk: frozen bucket classification of the sourcable tickers, absent
+	// on every snapshot written before the account wide defaults existed
+	inputBuckets: z
+		.record(
+			z.string(),
+			z.array(z.enum(["workforce", "repair", "production"]))
+		)
+		.optional(),
 	// frozen alongside the numbers they priced, they back the read only
 	// sourced cost notes; absent in payloads predating those notes
 	inputPrices: z.record(z.string(), z.number()).optional(),
@@ -427,6 +482,12 @@ export const RaukkSourcingExportSchema = z.object({
 	// same reason the five v2 slices are: every payload written before
 	// depots existed knows none.
 	depots: z.record(z.string(), RaukkDepotSchema).default({}),
+	// raukk: planned gates, keyed by their own id. Same rule as depots —
+	// every payload written before the gate planning tool knows none.
+	plannedGates: z.record(z.string(), RaukkPlannedGateSchema).default({}),
+	// raukk: account wide bucket defaults, absent in every payload written
+	// before they existed — an empty object is the pre defaults behaviour
+	sourcingDefaults: RaukkSourcingDefaultsSchema.prefault({}),
 });
 
 export type RaukkSourcingExportType = z.infer<typeof RaukkSourcingExportSchema>;

@@ -563,6 +563,63 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 			expect(result.legs[0].utilization).toBeCloseTo(1 / 3, 10);
 		});
 
+		it("carries two pickups at once on the leg between them", () => {
+			// pick up at A, pick up at B, drop both at C: the B→C leg
+			// holds BOTH loads at the same time, and 1200 t of it does
+			// not fit the 1000 t hull — the loop flies more often rather
+			// than overloading the ship
+			const result: IRaukkChainShipping = calculateChainShipping(
+				chainInput(
+					["AA-001a", "AA-002b", "AA-003c"],
+					[
+						flow("ALO", "AA-001a", "AA-003c", 600),
+						flow("FEO", "AA-002b", "AA-003c", 600),
+					]
+				)
+			);
+
+			expect(result.legs[0].loads).toBeCloseTo(0.6, 10);
+			expect(result.legs[1].loads).toBeCloseTo(1.2, 10);
+			expect(result.bindingLegIndex).toBe(1);
+			// 1.2 hull loads a day is 1.2 trips a day, never one full one
+			expect(result.tripsPerDay).toBeCloseTo(1.2, 10);
+		});
+
+		it("holds two pickups on one lap while they still fit", () => {
+			// the same shape under the hull: neither base fills the ship
+			// and neither does their sum, so one lap takes both
+			const result: IRaukkChainShipping = calculateChainShipping(
+				chainInput(
+					["AA-001a", "AA-002b", "AA-003c"],
+					[
+						flow("RAT", "AA-001a", "AA-003c", 300),
+						flow("DW", "AA-002b", "AA-003c", 300),
+					]
+				)
+			);
+
+			expect(result.legs[1].loads).toBeCloseTo(0.6, 10);
+			expect(result.tripsPerDay).toBeCloseTo(0.6, 10);
+			expect(result.legs[1].utilization).toBe(1);
+		});
+
+		it("never lets a cadence cap send an overfull ship", () => {
+			// a 90 day repair rhythm cannot stretch a leg that fills in
+			// under a day: the cap only ever SHORTENS the interval
+			const result: IRaukkChainShipping = calculateChainShipping(
+				chainInput(
+					["AA-001a", "AA-002b", "AA-003c"],
+					[
+						flow("ALO", "AA-001a", "AA-003c", 600),
+						flow("FEO", "AA-002b", "AA-003c", 600),
+					],
+					{ capDays: 90 }
+				)
+			);
+
+			expect(result.tripsPerDay).toBeCloseTo(1.2, 10);
+		});
+
 		it("visits at the cadence cap when the binding leg fills slower", () => {
 			const flows = [flow("RAT", "AA-001a", "AA-002b", 50)];
 

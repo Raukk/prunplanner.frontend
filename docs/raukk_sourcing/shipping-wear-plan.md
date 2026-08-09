@@ -48,18 +48,16 @@ shipping-fleet.md (fleet, profiles, blueprint seeding).
 `shipping.ts`:
 
 - `RAUKK_REPAIR_BILL = { LHP: 11, SSC: 11, MFK: 12, FLP: 8 }` — the
-  observed full bill of a 3000 t freighter at ~80 % damage.
-- `RAUKK_REPAIR_AT_DAMAGE = 0.8` — players repair at ~80 %.
-
-> **CORRECTED 2026-08-09, calibration §14.** Everything in this file
-> that reads 0.8 or "80 % damage" is 0.2 and "20 % damage": the game's
-> "80 %" is 80 % CONDITION. The observed bill was always right — the law
-> `ceil(componentCount × damage × 0.75 × shieldRelief)` reproduces this
-> plan's own 3-at-4.5 % and 11-at-"80 %" on a 71 element hull only at a
-> fifth of condition lost. `RAUKK_REPAIR_AT_DAMAGE` is now 0.2 and the
-> bill derives from the BOM in `shippingRepair.ts`, so the ÷ 0.8 in the
-> formulas below is ÷ 0.2 and every repair figure is four times what
-> this plan predicted.
+  observed full bill of a 3000 t freighter at 80 % condition.
+- `RAUKK_REPAIR_AT_DAMAGE = 0.2` — players repair at 80 % CONDITION,
+  which is 20 % accumulated damage (see shipping-decisions.md round
+  21; the constant read 0.8 until then and every repair number was
+  off by 4x).
+- The bill is no longer four fixed numbers: `shippingRepair.ts` derives
+  it from the ship's BOM as `ceil(componentCount × damage × 0.75 ×
+  shieldRelief)` plus a flat MFK 12 and FLP 8, which reproduces the
+  observation above on the 71 structural elements that hull carries.
+  See shipping-calibration.md §14.
 - `calculateRepairBillCost` prices the bill through the snapshot's
   price resolver (CX/sourced prices like any other ticker).
 - `calculateRepairCostPerTrip` charges each round trip the share of
@@ -89,7 +87,8 @@ What the user can see today:
   silently folded in.
 
 Nothing anywhere answers: "what does wear cost me per trip / per
-day", "how many trips until this ship hits the repair threshold", "what materials
+day", "how many trips until this ship hits 80 % condition", "what
+materials
 will the repair take and what will it cost".
 
 ### 1.4 Known model gaps (calibration §6 / §8, decisions round 9)
@@ -138,7 +137,7 @@ costs already live.
      damagePerTrip,          // fraction per round trip
      tripsUntilRepair,       // RAUKK_REPAIR_AT_DAMAGE / damagePerTrip
      daysUntilRepair,        // tripsUntilRepair / tripsPerDay
-     repairBillUnits,        // ticker → units, the full repair bill
+     repairBillUnits,        // ticker → units, the full bill
      repairBillCost,         // ȼ of that bill
      repairCostPerTrip,      // (damage / 0.2) × billCost
      repairCostPerDay,       // × tripsPerDay
@@ -192,12 +191,14 @@ page should answer it per ship type.
 Replace the one-size 3000 t bill (calibration §6 open item).
 
 Observed structure: MFK/FLP fixed per repair, LHP/SSC roughly linear
-in damage (≈3 each at 4.5 %, ≈11 each at 80 %). The blueprint panel
+in damage (≈3 each at 4.5 % damage, ≈11 each at the 20 % damage
+repair point). The blueprint panel
 does not expose a BOM, and no FIO endpoint carries it, so a static
 per-hull asset cannot be sourced reliably. Recommendation: an
 optional per-profile OBSERVED bill — the calibration pattern — a
 `repairBill?: Record<ticker, units>` field on the ship profile
-(schema + profile editor), meaning "units at the repair threshold",
+(schema + profile editor), meaning "units at the 80 % condition
+repair point",
 falling back to today's constants when absent. `calculateRepairBillCost`
 takes the profile's bill; the scaling-vs-fixed split stays internal
 to the observation (users enter what the game showed them at their

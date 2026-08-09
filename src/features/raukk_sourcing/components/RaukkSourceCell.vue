@@ -34,6 +34,13 @@
 			required: false,
 			default: false,
 		},
+		/** The source shown is the account wide bucket default, this plan
+		 * stores none of its own */
+		fromDefault: {
+			type: Boolean,
+			required: false,
+			default: false,
+		},
 	});
 
 	const emit = defineEmits<{
@@ -61,8 +68,11 @@
 
 		if (!option.aggregate) return option.planName;
 
-		return option.value === "AGG_AVG"
-			? t("raukk_sourcing.source_option.agg_avg")
+		if (option.value === "AGG_AVG")
+			return t("raukk_sourcing.source_option.agg_avg");
+
+		return option.value === "AGG_AVG_MKT"
+			? t("raukk_sourcing.source_option.agg_avg_mkt")
 			: t("raukk_sourcing.source_option.agg_max");
 	}
 
@@ -73,6 +83,7 @@
 			{
 				yours: t("raukk_sourcing.source_option.yours"),
 				others: t("raukk_sourcing.source_option.others"),
+				pooled: t("raukk_sourcing.source_option.pooled"),
 			}
 		);
 	}
@@ -118,6 +129,17 @@
 			),
 		];
 
+		if (option.coverage !== undefined)
+			children.push(
+				h(
+					"span",
+					{ class: "pl-1 text-white/60" },
+					`(${formatNumber(option.coverage * 100)}% ${t(
+						"raukk_sourcing.source_option.pooled"
+					)})`
+				)
+			);
+
 		if (option.stale)
 			children.push(
 				h(
@@ -139,7 +161,16 @@
 
 	function toggle(checked: boolean | undefined): void {
 		if (!checked) {
-			emit("update:source", undefined);
+			/*
+			 * Unchecking a row that only follows the ACCOUNT default has to
+			 * store the opt out explicitly: clearing would drop nothing and
+			 * the default would tick the box straight back on. `cx` is that
+			 * opt out — the plans CX preference price, stated.
+			 */
+			emit(
+				"update:source",
+				props.fromDefault ? { mode: "cx" } : undefined
+			);
 			return;
 		}
 
@@ -178,6 +209,12 @@
 				:disabled="disabled"
 				:render-label="renderLabel"
 				@update:value="select" />
+			<span
+				v-if="fromDefault"
+				class="text-white/40 text-nowrap"
+				:title="$t('raukk_sourcing.defaults.row_marker_tooltip')">
+				{{ $t("raukk_sourcing.defaults.row_marker") }}
+			</span>
 		</template>
 	</div>
 </template>

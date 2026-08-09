@@ -115,7 +115,7 @@ describe("raukk shipping display helpers", () => {
 			const pair: IRaukkShippingPair = sourcingPair();
 			pair.profile = { ...profile, damagePerParsec: 0.01 };
 
-			// 2 * 5 * 0.01 = 10% damage on a 20% repair budget, bill 800
+			// 2 * 5 * 0.01 = 10% damage on a 20% damage budget, bill 800
 			const [row] = buildLmComparison([pair], config, 800, caps);
 
 			expect(row.ownCostPerTrip).toBe(200 + 400);

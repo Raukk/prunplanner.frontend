@@ -16,7 +16,9 @@ import {
 	raukkBuildAutoChains,
 	raukkClassDetourBudget,
 	raukkClusterChainStops,
+	raukkAutoChainReason,
 	raukkFlowConcernsPlan,
+	raukkFlowPrecedence,
 	raukkHubSpokeRows,
 	raukkIsAutoChainId,
 	raukkOrderChainStops,
@@ -162,6 +164,75 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 		});
 	});
 
+	describe("raukkFlowPrecedence", () => {
+		it("constrains base to base cargo only", () => {
+			const pairs: Set<string> = raukkFlowPrecedence(
+				[
+					flow("ALO", "AA-001a", "AA-002b", 10),
+					flow("AL", "AA-002b", "AA-003c", 10),
+					// bought at and sold to the exchange: no constraint,
+					// the loop opens and closes there anyway
+					flow("RAT", "CX1", "AA-001a", 10),
+					flow("FE", "AA-003c", "CX1", 10),
+				],
+				cxSystems
+			);
+
+			expect([...pairs].sort()).toStrictEqual([
+				"AA-001a>AA-002b",
+				"AA-002b>AA-003c",
+			]);
+		});
+	});
+
+	describe("raukkAutoChainReason", () => {
+		it("names a loop that feeds itself a supply run, however full", () => {
+			expect(
+				raukkAutoChainReason(
+					[
+						flow("ALO", "AA-001a", "AA-002b", 100),
+						flow("RAT", "CX1", "AA-001a", 10),
+					],
+					1,
+					cxSystems
+				)
+			).toBe("supply");
+		});
+
+		it("names a thin exchange only loop a partial run", () => {
+			expect(
+				raukkAutoChainReason(
+					[
+						flow("RAT", "CX1", "AA-001a", 10),
+						flow("FE", "AA-002b", "CX1", 10),
+					],
+					0.3,
+					cxSystems
+				)
+			).toBe("partial");
+		});
+
+		it("names a full exchange only loop bases on the way", () => {
+			expect(
+				raukkAutoChainReason(
+					[flow("FE", "AA-002b", "CX1", 900)],
+					0.9,
+					cxSystems
+				)
+			).toBe("neighbours");
+		});
+
+		it("ignores a base to base flow that moves nothing", () => {
+			expect(
+				raukkAutoChainReason(
+					[flow("ALO", "AA-001a", "AA-002b", 0)],
+					0.2,
+					cxSystems
+				)
+			).toBe("partial");
+		});
+	});
+
 	describe("loop ordering", () => {
 		it("solves the cheapest loop exactly, whatever the input order", () => {
 			const loop: IRaukkOrderedLoop | null = raukkOrderChainStops(
@@ -181,6 +252,52 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 				"AA-001a",
 				"AA-003c",
 			]);
+		});
+
+		it("loads before it unloads, even against the cheaper mirror", () => {
+			// AA-003c produces what AA-001a consumes, so the lap has to
+			// call at AA-003c first — the mirror image is the same parsecs
+			// and would deliver nothing
+			const loop: IRaukkOrderedLoop | null = raukkOrderChainStops(
+				"CX1",
+				["AA-001a", "AA-002b", "AA-003c"],
+				routes,
+				cxSystems,
+				new Set(["AA-003c>AA-001a"])
+			);
+
+			expect(loop?.stops).toStrictEqual([
+				"CX1",
+				"AA-003c",
+				"AA-002b",
+				"AA-001a",
+			]);
+			expect(loop?.parsecs).toBeCloseTo(8, 10);
+		});
+
+		it("refuses a loop whose stops feed each other both ways", () => {
+			// one lap cannot pick up at A before B and at B before A
+			expect(
+				raukkOrderChainStops(
+					"CX1",
+					["AA-001a", "AA-002b"],
+					routes,
+					cxSystems,
+					new Set(["AA-001a>AA-002b", "AA-002b>AA-001a"])
+				)
+			).toBeNull();
+		});
+
+		it("ignores precedence naming a stop the loop does not visit", () => {
+			const loop: IRaukkOrderedLoop | null = raukkOrderChainStops(
+				"CX1",
+				["AA-001a", "AA-002b"],
+				routes,
+				cxSystems,
+				new Set(["AA-004d>AA-001a"])
+			);
+
+			expect(loop?.stops).toStrictEqual(["CX1", "AA-001a", "AA-002b"]);
 		});
 
 		it("beats every other order of the same stops", () => {
@@ -453,11 +570,13 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			capDaysOf: (
 				planUuid: string | undefined,
 				bucket: RAUKK_CARGO_BUCKET
-			) => number = () => 14
+			) => number = () => 14,
+			isDepot: (stopRef: string) => boolean = () => false
 		): IRaukkAutoChain[] {
 			return raukkBuildAutoChains({
 				flows,
 				anchorOf,
+				isDepot,
 				capDaysOf,
 				chainConfig,
 				routes,
@@ -488,6 +607,56 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			// ZZ-900a is the only base of the CX2 region: a loop
 			// CX → A → CX is the lane that plan already flies
 			expect(build().some((chain) => chain.cxCode === "CX2")).toBe(false);
+		});
+
+		it("restocks a lone DEPOT, which flies no lane of its own", () => {
+			const chains: IRaukkAutoChain[] = build(
+				() => 14,
+				(stopRef: string) => stopRef === "ZZ-900a"
+			);
+
+			const restock: IRaukkAutoChain = chains.find(
+				(chain) => chain.cxCode === "CX2"
+			) as IRaukkAutoChain;
+
+			// the one stop loop the minimum normally refuses: its base
+			// hands cargo over at the warehouse and flies nothing itself
+			expect(restock).toBeDefined();
+			expect(restock.chainId).toBe("auto:production:CX2:ZZ-900a");
+			expect(restock.stops).toStrictEqual(["CX2", "ZZ-900a"]);
+			expect(
+				restock.flows.map((claimed) => claimed.ticker)
+			).toStrictEqual(["ORE"]);
+			expect(restock.memberPlanUuids).toStrictEqual(["far"]);
+		});
+
+		it("qualifies a depot however small its share", () => {
+			// BB-100a carries a sliver of the CX1 shipment and sits 20 pc
+			// out, far past any detour budget — as a depot it is a stop
+			// all the same, because nothing else would move its cargo
+			const tiny: IRaukkChainFlow[] = [
+				...flows,
+				flow("H2O", "BB-100a", "CX1", 1, 1, 1, "production", "tiny"),
+			];
+
+			const candidates: IRaukkAutoChainCandidate[] =
+				raukkAutoChainCandidates(
+					tiny,
+					"CX1",
+					chainConfig,
+					routes,
+					cxSystems,
+					(stopRef: string) => stopRef === "BB-100a"
+				);
+
+			const depot: IRaukkAutoChainCandidate = candidates.find(
+				(candidate) => candidate.planetNaturalId === "BB-100a"
+			) as IRaukkAutoChainCandidate;
+
+			expect(depot.share).toBeLessThan(
+				chainConfig.autoChainMinShare ?? 0.05
+			);
+			expect(depot.qualified).toBe(true);
 		});
 
 		it("flies at the tightest cap of its member plans", () => {
@@ -678,14 +847,14 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			);
 
 			// heaviest pair (150 units) first, share descending inside
-			expect(
-				rows.map((row) => [row.fromStop, row.ticker])
-			).toStrictEqual([
-				["AA-003c", "RAT"],
-				["AA-003c", "COF"],
-				["AA-001a", "ORE"],
-				["AA-001a", "DW"],
-			]);
+			expect(rows.map((row) => [row.fromStop, row.ticker])).toStrictEqual(
+				[
+					["AA-003c", "RAT"],
+					["AA-003c", "COF"],
+					["AA-001a", "ORE"],
+					["AA-001a", "DW"],
+				]
+			);
 		});
 
 		it("still sorts ungrouped rows by share alone", () => {

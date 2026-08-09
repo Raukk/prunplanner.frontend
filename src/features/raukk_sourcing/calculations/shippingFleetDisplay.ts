@@ -7,8 +7,9 @@
 // Calculations
 import { RAUKK_REPAIR_AT_DAMAGE } from "@/features/raukk_sourcing/calculations/shipping";
 import {
-	RAUKK_FTL_REACTORS,
+	RAUKK_OFFERED_FTL_REACTOR,
 	RAUKK_SHIP_HULLS,
+	RAUKK_STL_DRIVE,
 	raukkShipProfileId,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 import { raukkDaysUntilRepair } from "@/features/raukk_sourcing/calculations/shippingWear";
@@ -74,6 +75,8 @@ export interface IRaukkFleetRow {
 	/** In-game bay code, undefined for a hull outside the six presets */
 	bayCode: string | undefined;
 	ftlReactor: RAUKK_FTL_REACTOR;
+	/** Built without an FTL drive: the hull cell names no reactor */
+	stlOnly: boolean;
 	cargoWeight: number;
 	cargoVolume: number;
 	/** Editable blueprint design label, empty when never set */
@@ -87,6 +90,13 @@ export interface IRaukkFleetRow {
 	over: boolean;
 	/** Number of lanes and chains assigned to this type */
 	assignedCount: number;
+	/**
+	 * How many of those come from a stored result flagged stale. The
+	 * row then states the assignment of the LAST compute: a fleet change
+	 * stales every stored result, but nothing moves until the snapshots
+	 * and chains are recomputed.
+	 */
+	staleCount: number;
 	/**
 	 * True while at least one stored result of this type predates the
 	 * wear rollup: the wear is UNKNOWN then, never zero, and the row says
@@ -137,6 +147,8 @@ export interface IRaukkShipTypeOption {
 	bayCode: string | undefined;
 	hull: IRaukkShipHull;
 	ftlReactor: RAUKK_FTL_REACTOR;
+	/** Built without an FTL drive: the label names no reactor */
+	stlOnly: boolean;
 }
 
 /**
@@ -164,6 +176,11 @@ export function raukkBayCode(
  * does. A preset hull reads as its in-game bay code ("WCB"), anything
  * else falls back to the raw hull key ("1500x1500").
  *
+ * The STL-only build of a hull shares that bay and would otherwise read
+ * exactly like its FTL sibling, so its drive is spelled out: "SCB STL".
+ * Which of the two flies a leg is the whole question on a surface that
+ * names ship types at all.
+ *
  * @author raukk
  *
  * @param {string} shipTypeId Ship type id
@@ -173,12 +190,22 @@ export function raukkShipTypeLabel(shipTypeId: string): string {
 	const separator: number = shipTypeId.indexOf("-");
 	const hullKey: string =
 		separator < 0 ? shipTypeId : shipTypeId.slice(0, separator);
+	const drive: string = separator < 0 ? "" : shipTypeId.slice(separator + 1);
 
-	return RAUKK_BAY_CODE_BY_HULL[hullKey] ?? hullKey;
+	const bay: string = RAUKK_BAY_CODE_BY_HULL[hullKey] ?? hullKey;
+
+	return drive === RAUKK_STL_DRIVE ? `${bay} STL` : bay;
 }
 
 /**
- * Every hull times reactor flag, as the add row offers them.
+ * The ship types the add row offers: per hull the quick-charge FTL
+ * build and its STL-only sibling, the two kept next to each other.
+ *
+ * The standard-reactor presets are deliberately NOT offered — see
+ * {@link RAUKK_OFFERED_FTL_REACTOR}: both reactors fly and burn much
+ * the same, so the second row per hull was a question with no
+ * consequence, while the STL-only build is a genuinely different ship
+ * and had no row at all.
  *
  * @author raukk
  *
@@ -186,11 +213,16 @@ export function raukkShipTypeLabel(shipTypeId: string): string {
  */
 export function raukkShipTypeOptions(): IRaukkShipTypeOption[] {
 	return RAUKK_SHIP_HULLS.flatMap((hull) =>
-		RAUKK_FTL_REACTORS.map((ftlReactor) => ({
-			shipTypeId: raukkShipProfileId(hull, ftlReactor),
+		[false, true].map((stlOnly) => ({
+			shipTypeId: raukkShipProfileId(
+				hull,
+				RAUKK_OFFERED_FTL_REACTOR,
+				stlOnly
+			),
 			bayCode: raukkBayCode(hull.cargoWeight, hull.cargoVolume),
 			hull,
-			ftlReactor,
+			ftlReactor: RAUKK_OFFERED_FTL_REACTOR,
+			stlOnly,
 		}))
 	);
 }
@@ -246,6 +278,7 @@ export function raukkFleetRows(
 			shipTypeId: entry.shipTypeId,
 			bayCode: raukkBayCode(profile.cargoWeight, profile.cargoVolume),
 			ftlReactor: profile.ftlReactor,
+			stlOnly: profile.stlOnly,
 			cargoWeight: profile.cargoWeight,
 			cargoVolume: profile.cargoVolume,
 			designName: entry.designName ?? "",
@@ -257,6 +290,7 @@ export function raukkFleetRows(
 				entry.utilization !== null &&
 				entry.utilization > 1 + RAUKK_EPSILON_EQUAL,
 			assignedCount: entry.keys.length,
+			staleCount: entry.staleKeys.length,
 			wearUnknown,
 			drydockDays,
 			damagePercentPerDay:

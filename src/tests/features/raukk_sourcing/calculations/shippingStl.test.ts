@@ -206,16 +206,21 @@ describe("raukk shipping STL-only", () => {
 		const STL: IRaukkHullCandidate = candidate("stl", true);
 
 		it("drops STL-only hulls from an unservable lane", () => {
-			expect(raukkStlOnlyCandidates([FTL, STL], false)).toStrictEqual([
-				FTL,
-			]);
+			expect(
+				raukkStlOnlyCandidates([FTL, STL], false, true)
+			).toStrictEqual([FTL]);
 		});
 
-		it("keeps every hull on a servable one", () => {
-			expect(raukkStlOnlyCandidates([FTL, STL], true)).toStrictEqual([
-				FTL,
-				STL,
-			]);
+		it("drops them from a servable lane that calls at no depot", () => {
+			expect(
+				raukkStlOnlyCandidates([FTL, STL], true, false)
+			).toStrictEqual([FTL]);
+		});
+
+		it("keeps every hull on a servable, depot served lane", () => {
+			expect(
+				raukkStlOnlyCandidates([FTL, STL], true, true)
+			).toStrictEqual([FTL, STL]);
 		});
 	});
 });

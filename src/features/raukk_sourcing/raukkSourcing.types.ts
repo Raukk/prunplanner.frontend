@@ -14,6 +14,7 @@ import {
 	RAUKK_CHAIN_ANCHOR_KIND,
 	RAUKK_STOP_REF,
 } from "@/features/raukk_sourcing/calculations/shippingChains.types";
+import { RAUKK_AUTO_CHAIN_REASON } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
 
 /**
  * The shipping shapes the store persists. They are defined next to the
@@ -49,13 +50,61 @@ export type { IRaukkFleetShip } from "@/features/raukk_sourcing/calculations/shi
  * @author raukk
  */
 export type { IRaukkDepot } from "@/features/raukk_sourcing/calculations/shippingDepots";
+/**
+ * The planned gate shape the store persists, defined next to the gate
+ * planning math.
+ *
+ * @author raukk
+ */
+export type {
+	IRaukkPlannedGate,
+	RAUKK_PLANNED_GATE_STATUS,
+} from "@/features/raukk_sourcing/calculations/gatePlanning";
 
 export type RAUKK_PRICE_MODE = "BID" | "ASK" | "MID" | "AVG7D" | "AVG30D";
 
 export type RAUKK_REPAIR_DAY = 30 | 60 | 90 | 120;
 
-/** Synthetic multi-producer sources */
-export type RAUKK_SOURCE_AGGREGATE = "AGG_AVG" | "AGG_MAX";
+/**
+ * Synthetic multi-producer sources.
+ *
+ * `AGG_AVG` prices every unit at the output weighted average of the
+ * producers, `AGG_MAX` at the dearest of them. `AGG_AVG_MKT` is the
+ * average with a MARKET TOP UP: only the share the producers actually
+ * cover is charged at their average, the rest is bought at the market
+ * price the ticker would cost without any source at all — the pool
+ * covering two thirds of the demand pays two thirds average, one third
+ * market. See `aggregateCoverage`.
+ *
+ * @author raukk
+ */
+export type RAUKK_SOURCE_AGGREGATE = "AGG_AVG" | "AGG_MAX" | "AGG_AVG_MKT";
+
+/**
+ * Input buckets an account wide sourcing default can be set for.
+ *
+ * The same three groups the input table renders — ship fuel is
+ * deliberately absent, its cost is already inside the shipping model.
+ *
+ * @author raukk
+ */
+export type RAUKK_SOURCE_BUCKET = "workforce" | "repair" | "production";
+
+/**
+ * Account wide default source per input bucket.
+ *
+ * A ticker of a bucket WITHOUT its own entry in `IRaukkPlanConfig.sources`
+ * follows the default of that bucket, on every base at once — the point
+ * being that rations, drinking water and the repair materials never have
+ * to be configured base by base. An absent bucket keeps the old behavior:
+ * the plans CX preference price. A per plan entry always wins, `cx` being
+ * the entry that pins one ticker of one base back to its CX price.
+ *
+ * @author raukk
+ */
+export type IRaukkSourcingDefaults = Partial<
+	Record<RAUKK_SOURCE_BUCKET, IRaukkTickerSource>
+>;
 
 /**
  * Price of one local market ad, shared by the sell and the buy side.
@@ -78,7 +127,11 @@ export interface IRaukkLocalPrice {
 export type IRaukkTickerSource =
 	| { mode: "market"; priceMode: RAUKK_PRICE_MODE }
 	| { mode: "plan"; sourcePlanUuid: string | RAUKK_SOURCE_AGGREGATE }
-	| { mode: "local"; price: IRaukkLocalPrice };
+	| { mode: "local"; price: IRaukkLocalPrice }
+	/** The plans CX preference price, stated explicitly: identical to
+	 * having no entry at all EXCEPT that it opts the ticker out of the
+	 * account wide bucket default of {@link IRaukkSourcingDefaults} */
+	| { mode: "cx" };
 
 /** Per-plan sourcing configuration, keyed into store by plan uuid */
 export interface IRaukkPlanConfig {
@@ -141,8 +194,16 @@ export interface IRaukkSnapshot {
 	 * units/day. Drives subscription percentages and staleness
 	 * propagation. */
 	draws: Record<string, Record<string, number>>;
-	/** Sourcing config this snapshot was computed with */
+	/** Sourcing config this snapshot was computed with. Its `sources` are
+	 * the EFFECTIVE ones: the per plan entries with the account wide
+	 * bucket defaults already merged in, so the read only notes state the
+	 * source the numbers were really priced at. */
 	config?: IRaukkPlanConfig;
+	/** Input buckets of every sourcable ticker of this plan, frozen so the
+	 * account wide defaults know which stored per plan entries they would
+	 * replace without recalculating every plan. Absent on snapshots
+	 * written before the defaults existed. */
+	inputBuckets?: Record<string, RAUKK_SOURCE_BUCKET[]>;
 	/** Effective ȼ per unit of every input ticker at computation time,
 	 * market and plan sourced alike. Backs the read only sourced cost
 	 * notes on the non-sourcing panels. */
@@ -307,6 +368,10 @@ export interface IRaukkChainResult {
 	 * chain pass, never authored and never stored as a chain. Absent on
 	 * every result written before the automatic chains existed. */
 	auto?: boolean;
+	/** Why the builder derived this loop, see `raukkAutoChainReason`.
+	 * Nobody authored an automatic chain, so the list has to say what the
+	 * builder saw. Only automatic chains carry one. */
+	autoReason?: RAUKK_AUTO_CHAIN_REASON;
 	/** Days per visit the loop was capped at, the tightest cap of its
 	 * member consuming plans. Only automatic chains carry one. */
 	capDays?: number;

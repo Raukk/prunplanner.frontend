@@ -164,6 +164,22 @@ Two points the phase left open, decided while building it:
     brute force (5!/2 = 60 distinct loops at 5 stops, the orderings
     modulo direction), scored by round-trip parsecs. More than 5 qualifying → proximity-cluster into
     multiple chains, then order each exactly.
+  - **Cargo order beats route order.** A base-to-base flow has to be
+    picked up before it can be dropped off, so the producing stop is
+    always visited before the consuming one (ALO → smelter → AL →
+    manufacturer). Direction now MATTERS, so the mirror-image fold is
+    dropped whenever such a constraint exists (5! = 120 loops, still
+    brute force). Legs to or from the exchange constrain nothing — the
+    loop opens and closes there. Stops that feed each other both ways
+    cannot share a lap: no order exists, no loop is built, and their
+    cargo stays hub/spoke. An order that only works by doubling back
+    costs those extra parsecs against the class detour budget like any
+    other detour, so it drops to hub/spoke on its own once it is not
+    worth flying.
+  - Equal-parsec orders (a base in the exchange's own system is 0
+    parsecs from it) break to fewer jumps, then to the shorter leg out
+    of the exchange, then to the stop refs — so the nearest base leads
+    the loop and the answer is stable between runs.
 - Everything below the cutoff is hub/spoke via the exchange: the
   consumer buys at the CX (freight on its own CX lane), the
   producer's excess already ships out on its CX lane. Chain-claimed

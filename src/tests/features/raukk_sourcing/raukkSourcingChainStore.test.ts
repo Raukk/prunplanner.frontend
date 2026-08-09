@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
 // stores
@@ -9,6 +9,10 @@ import { raukkDefaultChainConfig } from "@/features/raukk_sourcing/calculations/
 import { raukkAutoChainId } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 import { raukkChainAssignmentKey } from "@/features/raukk_sourcing/calculations/shippingFleet";
 import { RAUKK_DEFAULT_SHIP_PROFILE_ID } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import {
+	raukkPlannedGateLinks,
+	setRaukkPlannedGateLinks,
+} from "@/features/raukk_sourcing/calculations/routeDistance";
 
 // Types & Interfaces
 import {
@@ -1075,6 +1079,15 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.depots).toStrictEqual({});
 		});
 
+		it("stales the snapshots too, a base there loses its CX lane", () => {
+			withMembers();
+
+			store.setDepot("ZV-194a");
+
+			expect(store.snapshots.source.stale).toBe(true);
+			expect(store.snapshots.consumer.stale).toBe(true);
+		});
+
 		it("stales nothing when only the rent of a known depot moves", () => {
 			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
 			store.setDepot("ZV-307c");
@@ -1108,6 +1121,233 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			);
 
 			expect(store.depots).toStrictEqual({});
+		});
+	});
+
+	describe("planned gates", () => {
+		afterEach(() => {
+			// the store hands its enabled gates to the module level route
+			// index; nothing may leak into another test file's routing
+			setRaukkPlannedGateLinks([]);
+		});
+
+		it("stores a gate with the shipped defaults filled in", () => {
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+			});
+
+			expect(store.plannedGates["g1"]).toStrictEqual({
+				id: "g1",
+				name: undefined,
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+				fee: 4000,
+				capacityUpgrades: 0,
+				volumeUpgrades: 0,
+				rangeUpgrades: 0,
+				enabled: false,
+				status: "proposed",
+				note: undefined,
+			});
+			expect(store.listPlannedGates()).toHaveLength(1);
+		});
+
+		it("refuses a gate that is missing an end", () => {
+			store.setPlannedGate("g1", { planetA: "ZV-307c" });
+			store.setPlannedGate("  ", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+			});
+
+			expect(store.plannedGates).toStrictEqual({});
+		});
+
+		it("patches what it is given and keeps the rest", () => {
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+				fee: 2500,
+			});
+			store.setPlannedGate("g1", {
+				volumeUpgrades: 3,
+				name: "Long Haul",
+			});
+
+			expect(store.plannedGates["g1"]).toMatchObject({
+				planetA: "ZV-307c",
+				fee: 2500,
+				volumeUpgrades: 3,
+				name: "Long Haul",
+			});
+		});
+
+		it("refuses non finite and negative numbers", () => {
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+				fee: 2500,
+			});
+			store.setPlannedGate("g1", { fee: Number.NaN, volumeUpgrades: -1 });
+
+			expect(store.plannedGates["g1"].fee).toBe(2500);
+			expect(store.plannedGates["g1"].volumeUpgrades).toBe(0);
+		});
+
+		it("only an ENABLED gate reaches the route index", () => {
+			// 12.88 pc apart, so one range upgrade makes it buildable
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "IA-335b",
+				rangeUpgrades: 1,
+			});
+
+			expect(raukkPlannedGateLinks()).toHaveLength(0);
+
+			store.setPlannedGate("g1", { enabled: true });
+
+			expect(raukkPlannedGateLinks()).toHaveLength(1);
+			expect(raukkPlannedGateLinks()[0]).toMatchObject({
+				a: "ZV-307c",
+				b: "IA-335b",
+				planned: true,
+			});
+
+			store.setPlannedGate("g1", { enabled: false });
+
+			expect(raukkPlannedGateLinks()).toHaveLength(0);
+		});
+
+		it("stales the chains when the graph moves", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setChainResult("c1", makeChainResult("c1", []));
+
+			// authoring a switched OFF gate routes nothing
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+			});
+
+			expect(store.chainResults["c1"].stale).toBe(false);
+
+			store.setPlannedGate("g1", { enabled: true });
+
+			expect(store.chainResults["c1"].stale).toBe(true);
+		});
+
+		it("stales nothing for a label, a note or a status", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+				enabled: true,
+			});
+			store.setChainResult("c1", makeChainResult("c1", []));
+
+			store.setPlannedGate("g1", {
+				name: "Long Haul",
+				note: "opens in a week",
+				status: "construction",
+			});
+
+			expect(store.chainResults["c1"].stale).toBe(false);
+		});
+
+		it("stales the snapshots only while shipping is enabled", () => {
+			store.setShippingConfig({ enabled: false });
+			store.setSnapshot("plan-1", makeSnapshot("Plan 1", "ZV-307c"));
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+				enabled: true,
+			});
+
+			expect(store.snapshots["plan-1"].stale).toBe(false);
+
+			store.setShippingConfig({ enabled: true });
+			store.setSnapshot("plan-1", makeSnapshot("Plan 1", "ZV-307c"));
+			store.setPlannedGate("g1", { volumeUpgrades: 3 });
+
+			expect(store.snapshots["plan-1"].stale).toBe(true);
+		});
+
+		it("deletes, taking the edge back out of the graph", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+				enabled: true,
+			});
+			store.setChainResult("c1", makeChainResult("c1", []));
+
+			store.deletePlannedGate("g1");
+
+			expect(store.plannedGates).toStrictEqual({});
+			expect(raukkPlannedGateLinks()).toHaveLength(0);
+			expect(store.chainResults["c1"].stale).toBe(true);
+		});
+
+		it("deleting a switched off gate stales nothing", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+			});
+			store.setChainResult("c1", makeChainResult("c1", []));
+
+			store.deletePlannedGate("g1");
+			store.deletePlannedGate("nope");
+
+			expect(store.chainResults["c1"].stale).toBe(false);
+		});
+
+		it("round trips through the export", () => {
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "IA-335b",
+				fee: 2500,
+				volumeUpgrades: 1,
+				rangeUpgrades: 1,
+				enabled: true,
+				status: "construction",
+				name: "Long Haul",
+			});
+
+			const payload: string = store.exportJSON();
+			store.$reset();
+
+			expect(store.plannedGates).toStrictEqual({});
+			expect(raukkPlannedGateLinks()).toHaveLength(0);
+
+			store.importJSON(payload);
+
+			expect(store.plannedGates["g1"]).toMatchObject({
+				planetA: "ZV-307c",
+				planetB: "IA-335b",
+				fee: 2500,
+				volumeUpgrades: 1,
+				rangeUpgrades: 1,
+				enabled: true,
+				status: "construction",
+				name: "Long Haul",
+			});
+			// the import has to reach the routing layer too
+			expect(raukkPlannedGateLinks()).toHaveLength(1);
+		});
+
+		it("imports a payload written before planned gates existed", () => {
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+				enabled: true,
+			});
+
+			store.importJSON(
+				JSON.stringify({ version: 1, configs: {}, snapshots: {} })
+			);
+
+			expect(store.plannedGates).toStrictEqual({});
+			expect(raukkPlannedGateLinks()).toHaveLength(0);
 		});
 	});
 

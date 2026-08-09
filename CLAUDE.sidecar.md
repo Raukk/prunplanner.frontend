@@ -124,6 +124,66 @@ anywhere in the repo. Not retroactive.
   program data. All but COGC are already parsed and cached on
   `IFIOPlanetFees` (query `GetFIOPlanetFees`) — consumers only need to
   read them; only production fees have UI today.
+- 2026-08-08: Production fees surfaced per recipe (user request — no
+  UI listed them before): the production table gained a FEE column
+  between RUNTIME and SHARE showing the batch fee and that fee split
+  evenly over the batch's output units (`calculateProductionFeePerUnit`,
+  same even split the COGM `costSplit` uses). Frozen on the recipe row
+  (`productionFeeBatch` / `productionFeePerUnit`) so the COGM block
+  reuses it instead of recomputing. Row hides itself while fees are
+  unknown (FIO down → 0), it never renders a fake "0 ȼ". Grid re-split
+  3/2/2/2/3 to make room.
+- 2026-08-08: Self consumption re-costed (user report: an FE drawn from
+  a big base priced ~4x market). Cause was NOT other buildings bleeding
+  into FE: a partly self consumed output carried its WHOLE line cost on
+  the units that happen to leave the base — netting removed the internal
+  units from every input bill, so nobody else paid for them. Outputs now
+  price per unit MADE and the eating recipe is charged the plan's own
+  unit cost for what it ate, carried bucket by bucket (an internally made
+  input is upstream workforce/repair, not `inputs`). Internal prices are
+  a fixed point (own food feeds the workforce growing it), solved by
+  iterating passes until settled, cap `INTERNAL_PRICE_PASSES` = 25.
+  Verified: SME 1000 ȼ/d makes 100 FE, base eats 90 → FE 66.67 → 6.67
+  ȼ/u, STL 33.33 → 93.33 ȼ/u, exported value still exactly 1000 ȼ/d.
+  User decision: exact charge-through over the cheaper proportional
+  spread. `calculateRepairPerUnit` (Repair Analysis) still uses the OLD
+  net-weight rule and is deliberately untouched — its per-unit repair
+  therefore disagrees with `breakdown.repair` on self consuming bases.
+- 2026-08-09: Account shipping is EMPIRE SCOPED (user report: a plan
+  unassigned in Management still flew in the chains). `scopedSnapshots()`
+  = snapshots of plans in at least one empire; chains, fleet rollup,
+  hub/spoke and storage read it, per-plan reads still use `snapshots`
+  (an unassigned plan still opens, computes and can be sourced from) and
+  its snapshot is KEPT so re-assigning restores it without recomputing.
+  An EMPTY assigned set means "empires not loaded yet" and passes
+  everything — filtering on it would blank the page on every fresh load.
+  Saving assignments purges the derived chain results (nobody authored
+  them, they rebuild from flows) and stales the authored ones.
+- 2026-08-09: Auto chain order honours the CARGO (user correction): a
+  base-to-base flow must be picked up before it is dropped off, so the
+  producing stop precedes the consuming one and the mirror-image fold is
+  dropped whenever such a constraint exists. Mutually feeding stops
+  cannot share a lap → no loop, cargo stays hub/spoke; doubling back
+  pays its parsecs against the detour budget as usual. Equal-length
+  orders (a base in the exchange's own system is 0 parsecs away — e.g.
+  ZV-307c at AI1) now break to fewer jumps, then the shorter leg out of
+  the exchange, then stop refs: that tie, not a solver bug, is what made
+  the printed order look wonky.
+- 2026-08-09: Auto chains state WHY they exist (user request), stored on
+  the result as `autoReason` and shown as a tag: `supply` (a member base
+  feeds another — tested first, it holds whatever the fill),
+  `partial` (exchange-only cargo leaving the hull under
+  `RAUKK_AUTO_CHAIN_PARTIAL_FILL` = 0.5 per visit — the case where
+  sharing a lap pays, since the fleet is charged ship TIME), else
+  `neighbours`. Fill per visit = the BINDING leg's utilization, which is
+  already the hull share one trip carries. Capacity itself needed no fix:
+  flows ride every leg from pickup to dropoff, so simultaneous pickups
+  sum on the shared leg, and a peak above one hull raises trips/day
+  (`fillDays = 1/loads`, the cadence cap may only SHORTEN the interval) —
+  a ship is never overloaded. Regression tests in shippingChains.test.ts.
+  NOT done, offered: the order is still picked on parsecs alone, so among
+  equally short flyable orders it may pick one whose peak forces more
+  trips.
 - 2026-08-09: Habitation auto-optimization is FORCED ON account wide
   (user decision) and solves the AREA goal, never `"auto"` (which tries
   cost-minimal first and only falls back to area when it does not fit).
@@ -147,6 +207,34 @@ anywhere in the repo. Not retroactive.
   now one shared exported constant `RAUKK_SNAPSHOT_EQUAL_EPSILON` =
   1e-6. A settled pass must count as materially unchanged or the final
   pass re-flags the rest of the loop.
+- 2026-08-09: Gate planning tool (user request — plan gates that do
+  not exist yet, e.g. ones under construction). Account-global
+  `plannedGates` store slice + a shipping-page section; an enabled
+  gate becomes a real edge of the route graph via
+  `setRaukkPlannedGateLinks` (module-level registry in
+  `routeDistance.ts`, pushed by a sync/deep/immediate store watcher
+  that also covers hydration). Planned edges carry `planned: true` and
+  the new time option `usePlannedGates` (default on) bars them per
+  query — one graph, no second index. Each row's worth = its own
+  traversal against the fastest route with ALL planned gates barred,
+  both sides flown by a hull the size of the planned clearance.
+  Switching/moving/re-pricing an ENABLED gate stales chains (and
+  snapshots while shipping is on); labels, notes and switched-off
+  edits stale nothing. Full reasoning in
+  docs/raukk_sourcing/shipping-decisions.md round 24.
+- 2026-08-09: Gate build costs transcribed from the in-game GTWI panel
+  (13 configurations, two gates) into `assets/raukk_gate_costs.json` —
+  FIO serves none of this (`/sites/gateways` 401, `/infrastructure/
+  gateways` 204). Upgrade cost is TRIANGULAR (n-th level costs n x unit),
+  which one screenshot alone reads as linear and gets 2x wrong; effects
+  are linear. A link is TWO gates (user emphasis), and a gate holds 5
+  upgrade levels TOTAL across the 5/3/3 tracks, so range bought is
+  clearance not bought. Linking range (10 pc, +5/upgrade, 25 max) is a
+  hard cap in the same parsecs `straightLineParsecs` measures — the
+  panel's Reachable Systems distances match it to three decimals, which
+  validates that metric against the game. Planned-gate clearance is now
+  derived from volume upgrades rather than typed. Full reasoning in
+  docs/raukk_sourcing/shipping-decisions.md round 25.
 - 2026-08-09: Plan tool tabs are sticky (user request — open/close a
   tool while working further down the plan). The toolbar and the tool
   view are now separate grid items of PlanView's header grid (rows 4
@@ -159,3 +247,89 @@ anywhere in the repo. Not retroactive.
   replaced the material i/o column's hardcoded `top-12`. Opening a
   tool while scrolled down scrolls the panel into view, it would
   otherwise render off-screen above.
+- 2026-08-09: Account wide sourcing defaults (user request — setting
+  rations, drinking water and repair materials per base was the chore).
+  `sourcingDefaults` sits next to `shippingConfig`, one optional source
+  per input bucket (workforce/repair/production), merged in at
+  RESOLUTION time by `resolveEffectiveSources`: a ticker without a per
+  plan entry follows its bucket default, nothing is written into the
+  configs, so a base keeps following a default that changes later. The
+  per plan entry always wins; new source mode `{ mode: "cx" }` is the
+  explicit "this ticker, this base, CX price" opt out (without it,
+  unchecking a defaulted row would clear nothing and the default would
+  re-tick it). Changing a default stales the whole store and, only when
+  per plan entries of that bucket exist, offers to DROP them so those
+  bases follow the default too. Buckets per ticker are frozen onto the
+  snapshot (`inputBuckets`) — the store must answer the replace
+  question without running a plan calculation. Third aggregate
+  `AGG_AVG_MKT`: coverage = pool output ÷ (own need + others' draws),
+  price = coverage × pool average + rest × CX preference. The FULL need
+  stays booked as a draw (the pool really is oversubscribed by the
+  market bought share, and capping it would drift upward over passes),
+  so the base fraction and the shipping routing of a topped up draw
+  overstate it slightly — accepted, see
+  docs/raukk_sourcing/sourcing-defaults.md. Edited on the account level
+  page (/shipping), NOT on a plan's sourcing panel (user correction: an
+  account wide value does not belong to whichever base is open); the
+  plan panel keeps a read-only line naming the defaults in force, so the
+  rows marked "(default)" explain themselves.
+- 2026-08-09: Visualization palette consolidated (user request — do the
+  new data viz match the app's tone, and are they easy to find). New
+  `calculations/raukkVizPalette.ts` owns every non-series color of both
+  the oversubscription report and the Shipping page's visualisations:
+  surfaces, the neutral warm-gray ink ramp, the alert pair (one red,
+  one amber), the ramp hue and the lime accent. Values come from the
+  app's Tailwind tokens where one exists. Notable changes, not pure
+  renames: the three map/plane canvases were a blue-black `#050a0d`
+  with blue-slate `#1b2530`/`#243040`/`#20242a` rules — they read as a
+  different app to the neutral report tabs, so the canvas is now a
+  neutral `#0a0b0b` and the rules `#2c2c2a`; the Beeswarm and Bubbles
+  tabs each carried their own utilization alpha curve (0.12+0.55u and
+  0.10+0.5u against the shared 0.08+0.8s), so a 100 % row rendered at
+  three intensities — all three now call `raukkOversubBlueRamp`; the
+  Dumbbell's headroom sage green `#8fce8f` became the app's `positive`
+  lime; the capacity plane's selected hull box was the SAME `#3987e5`
+  as its production-class dots and is now the lime accent; the viz
+  tooltip invented its own `#252525`/`white-10` surface and now mirrors
+  `tooltipConfig` (`bg-black/90`, `border-white/20`); three tabs set
+  `system-ui` on their SVG text while the app is Roboto. Drift pairs
+  merged: `#565650`/`#56554f`, `#2c2c2a`/`#2a2a28`, `#212529`/`#252525`.
+  NOT changed, offered: the ramp blue, consumer slot 0 and the
+  production cargo class are all `#3987e5` — documented as
+  "single-hue blue" and a real ambiguity, but re-hueing a series is a
+  design decision, not a consistency pass.
+  Discoverability side: the 11 oversub tab labels are chart-form names
+  (Beeswarm, Dumbbell, Waffle...) that name no question, so each got a
+  `tabs.<key>_tooltip` line shown both on hover and as prose under the
+  active tab; both tab strips gained `flex-wrap` (11 buttons in a
+  non-wrapping `inline-flex` overflowed narrow viewports); the Shipping
+  visuals section used an `h3 text-white/80` with no info line where
+  every sibling uses `h4 font-bold py-3` plus one; the capacity plane
+  colored its dots by cargo class with no key at all. `empire.md` and
+  the shipping page intro now point at both.
+- 2026-08-09: Shipping page split into sections (user request — the page
+  is overloaded, tab it like the plan tools). Was one scroll with every
+  section mounted and none collapsible: config bar, Fleet, Chains,
+  Automatic chains, Hub/spoke, Depots, Visualisations. Now a sticky
+  strip of six — Settings · Fleet · Chains · Depots · Visuals ·
+  Calibration — following the PlanView tool-tab shape, with a one-shot
+  `?section=` deep link stripped via `router.replace` exactly as
+  `?tool=` is. Rules live in `calculations/shippingSections.ts`, so the
+  gate and the fallbacks are testable without mounting the page.
+  KEPT ALIVE, not `v-if`: every section holds unsaved local state — the
+  chain editor's entire draft only reaches the store on save, plus the
+  add-ship / add-depot pickers, expanded rows and delete confirmations —
+  so remounting on a tab click would discard it silently. There is a
+  regression test that fails without the KeepAlive. KeepAlive caches
+  COMPONENT children with ONE root only, which is why Fleet, Chain and
+  Depot sections gained a wrapping div, and why the config bar and the
+  calibration editor were extracted into RaukkShippingSettingsSection /
+  RaukkShippingCalibrationSection instead of staying inline markup.
+  Cost is unchanged: the old page had every section mounted at once
+  anyway, and now only visited ones are.
+  Fleet is the DEFAULT section on purpose — every existing in-app link
+  to `/shipping` (oversub fleet rows and marks, the grid's ship link,
+  the sourcing tool's ship-time link, the two "Manage fleet & routes"
+  buttons) is fleet-oriented, so none of them needed retargeting.
+  Calibration stopped being a show/hide button in the config bar;
+  `shipping.show_calibration` / `hide_calibration` deleted.

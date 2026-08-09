@@ -40,8 +40,28 @@ costs split across its recipes by runtime share, multi-output recipes
 split per existing outputCOGM logic. Roll up per output ticker:
 
 ```
-trueCost(P, ticker) = allocated daily cost of ticker / units per day
+trueCost(P, ticker) = allocated daily cost of ticker / units MADE per day
 ```
+
+Per unit MADE, not per unit exported. A base that eats part of its own
+production charges the EATING recipe the plan's own unit cost for those
+units — the same way it would be charged for buying them — so:
+
+- an output that is mostly self consumed prices at what it costs to
+  make, not at the whole line's cost divided by the few units that
+  happen to leave the base;
+- the products that consumed it carry that cost, bucket by bucket (an
+  internally made input arrives as upstream workforce/repair, it is not
+  a purchase and does not land in `breakdown.inputs`);
+- what LEAVES the plan still carries the plan's whole daily bill
+  exactly once.
+
+Those internal prices are self referential (own food feeds the
+workforce that grows it), so the allocation is solved as a fixed point:
+passes re-price internal transfers with the previous pass's unit costs
+until nothing moves (`RAUKK_EPSILON_SETTLE`), capped at
+`INTERNAL_PRICE_PASSES`. Idle runtime and buildings without a recipe
+still hold a residual, spread over everything the plan produces.
 
 Result must carry the breakdown: workforce / repair / inputs (and a
 zero shipping slot) per output ticker.

@@ -250,3 +250,38 @@ export function raukkPickHull(
 
 	return chosen;
 }
+
+/**
+ * The smallest hull of a candidate list, the fallback of a pick that
+ * found nothing to choose from.
+ *
+ * "Smallest" is the hold that carries least, weight times volume, ties
+ * broken by weight and then by id so the answer never depends on the
+ * order the candidates arrived in. It is deliberately the cheapest hull
+ * to fly: a fallback assigns work the heuristic could not place, and
+ * over-assigning a heavy hull to it would price freight that nobody
+ * asked for.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkHullCandidate[]} candidates Hulls to choose from
+ * @returns {(IRaukkHullCandidate | null)} Smallest hull, null on empty
+ */
+export function raukkSmallestCandidate(
+	candidates: IRaukkHullCandidate[]
+): IRaukkHullCandidate | null {
+	if (candidates.length === 0) return null;
+
+	return [...candidates].sort((a, b) => {
+		const holdA: number =
+			a.profile.cargoWeight * a.profile.cargoVolume;
+		const holdB: number =
+			b.profile.cargoWeight * b.profile.cargoVolume;
+
+		if (holdA !== holdB) return holdA - holdB;
+		if (a.profile.cargoWeight !== b.profile.cargoWeight)
+			return a.profile.cargoWeight - b.profile.cargoWeight;
+
+		return a.shipTypeId < b.shipTypeId ? -1 : 1;
+	})[0];
+}

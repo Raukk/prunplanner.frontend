@@ -50,6 +50,27 @@
 		IRaukkShipTypeOption,
 	} from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 	import { IRaukkShipProfile } from "@/features/raukk_sourcing/raukkSourcing.types";
+	import { RAUKK_FTL_REACTOR } from "@/features/raukk_sourcing/calculations/shipping.types";
+
+	/**
+	 * How one ship types drive reads: the reactor it carries, or the fact
+	 * that it carries none. An STL-only build has an `ftlReactor` in its
+	 * stored shape all the same — the flag is what decides.
+	 *
+	 * @author raukk
+	 *
+	 * @param {RAUKK_FTL_REACTOR} ftlReactor FTL reactor
+	 * @param {boolean} stlOnly Whether the build carries no FTL drive
+	 * @returns {string} Drive label
+	 */
+	function driveLabel(
+		ftlReactor: RAUKK_FTL_REACTOR,
+		stlOnly: boolean
+	): string {
+		return stlOnly
+			? t("raukk_sourcing.fleet.reactors.stl-only")
+			: t(`raukk_sourcing.fleet.reactors.${ftlReactor}`);
+	}
 
 	const props = defineProps({
 		/** ȼ of one full ship repair bill, 0 while unpriced — the drydock
@@ -83,6 +104,14 @@
 					raukkFleetSpillover(utilization.value)
 				)
 			: rows.value
+	);
+
+	/**
+	 * Columns the table draws, the colspan of its full width rows: the
+	 * spillover display adds the own and spilled in columns.
+	 */
+	const columnCount: ComputedRef<number> = computed(() =>
+		sourcingStore.fleetSpillover ? 10 : 8
 	);
 
 	const advisoryRows: ComputedRef<IRaukkFleetAdvisoryRow[]> = computed(() =>
@@ -135,9 +164,7 @@
 					bay: option.bayCode ?? "—",
 					weight: option.hull.cargoWeight,
 					volume: option.hull.cargoVolume,
-					reactor: t(
-						`raukk_sourcing.fleet.reactors.${option.ftlReactor}`
-					),
+					reactor: driveLabel(option.ftlReactor, option.stlOnly),
 				}),
 				value: option.shipTypeId,
 			}));
@@ -192,270 +219,322 @@
 </script>
 
 <template>
-	<h4 class="font-bold py-3">
-		{{ $t("raukk_sourcing.fleet.title") }}
-	</h4>
-	<div class="text-white/50 pb-3">
-		{{ $t("raukk_sourcing.fleet.info") }}
-	</div>
-
-	<div class="flex flex-row gap-x-2 child:my-auto pb-3">
-		<PCheckbox
-			:checked="sourcingStore.fleetSpillover"
-			@update:checked="
-				(v) => sourcingStore.setFleetSpillover(v === true)
-			" />
-		<div class="font-bold">
-			{{ $t("raukk_sourcing.fleet.spillover.toggle") }}
+	<!-- single root: this section is a KeepAlive child of the
+	 Shipping page's tab strip, which caches component children
+	 only when they have one root node -->
+	<div>
+		<h4 class="font-bold py-3">
+			{{ $t("raukk_sourcing.fleet.title") }}
+		</h4>
+		<div class="text-white/50 pb-3">
+			{{ $t("raukk_sourcing.fleet.info") }}
 		</div>
-	</div>
-	<div v-if="sourcingStore.fleetSpillover" class="text-white/50 pb-3">
-		{{ $t("raukk_sourcing.fleet.spillover.info") }}
-	</div>
 
-	<PTable striped>
-		<thead>
-			<tr>
-				<th>{{ $t("raukk_sourcing.fleet.bay") }}</th>
-				<th>{{ $t("raukk_sourcing.fleet.hull") }}</th>
-				<th>{{ $t("raukk_sourcing.fleet.design_name") }}</th>
-				<th class="text-right!">
-					{{ $t("raukk_sourcing.fleet.count") }}
-				</th>
-				<th>{{ $t("raukk_sourcing.fleet.utilization") }}</th>
-				<th class="text-right!">
-					{{ $t("raukk_sourcing.fleet.drydock") }}
-				</th>
-				<th class="text-right!">
-					{{ $t("raukk_sourcing.fleet.assigned") }}
-				</th>
-				<th></th>
-			</tr>
-		</thead>
-		<tbody>
-			<tr
-				v-for="row in displayRows"
-				:key="`RAUKKFLEET#${row.shipTypeId}`">
-				<td>
-					<PTag size="sm" type="secondary">
-						{{ row.bayCode ?? "—" }}
-					</PTag>
-				</td>
-				<td class="text-white/60">
-					{{
-						$t("raukk_sourcing.fleet.hull_label", {
-							weight: row.cargoWeight,
-							volume: row.cargoVolume,
-							reactor: $t(
-								`raukk_sourcing.fleet.reactors.${row.ftlReactor}`
-							),
-						})
-					}}
-				</td>
-				<td>
-					<PInput
-						class="min-w-40"
-						size="sm"
-						:value="row.designName"
-						:placeholder="
-							$t('raukk_sourcing.fleet.design_placeholder')
-						"
-						@update:value="
-							(v) => changeDesignName(row.shipTypeId, v)
-						" />
-				</td>
-				<td class="text-right">
-					<PInputNumber
-						class="min-w-20"
-						size="sm"
-						:min="0"
-						:value="row.count"
-						@update:value="(v) => changeCount(row.shipTypeId, v)" />
-				</td>
-				<td>
-					<div
-						v-if="row.spill"
-						class="flex flex-row gap-x-2 child:my-auto min-w-40">
+		<div class="flex flex-row gap-x-2 child:my-auto pb-3">
+			<PCheckbox
+				:checked="sourcingStore.fleetSpillover"
+				@update:checked="
+					(v) => sourcingStore.setFleetSpillover(v === true)
+				" />
+			<div class="font-bold">
+				{{ $t("raukk_sourcing.fleet.spillover.toggle") }}
+			</div>
+		</div>
+		<div v-if="sourcingStore.fleetSpillover" class="text-white/50 pb-3">
+			{{ $t("raukk_sourcing.fleet.spillover.info") }}
+		</div>
+
+		<PTable striped>
+			<thead>
+				<tr>
+					<th>{{ $t("raukk_sourcing.fleet.bay") }}</th>
+					<th>{{ $t("raukk_sourcing.fleet.hull") }}</th>
+					<th>{{ $t("raukk_sourcing.fleet.design_name") }}</th>
+					<th class="text-right!">
+						{{ $t("raukk_sourcing.fleet.count") }}
+					</th>
+					<th>{{ $t("raukk_sourcing.fleet.utilization") }}</th>
+					<th v-if="sourcingStore.fleetSpillover" class="text-right!">
+						{{ $t("raukk_sourcing.fleet.spillover.own") }}
+					</th>
+					<th v-if="sourcingStore.fleetSpillover" class="text-right!">
+						{{ $t("raukk_sourcing.fleet.spillover.spilled") }}
+					</th>
+					<th class="text-right!">
+						{{ $t("raukk_sourcing.fleet.drydock") }}
+					</th>
+					<th class="text-right!">
+						{{ $t("raukk_sourcing.fleet.assigned") }}
+					</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr
+					v-for="row in displayRows"
+					:key="`RAUKKFLEET#${row.shipTypeId}`">
+					<td>
+						<PTag size="sm" type="secondary">
+							{{ row.bayCode ?? "—" }}
+						</PTag>
+					</td>
+					<td class="text-white/60">
+						{{
+							$t("raukk_sourcing.fleet.hull_label", {
+								weight: row.cargoWeight,
+								volume: row.cargoVolume,
+								reactor: driveLabel(
+									row.ftlReactor,
+									row.stlOnly
+								),
+							})
+						}}
+					</td>
+					<td>
+						<PInput
+							class="min-w-40"
+							size="sm"
+							:value="row.designName"
+							:placeholder="
+								$t('raukk_sourcing.fleet.design_placeholder')
+							"
+							@update:value="
+								(v) => changeDesignName(row.shipTypeId, v)
+							" />
+					</td>
+					<td class="text-right">
+						<PInputNumber
+							class="w-20 ml-auto"
+							size="sm"
+							:min="0"
+							:value="row.count"
+							@update:value="
+								(v) => changeCount(row.shipTypeId, v)
+							" />
+					</td>
+					<td>
 						<div
-							class="w-full bg-gray-800 size-2 rounded-full overflow-hidden flex flex-row">
+							v-if="row.spill"
+							class="flex flex-row gap-x-2 child:my-auto min-w-40">
 							<div
-								class="h-full transition-all duration-300 ease-out"
+								class="shrink-0 w-24 h-2 bg-gray-800 rounded-full overflow-hidden flex flex-row">
+								<div
+									class="h-full transition-all duration-300 ease-out"
+									:class="
+										row.spill.over
+											? 'bg-negative'
+											: 'bg-prunplanner'
+									"
+									:style="{
+										width: `${
+											raukkSpilloverBarWidths(
+												row.spill.ownPercent,
+												row.spill.spilledInPercent
+											).own
+										}%`,
+									}"></div>
+								<div
+									class="h-full bg-amber-400 transition-all duration-300 ease-out"
+									:style="{
+										width: `${
+											raukkSpilloverBarWidths(
+												row.spill.ownPercent,
+												row.spill.spilledInPercent
+											).spilled
+										}%`,
+									}"></div>
+							</div>
+							<span
+								class="text-nowrap"
 								:class="
 									row.spill.over
-										? 'bg-negative'
-										: 'bg-prunplanner'
-								"
-								:style="{
-									width: `${
-										raukkSpilloverBarWidths(
-											row.spill.ownPercent,
-											row.spill.spilledInPercent
-										).own
-									}%`,
-								}"></div>
-							<div
-								class="h-full bg-amber-400 transition-all duration-300 ease-out"
-								:style="{
-									width: `${
-										raukkSpilloverBarWidths(
-											row.spill.ownPercent,
-											row.spill.spilledInPercent
-										).spilled
-									}%`,
-								}"></div>
+										? 'text-negative font-bold'
+										: ''
+								">
+								{{ formatNumber(row.spill.printedPercent) }} %
+							</span>
 						</div>
-						<span
-							class="text-nowrap"
-							:class="
-								row.spill.over ? 'text-negative font-bold' : ''
-							">
-							{{ formatNumber(row.spill.printedPercent) }} %
+						<div
+							v-else
+							class="flex flex-row gap-x-2 child:my-auto min-w-40">
+							<div
+								class="shrink-0 w-24 h-2 bg-gray-800 rounded-full overflow-hidden">
+								<div
+									class="h-full transition-all duration-300 ease-out"
+									:class="
+										row.over
+											? 'bg-negative'
+											: 'bg-prunplanner'
+									"
+									:style="{
+										width: `${raukkUtilizationBarWidth(row.utilization)}%`,
+									}"></div>
+							</div>
 							<span
-								v-if="row.spill.received"
-								class="text-xs text-white/50">
+								class="text-nowrap"
+								:class="
+									row.over ? 'text-negative font-bold' : ''
+								">
 								{{
-									$t("raukk_sourcing.fleet.spillover.split", {
-										own: formatNumber(row.spill.ownPercent),
-										spilled: formatNumber(
-											row.spill.spilledInPercent
+									row.utilizationPercent === null
+										? "—"
+										: `${formatNumber(row.utilizationPercent)} %`
+								}}
+							</span>
+						</div>
+					</td>
+					<td
+						v-if="sourcingStore.fleetSpillover"
+						class="text-right text-white/60">
+						{{
+							row.spill
+								? `${formatNumber(row.spill.ownPercent)} %`
+								: "—"
+						}}
+					</td>
+					<td
+						v-if="sourcingStore.fleetSpillover"
+						class="text-right text-white/60">
+						{{
+							row.spill && row.spill.received
+								? `${formatNumber(row.spill.spilledInPercent)} %`
+								: "—"
+						}}
+					</td>
+					<td class="text-right text-white/60">
+						<PTooltip v-if="row.drydockDays !== null">
+							<template #trigger>
+								<span class="hover:cursor-help">
+									{{
+										$t(
+											"raukk_sourcing.fleet.drydock_days",
+											{
+												days: formatNumber(
+													row.drydockDays
+												),
+											}
+										)
+									}}
+								</span>
+							</template>
+							{{
+								$t("raukk_sourcing.fleet.drydock_tooltip", {
+									damage: formatNumber(
+										row.damagePercentPerDay ?? 0
+									),
+									bill: billLabel,
+								})
+							}}
+							<template v-if="row.repairCostPerDay !== null">
+								{{
+									$t("raukk_sourcing.fleet.drydock_cost", {
+										daily: formatNumber(
+											row.repairCostPerDay
 										),
 									})
 								}}
-							</span>
-						</span>
-					</div>
-					<div
-						v-else
-						class="flex flex-row gap-x-2 child:my-auto min-w-40">
+							</template>
+						</PTooltip>
+						<PTooltip v-else-if="row.wearUnknown">
+							<template #trigger>
+								<span class="hover:cursor-help">—</span>
+							</template>
+							{{ $t("raukk_sourcing.fleet.drydock_unknown") }}
+						</PTooltip>
+						<span v-else>—</span>
+					</td>
+					<td class="text-right text-white/60">
 						<div
-							class="w-full bg-gray-800 size-2 rounded-full overflow-hidden">
-							<div
-								class="h-full transition-all duration-300 ease-out"
-								:class="
-									row.over ? 'bg-negative' : 'bg-prunplanner'
-								"
-								:style="{
-									width: `${raukkUtilizationBarWidth(row.utilization)}%`,
-								}"></div>
-						</div>
-						<span
-							class="text-nowrap"
-							:class="row.over ? 'text-negative font-bold' : ''">
-							{{
-								row.utilizationPercent === null
-									? "—"
-									: `${formatNumber(row.utilizationPercent)} %`
-							}}
-						</span>
-					</div>
-				</td>
-				<td class="text-right text-white/60">
-					<PTooltip v-if="row.drydockDays !== null">
-						<template #trigger>
-							<span class="hover:cursor-help">
+							class="flex flex-row gap-x-1 justify-end child:my-auto">
+							<PTooltip v-if="row.staleCount > 0">
+								<template #trigger>
+									<PTag size="sm" type="warning">
+										{{ $t("raukk_sourcing.fleet.stale") }}
+									</PTag>
+								</template>
 								{{
-									$t("raukk_sourcing.fleet.drydock_days", {
-										days: formatNumber(row.drydockDays),
+									$t("raukk_sourcing.fleet.stale_tooltip", {
+										stale: row.staleCount,
+										total: row.assignedCount,
 									})
 								}}
-							</span>
-						</template>
-						{{
-							$t("raukk_sourcing.fleet.drydock_tooltip", {
-								damage: formatNumber(
-									row.damagePercentPerDay ?? 0
-								),
-								bill: billLabel,
-							})
-						}}
-						<template v-if="row.repairCostPerDay !== null">
-							{{
-								$t("raukk_sourcing.fleet.drydock_cost", {
-									daily: formatNumber(row.repairCostPerDay),
-								})
-							}}
-						</template>
-					</PTooltip>
-					<PTooltip v-else-if="row.wearUnknown">
-						<template #trigger>
-							<span class="hover:cursor-help">—</span>
-						</template>
-						{{ $t("raukk_sourcing.fleet.drydock_unknown") }}
-					</PTooltip>
-					<span v-else>—</span>
-				</td>
-				<td class="text-right text-white/60">
-					{{ row.assignedCount }}
-				</td>
-				<td>
-					<div class="flex flex-row gap-x-1 justify-end">
-						<PButton
-							size="sm"
-							type="secondary"
-							@click="calibrate(row.shipTypeId)">
-							{{ $t("raukk_sourcing.fleet.calibrate") }}
-						</PButton>
-						<PButton
-							size="sm"
-							type="error"
-							@click="removeShipType(row.shipTypeId)">
-							{{ $t("raukk_sourcing.fleet.remove") }}
-						</PButton>
-					</div>
-				</td>
-			</tr>
-			<tr v-if="rows.length === 0">
-				<td colspan="8" class="text-center text-white/50">
-					{{ $t("raukk_sourcing.fleet.empty") }}
-				</td>
-			</tr>
-			<tr>
-				<td colspan="8">
-					<div class="flex flex-row flex-wrap gap-3 child:my-auto">
-						<PSelect
-							class="w-80!"
-							:value="refAddShipTypeId"
-							:options="addOptions"
-							:placeholder="
-								$t('raukk_sourcing.fleet.add_placeholder')
-							"
-							@update:value="
-								(v) => (refAddShipTypeId = v as string)
-							" />
-						<PButton
-							size="sm"
-							type="primary"
-							:disabled="refAddShipTypeId === null"
-							@click="addShipType">
-							{{ $t("raukk_sourcing.fleet.add") }}
-						</PButton>
-					</div>
-				</td>
-			</tr>
-		</tbody>
-	</PTable>
+							</PTooltip>
+							<span>{{ row.assignedCount }}</span>
+						</div>
+					</td>
+					<td>
+						<div class="flex flex-row gap-x-1 justify-end">
+							<PButton
+								size="sm"
+								type="secondary"
+								@click="calibrate(row.shipTypeId)">
+								{{ $t("raukk_sourcing.fleet.calibrate") }}
+							</PButton>
+							<PButton
+								size="sm"
+								type="error"
+								@click="removeShipType(row.shipTypeId)">
+								{{ $t("raukk_sourcing.fleet.remove") }}
+							</PButton>
+						</div>
+					</td>
+				</tr>
+				<tr v-if="rows.length === 0">
+					<td
+						:colspan="columnCount"
+						class="text-center text-white/50">
+						{{ $t("raukk_sourcing.fleet.empty") }}
+					</td>
+				</tr>
+				<tr>
+					<td :colspan="columnCount">
+						<div
+							class="flex flex-row flex-wrap gap-3 child:my-auto">
+							<PSelect
+								class="w-80!"
+								:value="refAddShipTypeId"
+								:options="addOptions"
+								:placeholder="
+									$t('raukk_sourcing.fleet.add_placeholder')
+								"
+								@update:value="
+									(v) => (refAddShipTypeId = v as string)
+								" />
+							<PButton
+								size="sm"
+								type="primary"
+								:disabled="refAddShipTypeId === null"
+								@click="addShipType">
+								{{ $t("raukk_sourcing.fleet.add") }}
+							</PButton>
+						</div>
+					</td>
+				</tr>
+			</tbody>
+		</PTable>
 
-	<div v-if="advisoryRows.length > 0" class="pt-3">
-		<div class="font-bold pb-2">
-			{{ $t("raukk_sourcing.fleet.advisories.title") }}
+		<div v-if="advisoryRows.length > 0" class="pt-3">
+			<div class="font-bold pb-2">
+				{{ $t("raukk_sourcing.fleet.advisories.title") }}
+			</div>
+			<div
+				v-for="advisory in advisoryRows"
+				:key="`RAUKKADVICE#${advisory.shipTypeId}#${advisory.suggestedShipTypeId}`"
+				class="text-white/60">
+				{{
+					$t("raukk_sourcing.fleet.advisories.row", {
+						suggested: typeLabel(advisory.suggestedShipTypeId),
+						current: typeLabel(advisory.shipTypeId),
+						assignments: advisory.assignmentCount,
+						visit: visitLabel(advisory.visitDays),
+						suggestedVisit: visitLabel(advisory.suggestedVisitDays),
+					})
+				}}
+			</div>
 		</div>
-		<div
-			v-for="advisory in advisoryRows"
-			:key="`RAUKKADVICE#${advisory.shipTypeId}#${advisory.suggestedShipTypeId}`"
-			class="text-white/60">
-			{{
-				$t("raukk_sourcing.fleet.advisories.row", {
-					suggested: typeLabel(advisory.suggestedShipTypeId),
-					current: typeLabel(advisory.shipTypeId),
-					assignments: advisory.assignmentCount,
-					visit: visitLabel(advisory.visitDays),
-					suggestedVisit: visitLabel(advisory.suggestedVisitDays),
-				})
-			}}
-		</div>
+
+		<RaukkCalibrationModal
+			v-model:show="refShowCalibration"
+			:ship-type-id="refCalibrateShipTypeId" />
 	</div>
-
-	<RaukkCalibrationModal
-		v-model:show="refShowCalibration"
-		:ship-type-id="refCalibrateShipTypeId" />
 </template>

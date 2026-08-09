@@ -15,7 +15,12 @@ import {
 } from "@/features/raukk_sourcing/calculations/shippingChains";
 import { raukkStlOnlyCandidates } from "@/features/raukk_sourcing/calculations/shippingStl";
 import {
+	raukkDepotStopKey,
+	raukkStopsServeDepot,
+} from "@/features/raukk_sourcing/calculations/shippingDepots";
+import {
 	raukkAutoChainDemand,
+	raukkAutoChainReason,
 	raukkBuildAutoChains,
 } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 import { calculateRepairBillCost } from "@/features/raukk_sourcing/calculations/shipping";
@@ -28,7 +33,10 @@ import {
 	raukkChainAssignmentKey,
 	raukkOwnedHullCandidates,
 } from "@/features/raukk_sourcing/calculations/shippingFleet";
-import { raukkPickHull } from "@/features/raukk_sourcing/calculations/shippingHull";
+import {
+	raukkPickHull,
+	raukkSmallestCandidate,
+} from "@/features/raukk_sourcing/calculations/shippingHull";
 import { raukkCxAnchorCode } from "@/features/raukk_sourcing/calculations/shippingFlows";
 import {
 	RAUKK_DEFAULT_CADENCE_REPAIR_DAYS,
@@ -420,7 +428,8 @@ function unclaimedAccountFlows(
 ): IRaukkChainFlow[] {
 	const sourcingStore = useRaukkSourcingStore();
 
-	return Object.entries(sourcingStore.snapshots)
+	// scoped: a plan assigned to no empire flies nothing account wide
+	return Object.entries(sourcingStore.scopedSnapshots())
 		.sort(([left], [right]) => (left < right ? -1 : 1))
 		.flatMap(([planUuid, snapshot]: [string, IRaukkSnapshot]) =>
 			(snapshot.flows ?? []).filter(
@@ -529,9 +538,13 @@ async function computeAutoChains(
 	chainConfig: IRaukkChainConfig,
 	loadPrices: IRaukkChainPriceLoader
 ): Promise<IRaukkChainResult[]> {
+	const sourcingStore = useRaukkSourcingStore();
+
 	const autoChains: IRaukkAutoChain[] = raukkBuildAutoChains({
 		flows: unclaimedAccountFlows(claimedFlowIds, claimedLanes),
 		anchorOf: planetAnchorLookup(shippingConfig),
+		isDepot: (stopRef: string): boolean =>
+			sourcingStore.depots[raukkDepotStopKey(stopRef)] !== undefined,
 		capDaysOf: (planUuid: string | undefined, bucket: RAUKK_CARGO_BUCKET) =>
 			planCapDays(planUuid, bucket, shippingConfig),
 		chainConfig,
@@ -615,6 +628,17 @@ async function computeOneAutoChain(
 	 */
 	const gateServable: boolean = raukkChainGateServable(autoChain.stops);
 
+	/*
+	 * raukk: and only for a loop it is BASED on. An STL-only hull lives
+	 * at a depot — it cannot jump out of the gate network it sits in — so
+	 * a loop that never calls at one is a loop it could reach only by
+	 * being flown there and stranded.
+	 */
+	const depotServed: boolean = raukkStopsServeDepot(
+		autoChain.stops,
+		sourcingStore.depotStopRefs()
+	);
+
 	const owned: IRaukkHullPick | null =
 		manual !== undefined
 			? null
@@ -624,15 +648,27 @@ async function computeOneAutoChain(
 							sourcingStore.fleet,
 							candidateOf
 						),
-						gateServable
+						gateServable,
+						depotServed
 					),
 					demand,
 					autoChain.capDays
 				);
 
+	/*
+	 * Nothing to choose from — every owned hull filtered out as non-FTL
+	 * on a loop no gate serves or no depot bases — falls back to the
+	 * smallest OWNED hull.
+	 * The account default is a hull the fleet may own none of, and
+	 * assigning work to it draws a fleet row with a capacity of zero;
+	 * only a fleet without a single hull reaches the default.
+	 */
 	const profileId: string =
 		manual ??
 		owned?.candidate.shipTypeId ??
+		raukkSmallestCandidate(
+			raukkOwnedHullCandidates(sourcingStore.fleet, candidateOf)
+		)?.shipTypeId ??
 		shippingConfig.defaultProfileId;
 
 	const ideal: IRaukkHullPick | null =
@@ -643,7 +679,8 @@ async function computeOneAutoChain(
 						sourcingStore
 							.listShipProfiles()
 							.map((profile) => candidateOf(profile.id)),
-						gateServable
+						gateServable,
+						depotServed
 					),
 					demand,
 					autoChain.capDays
@@ -703,6 +740,13 @@ async function computeOneAutoChain(
 		memberPlanUuids: autoChain.memberPlanUuids,
 		config: { ...chainConfig },
 		auto: true,
+		// what the builder saw: nobody authored this loop. The binding leg
+		// is the fullest one, so its utilization IS the share of the hull
+		// a visit of this loop carries
+		autoReason: raukkAutoChainReason(
+			autoChain.flows,
+			shipping.legs[shipping.bindingLegIndex]?.utilization ?? 0
+		),
 		capDays: autoChain.capDays,
 		advisories,
 	};

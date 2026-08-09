@@ -57,6 +57,35 @@ export const RAUKK_FTL_REACTORS: RAUKK_FTL_REACTOR[] = [
 ];
 
 /**
+ * The one reactor a preset is OFFERED under.
+ *
+ * Both reactors fly at about the same speed and burn about the same
+ * fuel, so two rows per hull only ever asked the user a question whose
+ * answer changed nothing. The add row therefore offers the quick-charge
+ * build alone and a user who wants the standard one calibrates a profile
+ * for it. Presets for both keep being BUILT — a stored fleet, chain
+ * assignment or snapshot naming a `-standard` id has to keep resolving
+ * to a real profile — they are simply no longer suggested.
+ *
+ * @author raukk
+ */
+export const RAUKK_OFFERED_FTL_REACTOR: RAUKK_FTL_REACTOR = "quick-charge";
+
+/**
+ * Drive marker an STL-only preset id carries in place of a reactor.
+ *
+ * A hull without an FTL drive has no reactor to name, and naming one
+ * anyway would collide with the FTL build of the same hull — which is
+ * the whole point of a separate id: `stlOnly` used to be a flag ON the
+ * shared profile, so ticking it on the LCB turned EVERY LCB in the
+ * account into an STL hull. The two builds are different ship types and
+ * now say so.
+ *
+ * @author raukk
+ */
+export const RAUKK_STL_DRIVE: string = "stl";
+
+/**
  * Cost per parsec and per sublight block are DERIVED, not free.
  *
  * Round 5 decision 2 refines round 1: instead of a shipped zero, a
@@ -246,15 +275,23 @@ const TIME_CALIBRATIONS: IRaukkTimeCalibration[] = REFERENCE_BUILDS.map(
  *
  * @author raukk
  *
+ * An STL-only build names {@link RAUKK_STL_DRIVE} instead of a reactor:
+ * it carries none, and the FTL build of the same hull already holds the
+ * reactor spelling.
+ *
  * @param {IRaukkShipHull} hull Cargo hold
  * @param {RAUKK_FTL_REACTOR} ftlReactor FTL reactor
+ * @param {boolean} stlOnly Whether the build carries no FTL drive
  * @returns {string} Profile id, e.g. `5000x5000-quick-charge`
  */
 export function raukkShipProfileId(
 	hull: IRaukkShipHull,
-	ftlReactor: RAUKK_FTL_REACTOR
+	ftlReactor: RAUKK_FTL_REACTOR,
+	stlOnly: boolean = false
 ): string {
-	return `${hull.cargoWeight}x${hull.cargoVolume}-${ftlReactor}`;
+	return `${hull.cargoWeight}x${hull.cargoVolume}-${
+		stlOnly ? RAUKK_STL_DRIVE : ftlReactor
+	}`;
 }
 
 /**
@@ -305,11 +342,13 @@ export function raukkNearestCalibration(
  *
  * @param {IRaukkShipHull} hull Cargo hold
  * @param {RAUKK_FTL_REACTOR} ftlReactor FTL reactor
+ * @param {boolean} stlOnly Whether the build carries no FTL drive
  * @returns {IRaukkShipProfile} Pre-filled profile
  */
 export function raukkShipProfilePreset(
 	hull: IRaukkShipHull,
-	ftlReactor: RAUKK_FTL_REACTOR
+	ftlReactor: RAUKK_FTL_REACTOR,
+	stlOnly: boolean = false
 ): IRaukkShipProfile {
 	const calibration: IRaukkTimeCalibration = raukkNearestCalibration(
 		hull,
@@ -317,19 +356,28 @@ export function raukkShipProfilePreset(
 	);
 
 	return {
-		id: raukkShipProfileId(hull, ftlReactor),
-		name: `${hull.cargoWeight}t / ${hull.cargoVolume}m³ ${ftlReactor}`,
+		id: raukkShipProfileId(hull, ftlReactor, stlOnly),
+		name: `${hull.cargoWeight}t / ${hull.cargoVolume}m³ ${
+			stlOnly ? RAUKK_STL_DRIVE : ftlReactor
+		}`,
 		cargoWeight: hull.cargoWeight,
 		cargoVolume: hull.cargoVolume,
+		/*
+		 * An STL-only preset still names a reactor it does not carry:
+		 * the field is part of the stored shape, the sublight constants
+		 * are what the build actually flies on, and keeping the FTL ones
+		 * filled means un-ticking the flag restores a working FTL hull
+		 * rather than a profile of zeroes.
+		 */
 		ftlReactor,
 		/*
-		 * Every preset is an FTL ship: the reference flights are FTL
-		 * flights, and no STL-only run is calibrated. Dropping the drive
-		 * is a user decision per profile, not a shipped hull class —
-		 * the hold is what a preset describes, and an STL-only build
-		 * has the very same hold.
+		 * No STL-only run is calibrated — the reference flights are all
+		 * FTL flights — so an STL preset copies the sublight half of the
+		 * nearest FTL calibration of its own hull. That half is the half
+		 * it flies: a gate drops the ship in the destination orbit, and
+		 * everything either side of the traversal is a sublight block.
 		 */
-		stlOnly: false,
+		stlOnly,
 		costPerParsec: DEFAULT_COST_PER_PARSEC,
 		stlBlockCost: DEFAULT_STL_BLOCK_COST,
 		ftlFuelPerParsec: calibration.ftlFuelPerParsec,
@@ -341,32 +389,44 @@ export function raukkShipProfilePreset(
 		damagePerParsec: DEFAULT_DAMAGE_PER_PARSEC,
 		damagePerStlBlock: DEFAULT_DAMAGE_PER_STL_BLOCK,
 		/*
-		 * A fresh game account starts with TWO SCB standard ships, so
-		 * that preset assumes both; every other hull is bought one at
-		 * a time.
+		 * A fresh game account starts with TWO SCB ships, so that preset
+		 * assumes both; every other hull is bought one at a time. The
+		 * game hands out the standard reactor build, but the offered
+		 * preset is the quick-charge one — the two are within noise of
+		 * each other on speed and fuel — and the assumption follows the
+		 * hull the user is actually given a row for.
 		 */
 		shipsAvailable:
 			hull.cargoWeight === 500 &&
 			hull.cargoVolume === 500 &&
-			ftlReactor === "standard"
+			ftlReactor === RAUKK_OFFERED_FTL_REACTOR &&
+			!stlOnly
 				? 2
 				: DEFAULT_SHIPS_AVAILABLE,
 	};
 }
 
 /**
- * All twelve preset profiles, six hulls times two reactor flags.
+ * Every preset profile: six hulls times two reactor flags, plus the
+ * STL-only build of each hull — eighteen.
+ *
+ * BUILT is not the same as OFFERED. The add row shows one FTL row per
+ * hull ({@link RAUKK_OFFERED_FTL_REACTOR}) and its STL-only sibling,
+ * while the standard-reactor presets stay here so that every id ever
+ * written into a fleet, a chain assignment or a snapshot still resolves
+ * to the profile it was costed with.
  *
  * @author raukk
  *
  * @returns {IRaukkShipProfile[]} Preset profiles
  */
 export function raukkShipProfilePresets(): IRaukkShipProfile[] {
-	return RAUKK_SHIP_HULLS.flatMap((hull) =>
-		RAUKK_FTL_REACTORS.map((reactor) =>
+	return RAUKK_SHIP_HULLS.flatMap((hull) => [
+		...RAUKK_FTL_REACTORS.map((reactor) =>
 			raukkShipProfilePreset(hull, reactor)
-		)
-	);
+		),
+		raukkShipProfilePreset(hull, RAUKK_OFFERED_FTL_REACTOR, true),
+	]);
 }
 
 /**
@@ -488,13 +548,13 @@ export function raukkResolveShipProfile(
 }
 
 /**
- * Default profile: the SCB 500t / 500m³ starter hull, standard
- * reactor — what every account flies before it configures anything,
- * because it is what the game hands a new player.
+ * Default profile: the SCB 500t / 500m³ starter hull — what every
+ * account flies before it configures anything, because it is what the
+ * game hands a new player. Quick-charge, like every offered preset.
  */
 export const RAUKK_DEFAULT_SHIP_PROFILE_ID: string = raukkShipProfileId(
 	{ cargoWeight: 500, cargoVolume: 500 },
-	"standard"
+	RAUKK_OFFERED_FTL_REACTOR
 );
 
 /**

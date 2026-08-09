@@ -30,6 +30,7 @@ import {
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 import { RAUKK_LEG_UNROUTABLE } from "@/features/raukk_sourcing/calculations/shippingStl";
 import { IRaukkChainResult } from "@/features/raukk_sourcing/raukkSourcing.types";
+import { RAUKK_AUTO_CHAIN_REASON } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
 
 /** Minutes of a day, the denominator of every ship time reading */
 const MINUTES_PER_DAY: number = 24 * 60;
@@ -62,6 +63,9 @@ export interface IRaukkChainListRow {
 	auto: boolean;
 	/** Days per visit the loop is capped at, only derived chains have one */
 	capDays: number | null;
+	/** Why the builder derived the loop, null on authored chains and on
+	 * results written before the reason existed */
+	autoReason: RAUKK_AUTO_CHAIN_REASON | null;
 }
 
 /** One leg of a chain as the detail table renders it */
@@ -296,6 +300,7 @@ export function raukkChainListRows(
 						: result.shipMinutesPerDay / MINUTES_PER_DAY,
 				auto: false,
 				capDays: null,
+				autoReason: null,
 			};
 		})
 		.sort((left, right) => left.name.localeCompare(right.name));
@@ -371,6 +376,7 @@ export function raukkAutoChainListRows(
 			shipDaysPerDay: result.shipMinutesPerDay / MINUTES_PER_DAY,
 			auto: true,
 			capDays: result.capDays ?? null,
+			autoReason: result.autoReason ?? null,
 		}))
 		.sort((left, right) => left.chainId.localeCompare(right.chainId));
 }

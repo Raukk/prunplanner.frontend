@@ -102,6 +102,29 @@ Verified against user BTF runs (ZV-759c → ANT, 4 pc, both hulls):
   Advisories are additionally ownership-filtered at READ time in
   `useRaukkFleet`: advice suggesting a type the fleet now owns is
   dropped immediately, without waiting for the recompute.
+- The "Routes" column counts the DISTINCT lanes and chains assigned to
+  the type (deduped assignment keys — one lane contributes an entry per
+  leg). It was headed "Assigned" until round 21, which read as a second
+  ship count next to the ship count.
+- STALENESS IS VISIBLE (round 22). The rollup reads STORED results, so a
+  fleet change stales every snapshot and chain result but moves no
+  assignment until each is recomputed — a type set to zero hulls keeps
+  its routes, which reads as a broken table. Each load entry carries the
+  `stale` flag of the result it came from, the rollup collects them per
+  type as `staleKeys`, and the Routes cell tags a row holding any. The
+  Shipping page carries the recompute that answers it: "Recompute
+  Snapshots" recomputes every stale snapshot of the operated plans,
+  upstream first, then re-costs the chains (`useRaukkStaleSnapshotRecompute`,
+  the pass logic of the empire wide upkeep). "Recompute Chains" alone
+  never touches snapshots and so can never move a lane.
+- NO ASSIGNMENT TO AN UNOWNED HULL (round 22). When the automatic pick
+  has nothing to choose from — every owned hull filtered out as STL only
+  on a leg no gate serves — both the lane and the chain path now fall
+  back to the SMALLEST owned hull (`raukkSmallestCandidate`), not to the
+  account default profile. The default is the SCB starter, so the old
+  fallback could assign work to a hull the account owns none of, drawing
+  a fleet row with a capacity of zero. Only a fleet without a single hull
+  still reaches the default, which is the documented starter assumption.
 - Per-plan shipping fraction remains (sum of the plan's own lanes)
   but the fleet page is the account-level truth.
 
@@ -140,9 +163,11 @@ the toggle off everything renders exactly as before.
   still past 100%. Recipient row: own load in the usual green, the
   spilled share appended as an amber (`amber-400`, the established
   raukk warning tone) segment; printed number is the combined
-  percentage with a secondary "own X % + spilled Y %" note. The
-  combined segments never draw past the track; numbers are never
-  clamped; nothing ever blocks.
+  percentage. The split itself lives in two extra columns, Own and
+  Spilled In, rendered only while the display is on (round 21: it
+  used to print inline behind the percentage, which squeezed the bar
+  of every row carrying it). The combined segments never draw past
+  the track; numbers are never clamped; nothing ever blocks.
 
 ## Store (C2)
 

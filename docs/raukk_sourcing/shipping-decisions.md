@@ -87,10 +87,7 @@ These supersede the matching decisions above.
    FTL fuel, CHRG 1m15s between jumps, per-jump times 6pc/1h07m,
    11pc/4h15m, 14pc/5h29m, 6pc/2h32m, 9pc/3h23m.
 6. **Damage/repair: deferred pending user data.** Users normally
-   repair at ~80% damage. **CORRECTED 2026-08-09 (calibration §14):
-   that is 80% CONDITION, i.e. 20% DAMAGE.** The two readings are
-   four times apart and round 3 below inherited the wrong one; see
-   the correction under round 3 item 1. Damage per parsec varies by system
+   repair at ~80% condition (round 21: "damage" here was a slip). Damage per parsec varies by system
    (micro-meteor density), and VERIFIED: no such field exists in
    our data (planets carry only pressure/surface/temperature/
    fertility/gravity; systems only positions/connections/type). So
@@ -106,16 +103,10 @@ These supersede the matching decisions above.
    components); at ~80% damage LHP and SSC were each ~10–12. Model:
    repair bill = fixed (12 MFK + 8 FLP) + LHP/SSC scaling roughly
    linearly with damage (≈3 each at 4.5%, ≈11 each at 80%). Users
-   repair at ~80% damage, so per-trip ship-repair cost =
-   (trip damage % ÷ 80%) × priced full bill.
-   **CORRECTED 2026-08-09 (calibration §14).** The quantities were
-   right and the threshold wrong: the real law is
-   `ceil(componentCount × damage × 0.75 × shieldRelief)`, and this
-   round's own two observations fall straight out of it on the 71
-   structural elements that hull carries — `ceil(71 × 0.045 × 0.75)`
-   is the 3 seen at 4.5% damage, `ceil(71 × 0.20 × 0.75)` the 11
-   seen at what was recalled as "80%". So the ÷80% divisor is ÷20%,
-   and every repair cost this app charged was FOUR TIMES too low. Trip damage comes from
+   repair at ~80% CONDITION, i.e. 20% damage (round 21 corrects the
+   "80% damage" phrasing of this entry and the divisor it produced),
+   so per-trip ship-repair cost =
+   (trip damage % ÷ 20%) × priced full bill. Trip damage comes from
    the per-leg damage numbers (flat per-parsec constant + per-STL-
    leg constant; no per-system variation, see Round 2 item 6).
 2. **STL legs: constant length.** Assume the sublight legs in and
@@ -610,6 +601,326 @@ and read as a working button — nothing said the field had to be filled
    summed at read time in `useRaukkDepotCosts`. Only marking a planet
    new to the anchor list (or un-marking one) stales now, the same
    line round 19 drew for the fleet count.
+
+## Round 21 (repair point: 80 % condition, not 80 % damage)
+
+Bug: the fleet Drydock column and every repair charge read the repair
+point as 80 % DAMAGE (2026-08-09, user report on the fleet table).
+
+1. **`RAUKK_REPAIR_AT_DAMAGE` is 0.2, not 0.8**: players repair at
+   80 % CONDITION — 20 % accumulated damage — because a hull below
+   that flies slow, and a hull above it wastes the fixed part of the
+   bill. Round 3 item 1 wrote that observation down as "at ~80 %
+   damage" and the constant took the phrase literally, so every
+   repair number was off by 4x: drydock cadence 4x too long, repair
+   cost per trip 4x too low. The round 3 numbers themselves settle
+   it — LHP/SSC scale roughly linearly and were 3 each at 4.5 %
+   damage, 10-12 each at the repair point; linear from 4.5 % lands
+   at ~13 by 20 % damage and at ~53 by 80 % damage.
+2. **`RAUKK_REPAIR_BILL` is unchanged**: the observed bill belongs to
+   that same 80 % condition cycle, so only the divisor was wrong.
+   Every consumer already reads the constant, so the fix is the one
+   value plus the copy that spelled "80 % repair threshold" out.
+3. **The fleet table breaks the spillover split out**: "own X % +
+   spilled Y %" printed inside the capacity cell, which squeezed the
+   bar of every row that carried it down to a stub. Own and Spilled
+   In are their own columns now, shown only while the spillover
+   display is on. The "Assigned" header reads "Routes" — it counts
+   the lanes and chains flown by the type, and "assigned" read as a
+   ship count next to a ship count.
+
+## Round 22 (depots as homes: gate planets, free handover, STL basing)
+
+User decision 2026-08-09, four connected changes that turn a depot from
+a pure routing anchor into the place non-FTL ships live.
+
+1. **A depot is SUGGESTED from own bases on gate planets**: the add row
+   is a dropdown of the planets the account has a snapshot for that the
+   gate transcription puts a gate on (`raukkDepotCandidates`), minus
+   the ones already marked. Both halves are the user's rule — a depot
+   without a gate anchors nothing a non-FTL ship could reach, and the
+   exchange already serves as the handover point everywhere else, while
+   a depot on a planet with no base has no warehouse behind it.
+   SUGGESTED, not enforced: `raukk_gates.json` is a hand transcription
+   and a gate built since it was taken is simply absent, so an "Enter
+   Id" escape hatch stays beside the list and a gateless entry warns
+   ("No Gate" tag) exactly as an unplaceable one does. Round 20's
+   precedent, unchanged: the transcription is not the map.
+2. **A base ON a depot owns no exchange lane**: it hands its sells over
+   and draws its buys at the warehouse on its own planet, so both
+   directions cost nothing and `buildShippingPairs` does not build the
+   CX pair at all (`depotOf` lookup). Inputs as well as outputs, per
+   user decision — the warehouse is next door in both directions. The
+   directed FLOWS are deliberately untouched: a loop calling at the
+   depot may still claim the onward move to the exchange and price it,
+   which is what keeps the freight on the books instead of deleting it.
+   Sourcing lanes are untouched too — a counterpart plan sits on
+   another planet and its cargo really is flown here. Marking or
+   un-marking a depot therefore stales SNAPSHOTS as well as chains,
+   widening round 20 decision 5 (rent edits still stale nothing).
+3. **A non-FTL hull is auto-assigned only to depot-served routes**:
+   `raukkStlOnlyCandidates` now takes a second bar, `depotServed`, on
+   top of round 18's `gateServable`. Such a ship is BASED at a depot
+   and cannot jump out of the gate network it sits in, so a route that
+   never calls at one is a route it could reach only by being flown
+   there and stranded. Because every leg of a gate-servable route is
+   gate-connected, one depot among the stops puts the whole route
+   inside that depot's reach — no separate reachability search. Lanes
+   answer it from the two PLANETS at build time (`depotServed` on the
+   pair, resolved where the planets are still known); auto chains from
+   their stop list (`raukkStopsServeDepot`). MANUAL assignment passes
+   neither bar, unchanged and on purpose: a deliberate non-FTL run
+   between two gate-linked planets is a real thing to want, it is
+   simply not something to guess at.
+4. **One offered preset per hull, quick-charge, plus its STL sibling**:
+   both reactors fly and burn near enough the same, so the second row
+   per hull asked a question with no consequence — the add row offers
+   `RAUKK_OFFERED_FTL_REACTOR` alone and the default profile and
+   starter-fleet assumption follow it. The standard presets keep being
+   BUILT so every id ever written into a fleet, assignment or snapshot
+   still resolves; they are only no longer suggested. The STL build
+   gets a preset id of its own (`2000x2000-stl`) — as a flag on the
+   shared profile, ticking `stlOnly` on the LCB turned every LCB in
+   the account into an STL hull, so the two builds could never be owned
+   side by side. They are different ship types and now say so.
+5. **The builder RESTOCKS a depot, and that is a leg** (user decision,
+   closing the hole decision 2 opened): a depot stop always qualifies as
+   an auto chain stop whatever its share, and is exempt from
+   `RAUKK_AUTO_CHAIN_MIN_STOPS`, so `CX → depot → CX` is derived. The
+   minimum's own justification is what makes the exemption sound — it
+   exists because a one stop loop is the exchange lane that plan flies
+   anyway, and a base on a depot flies no such lane since decision 2.
+   Without the exemption its cargo would be neither flown nor charged.
+   The share test is skipped for the same reason: failing it normally
+   sends a base to the hub/spoke listing, which for a depot base means
+   nowhere. Anchoring OTHER bases at a depot instead of their exchange
+   was considered and NOT done — flow endpoints name the exchange, so
+   re-anchoring without re-targeting the flows claims nothing, and
+   re-targeting them needs a transshipment volume the model has no
+   notion of. Chain splitting at depot anchors (round 11) already gives
+   the gate-side/FTL handover that motivated it.
+
+Rent, for the record (user, 2026-08-09): a depot is normally cheap or
+free — most capacity comes from STO storage, which has no upkeep once
+built, and a rented warehouse runs a few thousand ȼ per week for ~10 kt.
+Cargo merely flowing through needs none. The field stays, defaulting to
+zero; it is not a number worth agonising over.
+
+## Round 23 (a zero-hull type keeps its routes)
+
+Bug report: SCB set to 0 ships kept 11 routes and "Recompute Chains"
+changed nothing (2026-08-09, user, fleet table).
+
+1. **The pick was right, the DISPLAY was stale**: the fleet rollup
+   reads stored snapshot lanes and stored chain results, and
+   `setFleetShip` stales them all when a count crosses zero — but
+   staling moves nothing. Lanes only change hull when their plan's
+   snapshot is recomputed, which happens on PlanView/EmpireView, not
+   on the Shipping page; "Recompute Chains" re-costs chains from the
+   stored snapshot flows and never touches a lane. So the table was
+   faithfully reporting the last compute.
+2. **The table says so now**: each fleet load entry carries the
+   `stale` flag of the result it came from, the rollup collects them
+   per type (`staleKeys`), and the Routes cell tags a row holding
+   any. A row nobody can explain is worse than a slow recompute.
+3. **The page carries its own recompute**: "Recompute Snapshots"
+   recomputes every stale snapshot of the operated plans upstream
+   first and then re-costs the chains, in that order because a chain
+   is costed FROM the snapshot flows. Scope is `scopedSnapshots()`,
+   the same set the fleet rolls up, and only the stale ones — a
+   current snapshot gains nothing from being recomputed. The pass
+   logic is the empire upkeep's, cap included.
+4. **The fallback stops naming an unowned hull**: a pick with nothing
+   to choose from — every owned hull filtered out as STL only on a
+   leg no gate serves — fell back to `defaultProfileId`, which is the
+   SCB starter, so work could be assigned to a hull the account owns
+   none of and draw a fleet row with zero capacity. Both the lane and
+   the chain path now fall back to the smallest OWNED hull
+   (`raukkSmallestCandidate`); only a fleet without a single hull
+   still reaches the default, which is the starter assumption and
+   deliberate. Smallest, not best-fitting: a fallback places work the
+   heuristic could not, and the cheapest hull to fly is the
+   conservative answer.
+5. **Manual assignments still win outright**: none of this touches
+   `assignments[key]`. A user who picked SCB by hand keeps SCB at
+   zero hulls — the assignment is an answer, not a guess, and the
+   utilization row states the consequence.
+
+## Round 24 (gate planning tool)
+
+User request: plan gates that do NOT exist — one seen going up
+in-game, or one the player thinks would be worth building. Delivered
+as an account-global slice `plannedGates` (store key = gate id,
+persisted and exported like the depots), a section on the shipping
+page and a route-graph hook.
+
+Decisions taken while implementing:
+
+1. **A planned gate is symmetric**: one fee, one volume clearance,
+   both sides alike. Nobody planning a link knows which end will be
+   the narrower one, and the per-side asymmetry of the transcribed
+   asset is a transcription fact, not a planning input. Same reason
+   `jumps24h`, `up` and `est` are left blank. Currency is not
+   modelled at all (round 8: the four trade ~1:1).
+2. **Off by default, and the switch is the whole contract**: while a
+   gate is off it is a note and routes nothing; while it is on it is
+   an ordinary edge of the graph and every distance, lane and chain
+   in the account may be planned over it. The import defaults
+   `enabled` to false as well — restoring a backup must not silently
+   re-route an account over gates that do not exist.
+3. **Planned edges are FLAGGED, not hidden**: `IRaukkGateLink.planned`
+   and the matching `IRaukkRouteHop.planned`, plus a new time option
+   `usePlannedGates` (default on) that bars them per query. One graph,
+   one memoized tree per option set — no second index.
+4. **Value = the gate against today, per gate**: each row measures its
+   own traversal against the fastest route the network manages between
+   the same two systems with EVERY planned gate barred, the user's own
+   included. Otherwise a switched-on gate would report saving nothing,
+   and two planned gates over one pair would each hide the other.
+   Direct traversal is one hop, so `min(today, traversal)` is the
+   whole "with it" answer — no extra Dijkstra per row.
+5. **Both sides fly one hull**: today's route is asked for a ship as
+   big as the planned gate would pass (`shipVolumeM3 = maxM3`), so a
+   narrow existing gate that could not take that hull does not count
+   against the plan. Consequence worth knowing: a 3,000 m³ plan over a
+   pair the 6,000 m³ Antares corridor already serves correctly reports
+   saving nothing.
+6. **Staleness follows the graph, not the record**: switching, moving
+   an endpoint, or changing fee/clearance of an ENABLED gate stales
+   every chain, and every snapshot while shipping is on (routing feeds
+   lane freight). A label, a note, a status, or any edit of a
+   switched-off gate stales nothing — the line round 19 drew for the
+   fleet count and round 20 for the depot rent.
+7. **The routing layer is pushed, not pulled**: `setRaukkPlannedGateLinks`
+   holds the links and drops the memoized index; the store owns the
+   data and pushes on a `sync`, deep, immediate watcher, which also
+   covers persisted-state hydration. The registry compares an
+   edge-only signature, so renaming a gate does not re-route the
+   universe. The calculation layer still knows nothing of the store.
+
+Not done, offered: no cost lens on the fee (a gate's ȼ per traversal
+is in the graph and priced by the chain math when routed, but the
+planning table itself compares TIME only), and no "which of my lanes
+would use it" column.
+
+## Round 25 (gate costs transcribed, and the range cap)
+
+The user transcribed the in-game GATEWAY INFORMATION (GTWI) panel across
+13 configurations on two gates (ZV-307c, SE-648c) into
+`src/features/raukk_sourcing/assets/raukk_gate_costs.json`. FIO does NOT
+serve this: `/sites/gateways` is 401 (your own sites, and no cost table),
+`/infrastructure/gateways` exists but returns 204. Screenshots are the
+only source, and 13 of them are enough — the model reproduces every
+material of every panel exactly.
+
+What the transcription established:
+
+1. **Upgrade cost is TRIANGULAR, not linear.** The n-th level costs
+   n x unit, so n levels cost `unit * n(n+1)/2`. This is the round's most
+   important finding and the one a single screenshot gets WRONG: the
+   3-level range panel shows 480 LIT, and 480/3 = 160 reads exactly like
+   a per-level price — the real first level costs 80. Caught only because
+   the user supplied levels 1, 2 AND 3. Effects, by contrast, ARE linear
+   per level (150 uses/day, 1,500 m³, 5 parsecs).
+2. **A link costs TWO gates** (user emphasis), one at each end, both
+   paying the full base bill. `raukkGateLinkBuildCost` doubles, the
+   column is labelled "Build ȼ" and the note under the table says so.
+3. **Five upgrade levels TOTAL** across the three tracks (user), even
+   though the per-track maxima are 5/3/3 and would sum to eleven. This is
+   the binding constraint and the interesting one: range bought is
+   clearance not bought. The store clamps the track the user just
+   RAISED — clamping the others would undo an untouched choice.
+4. **Linking range is a hard cap in the same parsecs the tool already
+   measures.** The panel's "Reachable Systems" distances match
+   `straightLineParsecs` to three decimals on all four sampled systems,
+   which both validates that metric against the game and makes the cap
+   enforceable: 10 pc, +5 per range upgrade, 25 pc fully upgraded. A
+   wider gap is not an expensive gate but an impossible one —
+   `out_of_range` (buy N range upgrades) and `unreachable_range` (nothing
+   can be built) are issues, and the add form refuses the second outright.
+5. **Clearance is no longer free-form.** A planned gate's m³ comes from
+   its volume upgrades (1,500 + 1,500/level), because that is all the
+   game offers. The old bare `maxM3` stays readable as a legacy field for
+   blobs written by round 21, and nothing writes it any more.
+6. **Upkeep is transcribed but NOT modelled**: constant across every
+   observed upgrade level, and the panel never states its billing period.
+   It sits in the asset for the user to read.
+
+Cost in ȼ is priced universe-wide at BUY, and the tooltip says plainly
+that a bill dominated by 10,000 SEA and 16,000 SP per link is what the
+exchange claims today rather than what buying that much would cost —
+the user's own caveat about thin markets.
+
+The 13 panels are pinned as fixtures in
+`src/tests/features/raukk_sourcing/calculations/gateCosts.test.ts`: a
+change that breaks one of those rows is a change that no longer describes
+the game.
+
+## Round 26 (review fixes: a stranded gate must not route)
+
+Two reviews of the round 24/24 tool — a UI/UX pass and a player pass —
+found one blocker and one bug that contradicted the docs. Both are fixed;
+the rest of both reviews is triage, not yet actioned.
+
+1. **BLOCKER: an enabled gate that stopped being buildable stayed an edge
+   of the route graph.** Reachable in a few clicks: switch a valid gate
+   on, then spend its range upgrades on volume instead. The gate is now
+   wider than its own linking range — impossible to build — and
+   `raukkPlannedGateLinks` filtered on `enabled` alone, so the whole
+   account carried on being planned over it. Worse, the row's checkbox
+   was `:disabled` whenever the gate had an issue, so the state could not
+   be switched off, only deleted. Fixed in the calculation layer, where
+   every caller is protected: `raukkPlannedGateBuildable` gates the link
+   list, and the checkbox now disables only the OFF→ON direction. The
+   stored `enabled` flag is deliberately left alone — it is the user's
+   intent, and restoring the range restores the edge without them having
+   to remember to switch it back on. The row says "Not Routed" while the
+   two disagree.
+2. **The add form warned about an impossible gate and added it anyway.**
+   Round 25 point 4 claimed it "refuses the second outright"; it did not
+   — `canAdd` only checked that both fields were non-empty. It now
+   refuses `unreachable_range` and `same_system`, and still permits an
+   unknown planet id, which is the call the depot table makes for the
+   same reason: the bundled systems JSON may not know a planet the user
+   does.
+
+Round 25's point 4 wording is corrected by this round.
+
+## Round 27 (gates on FTL routes)
+
+Closes the gap both reviews and the user landed on: an FTL hull's leg
+never consulted the gate network, so no gate — planned or transcribed —
+had ever made a freighter faster. Full brief and design in
+`gate-ftl-routing.md`; decisions worth repeating here:
+
+1. **No config flag** (user): *"If the gates are available, just assume
+   they are always on and that the cost of using them is still a benefit
+   as long as it's actually faster."* Gates are part of the network.
+2. **A gate is adopted only when it WINS.** The search is asked for the
+   fastest multi modal path at THIS hull's speed; its answer is taken
+   only if it contains a gate hop and beats the FTL route. Without the
+   gate-hop guard a leg could be re-routed onto a merely faster FTL path
+   — minutes-optimal is not parsec-optimal, many short jumps pay more
+   reactor charges than one long one — which would move numbers for
+   every user with no gate near them. With it, such a leg is not
+   re-routed at all and stays bit-identical.
+3. **Whole route, not per hop.** The path may jump, traverse a gate and
+   jump again; the Dijkstra already spans both edge sets.
+4. **Both modes pay their own bill**: FTL hops burn fuel per parsec and
+   charge the reactor per jump, gate hops pay a fee and the sublight fuel
+   of the traversal and take a flat damage instead of a per parsec one.
+   `effectiveParsecs` stays the WHOLE path — it weights the per flow
+   allocation by distance ridden — while only the FTL parsecs are ever
+   multiplied by a per parsec rate.
+5. **Hull volume is now modelled properly** (`shippingHullVolume.ts`).
+   A gate measures the SHIP, and the code had been passing the cargo
+   hold, which is some 600 m³ smaller — optimistic in exactly the
+   direction that routes a ship through a gate the game would refuse.
+   The delta model reproduces all six of the user's blueprints to the
+   unit. Its assumed modules are stated in the file; a user with unusual
+   tanks should set `hullVolumeM3` and be believed over the derivation.
+6. **Lanes and chains both**, so the same journey never gets two
+   answers.
 
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,

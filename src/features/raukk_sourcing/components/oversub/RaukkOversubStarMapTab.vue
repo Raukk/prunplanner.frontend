@@ -45,6 +45,13 @@
 		raukkStarPlacement,
 		raukkStarZoomView,
 	} from "@/features/raukk_sourcing/calculations/oversubStarMap";
+	import {
+		RAUKK_VIZ_ALERT,
+		RAUKK_VIZ_INK,
+		RAUKK_VIZ_INK_RGB,
+		RAUKK_VIZ_RAMP,
+		RAUKK_VIZ_SURFACE,
+	} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
 
 	// UI
 	import { PButton, PCheckbox } from "@/ui";
@@ -71,6 +78,12 @@
 		IRaukkOversubTooltipLine,
 		IRaukkOversubTooltipPayload,
 	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+
+	/** The ink washes this view draws its system rings and rules with,
+	 * and the over wash behind an overdrawn node */
+	const INK_RING_FILL: string = `rgba(${RAUKK_VIZ_INK_RGB}, 0.1)`;
+	const INK_RING_STROKE: string = `rgba(${RAUKK_VIZ_INK_RGB}, 0.5)`;
+	const ALERT_WASH: string = `rgba(${RAUKK_VIZ_ALERT.rgb}, 0.42)`;
 
 	const props = defineProps({
 		/** Materials rows, filtered and sorted by the section */
@@ -487,18 +500,21 @@
 
 	/** Fill of one node: worst-row blue ramp, over red, null hatched */
 	function nodeFill(node: IRaukkOversubStarNode): string {
-		if (node.producerRows.length === 0) return "#20242a";
-		if (node.anyOver) return "rgba(199, 0, 57, 0.42)";
-		if (node.worstUtilization === null) return "#1e1e1e";
+		if (node.producerRows.length === 0) return RAUKK_VIZ_SURFACE.rule;
+		if (node.anyOver) return ALERT_WASH;
+		if (node.worstUtilization === null) return RAUKK_VIZ_SURFACE.inert;
 		return raukkOversubBlueRamp(node.worstUtilization);
 	}
 
 	function nodeStroke(node: IRaukkOversubStarNode): string {
 		if (node.producerRows.length === 0)
-			return props.consumerSlots.colorByUuid[node.planUuid] ?? "#565650";
+			return (
+				props.consumerSlots.colorByUuid[node.planUuid] ??
+				RAUKK_VIZ_INK.dim
+			);
 		if (node.anyOver) return RAUKK_OVERSUB_STATUS_COLORS.over;
-		if (node.worstUtilization === null) return "#898781";
-		return "rgba(57, 135, 229, 0.85)";
+		if (node.worstUtilization === null) return RAUKK_VIZ_INK.base;
+		return RAUKK_VIZ_RAMP.stroke;
 	}
 
 	/** Labels on the right half flip inward */
@@ -839,7 +855,7 @@
 
 			<div
 				class="overflow-hidden rounded border border-white/10"
-				style="background: #050a0d">
+				:style="{ background: RAUKK_VIZ_SURFACE.plot }">
 				<svg
 					ref="refSvg"
 					class="block w-full h-auto touch-none"
@@ -858,14 +874,11 @@
 							height="7"
 							patternUnits="userSpaceOnUse"
 							patternTransform="rotate(45)">
-							<rect
-								width="7"
-								height="7"
-								fill="rgba(137, 135, 129, 0.1)" />
+							<rect width="7" height="7" :fill="INK_RING_FILL" />
 							<rect
 								width="3"
 								height="7"
-								fill="rgba(137, 135, 129, 0.5)" />
+								:fill="INK_RING_STROKE" />
 						</pattern>
 					</defs>
 
@@ -1001,7 +1014,7 @@
 								width="22"
 								height="12"
 								fill="url(#raukkOversubStarHatchGray)"
-								stroke="#898781"
+								:stroke="RAUKK_VIZ_INK.base"
 								stroke-width="0.8"
 								rx="2" />
 						</g>
@@ -1042,7 +1055,7 @@
 									width="22"
 									height="10"
 									fill="url(#raukkOversubStarHatchGray)"
-									stroke="#898781"
+									:stroke="RAUKK_VIZ_INK.base"
 									stroke-width="0.8"
 									rx="2" />
 								<text
@@ -1065,8 +1078,8 @@
 							:cx="placement.externalAnchor.x"
 							:cy="placement.externalAnchor.y"
 							r="10"
-							fill="#2a2a28"
-							stroke="#4a4a46"
+							:fill="RAUKK_VIZ_SURFACE.rule"
+							:stroke="RAUKK_VIZ_INK.faint"
 							stroke-dasharray="3 3" />
 						<text
 							:x="placement.externalAnchor.x - 16"
@@ -1177,9 +1190,9 @@
 
 <style scoped>
 	svg text {
-		font:
-			11px system-ui,
-			sans-serif;
+		/* inherit the app face, never system-ui: a chart label must not
+		 read in a different typeface to the prose around it */
+		font-size: 11px;
 		fill: rgba(255, 255, 255, 0.7);
 		pointer-events: none;
 	}
@@ -1193,7 +1206,7 @@
 	}
 	svg text.ssysname {
 		font-size: 10px;
-		fill: #56554f;
+		fill: var(--rviz-ink-dim);
 		letter-spacing: 0.14em;
 		text-transform: uppercase;
 	}

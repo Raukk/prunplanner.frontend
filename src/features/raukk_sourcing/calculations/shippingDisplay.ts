@@ -7,6 +7,7 @@
 import {
 	calculateCostPerTrip,
 	calculateTripDamage,
+	raukkPairGatePath,
 	raukkLaneLegs,
 } from "@/features/raukk_sourcing/calculations/shipping";
 import {
@@ -181,7 +182,8 @@ export function buildLmComparison(
 						pair.route,
 						leg.profile,
 						config,
-						repairBillCost
+						repairBillCost,
+						raukkPairGatePath(pair, leg.profile) ?? undefined
 					),
 			0
 		);
@@ -193,7 +195,8 @@ export function buildLmComparison(
 						pair.route,
 						pair.profile,
 						config,
-						repairBillCost
+						repairBillCost,
+						raukkPairGatePath(pair, pair.profile) ?? undefined
 					);
 
 		/** Trip weighted damage of the own fleet, the pairs own profile
@@ -204,10 +207,19 @@ export function buildLmComparison(
 						(sum, leg) =>
 							sum +
 							leg.tripsPerDay *
-								calculateTripDamage(pair.route, leg.profile),
+								calculateTripDamage(
+									pair.route,
+									leg.profile,
+									raukkPairGatePath(pair, leg.profile) ??
+										undefined
+								),
 						0
 					) / tripsPerDay
-				: calculateTripDamage(pair.route, pair.profile);
+				: calculateTripDamage(
+						pair.route,
+						pair.profile,
+						raukkPairGatePath(pair, pair.profile) ?? undefined
+					);
 
 		const lmRatePerTrip: number | undefined =
 			config.lmRates?.[pair.pairKey];

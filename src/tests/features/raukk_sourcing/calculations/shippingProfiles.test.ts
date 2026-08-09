@@ -47,11 +47,11 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 		]);
 	});
 
-	it("builds one preset per hull and reactor", () => {
+	it("builds one preset per hull and reactor, plus an STL-only one", () => {
 		const presets: IRaukkShipProfile[] = raukkShipProfilePresets();
 
 		expect(presets).toHaveLength(
-			RAUKK_SHIP_HULLS.length * RAUKK_FTL_REACTORS.length
+			RAUKK_SHIP_HULLS.length * (RAUKK_FTL_REACTORS.length + 1)
 		);
 		expect(new Set(presets.map((preset) => preset.id)).size).toBe(
 			presets.length
@@ -157,9 +157,10 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			raukkShipProfilePresets().forEach((preset) => {
 				expect(preset.costPerParsec).toBeNull();
 				expect(preset.stlBlockCost).toBeNull();
-				// a fresh game account starts with TWO SCB standard ships
+				// a fresh game account starts with TWO SCB ships, counted
+				// on the offered quick-charge preset
 				expect(preset.shipsAvailable).toBe(
-					preset.id === "500x500-standard" ? 2 : 1
+					preset.id === "500x500-quick-charge" ? 2 : 1
 				);
 			});
 		});
@@ -282,10 +283,26 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			expect(completed.stlFuelPerBlock).toBe(7);
 		});
 
-		it("presets an FTL ship, never an STL-only one", () => {
-			raukkShipProfilePresets().forEach((preset) => {
-				expect(preset.stlOnly).toBe(false);
-			});
+		it("gives every hull an STL-only preset of its own", () => {
+			const presets: IRaukkShipProfile[] = raukkShipProfilePresets();
+
+			const stl: IRaukkShipProfile[] = presets.filter(
+				(preset) => preset.stlOnly
+			);
+
+			// exactly one per hull, and it never shadows an FTL build
+			expect(stl).toHaveLength(RAUKK_SHIP_HULLS.length);
+			expect(stl.map((preset) => preset.id)).toStrictEqual(
+				RAUKK_SHIP_HULLS.map(
+					(hull) => `${hull.cargoWeight}x${hull.cargoVolume}-stl`
+				)
+			);
+
+			presets
+				.filter((preset) => !preset.stlOnly)
+				.forEach((preset) => {
+					expect(preset.id).not.toContain("-stl");
+				});
 		});
 
 		it("reads an absent STL-only flag as the FTL ship it was", () => {
@@ -322,6 +339,6 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			cxAnchorMode: "nearest",
 		});
 		// the SCB starter hull every new game account flies
-		expect(RAUKK_DEFAULT_SHIP_PROFILE_ID).toBe("500x500-standard");
+		expect(RAUKK_DEFAULT_SHIP_PROFILE_ID).toBe("500x500-quick-charge");
 	});
 });

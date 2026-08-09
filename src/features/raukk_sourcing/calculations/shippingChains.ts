@@ -14,6 +14,7 @@ import {
 	resolveSystemId,
 	routeBetween,
 	routePath,
+	straightLineParsecs,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import { RAUKK_CX_SYSTEM_IDS } from "@/features/raukk_sourcing/calculations/routeDistance";
 import {
@@ -23,6 +24,8 @@ import {
 } from "@/features/raukk_sourcing/calculations/shipping";
 import { RAUKK_DEFAULT_CHAIN_DATA } from "@/features/raukk_sourcing/calculations/shippingChainData";
 import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+// raukk: a gate measures the SHIP, not its cargo hold
+import { raukkHullVolumeM3 } from "@/features/raukk_sourcing/calculations/shippingHullVolume";
 import {
 	RAUKK_DEFAULT_CADENCE_REPAIR_DAYS,
 	raukkCadenceCaps,
@@ -41,6 +44,9 @@ import {
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import {
 	IRaukkGateLegCost,
+	raukkFasterGatePath,
+	raukkFtlJumpsOf,
+	raukkFtlParsecsOf,
 	raukkGateLegCost,
 	raukkGateOnlyPath,
 } from "@/features/raukk_sourcing/calculations/shippingStl";
@@ -97,6 +103,8 @@ export const RAUKK_DEFAULT_CHAIN_ROUTES: IRaukkRouteDistance = {
 	resolveSystemId,
 	path: routePath,
 	nearestNeighbor,
+	// raukk: the gap a gate would bridge, needed by the gate planning
+	straightLineParsecs,
 	// raukk: the gate aware metric, needed by the STL-only routing
 	fastestPath: fastestRoutePath,
 };
@@ -259,8 +267,20 @@ export function chainStopSystemId(
 export interface IRaukkChainLegShip {
 	/** True for a hull without an FTL drive, see `IRaukkShipProfile` */
 	stlOnly: boolean;
-	/** Hull volume in m³, gate links below it do not admit the ship */
+	/** SHIP volume in m³, gate links below it do not admit the ship */
 	shipVolumeM3: number;
+	/**
+	 * Minutes the hull takes per parsec of FTL flight.
+	 *
+	 * Needed so the gate comparison is made at THIS hull's speed: a fast
+	 * ship beats more gates than a slow one, and asking the question with
+	 * a reference hull would answer it for a ship nobody is flying.
+	 * Absent on legs built before gates could serve an FTL hull, which
+	 * then keep their pure FTL routing.
+	 */
+	minutesPerParsec?: number;
+	/** Minutes the hull's reactor takes to charge, per jump */
+	chargeMinutes?: number;
 }
 
 /**
@@ -274,7 +294,19 @@ export interface IRaukkChainLegShip {
 export function raukkChainLegShip(
 	profile: IRaukkResolvedShipProfile
 ): IRaukkChainLegShip {
-	return { stlOnly: profile.stlOnly, shipVolumeM3: profile.cargoVolume };
+	return {
+		stlOnly: profile.stlOnly,
+		// the SHIP's volume, which is what a gate measures — not the
+		// cargo hold's, which is some 600 m³ smaller and would let a hull
+		// through a gate the game would turn away
+		shipVolumeM3: raukkHullVolumeM3(
+			profile,
+			profile.stlOnly,
+			profile.ftlReactor
+		),
+		minutesPerParsec: profile.minutesPerParsec,
+		chargeMinutes: profile.chargeMinutes,
+	};
 }
 
 /**
@@ -338,20 +370,32 @@ export function buildChainLegs(
 
 		if (!leg.routable) return { ...leg, reason: "unresolved" };
 
-		if (ship?.stlOnly !== true || leg.sameSystem) return leg;
+		if (ship === undefined || leg.sameSystem) return leg;
 
-		const gatePath: IRaukkMultiModalPath | null = raukkGateOnlyPath(
+		if (ship.stlOnly) {
+			const gatePath: IRaukkMultiModalPath | null = raukkGateOnlyPath(
+				routes,
+				fromSystemId!,
+				toSystemId!,
+				ship.shipVolumeM3
+			);
+
+			if (gatePath === null) {
+				return { ...leg, routable: false, reason: "stl-only-no-gate" };
+			}
+
+			return { ...leg, gatePath };
+		}
+
+		const mixedPath: IRaukkMultiModalPath | null = raukkFasterGatePath(
 			routes,
 			fromSystemId!,
 			toSystemId!,
-			ship.shipVolumeM3
+			leg.route!,
+			ship
 		);
 
-		if (gatePath === null) {
-			return { ...leg, routable: false, reason: "stl-only-no-gate" };
-		}
-
-		return { ...leg, gatePath };
+		return mixedPath === null ? leg : { ...leg, mixedPath };
 	});
 }
 
@@ -462,6 +506,19 @@ export function claimChainFlows(
 /** Pricing of one legs distance term, damage included */
 interface ILegPricing {
 	effectiveParsecs: number;
+	/**
+	 * Parsecs the ship actually FLIES under its own drive.
+	 *
+	 * Split from `effectiveParsecs` because the two answer different
+	 * questions once a leg may mix both modes. `effectiveParsecs` is the
+	 * whole distance ridden and weights the per flow allocation; this is
+	 * the only figure a PER PARSEC rate — fuel, damage — may multiply,
+	 * because a gate hop covers its distance without flying it.
+	 *
+	 * Equal to `effectiveParsecs` on a plain FTL leg, and zero on a pure
+	 * gate leg and on every same system leg.
+	 */
+	ftlParsecs: number;
 	effectiveJumps: number;
 	distanceCost: number;
 	sameSystemMode: RAUKK_SAME_SYSTEM_MODE | null;
@@ -529,6 +586,43 @@ function pathMeanDensity(
 }
 
 /**
+ * Parsec weighted mean meteoroid density of the FTL hops of a path.
+ *
+ * The multi modal counterpart of {@link pathMeanDensity}: only the hops
+ * the ship actually flies contribute, because a gate traversal crosses
+ * no meteoroids and weighting its distance into the mean would dilute
+ * the rate the flown hops are charged at. `null` when the path flies no
+ * FTL hop at all, which the caller reads as "no adjustment".
+ *
+ * @author raukk
+ *
+ * @param {IRaukkMultiModalPath} path Multi modal path
+ * @param {IRaukkChainStaticData} data Static lookups
+ * @param {number} densityRef Reference density, the fallback per system
+ * @returns {(number | null)} Mean density, null without an FTL hop
+ */
+function mixedPathMeanDensity(
+	path: IRaukkMultiModalPath,
+	data: IRaukkChainStaticData,
+	densityRef: number
+): number | null {
+	let weighted: number = 0;
+	let parsecs: number = 0;
+
+	path.hops.forEach((hop) => {
+		if (hop.kind !== "ftl" || hop.parsecs <= 0) return;
+
+		const from: number = data.densityOf(hop.fromSystemId) ?? densityRef;
+		const to: number = data.densityOf(hop.toSystemId) ?? densityRef;
+
+		weighted += hop.parsecs * ((from + to) / 2);
+		parsecs += hop.parsecs;
+	});
+
+	return parsecs > 0 ? weighted / parsecs : null;
+}
+
+/**
  * Prices the distance term and the damage rate of one leg.
  *
  * Ordinary legs pay one way parsecs times the profiles ȼ per parsec.
@@ -571,6 +665,7 @@ function priceLeg(
 ): ILegPricing {
 	const flat: ILegPricing = {
 		effectiveParsecs: 0,
+		ftlParsecs: 0,
 		effectiveJumps: 0,
 		distanceCost: 0,
 		sameSystemMode: null,
@@ -606,6 +701,54 @@ function priceLeg(
 		};
 	}
 
+	/*
+	 * An FTL hull on a route where a gate beat the network. Both modes
+	 * are paid for what each actually does: the FTL hops burn FTL fuel
+	 * per parsec and charge the reactor per jump, the gate hops pay a fee
+	 * and the sublight fuel of the traversal overhead and burn no FTL
+	 * fuel at all. `raukkGateLegCost` already ignores non gate hops, so
+	 * it reads a mixed path correctly with no change.
+	 *
+	 * SEAM, as above: `effectiveParsecs` is the WHOLE path, gate hops
+	 * included, because the per flow allocation weights by distance
+	 * ridden. Only `ftlParsecs` is ever multiplied by a per parsec rate.
+	 */
+	if (leg.mixedPath !== undefined) {
+		const gate: IRaukkGateLegCost = raukkGateLegCost(
+			leg.mixedPath,
+			profile
+		);
+
+		/*
+		 * Density of the hops the ship FLIES, gate hops excluded: a
+		 * traversal crosses no meteoroids, so weighting its distance into
+		 * the mean would dilute the rate the flown hops are charged at.
+		 */
+		const density: number | null = mixedPathMeanDensity(
+			leg.mixedPath,
+			data,
+			chainConfig.densityRef
+		);
+
+		return {
+			...flat,
+			effectiveParsecs: leg.mixedPath.parsecs,
+			ftlParsecs: raukkFtlParsecsOf(leg.mixedPath),
+			effectiveJumps: raukkFtlJumpsOf(leg.mixedPath),
+			distanceCost:
+				raukkFtlParsecsOf(leg.mixedPath) * profile.costPerParsec +
+				gate.fees +
+				gate.fuelCost,
+			pathMeanDensity: density,
+			damagePerParsec:
+				density !== null && chainConfig.densityRef > 0
+					? (profile.damagePerParsec * density) /
+						chainConfig.densityRef
+					: profile.damagePerParsec,
+			gate,
+		};
+	}
+
 	if (!leg.sameSystem) {
 		const path: IRaukkRoutePath | null =
 			routes.path?.(leg.fromSystemId, leg.toSystemId!) ?? null;
@@ -616,6 +759,7 @@ function priceLeg(
 
 		return {
 			effectiveParsecs: leg.route.parsecs,
+			ftlParsecs: leg.route.parsecs,
 			effectiveJumps: leg.route.jumps,
 			distanceCost: leg.route.parsecs * profile.costPerParsec,
 			sameSystemMode: null,
@@ -698,6 +842,8 @@ function priceLeg(
 
 	return {
 		effectiveParsecs: twoJumpParsecs!,
+		// the ship really flies out to the neighbour and back
+		ftlParsecs: twoJumpParsecs!,
 		effectiveJumps: 2,
 		distanceCost: twoJumpCost!,
 		sameSystemMode: "two-jump",
@@ -853,15 +999,18 @@ export function calculateChainShipping(
 		const gate: IRaukkGateLegCost | null = pricing[index].gate;
 
 		/*
-		 * A gate served leg takes the flat per traversal damage of
-		 * shipping-calibration.md section 4 and NO per parsec damage:
-		 * the ship never flies those parsecs, the gate does.
+		 * Both modes wear the hull for what each of them does, and a leg
+		 * may be either or BOTH. Every gate traversal takes the flat
+		 * damage of shipping-calibration.md section 4 and no per parsec
+		 * damage — the ship never flies those parsecs, the gate does —
+		 * while the parsecs it does fly are charged at the per parsec
+		 * rate. `ftlParsecs` is zero on a pure gate leg and equal to the
+		 * whole route on a leg with no gate in it, so the one expression
+		 * covers all three cases.
 		 */
 		return (
-			(gate !== null
-				? gate.damage
-				: pricing[index].effectiveParsecs *
-					pricing[index].damagePerParsec) +
+			pricing[index].ftlParsecs * pricing[index].damagePerParsec +
+			(gate !== null ? gate.damage : 0) +
 			profile.damagePerStlBlock * pricing[index].blockDamageFactor
 		);
 	});
@@ -916,13 +1065,24 @@ export function calculateChainShipping(
 	const legMinutes: number[] = legs.map((leg, index) => {
 		const gate: IRaukkGateLegCost | null = pricing[index].gate;
 
-		// gate minutes are the measured traversal time and replace the
-		// hulls own FTL speed, which an STL-only ship does not have
+		/*
+		 * Three flight models, in order of specificity:
+		 *
+		 * - a MIXED path already timed both of its modes on this hull's
+		 *   own speed, so its own total is the answer — taking the gate
+		 *   minutes alone would drop the FTL hops it also flies;
+		 * - a pure GATE path (an STL-only hull) is the measured traversal
+		 *   time, which replaces an FTL speed the ship does not have;
+		 * - otherwise the FTL model, exactly as before gates existed.
+		 */
 		const flight: number =
-			gate !== null
-				? gate.minutes
-				: pricing[index].effectiveParsecs * profile.minutesPerParsec +
-					pricing[index].effectiveJumps * profile.chargeMinutes;
+			leg.mixedPath !== undefined
+				? leg.mixedPath.minutes
+				: gate !== null
+					? gate.minutes
+					: pricing[index].effectiveParsecs *
+							profile.minutesPerParsec +
+						pricing[index].effectiveJumps * profile.chargeMinutes;
 
 		return flight + stlBlockMinutes(profile, loads[index] / tripsPerDay);
 	});

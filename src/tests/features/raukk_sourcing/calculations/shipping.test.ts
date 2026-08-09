@@ -179,6 +179,7 @@ describe("Raukk Sourcing: Shipping", () => {
 				MFK: 12,
 				FLP: 8,
 			});
+			// 80% condition, which is 20% accumulated damage
 			expect(RAUKK_REPAIR_AT_DAMAGE).toBe(0.2);
 		});
 
@@ -791,6 +792,41 @@ describe("Raukk Sourcing: Shipping", () => {
 				expect(leg.unservableReason).toBeNull();
 			});
 
+			it("falls back to the smallest OWNED hull, never the default", () => {
+				// every owned hull is STL only and no gate serves the
+				// lane: the pick has nothing to choose from
+				const [leg] = raukkLaneLegs(
+					{
+						...fleetPair(
+							[ticker("ORE", 5000, 1, 1)],
+							[stlHull("stl_heavy"), stlHull("stl_small")]
+						),
+						hulls: {
+							owned: [
+								{
+									...stlHull("stl_heavy"),
+									shipTypeId: "stl_heavy",
+								},
+								{
+									...hull("stl_small", 500, 500),
+									profile: {
+										...hull("stl_small", 500, 500).profile,
+										stlOnly: true,
+									},
+								},
+							],
+							all: [hull("small", 500, 500)],
+						},
+					},
+					caps
+				);
+
+				// the pair profile is the account default, and a hull the
+				// account may own none of must never draw a fleet row
+				expect(leg.shipTypeId).toBe("stl_small");
+				expect(leg.shipTypeId).not.toBe(profile.id);
+			});
+
 			it("is not advised for such a lane either", () => {
 				const [leg] = raukkLaneLegs(
 					{
@@ -810,7 +846,7 @@ describe("Raukk Sourcing: Shipping", () => {
 				expect(leg.advisory).toBeNull();
 			});
 
-			it("flies a same system lane like any other hull", () => {
+			it("flies a same system, depot served lane like any other hull", () => {
 				const [leg] = raukkLaneLegs(
 					{
 						...fleetPair(
@@ -818,11 +854,30 @@ describe("Raukk Sourcing: Shipping", () => {
 							[hull("small", 500, 500), stlHull("stl")]
 						),
 						route: { parsecs: 0, jumps: 0, sameSystem: true },
+						depotServed: true,
 					},
 					caps
 				);
 
 				expect(leg.shipTypeId).toBe("stl");
+				expect(leg.unservableReason).toBeNull();
+			});
+
+			it("is not picked for a lane that calls at no depot", () => {
+				const [leg] = raukkLaneLegs(
+					{
+						...fleetPair(
+							[ticker("ORE", 5000, 1, 1)],
+							[hull("small", 500, 500), stlHull("stl")]
+						),
+						// flyable — same system — but no depot to be based
+						// at, so the ship is never guessed onto it
+						route: { parsecs: 0, jumps: 0, sameSystem: true },
+					},
+					caps
+				);
+
+				expect(leg.shipTypeId).toBe("small");
 				expect(leg.unservableReason).toBeNull();
 			});
 

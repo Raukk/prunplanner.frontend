@@ -190,7 +190,51 @@ describe("Raukk Sourcing: True Cost", () => {
 			expect(result.outputs.RAT.breakdown.workforce).toBeCloseTo(25, 8);
 		});
 
-		it("charges only net inputs and allocates only net outputs", () => {
+		it("prices a partly self consumed output per unit MADE, and charges the consumer for what it ate", () => {
+			// SME makes 100 FE for 1000 ȼ of workforce a day, the STL line
+			// on the same base eats 90 of them and 10 leave the plan
+			const result = calculateTrueCosts({
+				planResult: planResult(
+					[
+						building("SME", -1000, [
+							{
+								inputs: [],
+								outputs: [{ ticker: "FE", amount: 100 }],
+							},
+						]),
+						building("STL", -500, [
+							{
+								inputs: [{ ticker: "FE", amount: 90 }],
+								outputs: [{ ticker: "STL", amount: 10 }],
+							},
+						]),
+					],
+					[mio("FE", 90, 100), mio("STL", 0, 10), mio("RAT", 100, 0)],
+					[mio("RAT", 100, 0)],
+					[mio("FE", 90, 0)]
+				),
+				repairCostPerDayByBuilding: {},
+				resolveInputPrice: marketResolver({ RAT: 10 }),
+			});
+
+			// SME carries 2/3 of the 1000 ȼ workforce bill by its weight:
+			// 666.67 over the 100 FE it MAKES, not over the 10 exported
+			expect(result.outputs.FE.unitsPerDay).toBe(10);
+			expect(result.outputs.FE.costPerUnit).toBeCloseTo(6.6666666, 5);
+
+			// STL pays its own 333.33 plus the 90 FE it ate
+			expect(result.outputs.STL.costPerUnit).toBeCloseTo(93.333333, 5);
+
+			// what LEAVES the plan carries the plans whole daily bill
+			// exactly once: 10 FE and 10 STL against 1000 ȼ of workforce
+			expect(
+				result.outputs.FE.costPerUnit * result.outputs.FE.unitsPerDay +
+					result.outputs.STL.costPerUnit *
+						result.outputs.STL.unitsPerDay
+			).toBeCloseTo(1000, 5);
+		});
+
+		it("charges only net inputs and prices outputs per unit made", () => {
 			// HYF produces 40 H2O, FP consumes 30 of them internally
 			const result = calculateTrueCosts({
 				planResult: planResult(
@@ -220,12 +264,14 @@ describe("Raukk Sourcing: True Cost", () => {
 			expect(result.outputs.H2O.unitsPerDay).toBe(10);
 			expect(result.outputs.DW.breakdown.inputs).toBeCloseTo(0, 10);
 
-			// RIG repair follows the net share of its H2O output
+			// RIG repair rides all 40 H2O it makes, not the 10 that leave
 			expect(result.outputs.H2O.breakdown.repair).toBeCloseTo(
-				100 / 10,
+				100 / 40,
 				8
 			);
-			expect(result.outputs.DW.breakdown.repair).toBeCloseTo(200 / 20, 8);
+			// DW carries its own repair plus the repair inside the 30 H2O
+			// it consumed: 200/20 + 30 * 2.5 / 20
+			expect(result.outputs.DW.breakdown.repair).toBeCloseTo(13.75, 8);
 		});
 
 		it("redistributes cost of fully self consumed recipes", () => {

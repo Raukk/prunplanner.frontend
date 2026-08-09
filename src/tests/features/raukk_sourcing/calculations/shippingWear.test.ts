@@ -58,7 +58,7 @@ describe("Raukk Sourcing: Shipping Wear", () => {
 
 	describe("raukkDaysUntilRepair", () => {
 		it("inverts a daily damage rate into the drydock cadence", () => {
-			// 1 % per day reaches the 20 % repair threshold in 20 days
+			// 1 % per day reaches 20 % damage — 80 % condition — in 20 days
 			expect(raukkDaysUntilRepair(0.01)).toBeCloseTo(20);
 		});
 

@@ -316,9 +316,19 @@
 	 * The status bar sticks at the very top, the toolbar parks directly
 	 * below it and the material i/o column below both. Heights are
 	 * measured instead of hardcoded, both bars wrap on narrow screens.
+	 *
+	 * raukk: the plan name and the plan actions travel with the status
+	 * bar (user request) — but only from the width where the three share
+	 * one row (@6xl). Below it they sit in rows of their own, and three
+	 * items sticking at the same offset would stack on top of each
+	 * other. They stay direct grid children rather than moving into a
+	 * sticky wrapper, for the reason the toolbar is one as well: a
+	 * wrapper would be the grid item and the layout inside it would go.
 	 */
 
 	const refStatusBarElement: Ref<HTMLElement | null> = ref(null);
+	const refPlanNameElement: Ref<HTMLElement | null> = ref(null);
+	const refPlanActionsElement: Ref<HTMLElement | null> = ref(null);
 	const refToolbarElement: Ref<HTMLElement | null> = ref(null);
 	const refToolViewElement: Ref<HTMLElement | null> = ref(null);
 
@@ -337,14 +347,42 @@
 	onMounted(() => {
 		if (typeof ResizeObserver === "undefined") return;
 
+		/**
+		 * Height an element contributes to the sticky header, which is
+		 * none at all while it is not sticky: below @6xl the plan name
+		 * and the actions scroll away, and counting them would park the
+		 * toolbar below a gap where nothing is pinned. The applied style
+		 * answers that — a container query decides it, so no media query
+		 * here could.
+		 */
+		function stickyHeightOf(element: HTMLElement | null): number {
+			if (!element) return 0;
+
+			return window.getComputedStyle(element).position === "sticky"
+				? element.offsetHeight
+				: 0;
+		}
+
 		stickyResizeObserver = new ResizeObserver(() => {
-			refStatusBarHeight.value =
-				refStatusBarElement.value?.offsetHeight ?? 0;
+			/*
+			 * The header row is as tall as its tallest PINNED member, and
+			 * that is not always the status bar: the plan name carries a
+			 * text-2xl heading and the actions a row of buttons.
+			 */
+			refStatusBarHeight.value = Math.max(
+				stickyHeightOf(refStatusBarElement.value),
+				stickyHeightOf(refPlanNameElement.value),
+				stickyHeightOf(refPlanActionsElement.value)
+			);
 			refToolbarHeight.value = refToolbarElement.value?.offsetHeight ?? 0;
 		});
 
 		if (refStatusBarElement.value)
 			stickyResizeObserver.observe(refStatusBarElement.value);
+		if (refPlanNameElement.value)
+			stickyResizeObserver.observe(refPlanNameElement.value);
+		if (refPlanActionsElement.value)
+			stickyResizeObserver.observe(refPlanActionsElement.value);
 		if (refToolbarElement.value)
 			stickyResizeObserver.observe(refToolbarElement.value);
 	});
@@ -729,9 +767,10 @@
 	<div class="@container">
 		<div
 			class="grid grid-cols-1 grid-rows-[repeat(6,auto)] md:grid-cols-[auto_1fr_auto] gap-x-3">
-			<!-- Plan Name & Selector -->
+			<!-- Plan Name & Selector (sticky once it shares the header row) -->
 			<div
-				class="p-3 row-1 col-1 flex flex-row flex-wrap gap-x-3 pt-3 pb-3 md:pb-0 @6xl:pb-3 items-baseline">
+				ref="refPlanNameElement"
+				class="p-3 row-1 col-1 flex flex-row flex-wrap gap-x-3 pt-3 pb-3 md:pb-0 @6xl:pb-3 items-baseline @6xl:sticky @6xl:top-0 @6xl:z-1000 @6xl:bg-(--app-bg)">
 				<h1 class="text-2xl font-bold text-white">
 					{{ planName }}
 				</h1>
@@ -755,9 +794,10 @@
 					:expert-data="result.experts"
 					:overview-data="overviewData" />
 			</div>
-			<!-- Plan Actions -->
+			<!-- Plan Actions (sticky once it shares the header row) -->
 			<div
-				class="p-3 row-2 md:row-1 md:col-3 py-3 flex flex-row flex-wrap gap-x-3">
+				ref="refPlanActionsElement"
+				class="p-3 row-2 md:row-1 md:col-3 py-3 flex flex-row flex-wrap gap-x-3 @6xl:sticky @6xl:top-0 @6xl:z-1000 @6xl:bg-(--app-bg)">
 				<HelpDrawer file-name="plan" />
 
 				<PButtonGroup v-if="userStore.isLoggedIn">

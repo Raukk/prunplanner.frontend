@@ -119,6 +119,11 @@ export interface IProductionBuildingRecipe {
 	recipe: IRecipeBuildingOption;
 	dailyShare: number;
 	time: number;
+	/** raukk: government fee of ONE batch, undefined while the planets
+	 * fees are unknown (FIO unreachable) — a fee of 0 is a real fee */
+	productionFeeBatch: number | undefined;
+	/** raukk: batch fee split evenly over the units the batch produces */
+	productionFeePerUnit: number | undefined;
 	cogm: IProductionBuildingRecipeCOGM | undefined;
 }
 

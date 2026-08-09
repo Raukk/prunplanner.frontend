@@ -910,12 +910,11 @@ Verified against both of the calculator's worked ships: a 90 plate LHP
 hull at 20 % damage takes 14 plates and bills 61,360 ȼ, and its fully
 shielded AHP ship 253,860 ȼ. Both reproduce exactly.
 
-THE THRESHOLD WAS WRONG, and had been since the first shipping commit.
-`RAUKK_REPAIR_AT_DAMAGE` was 0.8, from rounds 2 and 3 of
-shipping-decisions.md reading "players repair at 80 %" as 80 % DAMAGE
-rather than 80 % CONDITION. Round 3's own observations settle it against
-the law above, on the 71 structural elements that hull's blueprint panel
-states:
+THE THRESHOLD. `RAUKK_REPAIR_AT_DAMAGE` read 0.8 from the first
+shipping commit until ROUND 21 of shipping-decisions.md, which is where
+it was corrected to 0.2 — independently of this section and before it.
+What the law above adds is the arithmetic that proves the correction,
+on the 71 structural elements that hull's blueprint panel states:
 
 | observed | law | damage it implies |
 |---|---|---|
@@ -923,9 +922,10 @@ states:
 | LHP 11, SSC 11 at "80 %" | `ceil(71 × 0.20 × 0.75)` = 11 | 20 % |
 | — | `ceil(71 × 0.80 × 0.75)` = 43 | 80 % ✗ |
 
-So the quantities were always right and only the divisor was wrong, and
-the app has been charging **a quarter** of the repair cost it should.
-That is the single largest number this whole campaign has moved.
+So the quantities were always right and only the divisor was wrong. The
+correction itself belongs to round 21; this section supplies the law it
+falls out of, and the 4.5 % row is the part round 21 could only call
+"linear" — it is exact.
 
 ### 14.2 Damage is FOUR types, not one
 

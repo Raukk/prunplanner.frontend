@@ -58,7 +58,9 @@ export function useRaukkOversubReport(
 		sourcingStore.shippingConfig.enabled
 			? raukkOversubSort(
 					raukkOversubFleetRows(
-						sourcingStore.snapshots,
+						// scoped exactly like the fleet section itself:
+						// a plan assigned to no empire commits no ship time
+						sourcingStore.scopedSnapshots(),
 						sourcingStore.chains,
 						sourcingStore.chainResults,
 						sourcingStore.fleet

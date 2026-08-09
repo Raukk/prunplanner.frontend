@@ -34,6 +34,7 @@ import { useQuery } from "@/lib/query_cache/useQuery";
 import {
 	calculateProductionFeeBatch,
 	calculateProductionFeeDaily,
+	calculateProductionFeePerUnit,
 } from "@/features/planning/calculations/productionFeeCalculations";
 import { IFIOPlanetFees } from "@/features/api/fioData.types";
 
@@ -437,6 +438,20 @@ export async function usePlanCalculation(
 						`Unable to find recipe info for ${b.name} with recipe id ${r.recipeid}`
 					);
 				} else {
+					// raukk: government fee of a single batch, charged on
+					// nominal recipe time and therefore independent of the
+					// buildings efficiency and of the queued amount.
+					// Undefined while FIO never answered: the row then says
+					// the fee is unknown rather than showing a fake 0.
+					const productionFeeBatch: number | undefined =
+						planetFees.value === null
+							? undefined
+							: calculateProductionFeeBatch(
+									buildingData,
+									planetFees.value,
+									recipeInfo.time_ms
+								);
+
 					activeRecipes.push({
 						recipeId: r.recipeid,
 						amount: r.amount,
@@ -449,6 +464,14 @@ export async function usePlanCalculation(
 							roi: 0,
 							profitPerArea: 0,
 						},
+						productionFeeBatch,
+						productionFeePerUnit:
+							productionFeeBatch === undefined
+								? undefined
+								: calculateProductionFeePerUnit(
+										productionFeeBatch,
+										recipeInfo.outputs
+									),
 						cogm: undefined,
 					});
 				}
@@ -578,12 +601,9 @@ export async function usePlanCalculation(
 				const degradationShare: number = degradation * runtimeShare;
 				const workforceCostTotal: number = workforceDailyCost * -1;
 				const workforceCost: number = workforceCostTotal * runtimeShare;
-				// raukk: fee per batch, charged on nominal recipe time
-				const productionFee: number = calculateProductionFeeBatch(
-					buildingData,
-					planetFees.value,
-					ar.recipe.time_ms
-				);
+				// raukk: fee per batch, charged on nominal recipe time and
+				// already computed with the row itself; unknown fees cost 0
+				const productionFee: number = ar.productionFeeBatch ?? 0;
 
 				const inputCost: ICOGMMaterialCost[] = await Promise.all(
 					ar.recipe.inputs.map(async (inputMat) => {

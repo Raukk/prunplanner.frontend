@@ -12,11 +12,17 @@ import {
 import {
 	raukkHullLoads,
 	raukkPickHull,
+	raukkSmallestCandidate,
 } from "@/features/raukk_sourcing/calculations/shippingHull";
 import {
+	raukkFasterGatePath,
+	raukkFtlParsecsOf,
+	raukkGateLegCost,
 	raukkGateOnlyPath,
 	raukkStlOnlyCandidates,
 } from "@/features/raukk_sourcing/calculations/shippingStl";
+// raukk: a gate measures the SHIP, not its cargo hold
+import { raukkHullVolumeM3 } from "@/features/raukk_sourcing/calculations/shippingHullVolume";
 import {
 	RAUKK_DEFAULT_REPAIR_BOM,
 	RAUKK_REPAIR_AT_DAMAGE,
@@ -24,11 +30,20 @@ import {
 	raukkRepairBillCost,
 } from "@/features/raukk_sourcing/calculations/shippingRepair";
 
-// Re-exported so the threshold keeps its historical import site
+/*
+ * The threshold's definition moved to `shippingRepair.ts` — a leaf
+ * module the bill law needs it in too, and importing it back from here
+ * would be a cycle. Re-exported so its historical import site still
+ * works; the reasoning behind the 0.2 is unchanged and lives with it.
+ */
 export { RAUKK_REPAIR_AT_DAMAGE };
 
 // Types & Interfaces
-import { IRaukkRoute } from "@/features/raukk_sourcing/calculations/routeDistance";
+import {
+	IRaukkMultiModalPath,
+	IRaukkRoute,
+} from "@/features/raukk_sourcing/calculations/routeDistance";
+import { IRaukkGateLegCost } from "@/features/raukk_sourcing/calculations/shippingStl";
 import {
 	IRaukkCadenceCaps,
 	IRaukkDirectionLoad,
@@ -62,12 +77,13 @@ const MINUTES_PER_DAY: number = 24 * 60;
 /**
  * Repair bill of one full repair cycle, in units per ticker.
  *
- * DERIVED as of round 4 from the default build and the repair law of
- * `shippingRepair.ts`, rather than the four numbers round 3 read off one
- * hull. It reproduces that observation exactly — `LHP 11`, `SSC 11`,
- * `MFK 12`, `FLP 8` — because the observation was always the law applied
- * to a 71 element hull at a fifth of condition lost; only the threshold
- * it was filed under was wrong. See {@link RAUKK_REPAIR_AT_DAMAGE}.
+ * Observed at 80% condition — the {@link RAUKK_REPAIR_AT_DAMAGE} cycle
+ * this bill belongs to — and now DERIVED from that same cycle through
+ * the BOM law of `shippingRepair.ts` rather than carried as four fixed
+ * numbers. It reproduces the observation exactly: `ceil(71 × 0.20 ×
+ * 0.75)` is the eleven LHP and eleven SSC seen on a hull whose panel
+ * states 71 structural elements, and MFK and FLP are fixed components
+ * paid whatever the damage.
  *
  * Deliberate v1 limitation, unchanged: these tickers are priced through
  * the snapshots resolver but their quantities are NOT booked into draws
@@ -168,11 +184,73 @@ export function calculateRepairBillCost(
  */
 export function calculateTripDamage(
 	route: IRaukkRoute,
-	profile: IRaukkResolvedShipProfile
+	profile: IRaukkResolvedShipProfile,
+	mixedPath?: IRaukkMultiModalPath
 ): number {
+	/*
+	 * A gate hop covers its distance without flying it: no per parsec
+	 * damage, a flat hit per traversal instead. Only the FTL hops of the
+	 * path may be multiplied by the per parsec rate.
+	 */
+	if (mixedPath !== undefined) {
+		const gate: IRaukkGateLegCost = raukkGateLegCost(mixedPath, profile);
+
+		return (
+			2 * raukkFtlParsecsOf(mixedPath) * profile.damagePerParsec +
+			2 * gate.damage +
+			2 * profile.damagePerStlBlock
+		);
+	}
+
 	return (
 		2 * route.parsecs * profile.damagePerParsec +
 		2 * profile.damagePerStlBlock
+	);
+}
+
+/**
+ * The gate route a lane should be flown on, `null` when the FTL network
+ * still wins.
+ *
+ * Same question {@link raukkFasterGatePath} answers for a chain leg, put
+ * where a lane can ask it: a lane carries its endpoints and its lookups
+ * for exactly this reason. Absent endpoints — every caller predating
+ * gates, the test literals included — means the lane keeps its pure FTL
+ * routing, which is the safe reading of "no gate network known".
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippingPair} pair Lane
+ * @param {IRaukkResolvedShipProfile} profile Hull flying it
+ * @returns {(IRaukkMultiModalPath | null)} Faster gate path, or null
+ */
+export function raukkPairGatePath(
+	pair: IRaukkShippingPair,
+	profile: IRaukkResolvedShipProfile
+): IRaukkMultiModalPath | null {
+	if (
+		pair.route.sameSystem ||
+		profile.stlOnly ||
+		pair.fromSystemId === undefined ||
+		pair.toSystemId === undefined ||
+		pair.routes === undefined
+	)
+		return null;
+
+	return raukkFasterGatePath(
+		pair.routes,
+		pair.fromSystemId,
+		pair.toSystemId,
+		pair.route,
+		{
+			shipVolumeM3: raukkHullVolumeM3(
+				profile,
+				profile.stlOnly,
+				profile.ftlReactor
+			),
+			minutesPerParsec: profile.minutesPerParsec,
+			chargeMinutes: profile.chargeMinutes,
+		}
 	);
 }
 
@@ -192,10 +270,12 @@ export function calculateTripDamage(
 export function calculateRepairCostPerTrip(
 	route: IRaukkRoute,
 	profile: IRaukkResolvedShipProfile,
-	repairBillCost: number
+	repairBillCost: number,
+	mixedPath?: IRaukkMultiModalPath
 ): number {
 	return (
-		(calculateTripDamage(route, profile) / RAUKK_REPAIR_AT_DAMAGE) *
+		(calculateTripDamage(route, profile, mixedPath) /
+			RAUKK_REPAIR_AT_DAMAGE) *
 		repairBillCost
 	);
 }
@@ -219,16 +299,31 @@ export function calculateCostPerTrip(
 	route: IRaukkRoute,
 	profile: IRaukkResolvedShipProfile,
 	config: IRaukkShippingConfig,
-	repairBillCost: number
+	repairBillCost: number,
+	mixedPath?: IRaukkMultiModalPath
 ): number {
+	/*
+	 * Both modes pay for what each does: the FTL hops burn fuel per
+	 * parsec, the gate hops pay their fee and the sublight fuel of the
+	 * traversal overhead, and neither pays the other's bill. Both
+	 * directions of the round trip, so both fees are charged.
+	 */
+	const gate: IRaukkGateLegCost | null =
+		mixedPath !== undefined ? raukkGateLegCost(mixedPath, profile) : null;
+
 	const distanceCost: number = route.sameSystem
 		? config.sameSystemFlatCost
-		: 2 * route.parsecs * profile.costPerParsec;
+		: mixedPath !== undefined && gate !== null
+			? 2 *
+				(raukkFtlParsecsOf(mixedPath) * profile.costPerParsec +
+					gate.fees +
+					gate.fuelCost)
+			: 2 * route.parsecs * profile.costPerParsec;
 
 	return (
 		distanceCost +
 		2 * profile.stlBlockCost +
-		calculateRepairCostPerTrip(route, profile, repairBillCost)
+		calculateRepairCostPerTrip(route, profile, repairBillCost, mixedPath)
 	);
 }
 
@@ -275,11 +370,18 @@ export function calculateRoundTripMinutes(
 	route: IRaukkRoute,
 	profile: IRaukkResolvedShipProfile,
 	loadFactorOut: number,
-	loadFactorBack: number
+	loadFactorBack: number,
+	mixedPath?: IRaukkMultiModalPath
 ): number {
+	// a mixed path already timed both of its modes on this hull's speed
+	const flight: number =
+		mixedPath !== undefined
+			? 2 * mixedPath.minutes
+			: 2 * route.parsecs * profile.minutesPerParsec +
+				2 * route.jumps * profile.chargeMinutes;
+
 	return (
-		2 * route.parsecs * profile.minutesPerParsec +
-		2 * route.jumps * profile.chargeMinutes +
+		flight +
 		stlBlockMinutes(profile, loadFactorOut) +
 		stlBlockMinutes(profile, loadFactorBack)
 	);
@@ -404,6 +506,16 @@ function stlOnlyServes(pair: IRaukkShippingPair): boolean {
  * advisory. Without any fleet data at all the pairs own profile flies the
  * leg, which is the behaviour of every caller that knows no fleet.
  *
+ * A pick that finds NOTHING to choose from — every owned hull filtered
+ * out as non-FTL on a leg no gate serves or no depot bases — falls back
+ * to the smallest OWNED hull rather than to the pairs profile: the pair
+ * profile is the account default, and defaulting there assigns work to a
+ * hull the account may own none of, which then draws a fleet row with a
+ * capacity of zero. The leg still fails its own STL validation, but it
+ * fails on a ship that exists. Only an account whose every hull is
+ * non-FTL reaches this at all, and for such an account there is no
+ * better OWNED answer to give.
+ *
  * @author raukk
  *
  * @param {IRaukkShippingPair} pair Route pair the leg belongs to
@@ -429,18 +541,24 @@ function legHull(
 	if (pair.hulls.manual !== undefined)
 		return { candidate: pair.hulls.manual, advisory: null };
 
-	// raukk: an STL-only hull is never picked for a lane it cannot fly,
-	// neither as an assignment nor as an advisory — advising a ship that
-	// would fail validation is worse than advising nothing
+	// raukk: an STL-only hull is never picked for a lane it cannot fly or
+	// is not based on, neither as an assignment nor as an advisory —
+	// advising a ship that would fail validation, or that would have to
+	// live away from its depot, is worse than advising nothing
+	const depotServed: boolean = pair.depotServed === true;
+
 	const owned: IRaukkHullPick | null = raukkPickHull(
-		raukkStlOnlyCandidates(pair.hulls.owned, gateServable),
+		raukkStlOnlyCandidates(pair.hulls.owned, gateServable, depotServed),
 		demand,
 		capDays
 	);
-	const candidate: IRaukkHullCandidate = owned?.candidate ?? fallback;
+	const candidate: IRaukkHullCandidate =
+		owned?.candidate ??
+		raukkSmallestCandidate(pair.hulls.owned) ??
+		fallback;
 
 	const ideal: IRaukkHullPick | null = raukkPickHull(
-		raukkStlOnlyCandidates(pair.hulls.all, gateServable),
+		raukkStlOnlyCandidates(pair.hulls.all, gateServable, depotServed),
 		demand,
 		capDays
 	);
@@ -760,17 +878,26 @@ export function calculatePairShipping(
 	let shippingFraction: number | null = 0;
 
 	legs.forEach((leg) => {
+		/*
+		 * Per LEG, because the hull is: the automatic pick may put a
+		 * different profile on each cadence class, and a gate that a
+		 * quick WCB beats is one a slow HCB gladly takes.
+		 */
+		const mixedPath: IRaukkMultiModalPath | undefined =
+			raukkPairGatePath(pair, leg.profile) ?? undefined;
+
 		// a hired lane wears someone elses hull, that is a hard zero —
 		// the same reasoning that zeroes its shipping fraction below
 		const damagePerTrip: number = hired
 			? 0
-			: calculateTripDamage(pair.route, leg.profile);
+			: calculateTripDamage(pair.route, leg.profile, mixedPath);
 		const repairCostPerTrip: number = hired
 			? 0
 			: calculateRepairCostPerTrip(
 					pair.route,
 					leg.profile,
-					repairBillCost
+					repairBillCost,
+					mixedPath
 				);
 		const costPerTrip: number =
 			lmRatePerTrip !== undefined
@@ -779,7 +906,8 @@ export function calculatePairShipping(
 						pair.route,
 						leg.profile,
 						config,
-						repairBillCost
+						repairBillCost,
+						mixedPath
 					);
 
 		const legDailyCost: number = leg.tripsPerDay * costPerTrip;
@@ -788,7 +916,8 @@ export function calculatePairShipping(
 			pair.route,
 			leg.profile,
 			leg.loadOut.loads / leg.tripsPerDay,
-			leg.loadBack.loads / leg.tripsPerDay
+			leg.loadBack.loads / leg.tripsPerDay,
+			mixedPath
 		);
 
 		/*

@@ -24,6 +24,20 @@ export interface IRaukkShipHull {
 	cargoWeight: number;
 	/** Cargo volume capacity in m³ */
 	cargoVolume: number;
+	/**
+	 * Volume of the SHIP, m³ — not of its cargo hold.
+	 *
+	 * The figure a gate measures: the in-game blueprint screen states it
+	 * as "SHIP OVERVIEW → VOLUME", separately from "CARGO → VOLUME
+	 * CAPACITY", and a gate's clearance is compared against this one. A
+	 * 5,000 m³ hold rides in a ship of about 5,837 m³.
+	 *
+	 * Absent means DERIVE, see `raukkHullVolumeM3`: the derivation is a
+	 * fit against real blueprints and a good default, while this field is
+	 * the figure the user read off their own ship and is always believed
+	 * over it.
+	 */
+	hullVolumeM3?: number;
 }
 
 /**
@@ -242,6 +256,19 @@ export interface IRaukkShippingPair {
 	fromSystemId?: string;
 	toSystemId?: string;
 	routes?: IRaukkRouteDistance;
+	/**
+	 * True when one END of the lane is a marked depot.
+	 *
+	 * The home an STL-only hull is based at, and therefore the second
+	 * condition of offering one automatically — see
+	 * `raukkStlOnlyCandidates`. Resolved where the lane is BUILT, the
+	 * only place that knows the two PLANETS: everything downstream sees
+	 * systems, and a depot is a planet.
+	 *
+	 * Absent reads as no depot, which is what every lane predating them
+	 * was.
+	 */
+	depotServed?: boolean;
 	out: IRaukkShippedTicker[];
 	back: IRaukkShippedTicker[];
 	/**
