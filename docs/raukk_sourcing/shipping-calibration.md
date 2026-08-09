@@ -1000,5 +1000,21 @@ tested and sourced; everything below is known-unknown.
    derives; §2.3 has the component table a ship designer would need.
 7. **`minutesPerParsec` from the panel** (§11.3). A two parameter fit to
    three observations. More hulls would firm it up.
-8. **Repair materials are not booked into draws or edges** — the v1
-   limitation of `RAUKK_REPAIR_BILL`, untouched by round 4.
+8. **Self-sustaining repairs: book repair materials as DRAWS**
+   (user request, 2026-08-09). Repair tickers are priced but their
+   quantities go nowhere, so a colony that produces LHP, SSC, MFK or FLP
+   cannot supply its own fleet. Fuel already works exactly this way and
+   is the template: `raukkFuelUnitsPerDay` states the daily burn in
+   units and `withFuelDraws` books it against whichever plan the
+   resolver sourced the ticker from, which is what makes fuel real
+   tonnage off a producer's output rather than a pure cost.
+
+   The mirror for repair is `(damagePerDay / RAUKK_REPAIR_AT_DAMAGE) ×
+   billUnits` per ticker — `shippingWear.ts` and
+   `shippingFleetDisplay.ts` already compute the left half — fed through
+   a `withRepairDraws` alongside `withFuelDraws`.
+
+   NOT a mechanical change: `raukkSourcingPricing.ts` documents the
+   current exclusion as deliberate, and booking repair draws pulls those
+   tickers into the cycle guard and the base fraction. Wants its own
+   round, with the supply-loop behaviour thought through.
