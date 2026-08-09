@@ -419,10 +419,16 @@ describe("queryStore: hydration", () => {
 		expect(mocks.fetchTtl).not.toHaveBeenCalled();
 	});
 
-	it("retries hydration after the key was invalidated", async () => {
+	it("does not re-hydrate after the key was invalidated", async () => {
+		/*
+			An invalidation means a mutation made this key stale. Mutations
+			do not write through to the stores hydration reads from, so a
+			second hydration would rebuild the pre-mutation payload and
+			silently undo the invalidation.
+		*/
 		mocks.hydrateTtl.mockResolvedValueOnce({ v: "local-1" });
 		mocks.hydrateTtl.mockResolvedValueOnce({ v: "local-2" });
-		mocks.fetchTtl.mockImplementation(() => new Promise(() => {}));
+		mocks.fetchTtl.mockResolvedValue({ v: "server" });
 
 		const key: JSONValue = ["ttlQuery", "h7"];
 
@@ -430,8 +436,8 @@ describe("queryStore: hydration", () => {
 
 		await store.invalidateKey(key, { skipRefetch: true });
 
-		expect(await exec("ttlQuery", "h7")).toStrictEqual({ v: "local-2" });
-		expect(mocks.hydrateTtl).toHaveBeenCalledTimes(2);
+		expect(await exec("ttlQuery", "h7")).toStrictEqual({ v: "server" });
+		expect(mocks.hydrateTtl).toHaveBeenCalledTimes(1);
 	});
 
 	it("falls back to the network when hydration throws", async () => {
@@ -992,5 +998,141 @@ describe("queryStore: remount guards", () => {
 		await store.refreshAll();
 
 		expect(store.refreshGeneration).toBe(generationBefore + 1);
+	});
+});
+
+describe("queryStore: invalidation during an in-flight execute", () => {
+	it("does not crash when an entry without hydrateFn is dropped mid-await", async () => {
+		let resolveFetch: (value: unknown) => void = () => {};
+
+		mocks.fetchPlain.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+
+		const pending = exec("plainQuery", "inv1");
+
+		// a mutation invalidates the key while execute awaits hydration
+		await store.invalidateKey(["plainQuery", "inv1"], {
+			skipRefetch: true,
+		});
+
+		resolveFetch({ v: "late" });
+
+		await expect(pending).resolves.toStrictEqual({ v: "late" });
+	});
+
+	it("does not let hydration revive an invalidated entry", async () => {
+		let resolveHydration: (value: unknown) => void = () => {};
+
+		mocks.hydrateTtl.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveHydration = resolve;
+				})
+		);
+		mocks.fetchTtl.mockResolvedValue({ v: "network" });
+
+		const hash: string = toCacheKey(["ttlQuery", "inv2"]);
+		const pending = exec("ttlQuery", "inv2");
+
+		await Promise.resolve();
+		await store.invalidateKey(["ttlQuery", "inv2"], { skipRefetch: true });
+
+		resolveHydration({ v: "stale-local" });
+
+		// the invalidated local payload must never reach the caller
+		await expect(pending).resolves.toStrictEqual({ v: "network" });
+		expect(store.cacheState[hash].data).toStrictEqual({ v: "network" });
+		expect(store.cacheState[hash].hydrated).toBe(false);
+	});
+
+	it("does not write a fetch result back into an invalidated entry", async () => {
+		let resolveFetch: (value: unknown) => void = () => {};
+
+		mocks.fetchPlain.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+
+		const hash: string = toCacheKey(["plainQuery", "inv3"]);
+		const pending = exec("plainQuery", "inv3");
+
+		// let execute get past hydration and into the fetch
+		await flushPromises();
+		await store.invalidateKey(["plainQuery", "inv3"], {
+			skipRefetch: true,
+		});
+
+		resolveFetch({ v: "pre-mutation" });
+		await pending;
+
+		// the entry stays dropped, the next read starts clean
+		expect(store.cacheState[hash]).toBeUndefined();
+		expect(store.cacheMeta[hash]).toBeUndefined();
+	});
+});
+
+describe("queryStore: mutation invalidation beats local storage", () => {
+	it("re-reads from the network after an invalidation, not from hydration", async () => {
+		// hydration mirrors the local planning store, which mutations
+		// never write to
+		mocks.hydrateTtl.mockResolvedValue({ v: "local-pre-mutation" });
+		mocks.fetchTtl.mockResolvedValue({ v: "server-post-mutation" });
+
+		const first = await exec("ttlQuery", "mut");
+		expect(first).toStrictEqual({ v: "local-pre-mutation" });
+
+		// a mutation drops the read key
+		await store.invalidateKey(["ttlQuery", "mut"], { skipRefetch: true });
+
+		// the view re-reads and must see the mutation
+		const second = await exec("ttlQuery", "mut");
+		expect(second).toStrictEqual({ v: "server-post-mutation" });
+		expect(mocks.hydrateTtl).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("queryStore: failed background revalidation backs off", () => {
+	it("does not retry a failed revalidation on every read", async () => {
+		mocks.fetchTtl.mockResolvedValueOnce({ v: 1 });
+		mocks.fetchTtl.mockRejectedValue(new Error("backend down"));
+
+		await exec("ttlQuery", "backoff");
+		expect(mocks.fetchTtl).toHaveBeenCalledTimes(1);
+
+		vi.setSystemTime(NOW + 5000);
+
+		// first stale read revalidates and fails
+		await exec("ttlQuery", "backoff");
+		await flushPromises();
+		expect(mocks.fetchTtl).toHaveBeenCalledTimes(2);
+
+		// subsequent reads inside the cooldown must not re-fire
+		await exec("ttlQuery", "backoff");
+		await exec("ttlQuery", "backoff");
+		store.checkEntryStatusAndRefresh();
+		await flushPromises();
+		expect(mocks.fetchTtl).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("queryStore: refreshAll re-entrancy", () => {
+	it("ignores a second refresh while one is running", async () => {
+		mocks.fetchTtl.mockResolvedValue({ v: 1 });
+		await exec("ttlQuery", "reentry");
+
+		const generationBefore: number = store.refreshGeneration;
+		const callsBefore: number = mocks.fetchTtl.mock.calls.length;
+
+		await Promise.all([store.refreshAll(), store.refreshAll()]);
+
+		expect(mocks.fetchTtl.mock.calls.length).toBe(callsBefore + 1);
+		expect(store.refreshGeneration).toBe(generationBefore + 1);
+		expect(store.refreshing).toBe(false);
 	});
 });

@@ -44,6 +44,14 @@ export const CACHE_GC_MS: number = 24 * 60 * 60 * 1000;
  */
 export const REFRESH_CONCURRENCY: number = 6;
 
+/**
+ * Cooldown after a failed background revalidation. A background failure
+ * deliberately keeps the cached payload and records no error, so without
+ * this the entry stays expired and would be retried on every watcher
+ * tick and every read for as long as the backend is down.
+ */
+export const REVALIDATE_RETRY_MS: number = 60_000;
+
 export const useQueryStore = defineStore(
 	"prunplanner_query_store",
 	() => {
@@ -105,6 +113,22 @@ export const useQueryStore = defineStore(
 		}
 
 		/**
+		 * Per key counter, bumped whenever an entry is dropped. Work that
+		 * started before a drop must not write its result back into the
+		 * entry, otherwise an invalidation triggered by a mutation is
+		 * silently undone by an older in-flight read.
+		 */
+		const invalidationEpoch = new Map<string, number>();
+
+		function epochOf(key: string): number {
+			return invalidationEpoch.get(key) ?? 0;
+		}
+
+		function bumpEpoch(key: string): void {
+			invalidationEpoch.set(key, epochOf(key) + 1);
+		}
+
+		/**
 		 * Incremented after every completed manual refresh. Views key
 		 * their data wrappers on it so a refresh re-reads the cache
 		 * without a page reload.
@@ -114,11 +138,24 @@ export const useQueryStore = defineStore(
 		function deleteState(key: string) {
 			delete cacheState[key];
 			delete cacheMeta[key];
-			hydrationAttempted.delete(key);
+			bumpEpoch(key);
+
+			/*
+				Deliberately keeps the hydration attempt. A key is dropped
+				because a mutation made it stale, and mutations do not
+				write through to the local stores hydration reads from, so
+				re-hydrating here would rebuild exactly the pre-mutation
+				payload the invalidation was meant to discard. Hydration
+				stays a once per session bootstrap, invalidation always
+				goes to the network. `$reset` clears it for the next user.
+			*/
 		}
 
 		function $reset(): void {
-			Object.keys(cacheState).forEach((key) => delete cacheState[key]);
+			Object.keys(cacheState).forEach((key) => {
+				delete cacheState[key];
+				bumpEpoch(key);
+			});
 			Object.keys(cacheMeta).forEach((key) => delete cacheMeta[key]);
 			hydrationAttempted.clear();
 			inFlight.clear();
@@ -273,8 +310,14 @@ export const useQueryStore = defineStore(
 				return false;
 			}
 
+			const startEpoch = epochOf(keyHash);
+
 			try {
 				const data = await definition.hydrateFn(params);
+
+				// the entry was invalidated while we read local storage,
+				// resurrecting it here would undo that invalidation
+				if (epochOf(keyHash) !== startEpoch) return false;
 
 				// nothing stored locally
 				if (data === null || data === undefined) return false;
@@ -361,6 +404,7 @@ export const useQueryStore = defineStore(
 			>;
 
 			const shouldCache = definition.persist !== false;
+			const startEpoch = epochOf(keyHash);
 
 			updateState(keyHash, {
 				definitionName,
@@ -380,6 +424,13 @@ export const useQueryStore = defineStore(
 						await definition.fetchFn(
 							params as ParamsOfDefinition<IQueryRepository[K]>
 						);
+
+					// invalidated mid-flight: hand the result to the
+					// caller but do not write it back, it is already
+					// known to be outdated
+					if (epochOf(keyHash) !== startEpoch) {
+						return result as DataOfDefinition<IQueryRepository[K]>;
+					}
 
 					if (shouldCache) {
 						const timestamp = Date.now();
@@ -407,8 +458,18 @@ export const useQueryStore = defineStore(
 						err instanceof Error ? err : new Error(String(err));
 
 					// a failed background refresh must not destroy the
-					// cached payload the user is currently looking at
-					if (background) {
+					// cached payload the user is currently looking at,
+					// nor may either case revive an invalidated entry
+					if (background || epochOf(keyHash) !== startEpoch) {
+						// a background failure records no error so the
+						// cached payload stays usable, so note the
+						// attempt instead or the entry stays expired and
+						// is retried on every tick and every read
+						if (cacheState[keyHash]) {
+							updateState(keyHash, {
+								revalidateFailedAt: Date.now(),
+							});
+						}
 						console.error(err);
 					} else {
 						updateState(keyHash, {
@@ -420,12 +481,16 @@ export const useQueryStore = defineStore(
 
 					throw error;
 				} finally {
-					updateState(keyHash, {
-						loading: background
-							? (cacheState[keyHash]?.loading ?? false)
-							: false,
-						revalidating: false,
-					});
+					// only clear the flags we set, an entry dropped mid
+					// flight must stay dropped
+					if (cacheState[keyHash]) {
+						updateState(keyHash, {
+							loading: background
+								? (cacheState[keyHash]?.loading ?? false)
+								: false,
+							revalidating: false,
+						});
+					}
 					inFlight.delete(keyHash);
 					if (!shouldCache) deleteState(keyHash);
 				}
@@ -454,6 +519,13 @@ export const useQueryStore = defineStore(
 		): void {
 			if (inFlight.has(keyHash)) return;
 
+			// back off after a failure, an entry serving stale data is
+			// not worth hammering an unreachable backend for
+			const failedAt = cacheState[keyHash]?.revalidateFailedAt ?? 0;
+			if (failedAt && Date.now() - failedAt < REVALIDATE_RETRY_MS) {
+				return;
+			}
+
 			runFetch(keyHash, definitionName, params, true).catch(() => {
 				/* handled in runFetch, cached data stays valid */
 			});
@@ -480,11 +552,30 @@ export const useQueryStore = defineStore(
 
 			updateState(keyHash, { expireTime: definition.expireTime });
 
+			const startEpoch = epochOf(keyHash);
+
 			// no payload in memory yet: try local storage before the
 			// network, this is what removes the loading screen after a
 			// hard refresh
 			if (!options?.forceRefetch && !hasCachedData(keyHash)) {
 				await ensureHydrated(keyHash, definitionName, params);
+			}
+
+			/*
+				Awaiting hydration gives an invalidation the chance to drop
+				this entry, so the invariant established above no longer
+				holds. Rebuild a clean entry and let it fall through to a
+				fetch rather than trusting anything from before the drop.
+			*/
+			if (epochOf(keyHash) !== startEpoch) {
+				delete cacheState[keyHash];
+			}
+
+			if (!cacheState[keyHash]) {
+				updateState(keyHash, {
+					definitionName,
+					expireTime: definition.expireTime,
+				});
 			}
 
 			const state = cacheState[keyHash]!;
@@ -788,6 +879,10 @@ export const useQueryStore = defineStore(
 		async function refreshAll<K extends keyof IQueryRepository>(
 			key?: JSONValue
 		): Promise<void> {
+			// a second pass would double every request and its finally
+			// would clear `refreshing` while the first is still running
+			if (refreshing.value) return;
+
 			refreshing.value = true;
 
 			const targets: {

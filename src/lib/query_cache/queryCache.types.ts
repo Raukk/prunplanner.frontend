@@ -24,6 +24,12 @@ export interface IQueryState<TParams, TData> {
 	hasData?: boolean;
 	/** Payload came from local storage rather than the network. */
 	hydrated?: boolean;
+	/**
+	 * When the last background revalidation failed. Background failures
+	 * record no `error` so the cached payload stays usable, which would
+	 * otherwise leave the entry permanently due for another attempt.
+	 */
+	revalidateFailedAt?: number;
 }
 
 /**
