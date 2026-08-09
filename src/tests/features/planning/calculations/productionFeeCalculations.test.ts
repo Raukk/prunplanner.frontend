@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
 	calculateProductionFeeBatch,
 	calculateProductionFeeDaily,
+	calculateProductionFeePerUnit,
 	calculateProductionFeeRate,
 } from "@/features/planning/calculations/productionFeeCalculations";
 
@@ -81,6 +82,22 @@ describe("productionFeeCalculations", () => {
 					12 * 60 * 60 * 1000
 				)
 			).toBe(2050);
+		});
+	});
+
+	describe("calculateProductionFeePerUnit", () => {
+		it("splits the batch fee evenly over all produced units", () => {
+			// 2050 over 4 + 1 units
+			expect(
+				calculateProductionFeePerUnit(2050, [
+					{ material_ticker: "AL", material_amount: 4 },
+					{ material_ticker: "SCR", material_amount: 1 },
+				])
+			).toBe(410);
+		});
+
+		it("returns 0 for a recipe without any output", () => {
+			expect(calculateProductionFeePerUnit(2050, [])).toBe(0);
 		});
 	});
 

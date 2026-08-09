@@ -200,10 +200,13 @@
 			<div class="col-span-3">
 				{{ $t("plan.components.production.table.building_recipe") }}
 			</div>
-			<div class="col-span-3">
+			<div class="col-span-2">
 				{{ $t("plan.components.production.table.runtime") }}
 			</div>
-			<div class="col-span-3">
+			<div class="col-span-2">
+				{{ $t("plan.components.production.table.fee") }}
+			</div>
+			<div class="col-span-2">
 				{{ $t("plan.components.production.table.share") }}
 			</div>
 			<div class="col-span-3 text-end">

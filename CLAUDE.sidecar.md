@@ -110,6 +110,15 @@ anywhere in the repo. Not retroactive.
   program data. All but COGC are already parsed and cached on
   `IFIOPlanetFees` (query `GetFIOPlanetFees`) — consumers only need to
   read them; only production fees have UI today.
+- 2026-08-08: Production fees surfaced per recipe (user request — no
+  UI listed them before): the production table gained a FEE column
+  between RUNTIME and SHARE showing the batch fee and that fee split
+  evenly over the batch's output units (`calculateProductionFeePerUnit`,
+  same even split the COGM `costSplit` uses). Frozen on the recipe row
+  (`productionFeeBatch` / `productionFeePerUnit`) so the COGM block
+  reuses it instead of recomputing. Row hides itself while fees are
+  unknown (FIO down → 0), it never renders a fake "0 ȼ". Grid re-split
+  3/2/2/2/3 to make room.
 - 2026-08-07: Staleness epsilon aligned (bug: in an A↔B supply loop
   "the other plan" stayed stale forever): the chain settling epsilon
   (1e-6) and setSnapshot's materially-changed epsilon (was 1e-9) are

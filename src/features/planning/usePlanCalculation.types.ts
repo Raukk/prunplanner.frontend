@@ -119,6 +119,10 @@ export interface IProductionBuildingRecipe {
 	recipe: IRecipeBuildingOption;
 	dailyShare: number;
 	time: number;
+	/** raukk: government fee of ONE batch, 0 while fees are unknown */
+	productionFeeBatch: number;
+	/** raukk: batch fee split evenly over the units the batch produces */
+	productionFeePerUnit: number;
 	cogm: IProductionBuildingRecipeCOGM | undefined;
 }
 

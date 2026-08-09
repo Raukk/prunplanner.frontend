@@ -2,7 +2,7 @@
 import { TOTALMSDAY } from "@/features/planning/calculations/buildingCalculations";
 
 // Types & Interfaces
-import { IBuilding } from "@/features/api/gameData.types";
+import { IBuilding, IRecipeMaterial } from "@/features/api/gameData.types";
 import { IFIOPlanetFees } from "@/features/api/fioData.types";
 import { WORKFORCE_TYPE } from "@/features/planning/usePlanCalculation.types";
 
@@ -66,6 +66,32 @@ export function calculateProductionFeeBatch(
 	return (
 		calculateProductionFeeRate(building, fees) * (recipeTimeMs / TOTALMSDAY)
 	);
+}
+
+/**
+ * Splits a batch fee over the units the batch produces.
+ *
+ * A recipe with several outputs splits the fee evenly over all produced
+ * units, the same even split the COGM table charges its cost with
+ * (`costSplit`): the fee is charged on the order, not on any one of its
+ * materials, so no output can claim a smaller share than another.
+ * @author raukk
+ *
+ * @export
+ * @param {number} feeBatch Fee of one batch
+ * @param {IRecipeMaterial[]} outputs Recipe Outputs
+ * @returns {number} Fee per produced unit, 0 without any output
+ */
+export function calculateProductionFeePerUnit(
+	feeBatch: number,
+	outputs: IRecipeMaterial[]
+): number {
+	const unitsPerBatch: number = outputs.reduce(
+		(sum, output) => sum + output.material_amount,
+		0
+	);
+
+	return unitsPerBatch > 0 ? feeBatch / unitsPerBatch : 0;
 }
 
 /**

@@ -320,8 +320,36 @@
 		</div>
 	</n-popover>
 
-	<div class="col-span-6 xl:col-span-3 text-xs text-white/80">
+	<div class="col-span-6 xl:col-span-2 text-xs text-white/80">
 		{{ humanizeTimeMs(localRecipeData.time) }}
+	</div>
+	<!-- raukk: government production fee of one batch of this recipe -->
+	<div class="col-span-6 xl:col-span-2 text-xs">
+		<PTooltip v-if="localRecipeData.productionFeeBatch > 0">
+			<template #trigger>
+				<div class="flex flex-col hover:cursor-help">
+					<span class="text-white/80 text-nowrap">
+						{{
+							$t("plan.components.production_recipe.fee_batch", {
+								fee: formatNumber(
+									localRecipeData.productionFeeBatch
+								),
+							})
+						}}
+					</span>
+					<span class="text-white/50 text-nowrap">
+						{{
+							$t("plan.components.production_recipe.fee_unit", {
+								fee: formatNumber(
+									localRecipeData.productionFeePerUnit
+								),
+							})
+						}}
+					</span>
+				</div>
+			</template>
+			{{ $t("plan.components.production_recipe.fee_tooltip") }}
+		</PTooltip>
 	</div>
 	<div class="col-span-6 xl:col-span-2 flex flex-row gap-x-3 items-center">
 		<template v-if="localRecipeData.dailyShare != 1">
@@ -335,7 +363,7 @@
 			</div>
 		</template>
 	</div>
-	<div class="col-span-6 xl:col-span-3 flex xl:justify-end">
+	<div class="col-span-6 xl:col-span-2 flex xl:justify-end">
 		<PTooltip :disabled="cogmEnabled">
 			<template #trigger>
 				<PButton

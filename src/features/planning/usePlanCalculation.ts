@@ -34,6 +34,7 @@ import { useQuery } from "@/lib/query_cache/useQuery";
 import {
 	calculateProductionFeeBatch,
 	calculateProductionFeeDaily,
+	calculateProductionFeePerUnit,
 } from "@/features/planning/calculations/productionFeeCalculations";
 import { IFIOPlanetFees } from "@/features/api/fioData.types";
 
@@ -437,6 +438,16 @@ export async function usePlanCalculation(
 						`Unable to find recipe info for ${b.name} with recipe id ${r.recipeid}`
 					);
 				} else {
+					// raukk: government fee of a single batch, charged on
+					// nominal recipe time and therefore independent of the
+					// buildings efficiency and of the queued amount
+					const productionFeeBatch: number =
+						calculateProductionFeeBatch(
+							buildingData,
+							planetFees.value,
+							recipeInfo.time_ms
+						);
+
 					activeRecipes.push({
 						recipeId: r.recipeid,
 						amount: r.amount,
@@ -449,6 +460,11 @@ export async function usePlanCalculation(
 							roi: 0,
 							profitPerArea: 0,
 						},
+						productionFeeBatch,
+						productionFeePerUnit: calculateProductionFeePerUnit(
+							productionFeeBatch,
+							recipeInfo.outputs
+						),
 						cogm: undefined,
 					});
 				}
@@ -578,12 +594,9 @@ export async function usePlanCalculation(
 				const degradationShare: number = degradation * runtimeShare;
 				const workforceCostTotal: number = workforceDailyCost * -1;
 				const workforceCost: number = workforceCostTotal * runtimeShare;
-				// raukk: fee per batch, charged on nominal recipe time
-				const productionFee: number = calculateProductionFeeBatch(
-					buildingData,
-					planetFees.value,
-					ar.recipe.time_ms
-				);
+				// raukk: fee per batch, charged on nominal recipe time and
+				// already computed with the row itself
+				const productionFee: number = ar.productionFeeBatch;
 
 				const inputCost: ICOGMMaterialCost[] = await Promise.all(
 					ar.recipe.inputs.map(async (inputMat) => {
