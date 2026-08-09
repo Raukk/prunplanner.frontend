@@ -1075,6 +1075,15 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.depots).toStrictEqual({});
 		});
 
+		it("stales the snapshots too, a base there loses its CX lane", () => {
+			withMembers();
+
+			store.setDepot("ZV-194a");
+
+			expect(store.snapshots.source.stale).toBe(true);
+			expect(store.snapshots.consumer.stale).toBe(true);
+		});
+
 		it("stales nothing when only the rent of a known depot moves", () => {
 			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
 			store.setDepot("ZV-307c");

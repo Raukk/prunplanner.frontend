@@ -139,6 +139,19 @@ export interface IRaukkPairLookups {
 	 */
 	localBuyOf?(ticker: string): boolean;
 	/**
+	 * True when the plan sits ON a marked DEPOT.
+	 *
+	 * Its exchange cargo then hands over at the warehouse next door: the
+	 * buys are drawn there and the sells are put there, both without
+	 * leaving the planet, so the plan owns no exchange lane at all.
+	 * Sourcing lanes are untouched — a counterpart plan is somewhere else
+	 * and its cargo really does fly.
+	 *
+	 * Absent lookup: no planet is a depot, the behaviour before depots
+	 * meant anything to the pair math.
+	 */
+	depotOf?(planetNaturalId: string): boolean;
+	/**
 	 * Exchange CODE the plan is anchored at, see `raukkCxAnchorCode`. Only
 	 * the flow list needs the code — a pair is priced by distance, not by
 	 * name — so the pair construction reads `anchorCxSystemId` instead.
@@ -632,12 +645,33 @@ export function buildShippingPairs(
 						routes,
 					}
 				: {}),
+			/*
+			 * Either END of the haul is a home an STL-only hull could be
+			 * based at — the cargo passes through both. The consumer side
+			 * still counts even though such a plan owns no exchange lane
+			 * any more: this lane is not that lane.
+			 */
+			depotServed:
+				lookups.depotOf?.(flows.planetNaturalId) === true ||
+				lookups.depotOf?.(sourcePlanet) === true,
 			out: [],
 			back: cargo,
 		});
 	});
 
-	if (cx === null) return pairs;
+	/*
+	 * A base standing ON a depot has no exchange lane to fly: it hands
+	 * its sells over at the warehouse on its own planet and draws its
+	 * buys from the very same shelf, so both directions cost nothing and
+	 * the pair does not exist. The onward move to the exchange belongs to
+	 * whatever loop calls at the depot — that is what a depot IS.
+	 *
+	 * The sourcing pairs above are deliberately left alone: a counterpart
+	 * plan sits on another planet and its cargo really is flown here.
+	 */
+	if (cx === null || lookups.depotOf?.(flows.planetNaturalId) === true) {
+		return pairs;
+	}
 
 	/**
 	 * Units of one own output that leave through the exchange.

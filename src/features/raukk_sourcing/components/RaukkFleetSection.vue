@@ -50,6 +50,27 @@
 		IRaukkShipTypeOption,
 	} from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 	import { IRaukkShipProfile } from "@/features/raukk_sourcing/raukkSourcing.types";
+	import { RAUKK_FTL_REACTOR } from "@/features/raukk_sourcing/calculations/shipping.types";
+
+	/**
+	 * How one ship types drive reads: the reactor it carries, or the fact
+	 * that it carries none. An STL-only build has an `ftlReactor` in its
+	 * stored shape all the same — the flag is what decides.
+	 *
+	 * @author raukk
+	 *
+	 * @param {RAUKK_FTL_REACTOR} ftlReactor FTL reactor
+	 * @param {boolean} stlOnly Whether the build carries no FTL drive
+	 * @returns {string} Drive label
+	 */
+	function driveLabel(
+		ftlReactor: RAUKK_FTL_REACTOR,
+		stlOnly: boolean
+	): string {
+		return stlOnly
+			? t("raukk_sourcing.fleet.reactors.stl-only")
+			: t(`raukk_sourcing.fleet.reactors.${ftlReactor}`);
+	}
 
 	const props = defineProps({
 		/** ȼ of one full ship repair bill, 0 while unpriced — the drydock
@@ -143,9 +164,7 @@
 					bay: option.bayCode ?? "—",
 					weight: option.hull.cargoWeight,
 					volume: option.hull.cargoVolume,
-					reactor: t(
-						`raukk_sourcing.fleet.reactors.${option.ftlReactor}`
-					),
+					reactor: driveLabel(option.ftlReactor, option.stlOnly),
 				}),
 				value: option.shipTypeId,
 			}));
@@ -260,9 +279,7 @@
 						$t("raukk_sourcing.fleet.hull_label", {
 							weight: row.cargoWeight,
 							volume: row.cargoVolume,
-							reactor: $t(
-								`raukk_sourcing.fleet.reactors.${row.ftlReactor}`
-							),
+							reactor: driveLabel(row.ftlReactor, row.stlOnly),
 						})
 					}}
 				</td>

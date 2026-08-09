@@ -8,9 +8,18 @@
 	// Composables
 	import { useRaukkDepotCosts } from "@/features/raukk_sourcing/useRaukkDepotCosts";
 
+	import { useI18n } from "vue-i18n";
+	const { t } = useI18n();
+
 	// Calculations
-	import { resolveSystemId } from "@/features/raukk_sourcing/calculations/routeDistance";
-	import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippingDepots";
+	import {
+		raukkHasGate,
+		resolveSystemId,
+	} from "@/features/raukk_sourcing/calculations/routeDistance";
+	import {
+		raukkDepotCandidates,
+		raukkDepotStopKey,
+	} from "@/features/raukk_sourcing/calculations/shippingDepots";
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
@@ -20,23 +29,74 @@
 		PButton,
 		PInput,
 		PInputNumber,
+		PSelect,
 		PTable,
 		PTag,
 		PTooltip,
 	} from "@/ui";
+	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
-	import { IRaukkDepotDailyCost } from "@/features/raukk_sourcing/calculations/shippingDepots";
+	import {
+		IRaukkDepotCandidate,
+		IRaukkDepotDailyCost,
+	} from "@/features/raukk_sourcing/calculations/shippingDepots";
+	import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
 
 	const { rows, depotDailyCost, chainDailyCost, totalDailyCost } =
 		useRaukkDepotCosts();
 
 	const refAddPlanet: Ref<string | null> = ref(null);
+	const refPickedPlanet: Ref<string | null> = ref(null);
 
-	/** What the add field holds, trimmed as the store would store it */
-	const entered: ComputedRef<string> = computed(() =>
-		(refAddPlanet.value ?? "").trim()
+	/**
+	 * Whether the add row is typing an id instead of picking one.
+	 *
+	 * The escape hatch of the suggestion list: the gate transcription is
+	 * a snapshot of the map, so a gate built since it was taken has to
+	 * stay reachable — by hand, with a warning, never not at all.
+	 */
+	const refManual: Ref<boolean> = ref(false);
+
+	/**
+	 * Planets the account plans on, as the candidate search takes them.
+	 * Read from the stored snapshots, the same source the chain editor
+	 * builds its stop list from.
+	 */
+	const candidates: ComputedRef<IRaukkDepotCandidate[]> = computed(() =>
+		raukkDepotCandidates(
+			Object.values(sourcingStore.snapshots).map(
+				(snapshot: IRaukkSnapshot) => ({
+					planetNaturalId: snapshot.planetNaturalId,
+					planName: snapshot.planName,
+				})
+			),
+			rows.value.map((row) => row.planetNaturalId)
+		)
 	);
+
+	const candidateOptions: ComputedRef<PSelectOption[]> = computed(() =>
+		candidates.value.map((candidate) => ({
+			label: t("raukk_sourcing.depots.candidate_label", {
+				plan: candidate.planName,
+				planet: candidate.planetNaturalId,
+			}),
+			value: candidate.planetNaturalId,
+		}))
+	);
+
+	/** What the add row holds, trimmed as the store would store it */
+	const entered: ComputedRef<string> = computed(() =>
+		refManual.value
+			? (refAddPlanet.value ?? "").trim()
+			: (refPickedPlanet.value ?? "").trim()
+	);
+
+	function toggleManual(): void {
+		refManual.value = !refManual.value;
+		refAddPlanet.value = null;
+		refPickedPlanet.value = null;
+	}
 
 	/**
 	 * Planet ids already marked, the add field refuses them again.
@@ -73,12 +133,19 @@
 		return resolveSystemId(stopRef) !== null;
 	}
 
-	/** Why the add button is off, or what the entry will not do */
+	/**
+	 * Why the add button is off, or what the entry will not do.
+	 *
+	 * A missing gate WARNS rather than blocks, exactly as an unplaceable
+	 * id does: the transcription is not the map, and a user standing on
+	 * a gate it has never heard of is right and it is wrong.
+	 */
 	const addHint: ComputedRef<string> = computed(() => {
-		if (entered.value === "") return "empty";
+		if (entered.value === "") return refManual.value ? "empty" : "unpicked";
 		if (isKnown.value) return "known";
+		if (!isRouted(entered.value)) return "unrouted";
 
-		return isRouted(entered.value) ? "" : "unrouted";
+		return raukkHasGate(entered.value) ? "" : "nogate";
 	});
 
 	function addDepot(): void {
@@ -86,6 +153,7 @@
 
 		sourcingStore.setDepot(entered.value);
 		refAddPlanet.value = null;
+		refPickedPlanet.value = null;
 	}
 
 	/**
@@ -163,6 +231,18 @@
 							</template>
 							{{ $t("raukk_sourcing.depots.unrouted_tooltip") }}
 						</PTooltip>
+						<PTooltip
+							v-else-if="!raukkHasGate(row.planetNaturalId)">
+							<template #trigger>
+								<PTag
+									size="sm"
+									type="warning"
+									class="hover:cursor-help">
+									{{ $t("raukk_sourcing.depots.nogate") }}
+								</PTag>
+							</template>
+							{{ $t("raukk_sourcing.depots.nogate_tooltip") }}
+						</PTooltip>
 					</div>
 				</td>
 				<td class="text-right">
@@ -198,11 +278,23 @@
 				<td colspan="5">
 					<div class="flex flex-row flex-wrap gap-3 child:my-auto">
 						<PInput
+							v-if="refManual"
 							v-model:value="refAddPlanet"
 							class="w-60!"
 							size="sm"
 							:placeholder="
 								$t('raukk_sourcing.depots.add_placeholder')
+							" />
+						<PSelect
+							v-else
+							class="w-80!"
+							:value="refPickedPlanet"
+							:options="candidateOptions"
+							:placeholder="
+								$t('raukk_sourcing.depots.pick_placeholder')
+							"
+							@update:value="
+								(v) => (refPickedPlanet = v as string)
 							" />
 						<PButton
 							size="sm"
@@ -211,10 +303,22 @@
 							@click="addDepot">
 							{{ $t("raukk_sourcing.depots.add") }}
 						</PButton>
+						<PButton
+							size="sm"
+							type="secondary"
+							@click="toggleManual">
+							{{
+								$t(
+									refManual
+										? "raukk_sourcing.depots.pick_instead"
+										: "raukk_sourcing.depots.enter_instead"
+								)
+							}}
+						</PButton>
 						<span
 							v-if="addHint !== ''"
 							:class="
-								addHint === 'empty'
+								addHint === 'empty' || addHint === 'unpicked'
 									? 'text-white/50'
 									: 'text-red-400'
 							">

@@ -413,12 +413,14 @@ function stlOnlyServes(pair: IRaukkShippingPair): boolean {
  * leg, which is the behaviour of every caller that knows no fleet.
  *
  * A pick that finds NOTHING to choose from — every owned hull filtered
- * out as STL only on a leg no gate serves — falls back to the smallest
- * OWNED hull rather than to the pairs profile: the pair profile is the
- * account default, and defaulting there assigns work to a hull the
- * account may own none of, which then draws a fleet row with a capacity
- * of zero. The leg still fails its own STL validation, but it fails on a
- * ship that exists.
+ * out as non-FTL on a leg no gate serves or no depot bases — falls back
+ * to the smallest OWNED hull rather than to the pairs profile: the pair
+ * profile is the account default, and defaulting there assigns work to a
+ * hull the account may own none of, which then draws a fleet row with a
+ * capacity of zero. The leg still fails its own STL validation, but it
+ * fails on a ship that exists. Only an account whose every hull is
+ * non-FTL reaches this at all, and for such an account there is no
+ * better OWNED answer to give.
  *
  * @author raukk
  *
@@ -445,11 +447,14 @@ function legHull(
 	if (pair.hulls.manual !== undefined)
 		return { candidate: pair.hulls.manual, advisory: null };
 
-	// raukk: an STL-only hull is never picked for a lane it cannot fly,
-	// neither as an assignment nor as an advisory — advising a ship that
-	// would fail validation is worse than advising nothing
+	// raukk: an STL-only hull is never picked for a lane it cannot fly or
+	// is not based on, neither as an assignment nor as an advisory —
+	// advising a ship that would fail validation, or that would have to
+	// live away from its depot, is worse than advising nothing
+	const depotServed: boolean = pair.depotServed === true;
+
 	const owned: IRaukkHullPick | null = raukkPickHull(
-		raukkStlOnlyCandidates(pair.hulls.owned, gateServable),
+		raukkStlOnlyCandidates(pair.hulls.owned, gateServable, depotServed),
 		demand,
 		capDays
 	);
@@ -459,7 +464,7 @@ function legHull(
 		fallback;
 
 	const ideal: IRaukkHullPick | null = raukkPickHull(
-		raukkStlOnlyCandidates(pair.hulls.all, gateServable),
+		raukkStlOnlyCandidates(pair.hulls.all, gateServable, depotServed),
 		demand,
 		capDays
 	);
