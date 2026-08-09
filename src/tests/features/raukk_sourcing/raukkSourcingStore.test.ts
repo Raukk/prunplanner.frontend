@@ -262,6 +262,105 @@ describe("Raukk Sourcing Store", () => {
 		});
 	});
 
+	describe("account wide sourcing defaults", () => {
+		/** A snapshot classifying RAT as workforce and BSE as repair */
+		function classified(name: string): IRaukkSnapshot {
+			return {
+				...makeSnapshot(name, { ORE: 100 }),
+				inputBuckets: { RAT: ["workforce"], BSE: ["repair"] },
+			};
+		}
+
+		it("stores a bucket default and stales the whole store", () => {
+			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot("b", makeSnapshot("B", { RAT: 10 }));
+
+			store.setSourcingDefault("workforce", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG_MKT",
+			});
+
+			expect(store.sourcingDefaults.workforce).toStrictEqual({
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG_MKT",
+			});
+			expect(store.snapshots.a.stale).toBe(true);
+			expect(store.snapshots.b.stale).toBe(true);
+		});
+
+		it("clears a bucket default again", () => {
+			store.setSourcingDefault("repair", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+			store.setSourcingDefault("repair", undefined);
+
+			expect(store.sourcingDefaults.repair).toBeUndefined();
+		});
+
+		it("lists the per plan entries a default would replace", () => {
+			store.setSnapshot("a", classified("A"));
+			store.setSnapshot("b", classified("B"));
+
+			store.setTickerSource("a", "RAT", {
+				mode: "plan",
+				sourcePlanUuid: "b",
+			});
+			store.setTickerSource("a", "BSE", {
+				mode: "market",
+				priceMode: "ASK",
+			});
+			store.setTickerSource("b", "RAT", { mode: "cx" });
+
+			store.setSourcingDefault("workforce", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+
+			expect(store.bucketOverrides("workforce")).toStrictEqual({
+				a: ["RAT"],
+				b: ["RAT"],
+			});
+			// the repair entry belongs to a bucket without a default
+			expect(store.bucketOverrides("repair")).toStrictEqual({});
+		});
+
+		it("drops the per plan entries of one bucket on every base", () => {
+			store.setSnapshot("a", classified("A"));
+			store.setTickerSource("a", "RAT", { mode: "cx" });
+			store.setTickerSource("a", "BSE", {
+				mode: "market",
+				priceMode: "ASK",
+			});
+
+			store.setSourcingDefault("workforce", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+			store.snapshots.a.stale = false;
+
+			expect(store.clearBucketOverrides("workforce")).toBe(1);
+			expect(store.configs.a.sources.RAT).toBeUndefined();
+			// a ticker of another bucket keeps its own setting
+			expect(store.configs.a.sources.BSE).toStrictEqual({
+				mode: "market",
+				priceMode: "ASK",
+			});
+			expect(store.snapshots.a.stale).toBe(true);
+		});
+
+		it("knows nothing of a plan that never computed a snapshot", () => {
+			store.setTickerSource("a", "RAT", { mode: "cx" });
+			store.setSourcingDefault("workforce", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+
+			expect(store.bucketOverrides("workforce")).toStrictEqual({});
+			expect(store.clearBucketOverrides("workforce")).toBe(0);
+		});
+	});
+
 	describe("snapshots and staleness", () => {
 		/** a <- b <- c, c depends on b, b depends on a */
 		function buildChain(): void {
@@ -632,6 +731,43 @@ describe("Raukk Sourcing Store", () => {
 				mode: "local",
 				price: { basis: "MANUAL", value: 90 },
 			});
+		});
+
+		it("round trips the account wide bucket defaults", () => {
+			store.setSourcingDefault("workforce", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG_MKT",
+			});
+			store.setSnapshot("a", {
+				...makeSnapshot("A", { ORE: 100 }),
+				inputBuckets: { RAT: ["workforce"] },
+			});
+
+			const exported: string = store.exportJSON();
+
+			store.$reset();
+			expect(store.sourcingDefaults).toStrictEqual({});
+
+			store.importJSON(exported);
+
+			expect(store.sourcingDefaults).toStrictEqual({
+				workforce: { mode: "plan", sourcePlanUuid: "AGG_AVG_MKT" },
+			});
+			expect(store.snapshots.a.inputBuckets).toStrictEqual({
+				RAT: ["workforce"],
+			});
+		});
+
+		it("imports a payload predating the bucket defaults", () => {
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: { a: { repairDay: 90, sources: {} } },
+					snapshots: {},
+				})
+			);
+
+			expect(store.sourcingDefaults).toStrictEqual({});
 		});
 
 		it("imports a payload predating the local market model", () => {

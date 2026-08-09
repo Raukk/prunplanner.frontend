@@ -23,10 +23,8 @@ import {
 	raukkAutoChainReason,
 	raukkBuildAutoChains,
 } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
-import {
-	calculateRepairBillCost,
-	RAUKK_REPAIR_BILL,
-} from "@/features/raukk_sourcing/calculations/shipping";
+import { calculateRepairBillCost } from "@/features/raukk_sourcing/calculations/shipping";
+import { RAUKK_REPAIR_TICKERS } from "@/features/raukk_sourcing/calculations/shippingRepair";
 import {
 	RAUKK_FUEL_TICKERS,
 	raukkResolveShipProfile,
@@ -84,7 +82,7 @@ import { IRaukkAutoChain } from "@/features/raukk_sourcing/calculations/shipping
  * @author raukk
  */
 export const RAUKK_CHAIN_PRICE_TICKERS: string[] = [
-	...Object.keys(RAUKK_REPAIR_BILL),
+	...RAUKK_REPAIR_TICKERS,
 	RAUKK_FUEL_TICKERS.ftl,
 	RAUKK_FUEL_TICKERS.stl,
 ];

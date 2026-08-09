@@ -53,6 +53,11 @@ shipping-fleet.md (fleet, profiles, blueprint seeding).
   which is 20 % accumulated damage (see shipping-decisions.md round
   21; the constant read 0.8 until then and every repair number was
   off by 4x).
+- The bill is no longer four fixed numbers: `shippingRepair.ts` derives
+  it from the ship's BOM as `ceil(componentCount × damage × 0.75 ×
+  shieldRelief)` plus a flat MFK 12 and FLP 8, which reproduces the
+  observation above on the 71 structural elements that hull carries.
+  See shipping-calibration.md §14.
 - `calculateRepairBillCost` prices the bill through the snapshot's
   price resolver (CX/sourced prices like any other ticker).
 - `calculateRepairCostPerTrip` charges each round trip the share of
@@ -144,7 +149,7 @@ costs already live.
    CADENCE (a partial trip counts full, same convention as
    everything else); the trips number is cadence-free.
 4. UI: one wear line per leg in the lane rows
-   (`RaukkShippingSection.vue`) and per chain in
+   (`RaukkTransportTable.vue`) and per chain in
    `RaukkChainDetail.vue`, e.g.
    `0.031 %/trip · repair after ~2 580 trips ≈ 610 d · 14 ȼ/trip`,
    with a tooltip listing the bill materials and the priced bill.

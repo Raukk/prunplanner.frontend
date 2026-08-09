@@ -11,10 +11,17 @@ import {
 } from "@/features/raukk_sourcing/calculations/shippingCadence";
 import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
 import {
+	IRaukkStlBlock,
+	RAUKK_DEFAULT_G_FACTOR,
+	RAUKK_DEFAULT_STL_ENGINE,
+	RAUKK_DEFAULT_STL_SLIDER,
+	RAUKK_FTL_FUEL_UNITS_PER_PARSEC,
 	RAUKK_REFERENCE_METEOROID_DENSITY,
-	RAUKK_REFERENCE_STL_LEG_KM,
+	RAUKK_STL_ENGINES,
+	RAUKK_STL_TANKS,
+	raukkAccelerationMax,
 	raukkFtlDamagePerParsec,
-	raukkStlDamage,
+	raukkStlBlock,
 } from "@/features/raukk_sourcing/calculations/shippingPhysics";
 
 // Types & Interfaces
@@ -111,76 +118,157 @@ export const RAUKK_FUEL_TICKERS: { ftl: string; stl: string } = {
  * exactly one block per leg — and so attributed the whole observed
  * damage to the distance term and started the block term at zero. The
  * calibration campaign measures the two independently
- * (docs/raukk_sourcing/shipping-calibration.md §6) and they turn out to
- * be nothing alike: a jump costs a flat 0.0011 % per parsec whatever
- * the reactor does, while the sublight block carries the meteoroid law
- * and dominates every FTL trip. Both stay user editable.
+ * (docs/raukk_sourcing/shipping-calibration.md §6, §11.4) and they turn
+ * out to be nothing alike: a jump costs a flat 0.0011 % per parsec
+ * whatever the reactor does, while the sublight block carries the
+ * meteoroid law over both its transit legs and dominates every FTL trip.
+ * Both stay user editable.
  */
 const DEFAULT_DAMAGE_PER_PARSEC: number = raukkFtlDamagePerParsec();
-const DEFAULT_DAMAGE_PER_STL_BLOCK: number = raukkStlDamage(
-	RAUKK_REFERENCE_STL_LEG_KM,
-	RAUKK_REFERENCE_METEOROID_DENSITY
-);
 
 /** One ship available per profile, per the implementer default */
 const DEFAULT_SHIPS_AVAILABLE: number = 1;
 
 /**
- * The two hull classes the reference flights cover, restated on the
- * calibration campaign's numbers.
+ * A build the campaign actually flew, as the preset table derives from.
  *
- * A one way flight is exactly ONE sublight block in this model: a
- * takeoff, a transit leg and a landing. Where the campaign
- * (docs/raukk_sourcing/shipping-calibration.md) and the round 5 logs
- * disagree the campaign wins, because it flew the Blueprint Test Flight
- * simulator and read exact per-leg tables instead of timing a real trip.
+ * The three time constants below are MEASURED per build; everything a
+ * sublight block costs is DERIVED from the §11 laws for the same build
+ * on the app's default engine and plate, so that changing a physical
+ * constant moves the presets with it instead of leaving them stranded
+ * at a number nobody can re-derive.
+ */
+interface IRaukkReferenceBuild {
+	hull: IRaukkShipHull;
+	ftlReactor: RAUKK_FTL_REACTOR;
+	/** Operating empty mass of the FTL build, tonnes */
+	emptyMassTons: number;
+	/** Sublight tank the build carries, fuel units */
+	stlTankCapacity: number;
+	minutesPerParsec: number;
+	chargeMinutes: number;
+	ftlFuelPerParsec: number;
+}
+
+/**
+ * The three hull classes the campaign covers, on the app's default
+ * build.
  *
- * - 5000/5000, the HCB of batch 1 (§7, FSE at 1,672 t, VH-331a → HRT at
- *   MIN): TO 6m59s / 24 u and TRA 53m48s / 38 u empty, TO 13m20s / 46 u
- *   and TRA 2h24m / 49 u with 5,000 t aboard. The observed leg ended at
- *   a station and so had no landing; the block adds one at the takeoff's
- *   own cost, since §1.3 covers TO and LND with one mechanism. That
- *   gives 67.8 min / 86 u empty and 170.7 min / 141 u loaded. The jump
- *   speed of 33 min per parsec survives round 5 — batch 7 flies 14 pc in
- *   7h44m — and so does the 5.83 units per parsec, which batch 7
- *   reproduces at 268 u over 46 pc.
- * - 3000/1000, the WCB the campaign flew as BP-EXRX-5540 (§ intro: ENG,
- *   931 t, acceleration capped at 98.1 m/s²). The campaign has no
- *   in-system leg for this hull, so its block is DERIVED from that build
- *   through the §1.2/§1.3 laws rather than read off — 28.9 min / 89 u
- *   empty and 50.8 min / 157 u loaded. Batch 3 corroborates the empty
- *   figure: the same WCB spent 98 sublight units on a one way trip. Its
- *   FTL burn is batch 3's own, 168 units over 36 parsecs.
+ * A one way flight is exactly ONE sublight block in this model, and
+ * §11.6 settles what that block contains: a surface hop, a planet side
+ * transit leg and a station side transit leg. USER DECISION
+ * (2026-08-09): every preset is derived on the fuel-saving engine and
+ * the Lightweight Hull Plate, because that is what the user's fleet
+ * flies — so the ENG builds the campaign happened to fly appear here
+ * only through their measured FTL constants and their empty mass.
  *
- * Charge times stay at the round 5 readings: the campaign measures CHRG
- * only on a standard reactor in a 5,831 m³ hull (§3), which is neither
- * of these two rows, and copying it across would be an extrapolation.
+ * - 500/500, the SCB of batch 9 (BP-WWKM-6763 masses, §intro: 638 t as
+ *   an FTL build; the batch flew a 1,500 u SSL tank). Its FTL constants
+ *   are that batch's own eight-hop fit: 22.51 min and 4.687 units per
+ *   REAL parsec, and 4m53s of charge measured seven times.
+ * - 3000/1000, the WCB the campaign flew as BP-EXRX-5540 and §10 flew
+ *   live. 26.5 min per parsec is that flight's own (4 pc in 1h44m over
+ *   3.93 real parsecs); the burn is batch 3's 168 units over 36 parsecs,
+ *   which agrees with batch 9's 4.687 to within a percent. Empty mass
+ *   925 t: the measured 931 t ENG build with the lighter engine.
+ * - 5000/5000, the HCB of batches 1 and 7. 33 min per parsec is batch
+ *   7's 14 pc in 7h44m, and 5.83 units per parsec its 268 over 46 — the
+ *   one burn the campaign finds ABOVE the flat rate, on a loaded
+ *   5,831 m³ hull, which is why it stays per profile.
  *
- * The uncovered ten profiles copy the nearest of these two, see
+ * Charge times: the standard reactor rows take batch 9's 4m53s, which
+ * §3's 6m06s on a 5,831 m³ hull corroborates as the same order. The
+ * quick-charge row keeps its round 5 reading — nothing in the campaign
+ * isolates a QCR charge — and is the last unmeasured constant here.
+ *
+ * The uncovered profiles copy the nearest of these three, see
  * {@link raukkNearestCalibration}.
  */
-const TIME_CALIBRATIONS: IRaukkTimeCalibration[] = [
+const REFERENCE_BUILDS: IRaukkReferenceBuild[] = [
+	{
+		hull: { cargoWeight: 500, cargoVolume: 500 },
+		ftlReactor: "standard",
+		emptyMassTons: 638,
+		stlTankCapacity: RAUKK_STL_TANKS.SSL,
+		minutesPerParsec: 22.51,
+		chargeMinutes: 293 / 60,
+		ftlFuelPerParsec: RAUKK_FTL_FUEL_UNITS_PER_PARSEC,
+	},
 	{
 		hull: { cargoWeight: 3000, cargoVolume: 1000 },
 		ftlReactor: "standard",
-		minutesPerParsec: 27.5,
-		chargeMinutes: 52 / 60,
-		stlBlockMinutesEmpty: 28.9,
-		stlBlockMinutesLoaded: 50.8,
+		emptyMassTons: 925,
+		stlTankCapacity: RAUKK_STL_TANKS.MSL,
+		minutesPerParsec: 26.5,
+		chargeMinutes: 293 / 60,
 		ftlFuelPerParsec: 168 / 36,
-		stlFuelPerBlock: (89 + 157) / 2,
 	},
 	{
 		hull: { cargoWeight: 5000, cargoVolume: 5000 },
 		ftlReactor: "quick-charge",
+		emptyMassTons: 1850,
+		stlTankCapacity: RAUKK_STL_TANKS.MSL,
 		minutesPerParsec: 33,
 		chargeMinutes: 74 / 60,
-		stlBlockMinutesEmpty: 2 * (6 + 59 / 60) + 53.8,
-		stlBlockMinutesLoaded: 2 * (13 + 20 / 60) + 144,
 		ftlFuelPerParsec: 105 / 18,
-		stlFuelPerBlock: (2 * 24 + 38 + (2 * 46 + 49)) / 2,
 	},
 ];
+
+/**
+ * One sublight block of a reference build at a given cargo load.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkReferenceBuild} build Reference build
+ * @param {number} cargoTons Cargo aboard
+ * @returns {IRaukkStlBlock} Time, fuel and damage of one block
+ */
+function referenceBlock(
+	build: IRaukkReferenceBuild,
+	cargoTons: number
+): IRaukkStlBlock {
+	const engine = RAUKK_STL_ENGINES[RAUKK_DEFAULT_STL_ENGINE];
+
+	return raukkStlBlock({
+		accelerationMax: raukkAccelerationMax(
+			engine.thrustTonneMetersPerSecondSquared,
+			build.emptyMassTons + cargoTons,
+			RAUKK_DEFAULT_G_FACTOR
+		),
+		fuelRatePerSecond: engine.fuelRatePerSecond,
+		topSpeedKmPerSecond: engine.topSpeedKmPerSecond,
+		tankCapacity: build.stlTankCapacity,
+		sliderFraction: RAUKK_DEFAULT_STL_SLIDER,
+		meteoroidDensity: RAUKK_REFERENCE_METEOROID_DENSITY,
+	});
+}
+
+/** Hull damage of one block at the reference density, a FRACTION */
+const DEFAULT_DAMAGE_PER_STL_BLOCK: number = referenceBlock(
+	REFERENCE_BUILDS[0],
+	0
+).damage;
+
+const TIME_CALIBRATIONS: IRaukkTimeCalibration[] = REFERENCE_BUILDS.map(
+	(build) => {
+		const empty: IRaukkStlBlock = referenceBlock(build, 0);
+		const loaded: IRaukkStlBlock = referenceBlock(
+			build,
+			build.hull.cargoWeight
+		);
+
+		return {
+			hull: build.hull,
+			ftlReactor: build.ftlReactor,
+			minutesPerParsec: build.minutesPerParsec,
+			chargeMinutes: build.chargeMinutes,
+			stlBlockMinutesEmpty: empty.seconds / 60,
+			stlBlockMinutesLoaded: loaded.seconds / 60,
+			ftlFuelPerParsec: build.ftlFuelPerParsec,
+			stlFuelPerBlock: (empty.fuel + loaded.fuel) / 2,
+		};
+	}
+);
 
 /**
  * Profile id of a hull and reactor combination.

@@ -13,8 +13,7 @@ import { RAUKK_DEFAULT_CHAIN_DATA } from "@/features/raukk_sourcing/calculations
 import { raukkNearestCalibration } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 import {
 	RAUKK_REFERENCE_METEOROID_DENSITY,
-	RAUKK_REFERENCE_STL_LEG_KM,
-	raukkStlDamage,
+	raukkStlBlockDamage,
 } from "@/features/raukk_sourcing/calculations/shippingPhysics";
 
 // Types & Interfaces
@@ -417,8 +416,7 @@ export function calibrateShipProfile(
 	const stlBlockMinutesEmpty: number =
 		input.stlBlockMinutesEmpty ?? seed.stlBlockMinutesEmpty;
 	const damagePerStlBlock: number =
-		input.damagePerStlBlock ??
-		raukkStlDamage(RAUKK_REFERENCE_STL_LEG_KM, densityRef);
+		input.damagePerStlBlock ?? raukkStlBlockDamage(densityRef);
 
 	const constants: IRaukkCalibrationConstants = {
 		minutesPerParsec: seed.minutesPerParsec,
@@ -480,18 +478,21 @@ export function calibrateShipProfile(
 	residuals.push(stlResidual);
 	constants.stlFuelPerBlock = stlResidual.mean;
 
-	// damage, block term removed and the rest density normalized
+	/*
+	 * Damage: the BLOCK carries the density and the jump does not
+	 * (calibration §6, §11.4). The seeded block is stated at densityRef,
+	 * so it is scaled to the path the flight actually flew before being
+	 * removed, and what is left is a flat per parsec rate.
+	 */
 	const damageEstimates: number[] = usable.map((entry) => {
 		const jumpDamage: number =
-			entry.flight.damagePercent / 100 - damagePerStlBlock;
+			entry.flight.damagePercent / 100 -
+			damagePerStlBlock * entry.geometry.densityFactor;
 
 		if (jumpDamage < 0)
 			warnings.add(RAUKK_CALIBRATION_WARNINGS.damageBelowBlockSeed);
 
-		return (
-			Math.max(jumpDamage, 0) /
-			(entry.geometry.parsecs * entry.geometry.densityFactor)
-		);
+		return Math.max(jumpDamage, 0) / entry.geometry.parsecs;
 	});
 	const damageResidual: IRaukkCalibrationResidual = residualOf(
 		"damagePerParsec",
