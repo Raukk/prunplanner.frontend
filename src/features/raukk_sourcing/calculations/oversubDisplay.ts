@@ -314,8 +314,7 @@ export function raukkOversubWorstRow(
 
 	rows.forEach((row) => {
 		if (row.utilization === null) return;
-		if (worst === null || row.utilization > worst.utilization!)
-			worst = row;
+		if (worst === null || row.utilization > worst.utilization!) worst = row;
 	});
 
 	return worst;

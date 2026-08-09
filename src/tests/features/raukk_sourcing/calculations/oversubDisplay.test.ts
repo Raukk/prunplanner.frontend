@@ -132,9 +132,10 @@ describe("Raukk Oversubscription: Display Scaffolding", () => {
 				}),
 			]);
 
-			expect(
-				registry.slots.map((slot) => slot.planUuid)
-			).toStrictEqual(["uuid-1", "uuid-2"]);
+			expect(registry.slots.map((slot) => slot.planUuid)).toStrictEqual([
+				"uuid-1",
+				"uuid-2",
+			]);
 		});
 
 		it("is independent of row and segment order", () => {
@@ -219,10 +220,11 @@ describe("Raukk Oversubscription: Display Scaffolding", () => {
 		const fleet = fleetRow({});
 
 		it("problems-only keeps over and beyond-epsilon-negative rows", () => {
-			const filtered = raukkOversubFilter(
-				[healthy, over, negativeNet],
-				{ problemsOnly: true, tickerQuery: null, staleOnly: false }
-			);
+			const filtered = raukkOversubFilter([healthy, over, negativeNet], {
+				problemsOnly: true,
+				tickerQuery: null,
+				staleOnly: false,
+			});
 
 			expect(filtered).toStrictEqual([over, negativeNet]);
 		});
@@ -391,9 +393,7 @@ describe("Raukk Oversubscription: Display Scaffolding", () => {
 			expect(folded).toHaveLength(1);
 			expect(folded[0].key).toBe("external");
 			expect(folded[0].selectable).toBe(false);
-			expect(folded[0].color).toBe(
-				RAUKK_OVERSUB_STATUS_COLORS.external
-			);
+			expect(folded[0].color).toBe(RAUKK_OVERSUB_STATUS_COLORS.external);
 		});
 
 		it("never folds fleet rows and keeps chain claims unselectable", () => {

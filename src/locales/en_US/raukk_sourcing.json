@@ -414,7 +414,50 @@
 		"title": "Oversubscription",
 		"info": "Where this empire is overdrawn: every producer and ticker whose subscribed draws approach or exceed its net capacity, plus the committed ship time of the fleet. Read-only — rows link to the owning plan, fleet rows to the Shipping page.",
 		"tabs": {
-			"table": "Table"
+			"table": "Table",
+			"ledger": "Ledger"
+		},
+		"legend": {
+			"other": "Other ({count} plans)",
+			"glyph_over": "over",
+			"glyph_stale": "stale",
+			"glyph_self": "net-after-self",
+			"glyph_no_capacity": "no capacity",
+			"glyph_external": "outside empire",
+			"highlighting": "Highlighting {name} — everything else dimmed.",
+			"clear_selection": "clear (Esc)"
+		},
+		"empty_state": {
+			"worst": "No oversubscription — worst row: {row} at {utilization} %.",
+			"show_all": "show healthy rows too",
+			"no_rows": "No rows match the current filters."
+		},
+		"ledger": {
+			"materials_note": "track = net capacity · subscribers largest first",
+			"fleet_note": "account-wide · ship-min/d",
+			"ships": "{count} ships",
+			"net_negative": "net {net}",
+			"subscribed_absolute": "{subscribed} {unit} subscribed",
+			"subscribed_of_net": "{subscribed} / {net}",
+			"clipped_value": "→ {utilization} % ▲",
+			"footnote": "Hatched notch left of the origin = the producer's own self-reserve, off the top. Dashed amber edge = stale segment. Red underline = past 100 %. Torn edge = graphic clipped at the axis cap — the printed % never is."
+		},
+		"tooltip": {
+			"row_net": "gross {gross} − self {self} = net {net} {unit}",
+			"row_fleet_capacity": "{count} ships × 1,440 = {gross} ship-min/d",
+			"row_subscribed": "subscribed {subscribed} {unit}",
+			"row_utilization": "utilization {utilization} %",
+			"row_no_capacity": "no net capacity — no denominator does not mean infinite capacity, utilization is n/a",
+			"row_no_ships": "no ships — no denominator does not mean infinite capacity, utilization is n/a",
+			"row_computed": "computed {age}",
+			"segment_draw": "draws {amount} {unit} · {share} % of net",
+			"segment_draw_no_net": "draws {amount} {unit} — net ≤ 0, no meaningful share",
+			"segment_external": "aggregate of plans outside this empire — not navigable",
+			"segment_stale": "stale snapshot ◷",
+			"segment_select_hint": "click: highlight this consumer everywhere",
+			"self_reserve": "Self-reserve ⌂",
+			"self_reserve_body": "{amount} {unit} of own output drawn by {producer} itself — off the top, never a consumer segment",
+			"self_reserve_clipped": "notch clipped — {share} % of net on this scale"
 		},
 		"filters": {
 			"problems_only": "Problems only",
