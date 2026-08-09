@@ -332,6 +332,8 @@ describe("Raukk Sourcing: account level chain compute", () => {
 				"baseFraction",
 				// frozen by the sourced cost notes, not by shipping
 				"inputPrices",
+				// frozen by the account wide bucket defaults, not by shipping
+				"inputBuckets",
 				"sellPrices",
 			]);
 			expect(snapshot.outputs.ALO.breakdown.shipping).toBe(0);

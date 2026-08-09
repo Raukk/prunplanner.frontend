@@ -16,6 +16,12 @@ import {
 // Pricing
 import { snapshotMateriallyChanged } from "@/features/raukk_sourcing/raukkSourcingPricing";
 
+// Defaults
+import {
+	mergeSnapshotBuckets,
+	overriddenTickersOf,
+} from "@/features/raukk_sourcing/raukkSourcingDefaults";
+
 // Schemas
 import {
 	RAUKK_SOURCING_EXPORT_VERSION,
@@ -62,8 +68,10 @@ import {
 	IRaukkShipProfile,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
+	IRaukkSourcingDefaults,
 	IRaukkTickerSource,
 	RAUKK_REPAIR_DAY,
+	RAUKK_SOURCE_BUCKET,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
 import {
@@ -125,6 +133,15 @@ export const useRaukkSourcingStore = defineStore(
 		 * only: no price, no hub, no storage.
 		 */
 		const depots: Ref<Record<string, IRaukkDepot>> = ref({});
+		/**
+		 * raukk: account wide default source per input bucket. Account
+		 * global exactly like the shipping configuration: a base without an
+		 * own entry for one of its workforce consumables, repair materials
+		 * or production inputs follows the default of that bucket, which is
+		 * what makes rations and repair materials a one time setting rather
+		 * than a per base chore.
+		 */
+		const sourcingDefaults: Ref<IRaukkSourcingDefaults> = ref({});
 
 		/**
 		 * Resets all store variables to their initial values
@@ -142,6 +159,7 @@ export const useRaukkSourcingStore = defineStore(
 			fleetSpillover.value = true;
 			chainConfig.value = raukkDefaultChainConfig();
 			depots.value = {};
+			sourcingDefaults.value = {};
 		}
 
 		// getters
@@ -1025,6 +1043,94 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Sets or clears the account wide default source of one input
+		 * bucket. `undefined` drops it and the bucket falls back to the CX
+		 * preference price of every plan again.
+		 *
+		 * Defaults are account global — they move the numbers of every base
+		 * at once — so the whole store goes stale, exactly like a shipping
+		 * configuration change. Stored per plan entries are NOT touched:
+		 * replacing those is the separate, confirmed
+		 * {@link clearBucketOverrides} step.
+		 * @author raukk
+		 *
+		 * @param {RAUKK_SOURCE_BUCKET} bucket Input Bucket
+		 * @param {IRaukkTickerSource | undefined} source Default, or clear
+		 */
+		function setSourcingDefault(
+			bucket: RAUKK_SOURCE_BUCKET,
+			source: IRaukkTickerSource | undefined
+		): void {
+			const next: IRaukkSourcingDefaults = { ...sourcingDefaults.value };
+
+			if (source === undefined) delete next[bucket];
+			else next[bucket] = inertClone(source);
+
+			sourcingDefaults.value = next;
+
+			markAllStale();
+		}
+
+		/**
+		 * Per plan source entries the default of one bucket would replace,
+		 * keyed by plan uuid. Reads the bucket classification frozen onto
+		 * the stored snapshots, so a plan that never computed one is not
+		 * part of the answer — there is nothing to classify its tickers by.
+		 * @author raukk
+		 *
+		 * @param {RAUKK_SOURCE_BUCKET} bucket Input Bucket
+		 * @returns {Record<string, string[]>} Tickers per plan uuid
+		 */
+		function bucketOverrides(
+			bucket: RAUKK_SOURCE_BUCKET
+		): Record<string, string[]> {
+			return overriddenTickersOf(
+				configs.value,
+				mergeSnapshotBuckets(snapshots.value),
+				bucket,
+				sourcingDefaults.value
+			);
+		}
+
+		/**
+		 * Drops every per plan source entry the given buckets default
+		 * covers, on every base at once: the bases stop overriding and
+		 * follow the account default from here on.
+		 *
+		 * Deliberately clears rather than writing the default value into
+		 * every config — a base that follows the default keeps following it
+		 * when the default changes again, which is the whole point of
+		 * having one.
+		 * @author raukk
+		 *
+		 * @param {RAUKK_SOURCE_BUCKET} bucket Input Bucket
+		 * @returns {number} Entries dropped
+		 */
+		function clearBucketOverrides(bucket: RAUKK_SOURCE_BUCKET): number {
+			const overrides: Record<string, string[]> = bucketOverrides(bucket);
+			let dropped: number = 0;
+
+			Object.entries(overrides).forEach(([planUuid, tickers]) => {
+				const config: IRaukkPlanConfig | undefined =
+					configs.value[planUuid];
+
+				if (!config) return;
+
+				tickers.forEach((ticker) => {
+					if (config.sources[ticker] === undefined) return;
+
+					delete config.sources[ticker];
+					dropped += 1;
+				});
+			});
+
+			// account wide again: every plan may have changed its price
+			if (dropped > 0) markAllStale();
+
+			return dropped;
+		}
+
+		/**
 		 * Removes a tickers source of a plan, it falls back to market
 		 * pricing. Marks the plan and all downstream plans stale.
 		 * @author raukk
@@ -1310,6 +1416,7 @@ export const useRaukkSourcingStore = defineStore(
 				fleetSpillover: fleetSpillover.value,
 				chainConfig: inertClone(chainConfig.value),
 				depots: inertClone(depots.value),
+				sourcingDefaults: inertClone(sourcingDefaults.value),
 			};
 
 			return JSON.stringify(payload);
@@ -1363,6 +1470,9 @@ export const useRaukkSourcingStore = defineStore(
 			chainConfig.value = validated.chainConfig;
 			// raukk: absent in every payload written before depots existed
 			depots.value = validated.depots;
+			// raukk: absent in every payload written before the account
+			// wide bucket defaults existed, the schema defaults them empty
+			sourcingDefaults.value = validated.sourcingDefaults;
 		}
 
 		return {
@@ -1378,6 +1488,7 @@ export const useRaukkSourcingStore = defineStore(
 			fleetSpillover,
 			chainConfig,
 			depots,
+			sourcingDefaults,
 			// reset
 			$reset,
 			// getters
@@ -1397,6 +1508,9 @@ export const useRaukkSourcingStore = defineStore(
 			// setters
 			setTickerSource,
 			clearTickerSource,
+			setSourcingDefault,
+			bucketOverrides,
+			clearBucketOverrides,
 			setLocalSale,
 			clearLocalSale,
 			setRepairDay,
@@ -1443,6 +1557,7 @@ export const useRaukkSourcingStore = defineStore(
 				"fleetSpillover",
 				"chainConfig",
 				"depots",
+				"sourcingDefaults",
 			],
 		},
 	}

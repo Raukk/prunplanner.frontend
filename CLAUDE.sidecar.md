@@ -219,3 +219,25 @@ anywhere in the repo. Not retroactive.
   replaced the material i/o column's hardcoded `top-12`. Opening a
   tool while scrolled down scrolls the panel into view, it would
   otherwise render off-screen above.
+- 2026-08-09: Account wide sourcing defaults (user request — setting
+  rations, drinking water and repair materials per base was the chore).
+  `sourcingDefaults` sits next to `shippingConfig`, one optional source
+  per input bucket (workforce/repair/production), merged in at
+  RESOLUTION time by `resolveEffectiveSources`: a ticker without a per
+  plan entry follows its bucket default, nothing is written into the
+  configs, so a base keeps following a default that changes later. The
+  per plan entry always wins; new source mode `{ mode: "cx" }` is the
+  explicit "this ticker, this base, CX price" opt out (without it,
+  unchecking a defaulted row would clear nothing and the default would
+  re-tick it). Changing a default stales the whole store and, only when
+  per plan entries of that bucket exist, offers to DROP them so those
+  bases follow the default too. Buckets per ticker are frozen onto the
+  snapshot (`inputBuckets`) — the store must answer the replace
+  question without running a plan calculation. Third aggregate
+  `AGG_AVG_MKT`: coverage = pool output ÷ (own need + others' draws),
+  price = coverage × pool average + rest × CX preference. The FULL need
+  stays booked as a draw (the pool really is oversubscribed by the
+  market bought share, and capping it would drift upward over passes),
+  so the base fraction and the shipping routing of a topped up draw
+  overstate it slightly — accepted, see
+  docs/raukk_sourcing/sourcing-defaults.md.
