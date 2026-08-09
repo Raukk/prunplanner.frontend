@@ -1,0 +1,1395 @@
+<!doctype html>
+<!--
+	Empire oversubscription report — interactive mockup
+	Spec: docs/raukk_sourcing/oversubscription-report.md
+	Precedent: docs/raukk_sourcing/cost-lens-mockup.html
+	Self-contained: zero external requests, vanilla JS, inline CSS/SVG.
+	Illustrative numbers; interactions are real. Dark theme only (app norm).
+	Navigation clicks flash a toast instead of routing — this is a mockup.
+-->
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oversubscription — Report Mockup</title>
+<style>
+	:root {
+		color-scheme: dark;
+		--page: #030707;
+		--surface: #1e1e1e;
+		--surface-2: #252525;
+		--ink: #ffffff;
+		--ink-2: #c3c2b7;
+		--muted: #898781;
+		--hairline: rgba(255, 255, 255, 0.1);
+		--grid: #2c2c2a;
+		--lime: #c0e219;
+		--neg: #c70039;
+		--neg-text: #ff5470;
+		--amber: #fab219;
+		--ramp: 57, 135, 229; /* single-hue blue ramp, rgb */
+		--s1: #3987e5; --s2: #d95926; --s3: #199e70;
+		--s4: #c98500; --s5: #d55181; --s6: #9085e9;
+		--other: #6b6a64;
+		--hatch: repeating-linear-gradient(45deg,
+			rgba(199, 0, 57, 0.55) 0 3px, transparent 3px 7px);
+		--hatch-gray: repeating-linear-gradient(45deg,
+			rgba(137, 135, 129, 0.55) 0 3px, transparent 3px 7px);
+	}
+	* { box-sizing: border-box; }
+	body {
+		margin: 0;
+		background: var(--page);
+		color: var(--ink);
+		font: 13.5px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+	}
+	main { max-width: 1180px; margin: 0 auto; padding: 22px 20px 64px; }
+	.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+	.num { font-variant-numeric: tabular-nums; }
+	a.fake { color: var(--lime); cursor: pointer; text-decoration: none; }
+	a.fake:hover { text-decoration: underline; }
+
+	/* ---------- header ---------- */
+	header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px; margin-bottom: 4px; }
+	header.top h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+	.mockchip {
+		font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+		color: var(--amber); border: 1px solid currentColor; border-radius: 3px;
+		padding: 1px 7px;
+	}
+	.summaryline { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+	.summaryline b { color: var(--ink-2); font-weight: 600; }
+	.summaryline b.bad { color: var(--neg-text); }
+
+	/* ---------- filter bar ---------- */
+	.filterbar {
+		display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;
+		background: var(--surface); border: 1px solid var(--hairline);
+		border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; font-size: 12.5px;
+	}
+	.filterbar label.tog { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink-2); user-select: none; }
+	.filterbar input[type="checkbox"] { accent-color: var(--lime); width: 14px; height: 14px; cursor: pointer; }
+	.filterbar input[type="text"] {
+		background: var(--surface-2); color: var(--ink); border: 1px solid var(--hairline);
+		border-radius: 4px; padding: 4px 8px; font: inherit; width: 130px;
+	}
+	.filterbar input[type="text"]:focus { outline: none; border-color: var(--lime); }
+	.filterbar select {
+		background: var(--surface-2); color: var(--ink); border: 1px solid var(--hairline);
+		border-radius: 4px; padding: 4px 6px; font: inherit;
+	}
+	.filterbar .lbl { color: var(--muted); }
+
+	/* ---------- recompute strip ---------- */
+	.recstrip {
+		display: none; align-items: center; gap: 12px;
+		background: var(--surface); border: 1px solid var(--hairline);
+		border-left: 3px solid var(--lime);
+		border-radius: 6px; padding: 7px 12px; margin-bottom: 10px; font-size: 12.5px; color: var(--ink-2);
+	}
+	.recstrip.on { display: flex; }
+	.recstrip b { color: var(--ink); }
+	.recstrip .bar { flex: 1; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; min-width: 120px; }
+	.recstrip .bar i { display: block; height: 100%; width: 0; background: var(--lime); transition: width 0.1s linear; }
+	.rbtn {
+		font: inherit; font-size: 11px; background: transparent; color: var(--ink-2);
+		border: 1px solid var(--hairline); border-radius: 4px; padding: 2px 8px; cursor: pointer;
+		white-space: nowrap;
+	}
+	.rbtn:hover:not(:disabled) { border-color: var(--lime); color: var(--ink); }
+	.rbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+	/* ---------- legend ---------- */
+	.legend {
+		display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
+		font-size: 11.5px; color: var(--ink-2); margin: 0 2px 10px;
+	}
+	.legend .li { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; border-radius: 3px; padding: 1px 4px; user-select: none; }
+	.legend .li:hover { background: var(--surface); }
+	.legend .li.dim { opacity: 0.3; }
+	.legend .li.on { background: var(--surface); outline: 1px solid var(--lime); }
+	.legend .sw { width: 12px; height: 12px; border-radius: 2px; flex: 0 0 12px; }
+	.legend .glyphs { color: var(--muted); display: inline-flex; gap: 14px; flex-wrap: wrap; margin-left: auto; }
+	.legend .glyphs b { font-weight: 400; color: var(--ink-2); }
+	.g-over { color: var(--neg-text); }
+	.g-stale { color: var(--amber); }
+	.selhint { font-size: 11.5px; color: var(--muted); margin: -4px 2px 10px; display: none; }
+	.selhint.on { display: block; }
+	.selhint b { color: var(--ink); }
+	.selhint a { color: var(--lime); cursor: pointer; margin-left: 8px; }
+
+	/* ---------- tabs ---------- */
+	.tabs { display: inline-flex; border: 1px solid var(--hairline); border-radius: 5px; overflow: hidden; margin-bottom: 10px; }
+	.tabs button {
+		font: inherit; font-size: 12.5px; padding: 5px 16px; border: 0; cursor: pointer;
+		background: transparent; color: var(--ink-2);
+	}
+	.tabs button.on { background: rgba(192, 226, 25, 0.14); color: var(--ink); font-weight: 600; }
+	section.panel {
+		background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px;
+		padding: 14px 16px 16px; min-width: 0; position: relative;
+	}
+	.grouphead {
+		display: flex; align-items: baseline; gap: 10px;
+		font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase;
+		color: var(--muted); font-weight: 600; margin: 4px 0 8px;
+	}
+	.grouphead:not(:first-child) { margin-top: 22px; }
+	.grouphead .sub { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11.5px; }
+	.emptystate { font-size: 12.5px; color: var(--ink-2); padding: 8px 2px 4px; }
+	.emptystate a { color: var(--lime); cursor: pointer; }
+	.footnote { font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+
+	/* computing overlay */
+	.panel.computing::after {
+		content: ""; position: absolute; inset: 0; border-radius: 8px; z-index: 5;
+		background: linear-gradient(100deg, rgba(30, 30, 30, 0.55) 30%,
+			rgba(192, 226, 25, 0.10) 50%, rgba(30, 30, 30, 0.55) 70%);
+		background-size: 280% 100%;
+		animation: shimmer 1.1s linear infinite;
+		pointer-events: all; cursor: progress;
+	}
+	@keyframes shimmer { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+
+	/* ---------- badges & glyphs ---------- */
+	.badge {
+		font-size: 10.5px; border-radius: 3px; padding: 0 6px; white-space: nowrap;
+		border: 1px solid currentColor;
+	}
+	.badge.nonet { color: var(--neg-text); }
+	.badge.noships { color: var(--neg-text); }
+	.badge.stale { color: var(--amber); border-style: dashed; }
+	.clock { color: var(--amber); font-size: 12px; cursor: default; }
+	.overglyph { color: var(--neg-text); font-size: 10px; }
+	.selfglyph { color: var(--ink-2); cursor: default; }
+
+	/* ---------- table tab ---------- */
+	.tablewrap { overflow-x: auto; }
+	table.rt { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 13px; }
+	table.rt th {
+		font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted);
+		font-weight: 600; text-align: left; padding: 5px 9px; border-bottom: 1px solid var(--grid);
+	}
+	table.rt th.r, table.rt td.r { text-align: right; }
+	table.rt td { padding: 4px 9px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+	tr.rrow:hover td { background: rgba(192, 226, 25, 0.04); }
+	tr.rrow td:first-child { white-space: nowrap; }
+	.caret { display: inline-block; width: 15px; cursor: pointer; color: var(--muted); font-size: 10px; user-select: none; }
+	.selfnum { color: var(--ink-2); }
+	.ubar {
+		position: relative; display: inline-block; width: 86px; height: 9px; vertical-align: middle;
+		background: var(--surface-2); border-radius: 2px; margin-right: 7px; overflow: hidden;
+	}
+	.ubar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: rgb(var(--ramp)); }
+	.ubar i.over { background: var(--neg); }
+	.ubar.null { background: var(--hatch-gray); }
+	.upct { font-weight: 600; }
+	.upct.over { color: var(--neg-text); }
+	.upct.nullv { color: var(--muted); font-weight: 400; }
+	tr.subrow td { border-bottom: 1px dashed var(--grid); font-size: 12.5px; color: var(--ink-2); padding-top: 2px; padding-bottom: 2px; }
+	tr.subrow.dim td { opacity: 0.3; }
+	tr.subrow .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 7px; vertical-align: baseline; cursor: pointer; }
+	tr.subrow td .name { cursor: pointer; }
+	tr.subrow td .name.nav:hover { color: var(--lime); }
+	tr.subrow td .name.ext { color: var(--muted); cursor: default; font-style: italic; }
+	.prodlink { cursor: pointer; }
+	.prodlink:hover { color: var(--lime); }
+	.planettag { color: var(--muted); font-size: 12px; }
+
+	/* ---------- ledger tab ---------- */
+	.ledger { min-width: 0; }
+	.laxis, .lrow { display: grid; grid-template-columns: 216px minmax(280px, 1fr) 74px; gap: 0 12px; align-items: center; }
+	.laxis { margin-bottom: 2px; height: 18px; font-size: 10px; color: var(--muted); }
+	.laxisbar { position: relative; height: 100%; margin-left: 56px; }
+	.laxisbar .tick { position: absolute; bottom: 0; transform: translateX(-50%); }
+	.lrow { min-height: 34px; padding: 3px 0; }
+	.lrow.sel-dim .lseg:not(.hit) { opacity: 0.3; }
+	.llabel { font-size: 12.5px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.llabel .tick { font-weight: 650; }
+	.llabel .who { color: var(--muted); font-size: 11.5px; display: block; }
+	.llabel .who .prodlink:hover { color: var(--lime); }
+	.lbar { position: relative; height: 24px; margin-left: 56px; }
+	.ltrack { position: absolute; top: 3px; bottom: 3px; left: 0; background: var(--surface-2); border-radius: 2px; }
+	.lwash { position: absolute; top: 0; bottom: 0; background: rgba(199, 0, 57, 0.08); }
+	.lrule { position: absolute; top: -3px; bottom: -3px; width: 1px; background: rgba(255, 255, 255, 0.38); }
+	.lseg {
+		position: absolute; top: 5px; bottom: 5px; border-radius: 1px; cursor: pointer; min-width: 2px;
+	}
+	.lseg.overpart { border-bottom: 2px solid var(--neg); top: 4px; bottom: 3px; }
+	.lseg.stale::after {
+		content: ""; position: absolute; left: 0; right: 0; top: -3px; height: 2px;
+		background: repeating-linear-gradient(90deg, var(--amber) 0 4px, transparent 4px 7px);
+	}
+	.lnotch {
+		position: absolute; right: calc(100% + 3px); top: 5px; bottom: 5px;
+		background: var(--hatch-gray); border: 1px solid rgba(137, 135, 129, 0.6);
+		border-radius: 1px; cursor: default;
+	}
+	.lnotch.clipped { border-left: none;
+		-webkit-mask-image: linear-gradient(90deg, transparent, #000 6px);
+		mask-image: linear-gradient(90deg, transparent, #000 6px); }
+	.ljag {
+		position: absolute; right: -2px; top: 0; bottom: 0; width: 12px; z-index: 2;
+		background: var(--surface);
+		clip-path: polygon(100% 0, 100% 100%, 30% 100%, 90% 88%, 25% 75%, 85% 62%, 20% 50%, 85% 38%, 25% 25%, 90% 12%, 30% 0);
+	}
+	.lclipnum { font-size: 11px; color: var(--neg-text); font-weight: 650; white-space: nowrap; }
+	.lcollapsed {
+		position: absolute; top: 7px; bottom: 7px; left: 0; border-radius: 2px;
+		background: var(--hatch); border: 1px solid rgba(199, 0, 57, 0.5);
+	}
+	.lval { font-size: 12px; text-align: right; white-space: nowrap; }
+	.lval .u { display: block; font-size: 10.5px; color: var(--muted); font-weight: 400; }
+
+	/* ---------- matrix tab ---------- */
+	.mwrap { overflow-x: auto; border: 1px solid var(--grid); border-radius: 5px; }
+	table.mx { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 100%; }
+	table.mx th, table.mx td { padding: 4px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+	table.mx thead th {
+		font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+		font-weight: 600; text-align: right; background: var(--surface); vertical-align: bottom;
+		max-width: 92px; overflow: hidden; text-overflow: ellipsis;
+	}
+	table.mx thead th.cons { cursor: pointer; }
+	table.mx thead th.cons:hover { color: var(--ink); }
+	table.mx thead th.cons .csw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+	table.mx th.rowh, table.mx td.rowh {
+		position: sticky; left: 0; background: var(--surface); text-align: left; z-index: 2;
+		border-right: 1px solid var(--grid); min-width: 150px;
+	}
+	table.mx td.rowh { font-size: 12.5px; }
+	table.mx td.rowh .who { color: var(--muted); font-size: 11px; display: block; }
+	table.mx td.rowh.overb { box-shadow: inset 3px 0 0 var(--neg); }
+	table.mx th.totc, table.mx td.totc {
+		position: sticky; right: 0; background: var(--surface); z-index: 2;
+		border-left: 1px solid var(--grid); text-align: right; min-width: 128px;
+	}
+	table.mx td.cell { text-align: right; color: var(--ink); min-width: 62px; cursor: default; }
+	table.mx td.cell.zero { color: var(--muted); }
+	table.mx td.cell.hatched { background: var(--hatch); }
+	table.mx td.dimcol { opacity: 0.25; }
+	table.mx td.netc { text-align: right; color: var(--ink-2); }
+	.mmeter {
+		position: relative; display: inline-block; width: 44px; height: 8px; vertical-align: middle;
+		background: var(--surface-2); border-radius: 2px; margin-right: 6px; overflow: hidden;
+	}
+	.mmeter i { position: absolute; left: 0; top: 0; bottom: 0; background: rgb(var(--ramp)); }
+	.mmeter i.over { background: var(--neg); }
+	.mmeter.null { background: var(--hatch-gray); }
+
+	/* ---------- map tab ---------- */
+	.mapsub { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+	#mapwrap { overflow-x: auto; }
+	#mapsvg { display: block; min-width: 760px; width: 100%; height: auto; }
+	#mapsvg text { font: 11.5px system-ui, sans-serif; fill: var(--ink-2); }
+	#mapsvg text.pn { font-weight: 650; fill: var(--ink); }
+	#mapsvg text.small { font-size: 10px; fill: var(--muted); }
+	#mapsvg text.overtxt { fill: var(--neg-text); font-weight: 650; font-size: 10.5px; }
+	#mapsvg .node { cursor: pointer; }
+	#mapsvg .ribbon { cursor: pointer; }
+
+	/* ---------- tooltip & toast ---------- */
+	#tip {
+		position: fixed; z-index: 30; pointer-events: none; display: none; max-width: 300px;
+		background: var(--surface-2); color: var(--ink); border: 1px solid var(--hairline);
+		border-radius: 6px; padding: 8px 11px; font-size: 12px;
+		box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+	}
+	#tip .big { font-size: 13px; font-weight: 650; }
+	#tip .sec { color: var(--ink-2); margin-top: 3px; }
+	#tip .ter { color: var(--muted); margin-top: 3px; font-size: 11px; }
+	#tip .warn { color: var(--amber); }
+	#tip .bad { color: var(--neg-text); }
+	#toast {
+		position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(8px);
+		z-index: 40; background: var(--surface-2); color: var(--ink);
+		border: 1px solid var(--lime); border-radius: 6px; padding: 8px 16px; font-size: 12.5px;
+		opacity: 0; transition: opacity 0.18s, transform 0.18s; pointer-events: none; white-space: nowrap;
+	}
+	#toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+	#toast .mono { color: var(--lime); }
+
+	details.notes { margin-top: 26px; font-size: 13px; color: var(--ink-2); }
+	details.notes summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+	details.notes li { margin: 5px 0; }
+</style>
+</head>
+<body>
+<main>
+	<header class="top">
+		<h1>Oversubscription — Antares Prime Empire</h1>
+		<span class="mockchip">mockup · illustrative data</span>
+	</header>
+	<p class="summaryline" id="summaryline"></p>
+
+	<div class="filterbar">
+		<label class="tog"><input type="checkbox" id="fProblems" checked> problems only</label>
+		<label class="tog"><span class="lbl">ticker</span>
+			<input type="text" id="fQuery" placeholder="filter ticker…" spellcheck="false"></label>
+		<label class="tog"><input type="checkbox" id="fStale"> stale only</label>
+		<label class="tog"><span class="lbl">sort</span>
+			<select id="fSort">
+				<option value="utilization" selected>utilization (worst first)</option>
+				<option value="producer">producer</option>
+				<option value="ticker">ticker</option>
+			</select></label>
+	</div>
+
+	<div class="recstrip" id="recstrip">
+		<span id="recmsg"></span>
+		<div class="bar"><i id="recbar"></i></div>
+		<span class="num" id="reccount"></span>
+	</div>
+
+	<div class="legend" id="legend"></div>
+	<div class="selhint" id="selhint"></div>
+
+	<div class="tabs" id="tabs">
+		<button data-t="table" class="on">Table</button>
+		<button data-t="ledger">Ledger</button>
+		<button data-t="matrix">Matrix</button>
+		<button data-t="map">Map</button>
+	</div>
+
+	<section class="panel" id="pane"></section>
+
+	<details class="notes">
+		<summary>Mockup notes — deliberate simplifications</summary>
+		<ul>
+			<li>Navigation is toasted, not routed; recompute is a fake 2&nbsp;s run
+				that reuses the real disabled-while-running + overlay behavior and
+				leaves every number unchanged.</li>
+			<li>The self-reserve notch (Ledger) is drawn on the row's own scale but
+				visually capped — a torn left edge marks the clip; the tooltip always
+				carries the absolute u/d (cap convention: graphics cap, printed
+				numbers never do).</li>
+			<li>The fleet matrix uses chain/lane columns instead of consumer-plan
+				columns — fleet claims are per lane/chain, not per plan.</li>
+			<li>The Map covers material rows only; fleet lanes/chains have no
+				plan-to-plan flow to draw — the Ledger and Matrix carry the fleet
+				domain.</li>
+			<li>Hired lanes claim no own ship time (spec), so the hired
+				Promitor&nbsp;→&nbsp;Montem MCG lane appears in no fleet row.</li>
+		</ul>
+	</details>
+</main>
+<div id="tip"></div>
+<div id="toast"></div>
+
+<script>
+	"use strict";
+	// =====================================================================
+	// Illustrative data — one shared row array in the spec's
+	// IRaukkOversubRow shape (derived fields computed below with the
+	// spec's real verdict rules, so the honesty rules hold).
+	// =====================================================================
+	const EPS = 0.0005; // RAUKK_EPSILON_EQUAL stand-in
+
+	const CONSUMERS = [
+		{ id: "boucher", name: "Boucher Yard",      planet: "UV-351a", uuid: "7c31…" },
+		{ id: "deimos",  name: "Deimos Depot",      planet: "KW-020c", uuid: "b8e2…" },
+		{ id: "gibson",  name: "Gibson Outpost",    planet: "ZV-896b", uuid: "04dd…" },
+		{ id: "hortus",  name: "Hortus Greenhouse", planet: "OT-889a", uuid: "91af…" },
+		{ id: "nova",    name: "Nova Honshu Labs",  planet: "XG-521d", uuid: "cc07…" },
+		{ id: "umbra",   name: "Umbra Chem",        planet: "UV-351b", uuid: "5f9b…" },
+		{ id: "verdant", name: "Verdant Ring",      planet: "AJ-455c", uuid: "e310…" },
+		{ id: "vireo",   name: "Vireo Station",     planet: "QQ-645a", uuid: "22b9…" },
+		{ id: "zephyr",  name: "Zephyr Point",      planet: "LS-231b", uuid: "da44…" },
+	];
+	const SLOTS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"];
+	// deterministic registry: sorted consumer identity over the UNFILTERED
+	// set (never first-appearance); consumers past 6 fold into gray Other
+	const registry = {};
+	CONSUMERS.slice()
+		.sort((a, b) => a.name.localeCompare(b.name) || a.uuid.localeCompare(b.uuid))
+		.forEach((c, i) => { registry[c.id] = i < 6 ? SLOTS[i] : null; });
+	const CONS = Object.fromEntries(CONSUMERS.map((c) => [c.id, c]));
+
+	const PRODUCERS = {
+		montem:   { name: "Montem HQ",            planet: "XK-745b", uuid: "3d71…" },
+		katoa:    { name: "Katoa Farms",          planet: "VH-331a", uuid: "a90c…" },
+		promitor: { name: "Promitor Prefabs",     planet: "OT-580b", uuid: "6b2e…" },
+		vallis:   { name: "Vallis Chemworks",     planet: "UV-796c", uuid: "f4d8…" },
+		ether:    { name: "Etherwind Extractors", planet: "ZV-307c", uuid: "1e55…" },
+	};
+
+	// seg: [consumerId | null, amountPerDay, stale, ageH] — null = external
+	const TICKER_RAW = [
+		{ ticker: "MCG", prod: "montem", gross: 500, self: 380, ageH: 2, producerStale: false,
+			segs: [["umbra", 260, false, 2], ["hortus", 180, true, 26], ["boucher", 140, false, 3],
+				["gibson", 90, false, 5], ["nova", 64, false, 2]] },
+		{ ticker: "DW", prod: "katoa", gross: 1200, self: 0, ageH: 4, producerStale: false,
+			segs: [["hortus", 620, false, 4], ["umbra", 480, false, 2], ["deimos", 292, true, 31],
+				["nova", 180, false, 6]] },
+		{ ticker: "RAT", prod: "katoa", gross: 800, self: 0, ageH: 4, producerStale: false,
+			segs: [["boucher", 300, false, 3], ["gibson", 210, false, 5], ["deimos", 162, false, 7]] },
+		{ ticker: "PE", prod: "vallis", gross: 400, self: 0, ageH: 6, producerStale: false,
+			segs: [["umbra", 120, false, 2], [null, 88, false, 0], ["nova", 40, false, 6]] },
+		{ ticker: "AL", prod: "promitor", gross: 600, self: 0, ageH: 3, producerStale: false,
+			segs: [["boucher", 60, false, 3], ["deimos", 48, false, 7], ["gibson", 42, false, 5],
+				["hortus", 36, true, 26], ["umbra", 30, false, 2], ["verdant", 24, false, 8],
+				["vireo", 18, false, 4], ["zephyr", 12, false, 9]] },
+		{ ticker: "FE", prod: "promitor", gross: 240, self: 300, ageH: 3, producerStale: false,
+			segs: [["boucher", 60, false, 3], ["gibson", 36, false, 5]] },
+		{ ticker: "C", prod: "ether", gross: 1000, self: 100, ageH: 5, producerStale: false,
+			segs: [["umbra", 180, true, 29], ["deimos", 99, false, 7]] },
+		{ ticker: "O", prod: "ether", gross: 500, self: 0, ageH: 27, producerStale: true,
+			segs: [["hortus", 200, false, 4], ["nova", 140, false, 6]] },
+	];
+
+	// fleet: unit ship-min/d; gross = count × 1440; account-scoped.
+	// hired Promitor → Montem MCG lane claims no own ship time → absent.
+	const FLEET_RAW = [
+		{ shipType: "WCB", design: "WCB Hauler", count: 2,
+			segs: [{ kind: "chain", label: "Chain — Montem ⇄ Katoa loop", amount: 1520, stale: true, ageH: 26 },
+				{ kind: "lane", label: "Lane XK-745b → VH-331a · DW", amount: 998, stale: false, ageH: 3 },
+				{ kind: "lane", label: "Lane OT-580b → XK-745b · BSE", amount: 880, stale: false, ageH: 5 }] },
+		{ shipType: "LCB", design: "LCB Freighter", count: 1,
+			segs: [{ kind: "lane", label: "Lane UV-796c → UV-351b · PE", amount: 520, stale: false, ageH: 6 },
+				{ kind: "lane", label: "Lane VH-331a → KW-020c · RAT", amount: 390, stale: false, ageH: 7 }] },
+		{ shipType: "STL", design: "STL Shuttle", count: 0,
+			segs: [{ kind: "lane", label: "Lane ZV-307c → XG-521d · O", amount: 240, stale: false, ageH: 6 }] },
+	];
+
+	// -------- derive: the spec's verdict rules, verbatim ------------------
+	function deriveTicker(raw) {
+		const p = PRODUCERS[raw.prod];
+		const net = raw.gross - raw.self;
+		const segs = raw.segs.map(([cid, amount, stale, ageH]) => cid === null
+			? { segmentKind: "external", cid: null, label: "outside this empire (2 plans)",
+				amount, stale, ageH, nav: null }
+			: { segmentKind: "plan", cid, label: CONS[cid].name, amount, stale, ageH,
+				nav: "/plan/" + CONS[cid].planet + "/" + CONS[cid].uuid + "?tool=raukk-sourcing" });
+		const subscribed = segs.reduce((s, g) => s + g.amount, 0);
+		const over = net > 0 ? subscribed > net * (1 + EPS) : (net < 0 || subscribed > 0);
+		return {
+			kind: "ticker", id: "t-" + raw.ticker + "-" + raw.prod, unit: "u/d",
+			ticker: raw.ticker, producer: p.name, producerKey: raw.prod,
+			planet: p.planet, uuid: p.uuid,
+			gross: raw.gross, self: raw.self, net, subscribed, segs,
+			utilization: net > 0 ? subscribed / net : null, over,
+			producerStale: raw.producerStale, ageH: raw.ageH,
+			anyStale: raw.producerStale || segs.some((g) => g.stale),
+			nav: "/plan/" + p.planet + "/" + p.uuid + "?tool=raukk-sourcing",
+		};
+	}
+	function deriveFleet(raw) {
+		const gross = raw.count * 1440;
+		const segs = raw.segs.map((s) => ({ segmentKind: s.kind, cid: null, label: s.label,
+			amount: s.amount, stale: s.stale, ageH: s.ageH, nav: "/shipping" }));
+		const subscribed = segs.reduce((s, g) => s + g.amount, 0);
+		const over = gross > 0 ? subscribed > gross * (1 + EPS) : subscribed > 0;
+		return {
+			kind: "fleet", id: "f-" + raw.shipType, unit: "ship-min/d",
+			ticker: raw.shipType, producer: raw.design, producerKey: raw.shipType,
+			planet: "", uuid: "", count: raw.count,
+			gross, self: 0, net: gross, subscribed, segs,
+			utilization: raw.count > 0 ? subscribed / gross : null, over,
+			producerStale: false, ageH: null,
+			anyStale: segs.some((g) => g.stale), nav: "/shipping",
+		};
+	}
+	const TICKER_ROWS = TICKER_RAW.map(deriveTicker);
+	const FLEET_ROWS = FLEET_RAW.map(deriveFleet);
+
+	// =====================================================================
+	// state
+	// =====================================================================
+	const state = {
+		problemsOnly: true, query: "", staleOnly: false, sort: "utilization",
+		tab: "table", sel: null, trace: null, open: new Set(), computing: false,
+	};
+
+	// selection key for a segment: slotted consumer id | "other" | "external"
+	function segKey(seg) {
+		if (seg.segmentKind === "external") return "external";
+		if (seg.cid && registry[seg.cid]) return seg.cid;
+		if (seg.cid) return "other";
+		return "fleetseg";
+	}
+	function segColor(seg) {
+		if (seg.cid && registry[seg.cid]) return registry[seg.cid];
+		if (seg.segmentKind === "external") return "#4a4a46";
+		return "var(--other)";
+	}
+	function segDimmed(seg) { return state.sel !== null && segKey(seg) !== state.sel; }
+
+	// =====================================================================
+	// filtering & sorting — shared slice all four tabs render from
+	// =====================================================================
+	function matchesQuery(r) {
+		const q = state.query.trim().toLowerCase();
+		if (!q) return true;
+		return r.ticker.toLowerCase().includes(q);
+	}
+	function passesSoft(r) { // query + stale, NOT problems-only
+		return matchesQuery(r) && (!state.staleOnly || r.anyStale);
+	}
+	function passes(r) { return passesSoft(r) && (!state.problemsOnly || r.over); }
+	function sortRows(rows) {
+		const u = (r) => (r.utilization === null ? Infinity : r.utilization);
+		const deficit = (r) => r.subscribed - Math.max(r.net, 0);
+		const c = {
+			utilization: (a, b) => (b.over - a.over) || (u(b) - u(a)) || (deficit(b) - deficit(a)),
+			producer: (a, b) => a.producer.localeCompare(b.producer) || a.ticker.localeCompare(b.ticker),
+			ticker: (a, b) => a.ticker.localeCompare(b.ticker) || a.producer.localeCompare(b.producer),
+		}[state.sort];
+		return rows.slice().sort(c);
+	}
+	function slice() {
+		return {
+			tick: sortRows(TICKER_ROWS.filter(passes)),
+			fleet: sortRows(FLEET_ROWS.filter(passes)),
+			softTick: TICKER_ROWS.filter(passesSoft),
+			softFleet: FLEET_ROWS.filter(passesSoft),
+		};
+	}
+	function worstOf(rows) {
+		let w = null;
+		rows.forEach((r) => {
+			if (r.utilization !== null && (!w || r.utilization > w.utilization)) w = r;
+		});
+		return w;
+	}
+
+	// =====================================================================
+	// formatting helpers
+	// =====================================================================
+	const fmtN = (v) => Math.round(v).toLocaleString("en-US");
+	const fmtU = (v, unit) => fmtN(v) + " " + unit;
+	const fmtPct = (u) => u === null ? "—" : Math.round(u * 100) + "%";
+	const age = (h) => "computed " + h + " h ago";
+	function pctOfNet(seg, row) {
+		if (row.net <= 0) return "net ≤ 0 — no meaningful %";
+		return (100 * seg.amount / row.net).toFixed(seg.amount / row.net < 0.1 ? 1 : 0) + "% of net";
+	}
+
+	// =====================================================================
+	// tooltip / toast
+	// =====================================================================
+	const tip = document.getElementById("tip");
+	function moveTip(ev) {
+		const w = tip.offsetWidth, h = tip.offsetHeight;
+		let x = ev.clientX + 14, y = ev.clientY + 12;
+		if (x + w > innerWidth - 8) x = ev.clientX - w - 10;
+		if (y + h > innerHeight - 8) y = ev.clientY - h - 10;
+		tip.style.left = x + "px"; tip.style.top = y + "px";
+	}
+	function bindTip(el, htmlFn) {
+		el.addEventListener("mouseenter", (e) => { tip.innerHTML = htmlFn(); tip.style.display = "block"; moveTip(e); });
+		el.addEventListener("mousemove", moveTip);
+		el.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+	}
+	function segTip(seg, row) {
+		let h = "<div class='big'>" + seg.label + "</div>";
+		h += "<div class='sec'>draws <b class='num'>" + fmtU(seg.amount, row.unit) + "</b> of " +
+			row.ticker + " · " + pctOfNet(seg, row) + "</div>";
+		h += "<div class='ter" + (seg.stale ? " warn" : "") + "'>" +
+			(seg.segmentKind === "external" ? "aggregate of plans outside this empire — not navigable"
+				: age(seg.ageH) + (seg.stale ? " · stale ◷" : "")) + "</div>";
+		if (seg.segmentKind !== "external")
+			h += "<div class='ter'>click: highlight this consumer everywhere</div>";
+		return h;
+	}
+	function rowTip(row) {
+		let h = "<div class='big'>" + row.ticker + " — " + row.producer + "</div>";
+		if (row.kind === "ticker")
+			h += "<div class='sec num'>gross " + fmtN(row.gross) + " − self " + fmtN(row.self) +
+				" = net <b>" + fmtN(row.net) + " " + row.unit + "</b></div>";
+		else
+			h += "<div class='sec num'>" + row.count + " ship" + (row.count === 1 ? "" : "s") +
+				" × 1440 = <b>" + fmtN(row.gross) + " " + row.unit + "</b></div>";
+		h += "<div class='sec num'>subscribed <b>" + fmtN(row.subscribed) + " " + row.unit + "</b>" +
+			(row.utilization !== null ? " · utilization <b" + (row.over ? " class='bad'" : "") + ">" +
+				fmtPct(row.utilization) + "</b>" : "") + "</div>";
+		if (row.utilization === null)
+			h += "<div class='ter bad'>" + (row.kind === "fleet" ? "no ships — " : "no net capacity — ") +
+				"no denominator ≠ infinite capacity: utilization is null</div>";
+		if (row.ageH !== null)
+			h += "<div class='ter" + (row.producerStale ? " warn" : "") + "'>" + age(row.ageH) +
+				(row.producerStale ? " · producer stale ◷" : "") + "</div>";
+		return h;
+	}
+	let toastT = null;
+	function toast(path) {
+		const t = document.getElementById("toast");
+		t.innerHTML = "mockup — would open <span class='mono'>" + path + "</span>";
+		t.classList.add("on");
+		clearTimeout(toastT);
+		toastT = setTimeout(() => t.classList.remove("on"), 1900);
+	}
+
+	// =====================================================================
+	// selection (component-local, survives tab switches; Esc clears)
+	// =====================================================================
+	function setSel(key) {
+		state.sel = state.sel === key ? null : key;
+		renderLegend(); renderPane();
+	}
+	document.addEventListener("keydown", (e) => {
+		if (e.key !== "Escape") return;
+		if (state.trace) { state.trace = null; renderPane(); }
+		else if (state.sel) setSel(state.sel);
+	});
+
+	// =====================================================================
+	// legend (shared)
+	// =====================================================================
+	function renderLegend() {
+		const L = document.getElementById("legend");
+		L.innerHTML = "";
+		CONSUMERS.filter((c) => registry[c.id]).forEach((c) => {
+			const li = document.createElement("span");
+			li.className = "li" + (state.sel === c.id ? " on" : state.sel ? " dim" : "");
+			li.innerHTML = "<span class='sw' style='background:" + registry[c.id] + "'></span>" + c.name;
+			li.addEventListener("click", () => setSel(c.id));
+			bindTip(li, () => "<div class='big'>" + c.name + "</div><div class='ter'>consumer plan · " +
+				c.planet + " · click to highlight in every tab</div>");
+			L.appendChild(li);
+		});
+		const other = document.createElement("span");
+		other.className = "li" + (state.sel === "other" ? " on" : state.sel ? " dim" : "");
+		other.innerHTML = "<span class='sw' style='background:var(--other)'></span>Other (3 plans)";
+		other.addEventListener("click", () => setSel("other"));
+		bindTip(other, () => "<div class='big'>Other</div><div class='ter'>consumers past the 6 color slots fold here — membership from the deterministic registry, never row order</div>");
+		L.appendChild(other);
+		const g = document.createElement("span");
+		g.className = "glyphs";
+		g.innerHTML = "<b><span class='g-over'>▲</span> over</b>" +
+			"<b><span class='g-stale'>◷</span> stale</b>" +
+			"<b>⌂ net-after-self</b>" +
+			"<b><span class='sw' style='display:inline-block;background:var(--hatch);vertical-align:-2px'></span> no capacity</b>" +
+			"<b><span class='sw' style='display:inline-block;background:#4a4a46;vertical-align:-2px'></span> outside empire</b>";
+		L.appendChild(g);
+		const hint = document.getElementById("selhint");
+		if (state.sel && state.sel !== "external") {
+			const name = state.sel === "other" ? "Other (3 folded plans)" : CONS[state.sel].name;
+			hint.className = "selhint on";
+			hint.innerHTML = "highlighting <b>" + name + "</b> across all tabs — others dimmed" +
+				"<a id='clearsel'>clear (Esc)</a>";
+			document.getElementById("clearsel").addEventListener("click", () => setSel(state.sel));
+		} else hint.className = "selhint";
+	}
+
+	// =====================================================================
+	// summary line
+	// =====================================================================
+	function renderSummary() {
+		const tOver = TICKER_ROWS.filter((r) => r.over).length;
+		const fOver = FLEET_ROWS.filter((r) => r.over).length;
+		document.getElementById("summaryline").innerHTML =
+			"Where subscribed draws approach or exceed net capacity. " +
+			"<b class='bad'>" + tOver + " of " + TICKER_ROWS.length + "</b> material rows and " +
+			"<b class='bad'>" + fOver + " of " + FLEET_ROWS.length + "</b> fleet rows oversubscribed · " +
+			"scope: plans assigned to this empire · fleet is account-wide · " +
+			"draws from outside the empire still count (gray).";
+	}
+
+	// =====================================================================
+	// recompute demo — disabled-while-running + progress + freeze overlay
+	// =====================================================================
+	function recompute(label, total) {
+		if (state.computing) return;
+		state.computing = true;
+		renderPane(); // re-render so buttons pick up disabled state
+		document.getElementById("pane").classList.add("computing");
+		const strip = document.getElementById("recstrip");
+		strip.classList.add("on");
+		const msg = document.getElementById("recmsg"), bar = document.getElementById("recbar"),
+			cnt = document.getElementById("reccount");
+		const t0 = Date.now(), DUR = 2000;
+		const iv = setInterval(() => {
+			const p = Math.min(1, (Date.now() - t0) / DUR);
+			const done = Math.min(total, Math.floor(p * total));
+			msg.innerHTML = "Recomputing <b>" + label + "</b> — upstream-first, may include plans outside this empire";
+			bar.style.width = (p * 100).toFixed(1) + "%";
+			cnt.textContent = done + " / " + total + " plans · pass 1/5";
+			if (p >= 1) {
+				clearInterval(iv);
+				cnt.textContent = total + " / " + total + " plans · 0 errors";
+				setTimeout(() => {
+					strip.classList.remove("on");
+					document.getElementById("pane").classList.remove("computing");
+					state.computing = false;
+					renderPane();
+				}, 450);
+			}
+		}, 90);
+	}
+	function recBtn(label, total, title) {
+		const b = document.createElement("button");
+		b.className = "rbtn"; b.textContent = "↻ recompute";
+		b.title = title || "recompute the chain contributing to this row";
+		b.disabled = state.computing;
+		b.addEventListener("click", (e) => { e.stopPropagation(); recompute(label, total); });
+		return b;
+	}
+
+	// =====================================================================
+	// shared bits
+	// =====================================================================
+	function el(tag, cls, html) {
+		const d = document.createElement(tag);
+		if (cls) d.className = cls;
+		if (html !== undefined) d.innerHTML = html;
+		return d;
+	}
+	function groupHead(pane, title, sub, extra) {
+		const h = el("div", "grouphead", "<span>" + title + "</span>" +
+			(sub ? "<span class='sub'>" + sub + "</span>" : ""));
+		if (extra) h.appendChild(extra);
+		pane.appendChild(h);
+		return h;
+	}
+	function emptyState(pane, softRows, unit) {
+		const w = worstOf(softRows);
+		const d = el("div", "emptystate");
+		if (w) {
+			d.innerHTML = "No oversubscription — worst row: <b class='num'>" + w.ticker + " @ " +
+				w.producer + "</b> at <b class='num'>" + fmtPct(w.utilization) + "</b>. " +
+				"<a>show healthy rows too</a>";
+			d.querySelector("a").addEventListener("click", () => {
+				document.getElementById("fProblems").checked = false;
+				state.problemsOnly = false; renderAll();
+			});
+		} else d.textContent = "No rows match the current filters.";
+		pane.appendChild(d);
+	}
+	// fold a row's segments for Ledger/Map: slotted stay, unslotted merge
+	function foldSegs(row) {
+		const out = [], fold = [];
+		row.segs.forEach((s) => {
+			if (row.kind === "ticker" && s.cid && !registry[s.cid]) fold.push(s);
+			else out.push(s);
+		});
+		if (fold.length)
+			out.push({ segmentKind: "plan", cid: null, isOther: true,
+				label: "Other " + fold.length + " plans",
+				amount: fold.reduce((t, s) => t + s.amount, 0),
+				stale: fold.some((s) => s.stale),
+				ageH: Math.max.apply(null, fold.map((s) => s.ageH)), nav: null, members: fold });
+		return out.sort((a, b) => b.amount - a.amount);
+	}
+	function foldKey(seg) { return seg.isOther ? "other" : segKey(seg); }
+	function foldColor(seg) { return seg.isOther ? "var(--other)" : segColor(seg); }
+	function foldDim(seg) { return state.sel !== null && foldKey(seg) !== state.sel; }
+	function utilCell(row) { // mini-bar capped at 100%, uncapped % text
+		const wrap = el("span");
+		const bar = el("span", "ubar" + (row.utilization === null ? " null" : ""));
+		if (row.utilization !== null) {
+			const i = el("i", row.over ? "over" : "");
+			i.style.width = Math.min(100, row.utilization * 100).toFixed(1) + "%";
+			bar.appendChild(i);
+		}
+		wrap.appendChild(bar);
+		const pct = el("span", "upct num" +
+			(row.over ? " over" : "") + (row.utilization === null ? " nullv" : ""),
+			row.utilization === null ? "n/a" : fmtPct(row.utilization) + (row.over ? " ▲" : ""));
+		wrap.appendChild(pct);
+		return wrap;
+	}
+
+	// =====================================================================
+	// TABLE tab
+	// =====================================================================
+	function renderTable(pane, S) {
+		groupHead(pane, "Materials", "producer × ticker · plans in this empire");
+		if (!S.tick.length) emptyState(pane, S.softTick, "t");
+		else {
+			const wrap = el("div", "tablewrap");
+			const t = el("table", "rt");
+			t.innerHTML = "<thead><tr><th></th><th>Ticker</th><th>Producer</th>" +
+				"<th class='r'>Gross</th><th class='r'>Self</th><th class='r'>Net</th>" +
+				"<th class='r'>Subscribed</th><th>Utilization</th><th>Flags</th><th></th></tr></thead>";
+			const tb = el("tbody");
+			S.tick.forEach((r) => emitRow(tb, r));
+			t.appendChild(tb); wrap.appendChild(t); pane.appendChild(wrap);
+		}
+
+		const fh = groupHead(pane, "Fleet", "account-wide · ship-min/d · renders while shipping is enabled");
+		fh.appendChild(recBtn("chain results", 4, "recompute chain results — same call as the /shipping button"));
+		if (!S.fleet.length) emptyState(pane, S.softFleet, "f");
+		else {
+			const wrap = el("div", "tablewrap");
+			const t = el("table", "rt");
+			t.innerHTML = "<thead><tr><th></th><th>Ship type</th><th>Design</th>" +
+				"<th class='r'>Count</th><th class='r'></th><th class='r'>Capacity</th>" +
+				"<th class='r'>Committed</th><th>Utilization</th><th>Flags</th><th></th></tr></thead>";
+			const tb = el("tbody");
+			S.fleet.forEach((r) => emitRow(tb, r));
+			t.appendChild(tb); wrap.appendChild(t); pane.appendChild(wrap);
+		}
+		pane.appendChild(el("div", "footnote",
+			"Hired lanes claim no own ship time — the hired Promitor → Montem MCG lane appears in no row. " +
+			"Self-draws come off the top and are never a consumer segment."));
+	}
+	function emitRow(tb, r) {
+		const tr = el("tr", "rrow");
+		const open = state.open.has(r.id);
+		const flags = [];
+		if (r.kind === "ticker" && r.net <= 0) flags.push("<span class='badge nonet'>no net capacity</span>");
+		if (r.kind === "fleet" && r.count === 0) flags.push("<span class='badge noships'>no ships</span>");
+		if (r.anyStale) flags.push("<span class='badge stale'>◷ stale</span>");
+		const tdCaret = el("td", "", "<span class='caret'>" + (open ? "▼" : "▶") + "</span>");
+		tdCaret.querySelector(".caret").addEventListener("click", (e) => {
+			e.stopPropagation();
+			open ? state.open.delete(r.id) : state.open.add(r.id);
+			renderPane();
+		});
+		tr.appendChild(tdCaret);
+		tr.appendChild(el("td", "mono", "<b>" + r.ticker + "</b>"));
+		const tdProd = el("td", "", "<span class='prodlink'>" + r.producer + "</span>" +
+			(r.planet ? " <span class='planettag mono'>" + r.planet + "</span>" : "") +
+			(r.producerStale ? " <span class='clock' title='producer snapshot stale'>◷</span>" : ""));
+		tdProd.querySelector(".prodlink").addEventListener("click", () => toast(r.nav));
+		tr.appendChild(tdProd);
+		if (r.kind === "ticker") {
+			tr.appendChild(el("td", "r num", fmtN(r.gross)));
+			tr.appendChild(el("td", "r num selfnum",
+				r.self > 0 ? "−" + fmtN(r.self) + " <span class='selfglyph' title='net-after-self'>⌂</span>" : "0"));
+			tr.appendChild(el("td", "r num", r.net < 0
+				? "<b style='color:var(--neg-text)'>" + fmtN(r.net) + "</b>" : "<b>" + fmtN(r.net) + "</b>"));
+		} else {
+			tr.appendChild(el("td", "r num", String(r.count)));
+			tr.appendChild(el("td", "r num selfnum", ""));
+			tr.appendChild(el("td", "r num", "<b>" + fmtN(r.gross) + "</b>"));
+		}
+		tr.appendChild(el("td", "r num", fmtN(r.subscribed)));
+		const tdU = el("td"); tdU.appendChild(utilCell(r)); tr.appendChild(tdU);
+		tr.appendChild(el("td", "", flags.join(" ")));
+		const tdR = el("td", "r");
+		tdR.appendChild(r.kind === "ticker"
+			? recBtn("chain of " + r.producer, 7)
+			: recBtn("chain results", 4, "recompute chain results"));
+		tr.appendChild(tdR);
+		bindTip(tr.children[1], () => rowTip(r));
+		tb.appendChild(tr);
+		if (open) r.segs.slice().sort((a, b) => b.amount - a.amount).forEach((seg) => {
+			const sr = el("tr", "subrow" + (segDimmed(seg) ? " dim" : ""));
+			const cls = seg.segmentKind === "external" ? "ext" : "nav";
+			sr.innerHTML = "<td></td><td colspan='2' style='padding-left:26px'>" +
+				"<span class='sw' style='background:" + segColor(seg) + "'></span>" +
+				"<span class='name " + cls + "'>" + seg.label + "</span>" +
+				(seg.stale ? " <span class='clock'>◷</span>" : "") + "</td>" +
+				"<td></td><td></td><td></td>" +
+				"<td class='r num'>" + fmtN(seg.amount) + "</td>" +
+				"<td class='num' style='color:var(--muted)'>" + pctOfNet(seg, r) + "</td>" +
+				"<td style='color:var(--muted)'>" +
+				(seg.segmentKind === "external" ? "not navigable" : age(seg.ageH)) + "</td><td></td>";
+			const sw = sr.querySelector(".sw"), nm = sr.querySelector(".name");
+			if (seg.segmentKind !== "external") {
+				sw.addEventListener("click", () => setSel(segKey(seg)));
+				nm.addEventListener("click", () => toast(seg.nav)); // subscriber name = plan link
+			}
+			bindTip(sr, () => segTip(seg, r));
+			tb.appendChild(sr);
+		});
+	}
+
+	// =====================================================================
+	// LEDGER tab — bullet bars on a shared per-row utilization scale
+	// =====================================================================
+	function ledgerDomain(S) {
+		let m = 0;
+		S.tick.concat(S.fleet).forEach((r) => {
+			if (r.utilization !== null) m = Math.max(m, r.utilization * 100);
+		});
+		return Math.min(250, Math.max(140, Math.ceil(m / 10) * 10));
+	}
+	function renderLedger(pane, S) {
+		const xMax = ledgerDomain(S);
+		const px = (p) => (p / xMax * 100).toFixed(3) + "%";
+		function axis() {
+			const a = el("div", "laxis");
+			a.appendChild(el("div"));
+			const bar = el("div", "laxisbar");
+			for (let t = 0; t <= xMax; t += 50) {
+				const k = el("span", "tick num", t + "%");
+				k.style.left = px(t);
+				if (t === 100) k.style.color = "var(--ink-2)";
+				bar.appendChild(k);
+			}
+			a.appendChild(bar); a.appendChild(el("div"));
+			return a;
+		}
+		function bars(rows, unit) {
+			const box = el("div", "ledger");
+			box.appendChild(axis());
+			rows.forEach((r) => {
+				const row = el("div", "lrow" + (state.sel ? " sel-dim" : ""));
+				const lab = el("div", "llabel",
+					"<span class='tick mono'>" + r.ticker + "</span>" +
+					(r.over ? " <span class='overglyph'>▲</span>" : "") +
+					(r.anyStale ? " <span class='clock'>◷</span>" : "") +
+					"<span class='who'><span class='prodlink'>" + r.producer + "</span>" +
+					(r.kind === "fleet" ? " · " + r.count + " ship" + (r.count === 1 ? "" : "s") : "") +
+					"</span>");
+				lab.querySelector(".prodlink").addEventListener("click", () => toast(r.nav));
+				bindTip(lab, () => rowTip(r));
+				row.appendChild(lab);
+
+				const bar = el("div", "lbar");
+				// red wash 100 → domain end, then the 1px 100% rule
+				const wash = el("div", "lwash");
+				wash.style.left = px(100); wash.style.right = "0";
+				bar.appendChild(wash);
+
+				if (r.net <= 0 && r.kind === "ticker") {
+					// collapsed hatched track — no denominator, absolute numbers only
+					const c = el("div", "lcollapsed");
+					c.style.width = px(100);
+					bar.appendChild(c);
+					const badge = el("span", "badge nonet", "no net capacity");
+					badge.style.cssText = "position:absolute;left:8px;top:4px;background:var(--surface)";
+					bar.appendChild(badge);
+					bindTip(bar, () => rowTip(r));
+				} else if (r.utilization === null) {
+					const c = el("div", "lcollapsed");
+					c.style.width = px(100);
+					bar.appendChild(c);
+					const badge = el("span", "badge noships", "no ships");
+					badge.style.cssText = "position:absolute;left:8px;top:4px;background:var(--surface)";
+					bar.appendChild(badge);
+					bindTip(bar, () => rowTip(r));
+				} else {
+					// track = net capacity (0 → 100 on this row's scale)
+					const track = el("div", "ltrack");
+					track.style.width = px(100);
+					bar.appendChild(track);
+					bindTip(track, () => rowTip(r));
+					// self-reserve: hatched notch left of the origin, outside track
+					if (r.self > 0) {
+						const n = el("div", "lnotch");
+						const selfPct = r.self / r.net * 100;
+						const capped = selfPct / xMax > 0.09;
+						n.style.width = capped ? "9%" : px(selfPct);
+						if (capped) n.classList.add("clipped");
+						bindTip(n, () => "<div class='big'>self-reserve ⌂</div><div class='sec num'>" +
+							fmtU(r.self, r.unit) + " of own output drawn by " + r.producer +
+							" itself — off the top, never a consumer segment</div>" +
+							(capped ? "<div class='ter'>notch clipped — " +
+								Math.round(selfPct) + "% of net on this scale</div>" : ""));
+						bar.appendChild(n);
+					}
+					// consumer segments, largest first, 2px gaps
+					let cur = 0;
+					foldSegs(r).forEach((seg, i) => {
+						const upct = seg.amount / r.net * 100;
+						const from = cur, to = cur + upct;
+						cur = to;
+						const s = el("div", "lseg" + (seg.stale ? " stale" : "") +
+							(to > 100 + 1e-9 ? " overpart" : "") + (foldDim(seg) ? "" : " hit"));
+						const clipTo = Math.min(to, xMax);
+						if (from >= xMax) return; // fully past the clip
+						s.style.left = "calc(" + px(from) + " + " + (i ? 2 : 0) + "px)";
+						s.style.width = "calc(" + px(clipTo - from) + " - " + (i ? 2 : 0) + "px)";
+						s.style.background = foldColor(seg);
+						if (seg.segmentKind !== "external")
+							s.addEventListener("click", () => setSel(foldKey(seg)));
+						else s.style.cursor = "default";
+						bindTip(s, () => segTip(seg, r));
+						bar.appendChild(s);
+					});
+					// jagged clip edge when the row exceeds the capped domain
+					if (r.utilization * 100 > xMax + 1e-9) bar.appendChild(el("div", "ljag"));
+					// 100% rule on top
+					const rule = el("div", "lrule");
+					rule.style.left = px(100);
+					bar.appendChild(rule);
+				}
+				row.appendChild(bar);
+
+				const val = el("div", "lval num");
+				if (r.net <= 0 && r.kind === "ticker")
+					val.innerHTML = "<b style='color:var(--neg-text)'>net " + fmtN(r.net) + "</b>" +
+						"<span class='u'>" + fmtN(r.subscribed) + " " + r.unit + " subscribed</span>";
+				else if (r.utilization === null)
+					val.innerHTML = "<b style='color:var(--neg-text)'>n/a</b>" +
+						"<span class='u'>" + fmtN(r.subscribed) + " " + r.unit + "</span>";
+				else if (r.utilization * 100 > xMax + 1e-9)
+					val.innerHTML = "<span class='lclipnum'>→ " + fmtPct(r.utilization) + " ▲</span>" +
+						"<span class='u'>" + fmtN(r.subscribed) + " / " + fmtN(r.net) + "</span>";
+				else
+					val.innerHTML = "<b" + (r.over ? " style='color:var(--neg-text)'" : "") + ">" +
+						fmtPct(r.utilization) + (r.over ? " ▲" : "") + "</b>" +
+						"<span class='u'>" + fmtN(r.subscribed) + " / " + fmtN(r.net) + "</span>";
+				row.appendChild(val);
+				box.appendChild(row);
+			});
+			return box;
+		}
+		groupHead(pane, "Materials", "track = net capacity · segments = subscribers, largest first · axis capped at 250%");
+		if (!S.tick.length) emptyState(pane, S.softTick, "t");
+		else pane.appendChild(bars(S.tick, "u/d"));
+		groupHead(pane, "Fleet", "account-wide · ship-min/d");
+		if (!S.fleet.length) emptyState(pane, S.softFleet, "f");
+		else pane.appendChild(bars(S.fleet, "ship-min/d"));
+		pane.appendChild(el("div", "footnote",
+			"Hatched notch left of the origin = producer's own self-reserve (off the top). " +
+			"Dashed amber top edge = stale segment. Red underline = past 100%. " +
+			"Torn edge = graphic clipped at the axis cap — the printed % is never capped."));
+	}
+
+	// =====================================================================
+	// MATRIX tab — heatmap grid, positional identity, no series cap
+	// =====================================================================
+	function ramp(v) {
+		const t = Math.min(Math.max(v, 0), 1);
+		return "rgba(57,135,229," + (0.08 + 0.8 * t).toFixed(3) + ")";
+	}
+	function renderMatrix(pane, S) {
+		groupHead(pane, "Materials", "cell = draw ÷ net on a single-hue ramp · columns are consumer plans");
+		if (!S.tick.length) emptyState(pane, S.softTick, "t");
+		else {
+			const cons = CONSUMERS.filter((c) =>
+				S.tick.some((r) => r.segs.some((s) => s.cid === c.id)));
+			const hasExt = S.tick.some((r) => r.segs.some((s) => s.segmentKind === "external"));
+			const wrap = el("div", "mwrap");
+			const t = el("table", "mx");
+			const thead = el("thead");
+			const hr = el("tr");
+			hr.appendChild(el("th", "rowh", "producer × ticker"));
+			hr.appendChild(el("th", "", "net"));
+			cons.forEach((c) => {
+				const th = el("th", "cons" + (state.sel && state.sel !== (registry[c.id] ? c.id : "other") ? " dimcol" : ""),
+					"<span class='csw' style='background:" + (registry[c.id] || "var(--other)") + "'></span>" +
+					c.name.split(" ")[0]);
+				th.title = c.name + (registry[c.id] ? "" : " (folds into Other elsewhere)");
+				th.addEventListener("click", () => setSel(registry[c.id] ? c.id : "other"));
+				hr.appendChild(th);
+			});
+			if (hasExt) hr.appendChild(el("th", "", "outside"));
+			hr.appendChild(el("th", "totc", "total subscribed"));
+			thead.appendChild(hr); t.appendChild(thead);
+			const tb = el("tbody");
+			S.tick.forEach((r) => {
+				const tr = el("tr");
+				const rh = el("td", "rowh" + (r.over ? " overb" : ""),
+					"<b class='mono'>" + r.ticker + "</b> " +
+					(r.over ? "<span class='overglyph'>▲</span> " : "") +
+					(r.anyStale ? "<span class='clock'>◷</span> " : "") +
+					"<span class='who'><span class='prodlink'>" + r.producer + "</span></span>");
+				rh.querySelector(".prodlink").addEventListener("click", () => toast(r.nav));
+				bindTip(rh, () => rowTip(r));
+				tr.appendChild(rh);
+				tr.appendChild(el("td", "netc num", (r.net < 0
+					? "<span style='color:var(--neg-text)'>" + fmtN(r.net) + "</span>" : fmtN(r.net)) +
+					(r.self > 0 ? " <span class='selfglyph' title='net after self-draw of " +
+						fmtN(r.self) + " u/d'>⌂</span>" : "")));
+				cons.forEach((c) => {
+					const seg = r.segs.find((s) => s.cid === c.id);
+					const key = registry[c.id] ? c.id : "other";
+					const td = el("td", "cell" + (!seg ? " zero" : "") +
+						(state.sel && state.sel !== key ? " dimcol" : "") +
+						(seg && r.net <= 0 ? " hatched" : ""));
+					if (seg) {
+						td.innerHTML = "<span class='num'>" + fmtN(seg.amount) + "</span>" +
+							(seg.stale ? " <span class='clock'>◷</span>" : "");
+						if (r.net > 0) td.style.background = ramp(seg.amount / r.net);
+						bindTip(td, () => segTip(seg, r));
+					} else td.textContent = "·";
+					tr.appendChild(td);
+				});
+				if (hasExt) {
+					const seg = r.segs.find((s) => s.segmentKind === "external");
+					const td = el("td", "cell" + (!seg ? " zero" : "") + (state.sel ? " dimcol" : ""));
+					if (seg) {
+						td.innerHTML = "<span class='num' style='color:var(--muted)'>" + fmtN(seg.amount) + "</span>";
+						td.style.background = "rgba(137,135,129,0.14)";
+						bindTip(td, () => segTip(seg, r));
+					} else td.textContent = "·";
+					tr.appendChild(td);
+				}
+				const tot = el("td", "totc num");
+				tot.appendChild(matrixMeter(r));
+				tr.appendChild(tot);
+				tb.appendChild(tr);
+			});
+			t.appendChild(tb); wrap.appendChild(t); pane.appendChild(wrap);
+		}
+
+		groupHead(pane, "Fleet", "account-wide · columns are chains / lanes (fleet claims are not per-plan)");
+		if (!S.fleet.length) emptyState(pane, S.softFleet, "f");
+		else {
+			const labels = [];
+			S.fleet.forEach((r) => r.segs.forEach((s) => {
+				if (!labels.includes(s.label)) labels.push(s.label);
+			}));
+			const wrap = el("div", "mwrap");
+			const t = el("table", "mx");
+			const hr = el("tr");
+			hr.appendChild(el("th", "rowh", "ship type"));
+			hr.appendChild(el("th", "", "capacity"));
+			labels.forEach((l) => {
+				const th = el("th", "", l.replace("Lane ", "").replace("Chain — ", "⛓ "));
+				th.title = l;
+				hr.appendChild(th);
+			});
+			hr.appendChild(el("th", "totc", "total committed"));
+			const thead = el("thead"); thead.appendChild(hr); t.appendChild(thead);
+			const tb = el("tbody");
+			S.fleet.forEach((r) => {
+				const tr = el("tr");
+				const rh = el("td", "rowh" + (r.over ? " overb" : ""),
+					"<b class='mono'>" + r.ticker + "</b> " +
+					(r.over ? "<span class='overglyph'>▲</span> " : "") +
+					(r.anyStale ? "<span class='clock'>◷</span> " : "") +
+					"<span class='who'><span class='prodlink'>" + r.producer + " · " + r.count +
+					" ship" + (r.count === 1 ? "" : "s") + "</span></span>");
+				rh.querySelector(".prodlink").addEventListener("click", () => toast("/shipping"));
+				bindTip(rh, () => rowTip(r));
+				tr.appendChild(rh);
+				tr.appendChild(el("td", "netc num", fmtN(r.gross)));
+				labels.forEach((l) => {
+					const seg = r.segs.find((s) => s.label === l);
+					const td = el("td", "cell" + (!seg ? " zero" : "") +
+						(seg && r.gross <= 0 ? " hatched" : ""));
+					if (seg) {
+						td.innerHTML = "<span class='num'>" + fmtN(seg.amount) + "</span>" +
+							(seg.stale ? " <span class='clock'>◷</span>" : "");
+						if (r.gross > 0) td.style.background = ramp(seg.amount / r.gross);
+						bindTip(td, () => segTip(seg, r));
+						td.style.cursor = "pointer";
+						td.addEventListener("click", () => toast("/shipping"));
+					} else td.textContent = "·";
+					tr.appendChild(td);
+				});
+				const tot = el("td", "totc num");
+				tot.appendChild(matrixMeter(r));
+				tr.appendChild(tot);
+				tb.appendChild(tr);
+			});
+			t.appendChild(tb); wrap.appendChild(t); pane.appendChild(wrap);
+		}
+		pane.appendChild(el("div", "footnote",
+			"3px red row edge = over. Hatched cells = no denominator (net ≤ 0 / no ships) — absolute numbers, no ramp. " +
+			"⌂ = net shown after the producer's own self-draw. Scrolls horizontally inside this panel only."));
+	}
+	function matrixMeter(r) {
+		const wrap = el("span");
+		const m = el("span", "mmeter" + (r.utilization === null ? " null" : ""));
+		if (r.utilization !== null) {
+			const i = el("i", r.over ? "over" : "");
+			i.style.width = Math.min(100, r.utilization * 100).toFixed(1) + "%";
+			m.appendChild(i);
+		}
+		wrap.appendChild(m);
+		wrap.appendChild(el("span", "upct num" + (r.over ? " over" : "") +
+			(r.utilization === null ? " nullv" : ""),
+			fmtN(r.subscribed) + " · " +
+			(r.utilization === null ? "n/a" : fmtPct(r.utilization) + (r.over ? " ▲" : ""))));
+		bindTip(wrap, () => rowTip(r));
+		return wrap;
+	}
+
+	// =====================================================================
+	// MAP tab — bipartite flow, SVG. Material rows only (see footnote).
+	// =====================================================================
+	const SVGNS = "http://www.w3.org/2000/svg";
+	function svgEl(tag, attrs) {
+		const e = document.createElementNS(SVGNS, tag);
+		for (const k in attrs) e.setAttribute(k, attrs[k]);
+		return e;
+	}
+	function renderMap(pane, S) {
+		const focus = S.tick.filter((r) =>
+			r.over || (r.utilization !== null && r.utilization >= 0.70));
+		groupHead(pane, "Materials — flow", "node height = net capacity · ribbon = draw · overflow runs past the node over red hatching");
+		const sub = el("p", "mapsub");
+		sub.innerHTML = "showing <b class='num'>" + focus.length + " of " + S.tick.length +
+			"</b> — the rest are under 70%" +
+			(state.trace ? " · tracing one producer — <b>Esc</b> to clear" : "");
+		pane.appendChild(sub);
+		if (!focus.length) { emptyState(pane, S.softTick, "t"); return; }
+
+		// ---- layout ----
+		const MINU = 14; // min node px
+		const GAP = 34, TOP = 30;
+		// consumer groups keyed by fold key
+		const groups = new Map(); // key → {label,color,total,cur}
+		focus.forEach((r) => foldSegs(r).forEach((seg) => {
+			const k = seg.isOther ? "other" : (seg.segmentKind === "external" ? "external" : seg.cid);
+			let g = groups.get(k);
+			if (!g) {
+				g = { key: k, label: seg.isOther ? seg.label
+					: seg.segmentKind === "external" ? "outside this empire"
+					: CONS[seg.cid].name,
+					color: seg.isOther ? "#6b6a64" : segColor(seg), total: 0, cur: 0,
+					ext: seg.segmentKind === "external" };
+				groups.set(k, g);
+			}
+			g.total += seg.amount;
+		}));
+		const order = [];
+		CONSUMERS.forEach((c) => { if (registry[c.id] && groups.has(c.id)) order.push(groups.get(c.id)); });
+		if (groups.has("other")) order.push(groups.get("other"));
+		if (groups.has("external")) order.push(groups.get("external"));
+
+		const leftUnits = focus.reduce((s, r) => s + Math.max(r.net, 0, r.subscribed), 0);
+		const rightUnits = order.reduce((s, g) => s + g.total, 0);
+		const budget = Math.max(300, Math.min(560, 90 * focus.length + 120));
+		const scale = (budget - GAP * Math.max(focus.length, order.length)) /
+			Math.max(leftUnits, rightUnits, 1);
+		const px = (u) => Math.max(u * scale, 0);
+
+		let y = TOP;
+		focus.forEach((r) => {
+			r._y = y;
+			r._netH = r.net > 0 ? Math.max(px(r.net), 4) : 10;
+			r._subH = Math.max(px(r.subscribed), r.subscribed > 0 ? 3 : 0);
+			y += Math.max(r._netH, r._subH, MINU) + GAP;
+		});
+		const leftH = y;
+		y = TOP;
+		order.forEach((g) => { g.y = y; g.h = Math.max(px(g.total), 6); y += g.h + GAP; });
+		const H = Math.max(leftH, y) + 16, W = 980;
+		const X0 = 218, X1 = 742, NW = 13;
+
+		const wrap = el("div"); wrap.id = "mapwrap";
+		const svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H });
+		svg.id = "mapsvg";
+		const defs = svgEl("defs", {});
+		const pat = svgEl("pattern", { id: "hatchRed", width: "7", height: "7",
+			patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" });
+		pat.appendChild(svgEl("rect", { width: "7", height: "7", fill: "rgba(199,0,57,0.12)" }));
+		pat.appendChild(svgEl("rect", { width: "3", height: "7", fill: "rgba(199,0,57,0.55)" }));
+		defs.appendChild(pat);
+		svg.appendChild(defs);
+
+		const dimRow = (r) => state.trace && state.trace !== r.id;
+		// ---- ribbons first (under nodes) ----
+		focus.forEach((r) => {
+			let sOff = 0;
+			foldSegs(r).forEach((seg) => {
+				const k = seg.isOther ? "other" : (seg.segmentKind === "external" ? "external" : seg.cid);
+				const g = groups.get(k);
+				const h = Math.max(px(seg.amount), 1.5);
+				const sy = r._y + sOff, ty = g.y + g.cur;
+				sOff += h; g.cur += h;
+				const x0 = X0 + NW, x1 = X1, mx = (x0 + x1) / 2;
+				const col = seg.isOther ? "#6b6a64" : segColor(seg);
+				const p = svgEl("path", {
+					d: "M" + x0 + "," + sy + " C" + mx + "," + sy + " " + mx + "," + ty + " " + x1 + "," + ty +
+						" L" + x1 + "," + (ty + h) + " C" + mx + "," + (ty + h) + " " + mx + "," + (sy + h) +
+						" " + x0 + "," + (sy + h) + " Z",
+					fill: col, class: "ribbon",
+					"fill-opacity": dimRow(r) ? "0.05" : (foldDim(seg) ? "0.10" : "0.55"),
+				});
+				if (seg.stale) {
+					p.setAttribute("stroke", "#fab219");
+					p.setAttribute("stroke-width", "1");
+					p.setAttribute("stroke-dasharray", "5 4");
+					p.setAttribute("stroke-opacity", dimRow(r) || foldDim(seg) ? "0.15" : "0.8");
+				}
+				if (!seg.isOther && seg.segmentKind !== "external")
+					p.addEventListener("click", () => setSel(foldKey(seg)));
+				else if (seg.isOther) p.addEventListener("click", () => setSel("other"));
+				bindTip(p, () => segTip(seg, r));
+				svg.appendChild(p);
+			});
+		});
+		// ---- producer nodes ----
+		focus.forEach((r) => {
+			const gEl = svgEl("g", { class: "node", opacity: dimRow(r) ? "0.3" : "1" });
+			const overAmt = r.subscribed - Math.max(r.net, 0);
+			if (r.over && overAmt > 0) {
+				const oy = r._y + (r.net > 0 ? r._netH : 0);
+				const oh = Math.max(r._subH - (r.net > 0 ? r._netH : 0), 6);
+				gEl.appendChild(svgEl("rect", { x: X0 - 3, y: oy, width: NW + 6, height: oh,
+					fill: "url(#hatchRed)", rx: 1 }));
+				// bracket + uncapped over amount
+				gEl.appendChild(svgEl("path", { d: "M" + (X0 - 8) + "," + oy + " h-5 v" + oh + " h5",
+					stroke: "#c70039", fill: "none", "stroke-width": "1.2" }));
+				const ot = svgEl("text", { x: X0 - 18, y: oy + oh / 2 + 4,
+					"text-anchor": "end", class: "overtxt" });
+				ot.textContent = "+" + fmtN(overAmt) + " " + r.unit + " over";
+				gEl.appendChild(ot);
+			}
+			if (r.net > 0) {
+				gEl.appendChild(svgEl("rect", { x: X0, y: r._y, width: NW, height: r._netH,
+					fill: r.over ? "#c70039" : "#565650", rx: 2 }));
+			} else {
+				gEl.appendChild(svgEl("rect", { x: X0, y: r._y, width: NW, height: 10,
+					fill: "url(#hatchRed)", stroke: "#c70039", "stroke-width": "0.8", rx: 2 }));
+			}
+			const lab = svgEl("text", { x: X0 - 8, y: r._y - 9, "text-anchor": "end", class: "pn" });
+			lab.textContent = r.ticker + " — " + r.producer;
+			gEl.appendChild(lab);
+			const sub2 = svgEl("text", { x: X0 + NW + 6, y: r._y - 9, class: "small" });
+			sub2.textContent = r.net > 0
+				? "net " + fmtN(r.net) + " " + r.unit + (r.self > 0 ? " ⌂" : "")
+				: "no net capacity (net " + fmtN(r.net) + ")";
+			gEl.appendChild(sub2);
+			gEl.addEventListener("click", () => {
+				state.trace = state.trace === r.id ? null : r.id;
+				renderPane();
+			});
+			bindTip(gEl, () => rowTip(r) +
+				"<div class='ter'>click: trace only this producer's ribbons · Esc clears</div>");
+			svg.appendChild(gEl);
+		});
+		// ---- consumer nodes ----
+		order.forEach((g) => {
+			const dim = state.sel && g.key !== state.sel;
+			const gEl = svgEl("g", { class: "node", opacity: dim ? "0.3" : "1" });
+			gEl.appendChild(svgEl("rect", { x: X1, y: g.y, width: NW, height: g.h,
+				fill: g.color, rx: 2, "fill-opacity": g.ext ? "0.6" : "1" }));
+			const lab = svgEl("text", { x: X1 + NW + 8, y: g.y + Math.max(g.h / 2, 5) + 4 });
+			lab.textContent = g.label;
+			gEl.appendChild(lab);
+			const v = svgEl("text", { x: X1 + NW + 8, y: g.y + Math.max(g.h / 2, 5) + 17, class: "small num" });
+			v.textContent = fmtN(g.total) + " u/d drawn";
+			gEl.appendChild(v);
+			if (!g.ext) gEl.addEventListener("click", () => setSel(g.key));
+			bindTip(gEl, () => "<div class='big'>" + g.label + "</div><div class='sec num'>draws <b>" +
+				fmtN(g.total) + " u/d</b> across the shown producers</div>" +
+				(g.ext ? "<div class='ter'>outside this empire — counted, not navigable</div>"
+					: "<div class='ter'>click: highlight everywhere</div>"));
+			svg.appendChild(gEl);
+		});
+		wrap.appendChild(svg);
+		pane.appendChild(wrap);
+		pane.appendChild(el("div", "footnote",
+			"Ribbons keep true scale — overflow is never rescaled, it runs past the node bottom over the hatched field. " +
+			"Dashed amber edge = stale draw. Fleet rows have no plan-to-plan flow; see Ledger / Matrix for the fleet domain."));
+	}
+
+	// =====================================================================
+	// tabs & top-level render
+	// =====================================================================
+	function renderPane() {
+		const pane = document.getElementById("pane");
+		pane.innerHTML = "";
+		const S = slice();
+		if (state.tab === "table") renderTable(pane, S);
+		else if (state.tab === "ledger") renderLedger(pane, S);
+		else if (state.tab === "matrix") renderMatrix(pane, S);
+		else renderMap(pane, S);
+		if (state.computing) pane.classList.add("computing");
+	}
+	function renderAll() { renderSummary(); renderLegend(); renderPane(); }
+
+	document.getElementById("tabs").addEventListener("click", (e) => {
+		const b = e.target.closest("button"); if (!b) return;
+		state.tab = b.dataset.t;
+		document.querySelectorAll("#tabs button").forEach((x) =>
+			x.classList.toggle("on", x === b));
+		renderPane(); // filters + selection survive the switch
+	});
+	document.getElementById("fProblems").addEventListener("change", (e) => {
+		state.problemsOnly = e.target.checked; renderAll();
+	});
+	document.getElementById("fStale").addEventListener("change", (e) => {
+		state.staleOnly = e.target.checked; renderAll();
+	});
+	document.getElementById("fQuery").addEventListener("input", (e) => {
+		state.query = e.target.value; renderAll();
+	});
+	document.getElementById("fSort").addEventListener("change", (e) => {
+		state.sort = e.target.value; renderAll();
+	});
+
+	renderAll();
+</script>
+</body>
+</html>
