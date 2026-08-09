@@ -16,6 +16,17 @@ export interface IPreference {
 	burnResupplyDays: number;
 	burnOrigin: string;
 	layoutNavigationStyle: "full" | "collapsed";
+	/**
+	 * Hands the "Auto-Optimize Habs" decision back to the individual plan
+	 * checkbox. While false or absent — the default — habitation
+	 * optimization is forced on for every plan and runs the AREA goal, see
+	 * `useHabOptimization`.
+	 *
+	 * Optional because it is client side only: it is deliberately absent
+	 * from `UserPreferenceSchema`, so it never reaches the backend and a
+	 * preference fetch never carries it back.
+	 */
+	habOptimizePerPlan?: boolean;
 
 	// seeding per plan defaults
 	planOverrides: Record<string, Partial<IPreferencePerPlan>>;

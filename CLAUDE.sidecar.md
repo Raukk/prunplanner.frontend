@@ -170,9 +170,38 @@ anywhere in the repo. Not retroactive.
   NOT done, offered: the order is still picked on parsecs alone, so among
   equally short flyable orders it may pick one whose peak forces more
   trips.
+- 2026-08-09: Habitation auto-optimization is FORCED ON account wide
+  (user decision) and solves the AREA goal, never `"auto"` (which tries
+  cost-minimal first and only falls back to area when it does not fit).
+  `useHabOptimization` is the single chokepoint: the plan checkbox reads
+  through `resolveAutoOptimizeHabs`, so a stored override that is
+  missing, undefined or `false` still optimizes; writes still reach the
+  stored value so it survives the override. Escape hatch is the profile
+  preference `habOptimizePerPlan` (default false) which hands the
+  decision back to the per-plan checkboxes and restores the `"auto"`
+  goal. That preference is CLIENT SIDE ONLY — deliberately absent from
+  `UserPreferenceSchema`, since the hosted backend is out of this fork's
+  control (see 2026-08-09 FIO note); zod strips it from both the PATCH
+  payload and the GET response, so it persists through the user store's
+  local persistence and a preference fetch cannot clobber it. PlanView's
+  optimize watcher became `immediate: true` so a plan stored with the
+  checkbox off is brought in line on open rather than on the next
+  workforce change.
 - 2026-08-07: Staleness epsilon aligned (bug: in an A↔B supply loop
   "the other plan" stayed stale forever): the chain settling epsilon
   (1e-6) and setSnapshot's materially-changed epsilon (was 1e-9) are
   now one shared exported constant `RAUKK_SNAPSHOT_EQUAL_EPSILON` =
   1e-6. A settled pass must count as materially unchanged or the final
   pass re-flags the rest of the loop.
+- 2026-08-09: Plan tool tabs are sticky (user request — open/close a
+  tool while working further down the plan). The toolbar and the tool
+  view are now separate grid items of PlanView's header grid (rows 4
+  and 5, main view moved to row 6): a sticky grid item is constrained
+  to the grid container, not its own row, so only a direct grid child
+  keeps sticking past its own section — that is also why the status
+  bar already worked. Sticky offsets (toolbar below the status bar,
+  material i/o column below both) are measured with a ResizeObserver
+  instead of hardcoded, both bars wrap on narrow screens; this
+  replaced the material i/o column's hardcoded `top-12`. Opening a
+  tool while scrolled down scrolls the panel into view, it would
+  otherwise render off-screen above.

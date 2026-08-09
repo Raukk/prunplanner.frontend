@@ -177,6 +177,7 @@
 			"label": "Infrastructure",
 			"auto_optimize": "Auto-Optimize Habs",
 			"auto_optimize_tooltip": "Automatically optimize habitations to meet workforce needs as buildings are added.",
+			"auto_optimize_forced_tooltip": "Habitation optimization is enforced for all plans and solves for the smallest area. Enable per-plan habitation optimization in your profile preferences to control it here.",
 			"buttons": {
 				"optimize_cost": "Optimize Cost",
 				"optimize_area": "Optimize Area"

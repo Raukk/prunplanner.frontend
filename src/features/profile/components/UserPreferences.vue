@@ -38,6 +38,7 @@
 		burnResupplyDays,
 		burnOrigin,
 		locale,
+		habOptimizePerPlan,
 		planSettingsOverview,
 		cleanPlanPreferences,
 	} = usePreferences();
@@ -174,6 +175,21 @@
 		<PFormItem :label="t('profile.preferences.form.buy_from_cx')">
 			<PCheckbox v-model:checked="defaultBuyItemsFromCX" />
 		</PFormItem>
+
+		<PFormSeperator>
+			<h4 class="font-bold py-1">
+				{{ $t("profile.preferences.form.planning") }}
+			</h4>
+		</PFormSeperator>
+
+		<PFormItem :label="t('profile.preferences.form.hab_optimize_per_plan')">
+			<PCheckbox v-model:checked="habOptimizePerPlan" />
+		</PFormItem>
+		<PFormSeperator>
+			<div class="text-xs text-white/60 pt-1 pb-2">
+				{{ $t("profile.preferences.form.hab_optimize_per_plan_note") }}
+			</div>
+		</PFormSeperator>
 	</PForm>
 
 	<h3 class="font-bold py-3">
