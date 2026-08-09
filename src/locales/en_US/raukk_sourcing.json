@@ -96,7 +96,7 @@
 		"stale": "stale snapshot"
 	},
 	"shipping_page": {
-		"view_title": "Shipping",
+		"view_title": "Fleet & Shipping",
 		"info": "Fleet, routes and depots of the whole account. Everything here is account-global; the per-plan pieces — sources, local market rates and the plan CX anchor — stay on each plan's Sourcing tool.",
 		"manage_link": "Manage fleet & routes",
 		"recompute": "Recompute Chains",
