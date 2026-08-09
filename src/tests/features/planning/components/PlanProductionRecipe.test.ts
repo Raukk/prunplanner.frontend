@@ -25,8 +25,8 @@ const i18n = createI18n({
 });
 
 function recipeData(
-	productionFeeBatch: number,
-	productionFeePerUnit: number
+	productionFeeBatch: number | undefined,
+	productionFeePerUnit: number | undefined
 ): IProductionBuildingRecipe {
 	return {
 		recipeId: "SME#4xAL",
@@ -84,10 +84,16 @@ describe("PlanProductionRecipe", () => {
 		expect(wrapper.text()).toContain("512.50 ȼ / unit");
 	});
 
-	it("shows no fee while the planets fees are unknown", () => {
+	it("states a fee of zero as a real fee", () => {
 		const wrapper: VueWrapper = render(recipeData(0, 0));
 
+		expect(wrapper.text()).toContain("0.00 ȼ / batch");
+	});
+
+	it("marks the fee unknown while the planets fees never loaded", () => {
+		const wrapper: VueWrapper = render(recipeData(undefined, undefined));
+
 		expect(wrapper.text()).not.toContain("batch");
-		expect(wrapper.text()).not.toContain("unit");
+		expect(wrapper.text()).toContain("—");
 	});
 });

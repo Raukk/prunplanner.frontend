@@ -122,6 +122,30 @@
 	});
 
 	/**
+	 * Plan view path of the source, undefined for an aggregate and for a
+	 * source whose snapshot vanished: both name no single base to open.
+	 * @author raukk
+	 */
+	const localSourceLink: ComputedRef<string | undefined> = computed(() => {
+		const source: IRaukkTickerSource | undefined = localSource.value;
+
+		if (
+			props.delta >= 0 ||
+			source === undefined ||
+			source.mode !== "plan" ||
+			isAggregateSource(source.sourcePlanUuid)
+		)
+			return undefined;
+
+		const snapshot: IRaukkSnapshot | undefined =
+			raukkSourcingStore.snapshots[source.sourcePlanUuid];
+
+		if (!snapshot) return undefined;
+
+		return `/plan/${snapshot.planetNaturalId}/${source.sourcePlanUuid}`;
+	});
+
+	/**
 	 * Share of the SOURCE's output that all plans together draw from it,
 	 * undefined while the row is not drawn from a plan at all. Aggregates
 	 * pool the whole producer set, exactly as their price and their
@@ -223,7 +247,17 @@
 <template>
 	<PTooltip v-if="localSourceLabel">
 		<template #trigger>
+			<router-link
+				v-if="localSourceLink"
+				:to="localSourceLink"
+				class="pl-1 text-xs hover:underline"
+				:class="
+					localSourceOversubscribed ? 'text-negative' : 'text-white/40'
+				">
+				{{ localSourceText }}
+			</router-link>
 			<span
+				v-else
 				class="pl-1 text-xs hover:cursor-help"
 				:class="
 					localSourceOversubscribed ? 'text-negative' : 'text-white/40'

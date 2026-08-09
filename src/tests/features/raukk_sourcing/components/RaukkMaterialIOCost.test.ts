@@ -97,6 +97,39 @@ describe("RaukkMaterialIOCost", () => {
 		expect(render(-10, -500).text()).toContain("ours -200.00");
 	});
 
+	it("warns in red once sourcing costs more than buying", () => {
+		const store = useRaukkSourcingStore();
+
+		store.snapshots[CONSUMER] = snapshot(
+			{ HE3: 80 },
+			{ HE3: { mode: "plan", sourcePlanUuid: SOURCE } }
+		);
+
+		// 10 units per day at ȼ 80 against the ȼ 50 shown above
+		const wrapper: VueWrapper = render(-10, -500);
+
+		expect(wrapper.text()).toContain("ours -800.00");
+		expect(wrapper.find("div.text-negative").exists()).toBe(true);
+		expect(wrapper.findComponent({ name: "WarningAmberOutlined" }).exists())
+			.toBe(true);
+		expect(wrapper.text()).toContain("costs MORE than buying it");
+	});
+
+	it("stays neutral while sourcing is the cheaper side", () => {
+		const store = useRaukkSourcingStore();
+
+		store.snapshots[CONSUMER] = snapshot(
+			{ HE3: 20 },
+			{ HE3: { mode: "plan", sourcePlanUuid: SOURCE } }
+		);
+
+		const wrapper: VueWrapper = render(-10, -500);
+
+		expect(wrapper.find("div.text-negative").exists()).toBe(false);
+		expect(wrapper.findComponent({ name: "WarningAmberOutlined" }).exists())
+			.toBe(false);
+	});
+
 	it("stays silent while the input has no source at all", () => {
 		const store = useRaukkSourcingStore();
 

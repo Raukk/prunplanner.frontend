@@ -72,6 +72,10 @@ function render(delta: number, ticker: string = "HE3"): VueWrapper {
 		global: {
 			plugins: [i18n],
 			stubs: {
+				RouterLink: {
+					props: ["to"],
+					template: '<a :href="to"><slot /></a>',
+				},
 				PTooltip: {
 					template:
 						'<div><span class="trigger"><slot name="trigger" /></span><span class="content"><slot /></span></div>',
@@ -102,7 +106,7 @@ describe("RaukkMaterialIOInfo", () => {
 
 			expect(wrapper.text()).toContain("← Hermes");
 			expect(wrapper.text()).not.toContain("%");
-			expect(wrapper.find("span.text-negative").exists()).toBe(false);
+			expect(wrapper.find("a.text-negative").exists()).toBe(false);
 		});
 
 		it("carries the drawn share and turns negative once the source is oversubscribed", () => {
@@ -125,10 +129,44 @@ describe("RaukkMaterialIOInfo", () => {
 			const wrapper: VueWrapper = render(-80);
 
 			expect(wrapper.text()).toContain("← Hermes (120.00%)");
-			expect(wrapper.find("span.text-negative").exists()).toBe(true);
+			expect(wrapper.find(".text-negative").exists()).toBe(true);
 			expect(wrapper.text()).toContain(
 				raukk_matio.sourced_oversubscribed_tooltip
 			);
+		});
+
+		it("links a concrete source to its plan view", () => {
+			const store = useRaukkSourcingStore();
+
+			store.snapshots[SOURCE] = snapshot("Hermes", { HE3: 100 });
+			store.snapshots[CONSUMER] = snapshot(
+				"Consumer",
+				{},
+				{ [SOURCE]: { HE3: 40 } },
+				{ HE3: { mode: "plan", sourcePlanUuid: SOURCE } }
+			);
+
+			expect(render(-40).find("a").attributes("href")).toBe(
+				`/plan/OT-580b/${SOURCE}`
+			);
+		});
+
+		it("links no aggregate source, it names no single base", () => {
+			const store = useRaukkSourcingStore();
+
+			store.snapshots[SOURCE] = snapshot("Hermes", { HE3: 100 });
+			store.snapshots[OTHER_SOURCE] = snapshot("Apollo", { HE3: 100 });
+			store.snapshots[CONSUMER] = snapshot(
+				"Consumer",
+				{},
+				{ [SOURCE]: { HE3: 40 } },
+				{ HE3: { mode: "plan", sourcePlanUuid: "AGG_AVG" } }
+			);
+
+			const wrapper: VueWrapper = render(-40);
+
+			expect(wrapper.find("a").exists()).toBe(false);
+			expect(wrapper.text()).toContain("← avg of 2 producers");
 		});
 
 		it("pools the whole producer set of an aggregate source", () => {
@@ -147,7 +185,7 @@ describe("RaukkMaterialIOInfo", () => {
 
 			// 240 drawn over 200 produced, both producers pooled
 			expect(wrapper.text()).toContain("← avg of 2 producers (120.00%)");
-			expect(wrapper.find("span.text-negative").exists()).toBe(true);
+			expect(wrapper.find(".text-negative").exists()).toBe(true);
 		});
 	});
 
@@ -173,7 +211,7 @@ describe("RaukkMaterialIOInfo", () => {
 			const wrapper: VueWrapper = render(10, "HE");
 
 			expect(wrapper.text()).toContain("→ 12.00 / day (120.00%)");
-			expect(wrapper.find("span.text-negative").exists()).toBe(true);
+			expect(wrapper.find(".text-negative").exists()).toBe(true);
 		});
 	});
 });

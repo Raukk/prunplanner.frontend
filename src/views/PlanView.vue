@@ -599,430 +599,435 @@
 		:key="`INSIGHTS#${planetData.planet_natural_id}`"
 		:planet-natural-id="planetData.planet_natural_id" />
 	<div class="@container">
-		<div
-			class="grid grid-cols-1 grid-rows-[repeat(5,auto)] md:grid-cols-[auto_1fr_auto] gap-x-3">
-			<!-- Plan Name & Selector -->
+		<!-- raukk: plan name, status bar and actions travel with the page
+			 (user request); the tool bar below them scrolls away -->
+		<div class="sticky top-0 z-1000 bg-(--app-bg)">
 			<div
-				class="p-3 row-1 col-1 flex flex-row flex-wrap gap-x-3 pt-3 pb-3 md:pb-0 @6xl:pb-3 items-baseline">
-				<h1 class="text-2xl font-bold text-white">
-					{{ planName }}
-				</h1>
-				<span class="text-white/60">
-					{{
-						planetData.planet_name != planetData.planet_natural_id
-							? planetData.planet_name + " - "
-							: ""
-					}}
-					{{ planetData.planet_natural_id }}
-				</span>
-			</div>
-			<!-- Status Bar (sticky) -->
-			<div
-				class="row-3 md:row-2 md:col-span-full @6xl:row-1 @6xl:col-span-1 w-full md:w-auto justify-self-start md:justify-self-center my-auto p-3 sticky top-0 z-1000 bg-(--app-bg) md:rounded-b-lg">
-				<PlanStatusBar
-					:area-data="result.area"
-					:corphq="result.corphq"
-					:cogc="result.cogc"
-					:expert-data="result.experts"
-					:overview-data="overviewData" />
-			</div>
-			<!-- Plan Actions -->
-			<div
-				class="p-3 row-2 md:row-1 md:col-3 py-3 flex flex-row flex-wrap gap-x-3">
-				<HelpDrawer file-name="plan" />
-
-				<PButtonGroup v-if="userStore.isLoggedIn">
-					<PButton
-						v-if="disabled"
-						:disabled="sharedWasCloned"
-						:type="!sharedWasCloned ? 'primary' : 'success'"
-						@click="cloneShared">
-						<template #icon>
-							<ContentCopySharp />
-						</template>
-						<span v-if="!sharedWasCloned">
-							{{ $t("common.buttons.clone_plan") }}
-						</span>
-						<span v-else>
-							{{ $t("common.buttons.clone_complete") }}
-						</span>
-					</PButton>
-					<PTooltip :disabled="saveable">
-						<template #trigger>
-							<!-- ButtonGroup styling doesn't work quite right with this
-							 being wrapped in a tooltip, explicitly set rounded on it -->
-							<PButton
-								:loading="refIsSaving"
-								:type="
-									modified || !saveable ? 'error' : 'success'
-								"
-								:disabled="disabled || !saveable"
-								class="rounded-none! rounded-l-sm!"
-								@click="save">
-								<template #icon>
-									<SaveSharp />
-								</template>
-								{{
-									existing
-										? t("common.buttons.save")
-										: t("common.buttons.create")
-								}}
-							</PButton>
-						</template>
-						{{ $t("plan.notifications.must_have_name") }}
-					</PTooltip>
-					<PButton
-						v-if="existing && !disabled"
-						@click="openSaveAsModal">
-						<template #icon>
-							<ContentCopySharp />
-						</template>
-						{{ $t("common.buttons.save_as") }}
-					</PButton>
-					<PButton
-						v-if="existing"
-						:disabled="disabled"
-						:loading="refIsReloading"
-						@click="reloadPlan">
-						<template #icon>
-							<ChangeCircleOutlined />
-						</template>
-						{{ $t("common.buttons.reload") }}
-					</PButton>
-
-					<ShareButton
-						v-if="!disabled && refPlanData.uuid"
-						:plan-uuid="refPlanData.uuid" />
-				</PButtonGroup>
-				<!-- empty div to maintain layout -->
-				<div v-else class="@[1290px]:w-112.5" />
-			</div>
-			<!-- Tools Container -->
-			<div class="row-4 md:col-span-3">
-				<!-- Toolbar -->
+				class="grid grid-cols-1 grid-rows-[repeat(3,auto)] md:grid-cols-[auto_1fr_auto] gap-x-3">
+				<!-- Plan Name & Selector -->
 				<div
-					class="flex flex-wrap grow @3xl:justify-end border-y border-white/10 gap-3 py-3 child:my-auto px-3">
-					<PButton
-						:type="
-							refShowTool === 'configuration'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('configuration')">
-						<template #icon>
-							<SettingsSharp />
-						</template>
-						{{ $t("plan.components.configuration.label") }}
-					</PButton>
-					<PButton
-						v-if="userStore.isLoggedIn"
-						:type="refShowTool === 'popr' ? 'primary' : 'secondary'"
-						@click="toggleTool('popr')">
-						{{ $t("plan.tools.labels.popr") }}
-					</PButton>
-					<PButton
-						:type="
-							refShowTool === 'visitation-frequency'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('visitation-frequency')">
-						{{ $t("plan.tools.labels.visitation_frequency") }}
-					</PButton>
-					<PButton
-						:type="
-							refShowTool === 'construction-cart'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('construction-cart')">
-						{{ $t("plan.tools.labels.construction_cart") }}
-					</PButton>
-					<PButton
-						:type="
-							refShowTool === 'supply-cart'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('supply-cart')">
-						{{ $t("plan.tools.labels.supply_cart") }}
-					</PButton>
-					<PButton
-						:type="
-							refShowTool === 'repair-analysis'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('repair-analysis')">
-						{{ $t("plan.tools.labels.repair_analysis") }}
-					</PButton>
-					<!-- raukk: sourcing tool -->
-					<PButton
-						:type="
-							refShowTool === 'raukk-sourcing'
-								? 'primary'
-								: 'secondary'
-						"
-						@click="toggleTool('raukk-sourcing')">
-						{{ $t("raukk_sourcing.title") }}
-					</PButton>
+					class="p-3 row-1 col-1 flex flex-row flex-wrap gap-x-3 pt-3 pb-3 md:pb-0 @6xl:pb-3 items-baseline">
+					<h1 class="text-2xl font-bold text-white">
+						{{ planName }}
+					</h1>
+					<span class="text-white/60">
+						{{
+							planetData.planet_name != planetData.planet_natural_id
+								? planetData.planet_name + " - "
+								: ""
+						}}
+						{{ planetData.planet_natural_id }}
+					</span>
 				</div>
-				<!-- Tool View -->
+				<!-- Status Bar, sticky with the header around it -->
 				<div
-					class="transition-discrete transition-opacity duration-500"
-					:class="
-						!refShowTool
-							? 'opacity-0 overflow-hidden h-0!'
-							: 'px-6 py-3 opacity-100 border-b border-white/10'
-					">
-					<div
-						v-if="refShowTool === 'configuration'"
-						class="flex flex-wrap sm:justify-center-safe gap-6">
-						<div class="flex flex-col min-w-75">
-							<h2 class="text-white/80 font-bold text-lg pb-3">
-								{{ $t("plan.components.configuration.label") }}
-							</h2>
+					class="row-3 md:row-2 md:col-span-full @6xl:row-1 @6xl:col-span-1 w-full md:w-auto justify-self-start md:justify-self-center my-auto p-3 md:rounded-b-lg">
+					<PlanStatusBar
+						:area-data="result.area"
+						:corphq="result.corphq"
+						:cogc="result.cogc"
+						:expert-data="result.experts"
+						:overview-data="overviewData" />
+				</div>
+				<!-- Plan Actions -->
+				<div
+					class="p-3 row-2 md:row-1 md:col-3 py-3 flex flex-row flex-wrap gap-x-3">
+					<HelpDrawer file-name="plan" />
 
-							<div
-								class="flex flex-col gap-y-3 sm:border sm:border-white/10 sm:rounded sm:p-3">
-								<PlanConfiguration
-									:disabled="disabled"
-									:plan-name="planName"
-									:empire-options="refEmpireList"
-									:active-empire="computedActiveEmpire"
-									:plan-empires="planEmpires"
-									@update:active-empire="
-										(empireUuid: string) => {
-											refEmpireUuid = empireUuid;
-											refCXUuid =
-												findEmpireCXUuid(empireUuid);
-										}
+					<PButtonGroup v-if="userStore.isLoggedIn">
+						<PButton
+							v-if="disabled"
+							:disabled="sharedWasCloned"
+							:type="!sharedWasCloned ? 'primary' : 'success'"
+							@click="cloneShared">
+							<template #icon>
+								<ContentCopySharp />
+							</template>
+							<span v-if="!sharedWasCloned">
+								{{ $t("common.buttons.clone_plan") }}
+							</span>
+							<span v-else>
+								{{ $t("common.buttons.clone_complete") }}
+							</span>
+						</PButton>
+						<PTooltip :disabled="saveable">
+							<template #trigger>
+								<!-- ButtonGroup styling doesn't work quite right with this
+								 being wrapped in a tooltip, explicitly set rounded on it -->
+								<PButton
+									:loading="refIsSaving"
+									:type="
+										modified || !saveable ? 'error' : 'success'
 									"
-									@update:plan-name="handleChangePlanName" />
-								<PlanArea
-									:disabled="disabled"
-									:area-data="result.area"
-									:planet-natural-id="
-										planetData.planet_natural_id
-									"
-									@update:permits="handleUpdatePermits" />
-								<PlanBonuses
-									:disabled="disabled"
-									:corphq="result.corphq"
-									:cogc="result.cogc"
-									:planet-natural-id="
-										planetData.planet_natural_id
-									"
-									@update:corphq="handleUpdateCorpHQ"
-									@update:cogc="handleUpdateCOGC" />
-							</div>
-						</div>
-						<div>
-							<h2 class="text-white/80 font-bold text-lg pb-3">
-								{{ $t("plan.components.infrastructure.label") }}
-							</h2>
-							<div
-								class="sm:border sm:border-white/10 sm:rounded sm:p-3">
-								<PlanInfrastructure
-									:disabled="disabled"
-									:infrastructure-data="result.infrastructure"
-									:auto-optimize-habs="refAutoOptimizeHabs"
-									:planet-natural-id="
-										planetData.planet_natural_id
-									"
-									@update:infrastructure="
-										handleUpdateInfrastructure
-									"
-									@update:auto-optimize-habs="
-										(v: boolean, goal: HabSolverGoal) => {
-											refAutoOptimizeHabs = v;
-											trackEvent(
-												'plan_tool_optimize_habitation_active',
-												{ active: v }
-											);
-											applyOptimizeHabs(goal, false);
-										}
-									"
-									@optimize-habs="
-										(goal: HabSolverGoal) =>
-											applyOptimizeHabs(goal, true)
-									" />
-							</div>
-						</div>
-						<div>
-							<h2 class="text-white/80 font-bold text-lg pb-3">
-								{{ $t("plan.components.experts.label") }}
-							</h2>
-							<div
-								class="sm:border sm:border-white/10 sm:rounded sm:p-3">
-								<PlanExperts
-									:disabled="disabled"
-									:expert-data="result.experts"
-									:planet-natural-id="
-										planetData.planet_natural_id
-									"
-									@update:expert="handleUpdateExpert" />
-							</div>
-						</div>
-					</div>
-					<Suspense v-else-if="refShowTool && compViewToolMeta">
-						<template #default>
-							<component
-								:is="compViewToolComponent"
-								v-bind="compViewToolMeta.props"
-								v-on="compViewToolMeta.listeners" />
-						</template>
-						<template #fallback>
-							<div class="w-full text-center py-5">
-								<PSpin />
-							</div>
-						</template>
-					</Suspense>
+									:disabled="disabled || !saveable"
+									class="rounded-none! rounded-l-sm!"
+									@click="save">
+									<template #icon>
+										<SaveSharp />
+									</template>
+									{{
+										existing
+											? t("common.buttons.save")
+											: t("common.buttons.create")
+									}}
+								</PButton>
+							</template>
+							{{ $t("plan.notifications.must_have_name") }}
+						</PTooltip>
+						<PButton
+							v-if="existing && !disabled"
+							@click="openSaveAsModal">
+							<template #icon>
+								<ContentCopySharp />
+							</template>
+							{{ $t("common.buttons.save_as") }}
+						</PButton>
+						<PButton
+							v-if="existing"
+							:disabled="disabled"
+							:loading="refIsReloading"
+							@click="reloadPlan">
+							<template #icon>
+								<ChangeCircleOutlined />
+							</template>
+							{{ $t("common.buttons.reload") }}
+						</PButton>
+
+						<ShareButton
+							v-if="!disabled && refPlanData.uuid"
+							:plan-uuid="refPlanData.uuid" />
+					</PButtonGroup>
+					<!-- empty div to maintain layout -->
+					<div v-else class="@[1290px]:w-112.5" />
 				</div>
 			</div>
-			<!-- Main Plan View -->
+		</div>
+		<!-- Tools Container -->
+		<div>
+			<!-- Toolbar -->
 			<div
-				class="p-3 row-5 col-span-full grid grid-cols-1 @[1290px]:grid-cols-[auto_450px] pt-3 gap-3">
-				<div>
-					<div
-						class="flex flex-row flex-wrap sm:justify-center-safe gap-6">
-						<div>
-							<h2 class="text-white/80 font-bold text-lg pb-3">
-								{{ $t("plan.components.workforce.label") }}
-							</h2>
-							<PlanWorkforce
+				class="flex flex-wrap grow @3xl:justify-end border-y border-white/10 gap-3 py-3 child:my-auto px-3">
+				<PButton
+					:type="
+						refShowTool === 'configuration'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('configuration')">
+					<template #icon>
+						<SettingsSharp />
+					</template>
+					{{ $t("plan.components.configuration.label") }}
+				</PButton>
+				<PButton
+					v-if="userStore.isLoggedIn"
+					:type="refShowTool === 'popr' ? 'primary' : 'secondary'"
+					@click="toggleTool('popr')">
+					{{ $t("plan.tools.labels.popr") }}
+				</PButton>
+				<PButton
+					:type="
+						refShowTool === 'visitation-frequency'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('visitation-frequency')">
+					{{ $t("plan.tools.labels.visitation_frequency") }}
+				</PButton>
+				<PButton
+					:type="
+						refShowTool === 'construction-cart'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('construction-cart')">
+					{{ $t("plan.tools.labels.construction_cart") }}
+				</PButton>
+				<PButton
+					:type="
+						refShowTool === 'supply-cart'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('supply-cart')">
+					{{ $t("plan.tools.labels.supply_cart") }}
+				</PButton>
+				<PButton
+					:type="
+						refShowTool === 'repair-analysis'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('repair-analysis')">
+					{{ $t("plan.tools.labels.repair_analysis") }}
+				</PButton>
+				<!-- raukk: sourcing tool -->
+				<PButton
+					:type="
+						refShowTool === 'raukk-sourcing'
+							? 'primary'
+							: 'secondary'
+					"
+					@click="toggleTool('raukk-sourcing')">
+					{{ $t("raukk_sourcing.title") }}
+				</PButton>
+			</div>
+			<!-- Tool View -->
+			<div
+				class="transition-discrete transition-opacity duration-500"
+				:class="
+					!refShowTool
+						? 'opacity-0 overflow-hidden h-0!'
+						: 'px-6 py-3 opacity-100 border-b border-white/10'
+				">
+				<div
+					v-if="refShowTool === 'configuration'"
+					class="flex flex-wrap sm:justify-center-safe gap-6">
+					<div class="flex flex-col min-w-75">
+						<h2 class="text-white/80 font-bold text-lg pb-3">
+							{{ $t("plan.components.configuration.label") }}
+						</h2>
+
+						<div
+							class="flex flex-col gap-y-3 sm:border sm:border-white/10 sm:rounded sm:p-3">
+							<PlanConfiguration
 								:disabled="disabled"
-								:workforce-data="result.workforce"
+								:plan-name="planName"
+								:empire-options="refEmpireList"
+								:active-empire="computedActiveEmpire"
+								:plan-empires="planEmpires"
+								@update:active-empire="
+									(empireUuid: string) => {
+										refEmpireUuid = empireUuid;
+										refCXUuid =
+											findEmpireCXUuid(empireUuid);
+									}
+								"
+								@update:plan-name="handleChangePlanName" />
+							<PlanArea
+								:disabled="disabled"
+								:area-data="result.area"
 								:planet-natural-id="
 									planetData.planet_natural_id
 								"
-								@update:lux="handleUpdateWorkforceLux" />
-						</div>
-						<div>
-							<PlanOverview
-								:visitation-data="visitationData"
-								:overview-data="overviewData"
-								:area-data="result.area">
-								<template #heading="{ text }">
-									<h2
-										class="text-white/80 font-bold text-lg pb-3">
-										{{ text }}
-									</h2>
-								</template>
-							</PlanOverview>
+								@update:permits="handleUpdatePermits" />
+							<PlanBonuses
+								:disabled="disabled"
+								:corphq="result.corphq"
+								:cogc="result.cogc"
+								:planet-natural-id="
+									planetData.planet_natural_id
+								"
+								@update:corphq="handleUpdateCorpHQ"
+								@update:cogc="handleUpdateCOGC" />
 						</div>
 					</div>
-					<div class="pt-6">
-						<PlanProduction
-							:disabled="disabled"
-							:production-data="result.production"
-							:planet-resources="planetData.resources"
-							:cogc="result.cogc"
-							:cx-uuid="refCXUuid"
-							:planet-id="planetData.planet_natural_id"
-							@update:building:amount="handleUpdateBuildingAmount"
-							@delete:building="handleDeleteBuilding"
-							@create:building="handleCreateBuilding"
-							@create:building:recipe="
-								handleCreateBuildingAndRecipe
-							"
-							@update:building:recipe:amount="
-								handleUpdateBuildingRecipeAmount
-							"
-							@delete:building:recipe="handleDeleteBuildingRecipe"
-							@add:building:recipe="handleAddBuildingRecipe"
-							@update:building:recipe="
-								handleChangeBuildingRecipe
-							" />
+					<div>
+						<h2 class="text-white/80 font-bold text-lg pb-3">
+							{{ $t("plan.components.infrastructure.label") }}
+						</h2>
+						<div
+							class="sm:border sm:border-white/10 sm:rounded sm:p-3">
+							<PlanInfrastructure
+								:disabled="disabled"
+								:infrastructure-data="result.infrastructure"
+								:auto-optimize-habs="refAutoOptimizeHabs"
+								:planet-natural-id="
+									planetData.planet_natural_id
+								"
+								@update:infrastructure="
+									handleUpdateInfrastructure
+								"
+								@update:auto-optimize-habs="
+									(v: boolean, goal: HabSolverGoal) => {
+										refAutoOptimizeHabs = v;
+										trackEvent(
+											'plan_tool_optimize_habitation_active',
+											{ active: v }
+										);
+										applyOptimizeHabs(goal, false);
+									}
+								"
+								@optimize-habs="
+									(goal: HabSolverGoal) =>
+										applyOptimizeHabs(goal, true)
+								" />
+						</div>
+					</div>
+					<div>
+						<h2 class="text-white/80 font-bold text-lg pb-3">
+							{{ $t("plan.components.experts.label") }}
+						</h2>
+						<div
+							class="sm:border sm:border-white/10 sm:rounded sm:p-3">
+							<PlanExperts
+								:disabled="disabled"
+								:expert-data="result.experts"
+								:planet-natural-id="
+									planetData.planet_natural_id
+								"
+								@update:expert="handleUpdateExpert" />
+						</div>
 					</div>
 				</div>
-				<div>
-					<div class="sticky top-12">
-						<h2
-							class="text-white/80 font-bold text-lg pb-3 flex justify-between child:my-auto">
-							<div>
-								{{ $t("plan.components.materialio.label") }}
-							</div>
-							<div class="flex gap-x-3">
-								<PTooltip>
-									<template #trigger>
-										<PButton
-											size="sm"
-											secondary
-											@click="
-												refMaterialIOShowBasked =
-													!refMaterialIOShowBasked
-											">
-											<template #icon>
-												<ShoppingBasketSharp
-													v-if="
-														!refMaterialIOShowBasked
-													" />
-												<AttachMoneySharp v-else />
-											</template>
-										</PButton>
-									</template>
-									{{
-										$t(
-											"plan.components.materialio.buttons.toggle_weight_volume"
-										)
-									}}
-								</PTooltip>
-
-								<PTooltip>
-									<template #trigger>
-										<PButton
-											size="sm"
-											secondary
-											@click="
-												refMaterialIOSplitted =
-													!refMaterialIOSplitted
-											">
-											<template #icon>
-												<DataObjectRound
-													v-if="
-														!refMaterialIOSplitted
-													" />
-												<DataSaverOffSharp v-else />
-											</template>
-										</PButton>
-									</template>
-									{{
-										$t(
-											"plan.components.materialio.buttons.toggle_production_workforce"
-										)
-									}}
-								</PTooltip>
-							</div>
+				<Suspense v-else-if="refShowTool && compViewToolMeta">
+					<template #default>
+						<component
+							:is="compViewToolComponent"
+							v-bind="compViewToolMeta.props"
+							v-on="compViewToolMeta.listeners" />
+					</template>
+					<template #fallback>
+						<div class="w-full text-center py-5">
+							<PSpin />
+						</div>
+					</template>
+				</Suspense>
+			</div>
+		</div>
+		<!-- Main Plan View -->
+		<div
+			class="p-3 grid grid-cols-1 @[1290px]:grid-cols-[auto_450px] pt-3 gap-3">
+			<div>
+				<div
+					class="flex flex-row flex-wrap sm:justify-center-safe gap-6">
+					<div>
+						<h2 class="text-white/80 font-bold text-lg pb-3">
+							{{ $t("plan.components.workforce.label") }}
 						</h2>
-						<template v-if="!refMaterialIOSplitted">
-							<PlanMaterialIO
-								:material-i-o-data="result.materialio"
-								:show-basked="refMaterialIOShowBasked" />
-						</template>
-						<template v-else>
-							<h3 class="font-bold pb-3">
-								{{
-									$t(
-										"plan.components.materialio.label_production"
-									)
-								}}
-							</h3>
-							<PlanMaterialIO
-								:material-i-o-data="result.productionMaterialIO"
-								:show-basked="refMaterialIOShowBasked" />
-							<h3 class="font-bold py-3">
-								{{
-									$t(
-										"plan.components.materialio.label_workforce"
-									)
-								}}
-							</h3>
-							<PlanMaterialIO
-								:material-i-o-data="result.workforceMaterialIO"
-								:show-basked="refMaterialIOShowBasked" />
-						</template>
+						<PlanWorkforce
+							:disabled="disabled"
+							:workforce-data="result.workforce"
+							:planet-natural-id="
+								planetData.planet_natural_id
+							"
+							@update:lux="handleUpdateWorkforceLux" />
 					</div>
+					<div>
+						<PlanOverview
+							:visitation-data="visitationData"
+							:overview-data="overviewData"
+							:area-data="result.area">
+							<template #heading="{ text }">
+								<h2
+									class="text-white/80 font-bold text-lg pb-3">
+									{{ text }}
+								</h2>
+							</template>
+						</PlanOverview>
+					</div>
+				</div>
+				<div class="pt-6">
+					<PlanProduction
+						:disabled="disabled"
+						:production-data="result.production"
+						:planet-resources="planetData.resources"
+						:cogc="result.cogc"
+						:cx-uuid="refCXUuid"
+						:planet-id="planetData.planet_natural_id"
+						@update:building:amount="handleUpdateBuildingAmount"
+						@delete:building="handleDeleteBuilding"
+						@create:building="handleCreateBuilding"
+						@create:building:recipe="
+							handleCreateBuildingAndRecipe
+						"
+						@update:building:recipe:amount="
+							handleUpdateBuildingRecipeAmount
+						"
+						@delete:building:recipe="handleDeleteBuildingRecipe"
+						@add:building:recipe="handleAddBuildingRecipe"
+						@update:building:recipe="
+							handleChangeBuildingRecipe
+						" />
+				</div>
+			</div>
+			<div>
+				<!-- raukk: clears the sticky plan header above it -->
+				<div class="sticky top-20">
+					<h2
+						class="text-white/80 font-bold text-lg pb-3 flex justify-between child:my-auto">
+						<div>
+							{{ $t("plan.components.materialio.label") }}
+						</div>
+						<div class="flex gap-x-3">
+							<PTooltip>
+								<template #trigger>
+									<PButton
+										size="sm"
+										secondary
+										@click="
+											refMaterialIOShowBasked =
+												!refMaterialIOShowBasked
+										">
+										<template #icon>
+											<ShoppingBasketSharp
+												v-if="
+													!refMaterialIOShowBasked
+												" />
+											<AttachMoneySharp v-else />
+										</template>
+									</PButton>
+								</template>
+								{{
+									$t(
+										"plan.components.materialio.buttons.toggle_weight_volume"
+									)
+								}}
+							</PTooltip>
+
+							<PTooltip>
+								<template #trigger>
+									<PButton
+										size="sm"
+										secondary
+										@click="
+											refMaterialIOSplitted =
+												!refMaterialIOSplitted
+										">
+										<template #icon>
+											<DataObjectRound
+												v-if="
+													!refMaterialIOSplitted
+												" />
+											<DataSaverOffSharp v-else />
+										</template>
+									</PButton>
+								</template>
+								{{
+									$t(
+										"plan.components.materialio.buttons.toggle_production_workforce"
+									)
+								}}
+							</PTooltip>
+						</div>
+					</h2>
+					<template v-if="!refMaterialIOSplitted">
+						<PlanMaterialIO
+							:material-i-o-data="result.materialio"
+							:show-basked="refMaterialIOShowBasked" />
+					</template>
+					<template v-else>
+						<h3 class="font-bold pb-3">
+							{{
+								$t(
+									"plan.components.materialio.label_production"
+								)
+							}}
+						</h3>
+						<PlanMaterialIO
+							:material-i-o-data="result.productionMaterialIO"
+							:show-basked="refMaterialIOShowBasked" />
+						<h3 class="font-bold py-3">
+							{{
+								$t(
+									"plan.components.materialio.label_workforce"
+								)
+							}}
+						</h3>
+						<PlanMaterialIO
+							:material-i-o-data="result.workforceMaterialIO"
+							:show-basked="refMaterialIOShowBasked" />
+					</template>
 				</div>
 			</div>
 		</div>

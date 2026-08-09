@@ -17,6 +17,7 @@
 
 	// UI
 	import { PTooltip } from "@/ui";
+	import { WarningAmberOutlined } from "@vicons/material";
 
 	// Types & Interfaces
 	import {
@@ -120,25 +121,58 @@
 	const localIsStale: ComputedRef<boolean> = computed(
 		() => localSnapshot.value?.stale === true
 	);
+
+	/**
+	 * Sourcing this input costs MORE than simply buying it, the case the
+	 * note exists to catch. Both numbers are daily costs of an input and
+	 * therefore negative, so the worse one is the smaller one.
+	 * @author raukk
+	 */
+	const localIsWorseThanMarket: ComputedRef<boolean> = computed(
+		() =>
+			localCostPerDay.value !== undefined &&
+			localCostPerDay.value < props.vanillaCostPerDay
+	);
+
+	/**
+	 * Costing more than the market is the actionable problem and wins
+	 * over the stale marker: a stale number that is already worse is
+	 * worth looking at either way.
+	 * @author raukk
+	 */
+	const localCostClass: ComputedRef<string> = computed(() => {
+		if (localIsWorseThanMarket.value) return "text-negative";
+
+		return localIsStale.value ? "text-amber-400" : "text-white/40";
+	});
 </script>
 
 <template>
 	<PTooltip v-if="localVisible">
 		<template #trigger>
 			<div
-				class="text-xs hover:cursor-help"
-				:class="localIsStale ? 'text-amber-400' : 'text-white/40'">
-				{{
-					$t("raukk_matio.our_cost", {
-						cost: formatNumber(localCostPerDay ?? 0),
-					})
-				}}
+				class="text-xs hover:cursor-help flex flex-row gap-x-1 items-center"
+				:class="localCostClass">
+				<WarningAmberOutlined
+					v-if="localIsWorseThanMarket"
+					class="w-3.5 h-3.5 shrink-0" />
+				<span>
+					{{
+						$t("raukk_matio.our_cost", {
+							cost: formatNumber(localCostPerDay ?? 0),
+						})
+					}}
+				</span>
 			</div>
 		</template>
 		{{
-			$t("raukk_matio.our_cost_tooltip", {
-				price: formatNumber(localUnitPrice ?? 0),
-			})
+			localIsWorseThanMarket
+				? $t("raukk_matio.our_cost_worse_tooltip", {
+						price: formatNumber(localUnitPrice ?? 0),
+					})
+				: $t("raukk_matio.our_cost_tooltip", {
+						price: formatNumber(localUnitPrice ?? 0),
+					})
 		}}
 	</PTooltip>
 </template>
