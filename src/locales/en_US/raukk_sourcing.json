@@ -494,7 +494,9 @@
 		"build_cost_tooltip": "Both ends of the link at today's exchange prices — a gate is bought TWICE, one at each end, and this is the pair. The bill is dominated by a few enormous positions ({materials}), and those are thin markets: this is what the exchange says today, not what actually buying that much would cost.",
 		"cost_note": "Build ȼ counts BOTH ends of every link — a gate is two gates. A gate holds {budget} upgrade levels in total across uses, volume and range, so every level of range is a level of clearance not bought. Upgrade cost is triangular: the n-th level costs n times the first, so the third level of an upgrade costs three times what the first one did.",
 		"rollup_build": "Build ȼ, every planned link",
-		"out_of_range_tag": "Out of Range"
+		"out_of_range_tag": "Out of Range",
+		"not_routed": "Not Routed",
+		"enabled_broken": "Switched on, but this gate cannot exist as configured, so nothing is being routed over it. Fix the range or the planets — or switch it off."
 	},
 	"oversub_report": {
 		"title": "Oversubscription",

@@ -150,6 +150,54 @@ describe("Raukk Sourcing: planned gates reach the shipping math", () => {
 		).toBe(true);
 	});
 
+	it("drops an enabled gate that stops being buildable", () => {
+		store.setPlannedGate("g1", {
+			planetA: HEPHAESTUS,
+			planetB: FAR,
+			rangeUpgrades: 1,
+			volumeUpgrades: 1,
+			enabled: true,
+		});
+
+		expect(raukkPlannedGateLinks()).toHaveLength(1);
+
+		/*
+		 * Spending the range elsewhere stops describing a gate: the gap is
+		 * 12.88 pc and a gate with no range upgrade reaches 10. The route
+		 * graph must let go of it rather than plan the whole account over
+		 * something the game would refuse to build.
+		 */
+		store.setPlannedGate("g1", { rangeUpgrades: 0 });
+
+		expect(raukkPlannedGateLinks()).toHaveLength(0);
+		expect(
+			raukkChainGateServable(
+				[HEPHAESTUS, FAR],
+				RAUKK_DEFAULT_CHAIN_ROUTES,
+				undefined,
+				WCB_VOLUME_M3
+			)
+		).toBe(false);
+
+		// the user's INTENT is kept: restoring the range restores the edge
+		// without them having to remember to switch it back on
+		expect(store.plannedGates["g1"].enabled).toBe(true);
+
+		store.setPlannedGate("g1", { rangeUpgrades: 1 });
+
+		expect(raukkPlannedGateLinks()).toHaveLength(1);
+	});
+
+	it("never routes an enabled gate whose planets are unknown", () => {
+		store.setPlannedGate("g1", {
+			planetA: "NOWHERE-9z",
+			planetB: FAR,
+			enabled: true,
+		});
+
+		expect(raukkPlannedGateLinks()).toHaveLength(0);
+	});
+
 	/*
 	 * The boundary of the feature, pinned deliberately rather than left
 	 * to be discovered: an FTL hull's leg is measured on the pure FTL

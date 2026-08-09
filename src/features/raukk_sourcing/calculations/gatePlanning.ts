@@ -37,6 +37,8 @@ import {
 	IRaukkRouteDistance,
 	IRaukkRouteTimeOptions,
 	RAUKK_GATE_TRAVERSAL,
+	resolveSystemId,
+	straightLineParsecs,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import { RAUKK_STOP_REF } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 
@@ -290,20 +292,93 @@ export function raukkPlannedGateLink(gate: IRaukkPlannedGate): IRaukkGateLink {
 }
 
 /**
- * Graph edges of every ENABLED planned gate, in the given order.
+ * What the buildability check needs of a routing surface.
  *
- * A disabled gate is a note the user keeps, not an edge: it is measured
- * exactly like an enabled one, it just does not move any route.
+ * Deliberately the two CHEAP lookups: whether a gate could exist is a
+ * question about two coordinates, and answering it must not cost a
+ * shortest path search — the store asks it on every keystroke.
+ *
+ * @author raukk
+ */
+export type IRaukkPlannedGateRoutes = Pick<
+	IRaukkRouteDistance,
+	"resolveSystemId"
+> &
+	Pick<Required<IRaukkRouteDistance>, "straightLineParsecs">;
+
+/** The real systems JSON, what every caller means unless it says otherwise */
+const DEFAULT_ROUTES: IRaukkPlannedGateRoutes = {
+	resolveSystemId,
+	straightLineParsecs,
+};
+
+/**
+ * Whether a planned gate could be BUILT as configured.
+ *
+ * Both ends have to resolve to two different systems, and the gap
+ * between them has to fall inside the linking range the gate's range
+ * upgrades buy. Everything else about a gate — its fee, its clearance,
+ * whether it saves a minute — is a question of worth; this is the prior
+ * question of possibility.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkPlannedGate} gate Planned gate
+ * @param {IRaukkPlannedGateRoutes} routes Route lookups
+ * @returns {boolean} Whether the gate could exist
+ */
+export function raukkPlannedGateBuildable(
+	gate: IRaukkPlannedGate,
+	routes: IRaukkPlannedGateRoutes = DEFAULT_ROUTES
+): boolean {
+	if (gate.planetA.trim() === "" || gate.planetB.trim() === "") return false;
+
+	const systemIdA: string | null = routes.resolveSystemId(gate.planetA);
+	const systemIdB: string | null = routes.resolveSystemId(gate.planetB);
+
+	if (systemIdA === null || systemIdB === null) return false;
+	if (systemIdA === systemIdB) return false;
+
+	const parsecs: number | null = routes.straightLineParsecs(
+		systemIdA,
+		systemIdB
+	);
+
+	if (parsecs === null) return false;
+
+	return parsecs <= raukkPlannedGateSpecs(gate).linkingRangeParsecs;
+}
+
+/**
+ * Graph edges of every enabled planned gate that could actually EXIST.
+ *
+ * Two filters, and both matter. A disabled gate is a note the user
+ * keeps, not an edge: it is measured exactly like an enabled one, it
+ * just moves no route. And a gate that CANNOT BE BUILT is never an edge
+ * however switched on it is — a user who switches a gate on and then
+ * spends its range upgrades elsewhere has stopped describing a gate, and
+ * the route graph must stop carrying one rather than quietly plan the
+ * whole account over something the game would refuse to construct.
+ *
+ * The stored `enabled` flag is left alone: it is the user's intent, and
+ * restoring the range restores the edge without them having to remember
+ * to switch it back on.
  *
  * @author raukk
  *
  * @param {IRaukkPlannedGate[]} gates Planned gates
- * @returns {IRaukkGateLink[]} Gate links of the enabled ones
+ * @param {IRaukkPlannedGateRoutes} routes Route lookups
+ * @returns {IRaukkGateLink[]} Gate links of the enabled, buildable ones
  */
 export function raukkPlannedGateLinks(
-	gates: IRaukkPlannedGate[]
+	gates: IRaukkPlannedGate[],
+	routes: IRaukkPlannedGateRoutes = DEFAULT_ROUTES
 ): IRaukkGateLink[] {
-	return gates.filter((gate) => gate.enabled).map(raukkPlannedGateLink);
+	return gates
+		.filter(
+			(gate) => gate.enabled && raukkPlannedGateBuildable(gate, routes)
+		)
+		.map(raukkPlannedGateLink);
 }
 
 /**

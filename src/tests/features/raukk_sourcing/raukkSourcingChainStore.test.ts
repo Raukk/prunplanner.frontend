@@ -1160,7 +1160,10 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 				planetB: "OT-580b",
 				fee: 2500,
 			});
-			store.setPlannedGate("g1", { volumeUpgrades: 3, name: "Long Haul" });
+			store.setPlannedGate("g1", {
+				volumeUpgrades: 3,
+				name: "Long Haul",
+			});
 
 			expect(store.plannedGates["g1"]).toMatchObject({
 				planetA: "ZV-307c",
@@ -1183,9 +1186,11 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		});
 
 		it("only an ENABLED gate reaches the route index", () => {
+			// 12.88 pc apart, so one range upgrade makes it buildable
 			store.setPlannedGate("g1", {
 				planetA: "ZV-307c",
-				planetB: "OT-580b",
+				planetB: "IA-335b",
+				rangeUpgrades: 1,
 			});
 
 			expect(raukkPlannedGateLinks()).toHaveLength(0);
@@ -1195,7 +1200,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(raukkPlannedGateLinks()).toHaveLength(1);
 			expect(raukkPlannedGateLinks()[0]).toMatchObject({
 				a: "ZV-307c",
-				b: "OT-580b",
+				b: "IA-335b",
 				planned: true,
 			});
 
@@ -1290,9 +1295,10 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		it("round trips through the export", () => {
 			store.setPlannedGate("g1", {
 				planetA: "ZV-307c",
-				planetB: "OT-580b",
+				planetB: "IA-335b",
 				fee: 2500,
-				volumeUpgrades: 3,
+				volumeUpgrades: 1,
+				rangeUpgrades: 1,
 				enabled: true,
 				status: "construction",
 				name: "Long Haul",
@@ -1308,9 +1314,10 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 
 			expect(store.plannedGates["g1"]).toMatchObject({
 				planetA: "ZV-307c",
-				planetB: "OT-580b",
+				planetB: "IA-335b",
 				fee: 2500,
-				volumeUpgrades: 3,
+				volumeUpgrades: 1,
+				rangeUpgrades: 1,
 				enabled: true,
 				status: "construction",
 				name: "Long Haul",

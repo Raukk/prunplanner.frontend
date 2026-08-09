@@ -6,6 +6,7 @@ import {
 	IRaukkPlannedGateValue,
 	RAUKK_HCB_HULL_M3,
 	RAUKK_PLANNED_GATE_DEFAULT_FEE,
+	raukkPlannedGateBuildable,
 	raukkPlannedGateLabel,
 	raukkPlannedGateLink,
 	raukkPlannedGateLinks,
@@ -138,14 +139,46 @@ describe("Raukk Sourcing: gate planning", () => {
 			expect(RAUKK_HCB_HULL_M3).toBeLessThan(6000);
 		});
 
-		it("only the enabled gates become edges", () => {
-			const links: IRaukkGateLink[] = raukkPlannedGateLinks([
-				gate({ id: "on", enabled: true }),
-				gate({ id: "off", enabled: false }),
-			]);
+		it("only the enabled, BUILDABLE gates become edges", () => {
+			const links: IRaukkGateLink[] = raukkPlannedGateLinks(
+				[
+					gate({ id: "on", enabled: true }),
+					gate({ id: "off", enabled: false }),
+					// switched on, but its range no longer spans its own gap
+					gate({ id: "stranded", enabled: true, rangeUpgrades: 0 }),
+					gate({
+						id: "unknown",
+						enabled: true,
+						planetA: "XX-999a",
+					}),
+				],
+				routes()
+			);
 
 			expect(links).toHaveLength(1);
 			expect(links[0].aGate.id).toBe("on-a");
+		});
+
+		it("says whether a gate could be built at all", () => {
+			expect(raukkPlannedGateBuildable(gate(), routes())).toBe(true);
+			expect(
+				raukkPlannedGateBuildable(gate({ rangeUpgrades: 0 }), routes())
+			).toBe(false);
+			expect(
+				raukkPlannedGateBuildable(
+					gate({ planetB: "PG-007a", rangeUpgrades: 3 }),
+					routes()
+				)
+			).toBe(false);
+			expect(
+				raukkPlannedGateBuildable(
+					gate({ planetB: "PG-001c" }),
+					routes()
+				)
+			).toBe(false);
+			expect(
+				raukkPlannedGateBuildable(gate({ planetA: " " }), routes())
+			).toBe(false);
 		});
 	});
 

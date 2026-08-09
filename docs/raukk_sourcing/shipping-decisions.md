@@ -710,6 +710,44 @@ The 13 panels are pinned as fixtures in
 change that breaks one of those rows is a change that no longer describes
 the game.
 
+## Round 23 (review fixes: a stranded gate must not route)
+
+Two reviews of the round 21/22 tool — a UI/UX pass and a player pass —
+found one blocker and one bug that contradicted the docs. Both are fixed;
+the rest of both reviews is triage, not yet actioned.
+
+1. **BLOCKER: an enabled gate that stopped being buildable stayed an edge
+   of the route graph.** Reachable in a few clicks: switch a valid gate
+   on, then spend its range upgrades on volume instead. The gate is now
+   wider than its own linking range — impossible to build — and
+   `raukkPlannedGateLinks` filtered on `enabled` alone, so the whole
+   account carried on being planned over it. Worse, the row's checkbox
+   was `:disabled` whenever the gate had an issue, so the state could not
+   be switched off, only deleted. Fixed in the calculation layer, where
+   every caller is protected: `raukkPlannedGateBuildable` gates the link
+   list, and the checkbox now disables only the OFF→ON direction. The
+   stored `enabled` flag is deliberately left alone — it is the user's
+   intent, and restoring the range restores the edge without them having
+   to remember to switch it back on. The row says "Not Routed" while the
+   two disagree.
+2. **The add form warned about an impossible gate and added it anyway.**
+   Round 22 point 4 claimed it "refuses the second outright"; it did not
+   — `canAdd` only checked that both fields were non-empty. It now
+   refuses `unreachable_range` and `same_system`, and still permits an
+   unknown planet id, which is the call the depot table makes for the
+   same reason: the bundled systems JSON may not know a planet the user
+   does.
+
+Round 22's point 4 wording is corrected by this round.
+
+## Round 24 (proposed, NOT implemented): gates for FTL hulls
+
+Both reviews and the user landed on the same gap, stated here so it is
+not rediscovered: **an FTL hull's leg never consults the gate network**,
+so no gate — planned or transcribed — has ever made a freighter faster in
+this tool. Gates today move STL-only routing and the planning table's own
+numbers, nothing else. See `gate-ftl-routing.md` for the full brief.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,

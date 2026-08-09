@@ -128,13 +128,14 @@
 		(refAddB.value ?? "").trim()
 	);
 
-	const canAdd: ComputedRef<boolean> = computed(
+	/** Both ends typed, whatever the ids turn out to mean */
+	const bothEntered: ComputedRef<boolean> = computed(
 		() => enteredA.value !== "" && enteredB.value !== ""
 	);
 
 	/** Why the add button is off, or what the entry will not do */
 	const addHint: ComputedRef<string> = computed(() => {
-		if (!canAdd.value) return "empty";
+		if (!bothEntered.value) return "empty";
 
 		const systemA: string | null = resolveSystemId(enteredA.value);
 		const systemB: string | null = resolveSystemId(enteredB.value);
@@ -151,6 +152,23 @@
 
 		return "";
 	});
+
+	/*
+	 * Two of the hints REFUSE the add, the rest only warn.
+	 *
+	 * A gap past 25 parsecs and two planets of one system are not gates
+	 * anyone could build, so a row for one would sit in the table
+	 * permanently red, waiting to be noticed and deleted. An unknown
+	 * planet id still adds: the bundled systems JSON may simply not know
+	 * a planet the user does, which is the same call the depot table
+	 * makes.
+	 */
+	const canAdd: ComputedRef<boolean> = computed(
+		() =>
+			bothEntered.value &&
+			addHint.value !== "unreachable_range" &&
+			addHint.value !== "same_system"
+	);
 
 	function addGate(): void {
 		if (!canAdd.value) return;
@@ -262,6 +280,18 @@
 			.slice(0, 8)
 			.map(([ticker, amount]) => `${formatNumber(amount)} ${ticker}`)
 			.join(", ");
+	}
+
+	/**
+	 * Switched ON, but not an edge of the graph.
+	 *
+	 * Reachable by editing an enabled gate until it stops being buildable
+	 * — spending its range upgrades elsewhere, say. The routing already
+	 * refuses to carry it; the row has to say so, and the checkbox has to
+	 * stay live so the state can be corrected rather than only deleted.
+	 */
+	function strandedOn(row: IRaukkGatePlanningRow): boolean {
+		return row.gate.enabled && row.value.issue !== "";
 	}
 
 	/** Range upgrades a row still needs, or null when it is fine */
@@ -452,13 +482,30 @@
 					</PTooltip>
 				</td>
 				<td class="text-center">
-					<PCheckbox
-						:checked="row.gate.enabled"
-						:disabled="row.value.issue !== ''"
-						@update:checked="
-							(v) =>
-								patchGate(row.gate.id, { enabled: v === true })
-						" />
+					<div class="flex flex-col gap-y-1 items-center">
+						<PCheckbox
+							:checked="row.gate.enabled"
+							:disabled="
+								row.value.issue !== '' && !row.gate.enabled
+							"
+							@update:checked="
+								(v) =>
+									patchGate(row.gate.id, {
+										enabled: v === true,
+									})
+							" />
+						<PTooltip v-if="strandedOn(row)">
+							<template #trigger>
+								<PTag
+									size="sm"
+									type="error"
+									class="hover:cursor-help">
+									{{ $t("raukk_sourcing.gates.not_routed") }}
+								</PTag>
+							</template>
+							{{ $t("raukk_sourcing.gates.enabled_broken") }}
+						</PTooltip>
+					</div>
 				</td>
 				<td>
 					<div class="flex flex-row justify-end">
