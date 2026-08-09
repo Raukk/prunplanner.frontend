@@ -16,6 +16,7 @@ import {
 	IRaukkTrueCostInput,
 	IRaukkTrueCostResult,
 } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
+import { raukkSettledWithin } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
 /**
  * A single active recipe reduced to its daily contribution.
@@ -44,6 +45,55 @@ interface ICostBuckets {
 	repair: number;
 	inputs: number;
 	shipping: number;
+}
+
+/**
+ * Passes the internal transfer prices are solved in before the loop
+ * gives up.
+ *
+ * A plan consuming its own production feeds its unit costs back into
+ * itself, so the allocation is a fixed point rather than a formula. Each
+ * pass shrinks the remaining movement by the internally consumed share,
+ * which is below 1 in any plan that sells anything at all — a handful of
+ * passes settle it and this cap only bounds the pathological case.
+ *
+ * @author raukk
+ */
+const INTERNAL_PRICE_PASSES: number = 25;
+
+/** Zero of the cost bucket vector */
+function emptyBuckets(): ICostBuckets {
+	return { workforce: 0, repair: 0, inputs: 0, shipping: 0 };
+}
+
+/**
+ * Adds a scaled cost bucket vector onto another, in place. Absent
+ * summands (a ticker no pass has priced yet) add nothing.
+ *
+ * @author raukk
+ *
+ * @param {ICostBuckets} target Vector that is added to
+ * @param {ICostBuckets | undefined} source Vector that is added
+ * @param {number} factor Scale of the summand
+ */
+function addScaledBuckets(
+	target: ICostBuckets,
+	source: ICostBuckets | undefined,
+	factor: number
+): void {
+	if (source === undefined) return;
+
+	target.workforce += source.workforce * factor;
+	target.repair += source.repair * factor;
+	target.inputs += source.inputs * factor;
+	target.shipping += source.shipping * factor;
+}
+
+/** Sum of one cost bucket vector, 0 when it does not exist */
+function totalOfBuckets(bucket: ICostBuckets | undefined): number {
+	if (bucket === undefined) return 0;
+
+	return bucket.workforce + bucket.repair + bucket.inputs + bucket.shipping;
 }
 
 /**
@@ -269,9 +319,12 @@ export function calculateTrueCosts(
 
 	const netOutputUnits: IRaukkMaterialUnits = {};
 	const netProductionInput: IRaukkMaterialUnits = {};
-	let workforceCostTotal: number = 0;
+	/** Externally bought share of a tickers gross demand, 0..1 */
+	const externalFraction: IRaukkMaterialUnits = {};
 	/** Freight of the workforce share, allocated exactly like its cost */
 	let workforceShippingTotal: number = 0;
+	/** Externally bought part of the workforce consumables, per day */
+	let workforceExternalCost: number = 0;
 
 	planResult.materialio.forEach((e) => {
 		if (e.delta > 0) {
@@ -288,10 +341,31 @@ export function calculateTrueCosts(
 		const workforceShare: number = grossTotal > 0 ? wGross / grossTotal : 0;
 		const price: number = priceOf(e.ticker, netUnits);
 
-		workforceCostTotal += netUnits * workforceShare * price;
+		externalFraction[e.ticker] =
+			grossTotal > 0 ? Math.min(netUnits / grossTotal, 1) : 1;
+
+		workforceExternalCost += netUnits * workforceShare * price;
 		workforceShippingTotal +=
 			netUnits * workforceShare * shippingOf(e.ticker);
 		netProductionInput[e.ticker] = netUnits * (1 - workforceShare);
+	});
+
+	/**
+	 * Workforce consumables the plan GROWS itself, per ticker and day.
+	 *
+	 * Netting hides them — a fully self supplied consumable never appears
+	 * in the material I/O at all — but they are not free: the recipe that
+	 * made them booked the cost, and the workforce eating them has to
+	 * carry it, or the cost would vanish between the two.
+	 */
+	const workforceInternalUnits: IRaukkMaterialUnits = {};
+
+	Object.entries(workforceGross).forEach(([ticker, gross]) => {
+		// absent from the material I/O means fully self supplied: the
+		// netting cancelled the ticker out entirely
+		const internal: number = gross * (1 - (externalFraction[ticker] ?? 0));
+
+		if (internal > 0) workforceInternalUnits[ticker] = internal;
 	});
 
 	/*
@@ -357,100 +431,86 @@ export function calculateTrueCosts(
 			: 0;
 	}
 
-	function buildingWorkforceCost(name: string): number {
-		return buildingWorkforceOf(workforceCostTotal, name);
-	}
-
-	function buildingWorkforceShipping(name: string): number {
-		return buildingWorkforceOf(workforceShippingTotal, name);
-	}
-
 	/*
 	 * Allocation to outputs
+	 *
+	 * Every recipe pays for ALL the units it consumes and every unit it
+	 * PRODUCES carries a share of that. A base eating its own FE charges
+	 * the eating recipe the plans own FE unit cost, instead of leaving the
+	 * whole FE line on the few units that happen to leave the base — the
+	 * exported units would otherwise price at a multiple of what they
+	 * cost, and the products that ate the rest would look free.
+	 *
+	 * Those internal prices are what the allocation is solving for, so it
+	 * ITERATES: each pass prices internal transfers with the unit costs of
+	 * the previous one and stops once none of them moves. A loop inside
+	 * one plan (own food feeding the workforce that grows it) shrinks by
+	 * its internal share every pass and therefore converges; the cap only
+	 * guards against a pathological plan.
 	 */
 
-	const buckets: Record<string, ICostBuckets> = {};
-	const weightByTicker: IRaukkMaterialUnits = {};
-	const residual: ICostBuckets = {
-		workforce: 0,
-		repair: 0,
-		inputs: 0,
-		shipping: 0,
-	};
-	/** Key: building name, value: runtime share covered by its recipes */
-	const coveredShare: Record<string, number> = {};
-
-	function addBucket(ticker: string, key: keyof ICostBuckets, v: number) {
-		const current: ICostBuckets = buckets[ticker] ?? {
-			workforce: 0,
-			repair: 0,
-			inputs: 0,
-			shipping: 0,
-		};
-		current[key] += v;
-		buckets[ticker] = current;
+	/** One recipes charges, minus what the internal prices decide */
+	interface IRecipeCharge {
+		buildingName: string;
+		dailyShare: number;
+		/** Gross output units per day, keyed by ticker */
+		outputs: IRaukkMaterialUnits;
+		grossOutputTotal: number;
+		externalInputCost: number;
+		externalInputShipping: number;
+		/** Units taken from the plans own production, per ticker */
+		internalUnits: IRaukkMaterialUnits;
 	}
 
-	recipes.forEach((r) => {
-		coveredShare[r.buildingName] =
-			(coveredShare[r.buildingName] ?? 0) + r.dailyShare;
-
-		const workforce: number =
-			buildingWorkforceCost(r.buildingName) * r.dailyShare;
-		const repair: number =
-			(repairCostPerDayByBuilding[r.buildingName] ?? 0) * r.dailyShare;
-		const workforceShipping: number =
-			buildingWorkforceShipping(r.buildingName) * r.dailyShare;
-
-		let inputCost: number = 0;
-		let inputShipping: number = 0;
+	const charges: IRecipeCharge[] = recipes.map((r) => {
+		let externalInputCost: number = 0;
+		let externalInputShipping: number = 0;
+		const internalUnits: IRaukkMaterialUnits = {};
 
 		Object.entries(r.inputs).forEach(([ticker, units]) => {
 			const gross: number = recipeGrossInput[ticker] ?? 0;
 			if (gross <= 0) return;
 
-			const netFactor: number = (netProductionInput[ticker] ?? 0) / gross;
-			const netUnits: number = units * netFactor;
+			// the plan buys the net demand and makes the rest itself, in
+			// the same proportion for every recipe consuming the ticker
+			const externalUnits: number =
+				units * Math.min((netProductionInput[ticker] ?? 0) / gross, 1);
 
-			inputCost += netUnits * (priceCache.get(ticker)?.price ?? 0);
-			inputShipping += netUnits * shippingOf(ticker);
+			externalInputCost +=
+				externalUnits * (priceCache.get(ticker)?.price ?? 0);
+			externalInputShipping += externalUnits * shippingOf(ticker);
+
+			const internal: number = units - externalUnits;
+			if (internal > 0)
+				internalUnits[ticker] = (internalUnits[ticker] ?? 0) + internal;
 		});
 
-		// weight net outputs only, self consumed units carry no weight
-		const { weights, weightTotal } = netOutputWeights(
-			r.outputs,
-			recipeGrossOutput,
-			netOutputUnits
-		);
+		return {
+			buildingName: r.buildingName,
+			dailyShare: r.dailyShare,
+			outputs: r.outputs,
+			grossOutputTotal: Object.values(r.outputs).reduce(
+				(sum, units) => sum + units,
+				0
+			),
+			externalInputCost,
+			externalInputShipping,
+			internalUnits,
+		};
+	});
 
-		if (weightTotal <= 0) {
-			residual.workforce += workforce;
-			residual.repair += repair;
-			residual.inputs += inputCost;
-			residual.shipping += inputShipping + workforceShipping;
-			return;
-		}
+	/** Key: building name, value: runtime share covered by its recipes */
+	const coveredShare: Record<string, number> = {};
 
-		Object.entries(weights).forEach(([ticker, weight]) => {
-			const share: number = weight / weightTotal;
-
-			addBucket(ticker, "workforce", workforce * share);
-			addBucket(ticker, "repair", repair * share);
-			addBucket(ticker, "inputs", inputCost * share);
-			addBucket(
-				ticker,
-				"shipping",
-				(inputShipping + workforceShipping) * share
-			);
-
-			weightByTicker[ticker] = (weightByTicker[ticker] ?? 0) + weight;
-		});
+	charges.forEach((c) => {
+		coveredShare[c.buildingName] =
+			(coveredShare[c.buildingName] ?? 0) + c.dailyShare;
 	});
 
 	/*
 	 * Runtime shares left idle and buildings without an active recipe
-	 * carry workforce and repair cost as well. They contribute no recipe
-	 * row, so their share lands in the residual — the same handling
+	 * carry workforce and repair cost as well. They produce nothing, so
+	 * their share lands in the residual — the same handling
 	 * `calculateRepairPerUnit` performs.
 	 */
 	const costedBuildings: Set<string> = new Set([
@@ -458,35 +518,178 @@ export function calculateTrueCosts(
 		...Object.keys(repairCostPerDayByBuilding),
 	]);
 
-	costedBuildings.forEach((name) => {
-		const uncovered: number = 1 - (coveredShare[name] ?? 0);
-		if (uncovered <= 0) return;
-
-		residual.workforce += buildingWorkforceCost(name) * uncovered;
-		residual.repair += (repairCostPerDayByBuilding[name] ?? 0) * uncovered;
-		residual.shipping += buildingWorkforceShipping(name) * uncovered;
-	});
-
-	// redistribute the cost of fully self consumed recipes
-	const residualTotal: number =
-		residual.workforce +
-		residual.repair +
-		residual.inputs +
-		residual.shipping;
-	const residualWeight: number = Object.values(weightByTicker).reduce(
-		(sum, w) => sum + w,
+	const grossOutputTotal: number = Object.values(recipeGrossOutput).reduce(
+		(sum, units) => sum + units,
 		0
 	);
 
-	if (residualTotal !== 0 && residualWeight > 0) {
-		Object.entries(weightByTicker).forEach(([ticker, weight]) => {
-			const share: number = weight / residualWeight;
+	/**
+	 * One allocation pass over every recipe, internal transfers priced
+	 * with the unit costs handed in.
+	 *
+	 * @param {Record<string, ICostBuckets>} prices Cost of one gross unit
+	 *     per ticker, as the previous pass computed it
+	 * @returns {Record<string, ICostBuckets>} Daily cost per output ticker
+	 */
+	function allocationPass(
+		prices: Record<string, ICostBuckets>
+	): Record<string, ICostBuckets> {
+		const pass: Record<string, ICostBuckets> = {};
 
-			addBucket(ticker, "workforce", residual.workforce * share);
-			addBucket(ticker, "repair", residual.repair * share);
-			addBucket(ticker, "inputs", residual.inputs * share);
-			addBucket(ticker, "shipping", residual.shipping * share);
+		function addBucket(ticker: string, key: keyof ICostBuckets, v: number) {
+			const current: ICostBuckets = pass[ticker] ?? {
+				workforce: 0,
+				repair: 0,
+				inputs: 0,
+				shipping: 0,
+			};
+			current[key] += v;
+			pass[ticker] = current;
+		}
+
+		/*
+		 * Consumables the plan grows itself are not free: they cost what
+		 * the plan spent making them, bucket by bucket — an internally
+		 * made input is upstream WORKFORCE and REPAIR, it is not a
+		 * purchase, and folding it into one number would make the
+		 * breakdown lie about where the ȼ went.
+		 */
+		const workforceTotals: ICostBuckets = {
+			workforce: workforceExternalCost,
+			repair: 0,
+			inputs: 0,
+			shipping: workforceShippingTotal,
+		};
+
+		Object.entries(workforceInternalUnits).forEach(([ticker, units]) => {
+			addScaledBuckets(workforceTotals, prices[ticker], units);
 		});
+
+		const residual: ICostBuckets = emptyBuckets();
+
+		charges.forEach((c) => {
+			const charge: ICostBuckets = {
+				workforce:
+					buildingWorkforceOf(
+						workforceTotals.workforce,
+						c.buildingName
+					) * c.dailyShare,
+				repair:
+					((repairCostPerDayByBuilding[c.buildingName] ?? 0) +
+						buildingWorkforceOf(
+							workforceTotals.repair,
+							c.buildingName
+						)) *
+					c.dailyShare,
+				inputs:
+					c.externalInputCost +
+					buildingWorkforceOf(workforceTotals.inputs, c.buildingName) *
+						c.dailyShare,
+				shipping:
+					c.externalInputShipping +
+					buildingWorkforceOf(
+						workforceTotals.shipping,
+						c.buildingName
+					) *
+						c.dailyShare,
+			};
+
+			Object.entries(c.internalUnits).forEach(([ticker, units]) => {
+				addScaledBuckets(charge, prices[ticker], units);
+			});
+
+			if (c.grossOutputTotal <= 0) {
+				addScaledBuckets(residual, charge, 1);
+				return;
+			}
+
+			Object.entries(c.outputs).forEach(([ticker, units]) => {
+				const share: number = units / c.grossOutputTotal;
+
+				addBucket(ticker, "workforce", charge.workforce * share);
+				addBucket(ticker, "repair", charge.repair * share);
+				addBucket(ticker, "inputs", charge.inputs * share);
+				addBucket(ticker, "shipping", charge.shipping * share);
+			});
+		});
+
+		costedBuildings.forEach((name) => {
+			const uncovered: number = 1 - (coveredShare[name] ?? 0);
+			if (uncovered <= 0) return;
+
+			residual.workforce +=
+				buildingWorkforceOf(workforceTotals.workforce, name) * uncovered;
+			residual.repair +=
+				((repairCostPerDayByBuilding[name] ?? 0) +
+					buildingWorkforceOf(workforceTotals.repair, name)) *
+				uncovered;
+			residual.inputs +=
+				buildingWorkforceOf(workforceTotals.inputs, name) * uncovered;
+			residual.shipping +=
+				buildingWorkforceOf(workforceTotals.shipping, name) * uncovered;
+		});
+
+		// idle capacity is carried by everything the plan does produce
+		const residualTotal: number =
+			residual.workforce +
+			residual.repair +
+			residual.inputs +
+			residual.shipping;
+
+		if (residualTotal !== 0 && grossOutputTotal > 0) {
+			Object.entries(recipeGrossOutput).forEach(([ticker, units]) => {
+				const share: number = units / grossOutputTotal;
+
+				addBucket(ticker, "workforce", residual.workforce * share);
+				addBucket(ticker, "repair", residual.repair * share);
+				addBucket(ticker, "inputs", residual.inputs * share);
+				addBucket(ticker, "shipping", residual.shipping * share);
+			});
+		}
+
+		return pass;
+	}
+
+	/** Cost of ONE gross unit produced, per ticker and bucket */
+	function unitCostsOf(
+		pass: Record<string, ICostBuckets>
+	): Record<string, ICostBuckets> {
+		const result: Record<string, ICostBuckets> = {};
+
+		Object.entries(pass).forEach(([ticker, bucket]) => {
+			const gross: number = recipeGrossOutput[ticker] ?? 0;
+			if (gross <= 0) return;
+
+			const unit: ICostBuckets = emptyBuckets();
+			addScaledBuckets(unit, bucket, 1 / gross);
+			result[ticker] = unit;
+		});
+
+		return result;
+	}
+
+	let buckets: Record<string, ICostBuckets> = allocationPass({});
+	let prices: Record<string, ICostBuckets> = unitCostsOf(buckets);
+
+	for (let pass = 1; pass < INTERNAL_PRICE_PASSES; pass++) {
+		const next: Record<string, ICostBuckets> = allocationPass(prices);
+		const nextPrices: Record<string, ICostBuckets> = unitCostsOf(next);
+
+		buckets = next;
+
+		const settled: boolean = Object.keys({
+			...prices,
+			...nextPrices,
+		}).every((ticker) =>
+			raukkSettledWithin(
+				totalOfBuckets(prices[ticker]),
+				totalOfBuckets(nextPrices[ticker])
+			)
+		);
+
+		prices = nextPrices;
+
+		if (settled) break;
 	}
 
 	/*
@@ -500,6 +703,14 @@ export function calculateTrueCosts(
 		if (unitsPerDay <= 0) return;
 
 		/*
+		 * Per GROSS unit, not per exported one: what a unit costs does not
+		 * depend on whether it leaves the base. The units the plan eats
+		 * itself carry their own share and hand it to whatever ate them.
+		 */
+		const grossUnits: number = recipeGrossOutput[ticker] ?? 0;
+		if (grossUnits <= 0) return;
+
+		/*
 		 * The freight of the units sold at the exchange is charged per
 		 * unit sold and added on top of the allocated inbound freight,
 		 * per docs/raukk_sourcing/shipping-plan.md.
@@ -507,13 +718,13 @@ export function calculateTrueCosts(
 		const shipping: number =
 			bucket.shipping === 0 && (shippingPerUnitOut[ticker] ?? 0) === 0
 				? 0
-				: bucket.shipping / unitsPerDay +
+				: bucket.shipping / grossUnits +
 					(shippingPerUnitOut[ticker] ?? 0);
 
 		const breakdown: IRaukkCostBreakdown = {
-			workforce: bucket.workforce / unitsPerDay,
-			repair: bucket.repair / unitsPerDay,
-			inputs: bucket.inputs / unitsPerDay,
+			workforce: bucket.workforce / grossUnits,
+			repair: bucket.repair / grossUnits,
+			inputs: bucket.inputs / grossUnits,
 			shipping,
 		};
 

@@ -119,6 +119,22 @@ anywhere in the repo. Not retroactive.
   reuses it instead of recomputing. Row hides itself while fees are
   unknown (FIO down → 0), it never renders a fake "0 ȼ". Grid re-split
   3/2/2/2/3 to make room.
+- 2026-08-08: Self consumption re-costed (user report: an FE drawn from
+  a big base priced ~4x market). Cause was NOT other buildings bleeding
+  into FE: a partly self consumed output carried its WHOLE line cost on
+  the units that happen to leave the base — netting removed the internal
+  units from every input bill, so nobody else paid for them. Outputs now
+  price per unit MADE and the eating recipe is charged the plan's own
+  unit cost for what it ate, carried bucket by bucket (an internally made
+  input is upstream workforce/repair, not `inputs`). Internal prices are
+  a fixed point (own food feeds the workforce growing it), solved by
+  iterating passes until settled, cap `INTERNAL_PRICE_PASSES` = 25.
+  Verified: SME 1000 ȼ/d makes 100 FE, base eats 90 → FE 66.67 → 6.67
+  ȼ/u, STL 33.33 → 93.33 ȼ/u, exported value still exactly 1000 ȼ/d.
+  User decision: exact charge-through over the cheaper proportional
+  spread. `calculateRepairPerUnit` (Repair Analysis) still uses the OLD
+  net-weight rule and is deliberately untouched — its per-unit repair
+  therefore disagrees with `breakdown.repair` on self consuming bases.
 - 2026-08-07: Staleness epsilon aligned (bug: in an A↔B supply loop
   "the other plan" stayed stale forever): the chain settling epsilon
   (1e-6) and setSnapshot's materially-changed epsilon (was 1e-9) are
