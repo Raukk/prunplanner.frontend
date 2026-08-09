@@ -1136,14 +1136,20 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 				)
 			);
 
+			/*
+			 * calibration §6 and §11.4: the meteoroid law belongs to the
+			 * SUBLIGHT BLOCK, and a jump is density blind. Twice the
+			 * reference density therefore doubles the block, not the parsec
+			 * term — until §11.4 this was the wrong way round.
+			 */
 			expect(result.legs[0].pathMeanDensity).toBeCloseTo(6.56, 10);
 			expect(result.legs[0].damagePerParsec).toBeCloseTo(
-				2 * profile.damagePerParsec,
+				profile.damagePerParsec,
 				10
 			);
 			expect(result.legs[0].repairCostPerTrip).toBeCloseTo(
-				((10 * 2 * profile.damagePerParsec +
-					profile.damagePerStlBlock) /
+				((10 * profile.damagePerParsec +
+					2 * profile.damagePerStlBlock) /
 					0.8) *
 					REPAIR_BILL,
 				10
@@ -1166,8 +1172,13 @@ describe("Raukk Sourcing: Shipping Chains", () => {
 
 			// (6.56 + 3.28) / 2 = 4.92, one and a half times the reference
 			expect(result.legs[0].pathMeanDensity).toBeCloseTo(4.92, 10);
+			// which lands on the block, the parsec term staying flat
 			expect(result.legs[0].damagePerParsec).toBeCloseTo(
-				1.5 * profile.damagePerParsec,
+				profile.damagePerParsec,
+				10
+			);
+			expect(result.legs[0].damagePerTrip).toBeCloseTo(
+				10 * profile.damagePerParsec + 1.5 * profile.damagePerStlBlock,
 				10
 			);
 		});

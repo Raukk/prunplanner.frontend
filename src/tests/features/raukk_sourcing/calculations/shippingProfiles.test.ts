@@ -16,6 +16,10 @@ import {
 	raukkShipProfilePreset,
 	raukkShipProfilePresets,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import {
+	RAUKK_FTL_FUEL_UNITS_PER_PARSEC,
+	raukkStlBlockDamage,
+} from "@/features/raukk_sourcing/calculations/shippingPhysics";
 
 // Types & Interfaces
 import {
@@ -64,20 +68,31 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 	});
 
 	describe("calibration defaults", () => {
-		it("derives the 3000t class block from the campaign WCB", () => {
+		it("takes the WCB jump constants from the flight that flew them", () => {
 			const preset: IRaukkShipProfile = raukkShipProfilePreset(
 				{ cargoWeight: 3000, cargoVolume: 1000 },
 				"standard"
 			);
 
-			expect(preset.minutesPerParsec).toBe(27.5);
-			expect(preset.chargeMinutes).toBeCloseTo(52 / 60, 10);
-			// ENG at 931 t, acceleration capped at 98.1 m/s²
-			expect(preset.stlBlockMinutesEmpty).toBe(28.9);
-			expect(preset.stlBlockMinutesLoaded).toBe(50.8);
+			// §10: 4 pc in 1h44m over 3.93 real parsecs
+			expect(preset.minutesPerParsec).toBe(26.5);
+			// §11.3: 4m53s of charge, measured seven times on batch 9
+			expect(preset.chargeMinutes).toBeCloseTo(293 / 60, 10);
 		});
 
-		it("uses the batch 1 HCB legs for the 5000/5000 block", () => {
+		it("takes the SCB jump constants from batch 9's eight-hop fit", () => {
+			const preset: IRaukkShipProfile = raukkShipProfilePreset(
+				{ cargoWeight: 500, cargoVolume: 500 },
+				"standard"
+			);
+
+			expect(preset.minutesPerParsec).toBe(22.51);
+			expect(preset.ftlFuelPerParsec).toBe(
+				RAUKK_FTL_FUEL_UNITS_PER_PARSEC
+			);
+		});
+
+		it("keeps the HCB on batch 7's own jump constants", () => {
 			const preset: IRaukkShipProfile = raukkShipProfilePreset(
 				{ cargoWeight: 5000, cargoVolume: 5000 },
 				"quick-charge"
@@ -85,10 +100,28 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 
 			expect(preset.minutesPerParsec).toBe(33);
 			expect(preset.chargeMinutes).toBeCloseTo(74 / 60, 10);
-			// TO 6m59s + TRA 53m48s + a landing at the takeoff's cost
-			expect(preset.stlBlockMinutesEmpty).toBeCloseTo(67.767, 3);
-			// TO 13m20s + TRA 2h24m + landing, with 5,000 t aboard
-			expect(preset.stlBlockMinutesLoaded).toBeCloseTo(170.667, 3);
+		});
+
+		it("times a block as a surface hop and two transit legs", () => {
+			const preset: IRaukkShipProfile = raukkShipProfilePreset(
+				{ cargoWeight: 5000, cargoVolume: 5000 },
+				"quick-charge"
+			);
+
+			/*
+			 * §11.6: 67.3 M km planet side and 20.8 M km station side, both
+			 * at the fuel saver's 9,550 km/s ceiling on the default slider,
+			 * plus a surface hop. Loading 5,000 t only stretches the hop.
+			 */
+			expect(preset.stlBlockMinutesEmpty).toBeGreaterThan(
+				88_100_000 / 9_550 / 60
+			);
+			expect(preset.stlBlockMinutesLoaded).toBeGreaterThan(
+				preset.stlBlockMinutesEmpty
+			);
+			expect(preset.stlBlockMinutesLoaded).toBeLessThan(
+				preset.stlBlockMinutesEmpty * 1.1
+			);
 		});
 
 		it("copies the nearest covered profile by hull volume", () => {
@@ -101,7 +134,7 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 				"standard"
 			);
 
-			expect(small.hull.cargoVolume).toBe(1000);
+			expect(small.hull.cargoVolume).toBe(500);
 			expect(large.hull.cargoVolume).toBe(5000);
 		});
 
@@ -144,21 +177,33 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 
 			// calibration batch 3: 168 FTL units over 36 pc
 			expect(standard.ftlFuelPerParsec).toBeCloseTo(168 / 36, 10);
-			expect(standard.stlFuelPerBlock).toBe(123);
 			// 105 FTL units over 18 pc, batch 7 reproduces it at 268 / 46
 			expect(quick.ftlFuelPerParsec).toBeCloseTo(105 / 18, 10);
-			// batch 1: TO 24 u + TRA 38 u + LND, and 46 + 49 + 46 loaded
-			expect(quick.stlFuelPerBlock).toBe((86 + 141) / 2);
+			/*
+			 * §11.2: a block flies two transit legs, each spending the
+			 * slider's whole budget out of the profile's own tank — 175
+			 * units at the default 5 % of a 3,500 unit MSL — plus the
+			 * slider-blind surface hop.
+			 */
+			[standard, quick].forEach((preset) => {
+				expect(preset.stlFuelPerBlock).toBeGreaterThan(2 * 175);
+				expect(preset.stlFuelPerBlock).toBeLessThan(2 * 175 + 80);
+			});
 		});
 
 		it("copies the fuel burn of the nearest covered profile", () => {
+			// no quick-charge SCB was ever flown, so it copies the standard
+			// one across the reactor flag: same hull, same 1,500 unit tank
 			const small: IRaukkShipProfile = raukkShipProfilePreset(
 				{ cargoWeight: 500, cargoVolume: 500 },
-				"standard"
+				"quick-charge"
 			);
 
-			expect(small.ftlFuelPerParsec).toBeCloseTo(168 / 36, 10);
-			expect(small.stlFuelPerBlock).toBe(123);
+			expect(small.ftlFuelPerParsec).toBe(
+				RAUKK_FTL_FUEL_UNITS_PER_PARSEC
+			);
+			expect(small.stlFuelPerBlock).toBeGreaterThan(2 * 75);
+			expect(small.stlFuelPerBlock).toBeLessThan(2 * 75 + 40);
 		});
 	});
 
@@ -175,7 +220,7 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 				10
 			);
 			expect(raukkDerivedStlBlockCost(preset, resolvePrice)).toBeCloseTo(
-				123 * 10,
+				preset.stlFuelPerBlock * 10,
 				10
 			);
 		});
@@ -187,7 +232,10 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			);
 
 			expect(resolved.costPerParsec).toBeCloseTo((168 / 36) * 100, 10);
-			expect(resolved.stlBlockCost).toBe(1230);
+			expect(resolved.stlBlockCost).toBeCloseTo(
+				preset.stlFuelPerBlock * 10,
+				10
+			);
 		});
 
 		it("lets a manual value win, a manual zero included", () => {
@@ -221,7 +269,7 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 				raukkCompleteShipProfile(stored);
 
 			expect(completed.ftlFuelPerParsec).toBeCloseTo(168 / 36, 10);
-			expect(completed.stlFuelPerBlock).toBe(123);
+			expect(completed.stlFuelPerBlock).toBe(preset.stlFuelPerBlock);
 		});
 
 		it("leaves burn rates the profile carries alone, zero included", () => {
@@ -254,9 +302,10 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			raukkShipProfilePresets().forEach((preset) => {
 				// calibration §6: a flat 0.0011 % per parsec, reactor blind
 				expect(preset.damagePerParsec).toBeCloseTo(0.000011, 12);
-				// and the meteoroid law over the reference sublight leg
+				// §11.4: the meteoroid law over both transit legs, plus one
+				// landing, stated at the reference density
 				expect(preset.damagePerStlBlock).toBeCloseTo(
-					(25_000_000 * (2.2e-10 + 5.5e-10 * 3.28)) / 100,
+					raukkStlBlockDamage(3.28),
 					12
 				);
 			});

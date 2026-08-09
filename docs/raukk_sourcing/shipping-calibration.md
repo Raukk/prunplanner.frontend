@@ -689,3 +689,84 @@ the missing distance term. Every input needed to fix that now exists:
 3. LND damage per planet — the user has planetary data in PRUNplanner
    and offers examples once the above lands.
 4. Repair bill from the BOM (section 6, last bullet).
+
+## 12. As implemented, round 2 (2026-08-09)
+
+Section 9 recorded the first derivation layer. This is what §11 replaced
+it with, plus the two decisions the user made when it landed.
+
+USER DECISIONS (2026-08-09), both now defaults in `shippingPhysics.ts`:
+
+- Every profile is derived on the FUEL-SAVING ENGINE. The campaign's own
+  ships were a mix, and the ENG builds of batches 8 and 9 are the starter
+  ship's engine, not the fleet's.
+- Every profile is derived on the LIGHTWEIGHT HULL PLATE, 10 g. Batch
+  9's blueprints wore the Basic plate — which is what let §11.1 read its
+  8 g cap straight off the surface legs — but LHP is what the user flies
+  and, at the time of writing, is the cheaper of the two. It is also the
+  plate every damage constant in §6 was measured on, so the two agree.
+
+LANDED:
+
+- `raukkSurfaceLegSeconds` = `√(2 × km / accelMax)` (§11.1), replacing
+  `3200 / √accelMax`. Fuel stays `7.55 × rated × seconds`.
+- `raukkCruiseSpeed` = `min(engineTopSpeed, fuel × accelMax / (34 ×
+  rated))` and `raukkTransitSeconds` = `km / cruise` (§11.2). The
+  per-engine top speed replaces the fuel saver's `speedCapFactor` FLOOR
+  of round 1: a ceiling on speed is what the campaign measured, and it
+  reproduces batch 1's identical empty and loaded transits without the
+  floor's special case.
+- `raukkTransitFuel` is the slider's budget — `fraction × tank`, or a
+  flat 40 units at MIN — and no longer the rated-rate integral.
+- `raukkStlBlock` is the new shape (§11.6): ONE surface hop, ONE planet
+  side transit leg of 67.3 M km and ONE station side leg of 20.8 M km,
+  which is what a planet↔CX one-way flight is in either direction. The
+  old block — two surface hops and one 25 M km transit — was both the
+  wrong shape and three and a half times too short.
+- Damage gains the landing (§11.7) and the block now carries both
+  transit legs.
+- The DENSITY SCALING IS THE RIGHT WAY ROUND. `shippingChains.ts` scaled
+  `damagePerParsec` by path density and left the block flat; §6 and
+  §11.4 say the opposite, so the leg pricing now carries a
+  `blockDamageFactor` and the parsec term is flat. The two-flight solver
+  in `shippingCalibration.ts` inverts the same way.
+- `minutesPerParsec` is seeded `9.6 + 45.9 / panelSpeed` (§11.3) instead
+  of `60 / panelSpeed`, which ran 1.2× to 2.1× optimistic.
+  `ftlFuelPerParsec` is seeded at 4.687 for the first time.
+- The preset table is three measured builds — the SCB of batch 9, the
+  WCB of batches 3 and 10, the HCB of batches 1 and 7 — carrying their
+  own measured FTL constants and DERIVING every sublight term through
+  the laws above, so a change to a physical constant moves the presets
+  with it.
+
+MEASURED AGAINST BATCH 9. Fifteen one-way trips, the model run on those
+ships' own engine, plate and tank at MIN:
+
+| | round 1 | round 2 | spread |
+|---|---|---|---|
+| time | 0.59x | 1.02x | 0.81 - 1.19 |
+| damage | 0.39x | 0.63x | 0.44 - 0.95 |
+| STL fuel | 0.97x | 0.96x | 0.64 - 1.18 |
+
+The damage column is entirely the Antares anomaly: every one of the
+fifteen trips has one end at Antares Station, and removing that leg from
+both sides puts the model at 1.08x observed (0.77 - 1.50, which is the
+reference distance standing in for a real leg length). Nothing else in
+the damage model is off.
+
+STILL OPEN, and the first is now the biggest:
+
+- WHAT THE SLIDER ACTUALLY IS. The default is the user's stated 5 %, but
+  §10 and batch 9 both burned about 2.2 % of their tank per transit leg
+  at a slider the user reads as 5 %. At 5 % every fuel-saver build pins
+  to its 9,550 km/s ceiling and the app runs ~1.7x optimistic on
+  sublight time; at 2.2 % it does not. The §11.8 sweep settles it and
+  nothing else will.
+- The DEP/APP speed asymmetry of §11.2 — the model flies both legs at
+  one speed, the game flies the inbound one 6 % to 34 % faster.
+- The Antares term (§11.5) and per-planet landing damage (§6), the
+  latter a placeholder 0.018 % until the user's planetary data is fit.
+- A real per-leg distance instead of the two reference legs. §11.6 says
+  what it would take: a warp point per system pair plus the body's
+  orbital drift over the flight.
+- Repair bill from the ship's BOM (§6).

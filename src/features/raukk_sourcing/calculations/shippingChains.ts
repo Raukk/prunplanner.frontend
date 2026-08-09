@@ -467,7 +467,22 @@ interface ILegPricing {
 	sameSystemMode: RAUKK_SAME_SYSTEM_MODE | null;
 	sameSystemBand: IRaukkOrbitBand | null;
 	pathMeanDensity: number | null;
+	/**
+	 * Flat per parsec hull damage. NOT density scaled: calibration §6
+	 * measures the jump term reactor AND density independent, and §11.3
+	 * reproduces it at 0.001 % per parsec over eight hops through
+	 * systems of density 0.20 to 2.97.
+	 */
 	damagePerParsec: number;
+	/**
+	 * What the profiles per block damage is multiplied by on this leg,
+	 * `pathMeanDensity / densityRef` and 1 when the density is unknown.
+	 *
+	 * The BLOCK is what carries the meteoroid law (§6, §11.4), so it is
+	 * the block — not the parsecs — that a dense path makes expensive.
+	 * Until §11.4 this was the wrong way round.
+	 */
+	blockDamageFactor: number;
 	/**
 	 * Gate terms of an STL-only leg, null on every FTL leg. Present, its
 	 * fees and fuel ARE `distanceCost` and its damage replaces the
@@ -528,7 +543,9 @@ function pathMeanDensity(
  *
  * Hull damage is scaled per leg by the meteoroid density actually
  * flown through, anchored at `densityRef`, and falls back to the flat
- * profile rate whenever the path or a density is unknown.
+ * profile rate whenever the path or a density is unknown. The scaling
+ * lands on the SUBLIGHT BLOCK, which is what the meteoroid law belongs
+ * to (calibration §6, §11.4); the per parsec jump term is flat.
  *
  * A same system leg priced by the manual `sameSystemFlatCost` override
  * pays HALF of it: the v1 constant is a per ROUND TRIP figure and a
@@ -560,6 +577,7 @@ function priceLeg(
 		sameSystemBand: null,
 		pathMeanDensity: null,
 		damagePerParsec: profile.damagePerParsec,
+		blockDamageFactor: 1,
 		gate: null,
 	};
 
@@ -604,11 +622,11 @@ function priceLeg(
 			sameSystemBand: null,
 			pathMeanDensity: density,
 			gate: null,
-			damagePerParsec:
+			damagePerParsec: profile.damagePerParsec,
+			blockDamageFactor:
 				density !== null && chainConfig.densityRef > 0
-					? (profile.damagePerParsec * density) /
-						chainConfig.densityRef
-					: profile.damagePerParsec,
+					? density / chainConfig.densityRef
+					: 1,
 		};
 	}
 
@@ -686,11 +704,11 @@ function priceLeg(
 		sameSystemBand: band,
 		pathMeanDensity: neighborDensity,
 		gate: null,
-		damagePerParsec:
+		damagePerParsec: profile.damagePerParsec,
+		blockDamageFactor:
 			chainConfig.densityRef > 0
-				? (profile.damagePerParsec * neighborDensity) /
-					chainConfig.densityRef
-				: profile.damagePerParsec,
+				? neighborDensity / chainConfig.densityRef
+				: 1,
 	};
 }
 
@@ -843,7 +861,8 @@ export function calculateChainShipping(
 			(gate !== null
 				? gate.damage
 				: pricing[index].effectiveParsecs *
-					pricing[index].damagePerParsec) + profile.damagePerStlBlock
+					pricing[index].damagePerParsec) +
+			profile.damagePerStlBlock * pricing[index].blockDamageFactor
 		);
 	});
 

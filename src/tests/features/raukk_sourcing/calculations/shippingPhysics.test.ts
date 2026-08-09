@@ -2,26 +2,33 @@ import { describe, it, expect } from "vitest";
 
 // Calculations
 import {
+	RAUKK_DEFAULT_G_FACTOR,
+	RAUKK_STANDARD_GRAVITY,
 	RAUKK_STL_ENGINES,
 	RAUKK_STL_TANKS,
 	raukkAccelerationMax,
+	raukkCruiseSpeed,
 	raukkFtlDamagePerParsec,
 	raukkInferStlEngine,
+	raukkStlBlock,
 	raukkStlDamage,
-	raukkTakeoffFuel,
-	raukkTakeoffSeconds,
-	raukkTransitCapSeconds,
+	raukkSurfaceLegFuel,
+	raukkSurfaceLegSeconds,
 	raukkTransitFuel,
 	raukkTransitSeconds,
 } from "@/features/raukk_sourcing/calculations/shippingPhysics";
 
 /*
  * Every expectation below is an observation transcribed from
- * docs/raukk_sourcing/shipping-calibration.md, section 7. The tolerances
- * are the bands that document quotes its own constants at — the time
- * constants are stated as ranges (3,130-3,300 and 10,400-11,000), so a
- * couple of percent is as tight as the model can honestly claim.
+ * docs/raukk_sourcing/shipping-calibration.md — sections 7 and 11, the
+ * latter leg by leg in docs/raukk_sourcing/btf_flights.json. Batch 9 is
+ * exact enough to assert on directly: its surface legs carry printed
+ * seconds and its three blueprints all sit on an 8 g plate, so the
+ * acceleration is known to be 78.48 m/s².
  */
+
+/** Acceleration of every batch 9 blueprint: a Basic plate at 8 g */
+const BATCH_9_ACCELERATION: number = 8 * RAUKK_STANDARD_GRAVITY;
 
 describe("Raukk Shipping: Flight Physics", () => {
 	describe("acceleration", () => {
@@ -57,103 +64,228 @@ describe("Raukk Shipping: Flight Physics", () => {
 	});
 
 	describe("takeoff and landing", () => {
-		it("reproduces the batch 1 takeoff across the mass range", () => {
-			// 1,672 t at 59.8 m/s² took 6m59s
-			expect(raukkTakeoffSeconds(59.8)).toBeCloseTo(419, -1.5);
-			// 6,672 t, so 100,000 / 6,672 = 14.99 m/s², took 13m20s
-			expect(raukkTakeoffSeconds(100_000 / 6672)).toBeCloseTo(800, -2);
+		it("flies every batch 9 surface leg to the printed second", () => {
+			// km and seconds straight off the panels, §11.1
+			const legs: [number, number][] = [
+				[1_925, 222], // TO  Nike
+				[5_439, 373], // TO  Vulcan
+				[34_044, 932], // TO  Ashyn, the longest of the batch
+				[679, 132], // TO  Aceland, the shortest
+				[2_010, 227], // LND Aceland
+				[5_297, 368], // LND Lom Palanka
+				[26_898, 828], // LND Ashyn
+			];
+
+			legs.forEach(([km, seconds]) => {
+				expect(
+					raukkSurfaceLegSeconds(km, BATCH_9_ACCELERATION)
+				).toBeCloseTo(seconds, -0.5);
+			});
+		});
+
+		it("takes off and lands on one law, same planet same answer", () => {
+			// Nike: 1,925 km up in 222 s, 5,582 km down in 378 s — the two
+			// legs differ in length and return the same acceleration
+			const up: number =
+				(2 * 1_925 * 1_000) / raukkSurfaceLegSeconds(1_925, 78.48) ** 2;
+			const down: number =
+				(2 * 5_582 * 1_000) / raukkSurfaceLegSeconds(5_582, 78.48) ** 2;
+
+			expect(up).toBeCloseTo(down, 6);
 		});
 
 		it("burns 7.55 times the rated rate over the leg", () => {
-			// the campaign back-predicts batch 1 at 23.7 and 45.3 units
+			// batch 9, standard engine: 222 s → 25 u, 932 s → 105 u
+			const rate: number = RAUKK_STL_ENGINES.ENG.fuelRatePerSecond;
+
+			expect(Math.round(raukkSurfaceLegFuel(rate, 222))).toBe(25);
+			expect(Math.round(raukkSurfaceLegFuel(rate, 932))).toBe(106);
+			// and the campaign's own back-prediction of batch 1
 			expect(
-				raukkTakeoffFuel(RAUKK_STL_ENGINES.FSE.fuelRatePerSecond, 419)
+				raukkSurfaceLegFuel(
+					RAUKK_STL_ENGINES.FSE.fuelRatePerSecond,
+					419
+				)
 			).toBeCloseTo(23.7, 1);
-			expect(
-				raukkTakeoffFuel(RAUKK_STL_ENGINES.FSE.fuelRatePerSecond, 800)
-			).toBeCloseTo(45.3, 0);
+		});
+
+		it("goes nowhere without acceleration or distance", () => {
+			expect(raukkSurfaceLegSeconds(5_000, 0)).toBe(0);
+			expect(raukkSurfaceLegSeconds(0, 78.48)).toBe(0);
 		});
 	});
 
 	describe("transit", () => {
-		it("holds the engine sweep of batch 5 to its shared constant", () => {
-			// Glass 26.8 → 35m12s, Standard 66.9 → 22m19s,
-			// Advanced 133.4 → 15m47s, Hyperthrust 215.8 → 11m47s
-			const sweep: [number, number][] = [
-				[26.8, 2112],
-				[66.9, 1339],
-				[133.4, 947],
-				[215.8, 707],
+		it("prices the batch 5 engine sweep off its top speeds", () => {
+			// ~25.09 M km at 50 %: Glass 35m12s, Standard 22m19s,
+			// Advanced 15m47s, Hyperthrust 11m47s — all at their ceiling
+			const sweep: [keyof typeof RAUKK_STL_ENGINES, number][] = [
+				["GEN", 2112],
+				["ENG", 1339],
+				["AEN", 947],
+				["HTE", 707],
 			];
 
-			sweep.forEach(([acceleration, seconds]) => {
-				const predicted: number = raukkTransitSeconds(acceleration);
-
-				expect(predicted).toBeGreaterThan(seconds * 0.9);
-				expect(predicted).toBeLessThan(seconds * 1.1);
+			sweep.forEach(([code, seconds]) => {
+				expect(
+					raukkTransitSeconds(
+						25_090_000,
+						RAUKK_STL_ENGINES[code].topSpeedKmPerSecond
+					)
+				).toBeCloseTo(seconds, -2);
 			});
 		});
 
-		it("pins the fuel saver to its own speed cap, empty or loaded", () => {
-			const cap: number = raukkTransitCapSeconds(
-				59.8,
-				RAUKK_STL_ENGINES.FSE.speedCapFactor
+		it("reproduces the batch 9 outbound leg from its fuel", () => {
+			// 37 units at 78.48 m/s² on a standard engine bought 5,790 km/s
+			const cruise: number = raukkCruiseSpeed(
+				37,
+				BATCH_9_ACCELERATION,
+				RAUKK_STL_ENGINES.ENG.fuelRatePerSecond,
+				RAUKK_STL_ENGINES.ENG.topSpeedKmPerSecond
 			);
 
-			// batch 1 flew 43m47s at every slider setting and every load
-			expect(cap).toBeCloseTo(2627, -2);
-			expect(raukkTransitSeconds(59.8, cap)).toBeCloseTo(cap, 10);
-			// loading 5,000 t drops it to 14.99 m/s² and only then past it
-			expect(raukkTransitSeconds(100_000 / 6672, cap)).toBeGreaterThan(
-				cap
+			expect(cruise).toBeGreaterThan(5_500);
+			expect(cruise).toBeLessThan(6_000);
+			// and that speed flies the 105.0 M km Antares III leg in 5h02m
+			expect(raukkTransitSeconds(105_026_115, cruise)).toBeCloseTo(
+				18_120,
+				-3
 			);
 		});
 
-		it("leaves every other engine untouched by its own cap", () => {
-			const cap: number = raukkTransitCapSeconds(
-				98.1,
-				RAUKK_STL_ENGINES.ENG.speedCapFactor
+		it("pins the fuel saver to its own speed cap, empty or loaded", () => {
+			// batch 1 at 25 %: 875 units, 43m47s over 25.08 M km — the same
+			// 43m47s empty at 59.81 m/s² and loaded at 14.99
+			const empty: number = raukkCruiseSpeed(
+				875,
+				59.81,
+				RAUKK_STL_ENGINES.FSE.fuelRatePerSecond,
+				RAUKK_STL_ENGINES.FSE.topSpeedKmPerSecond
+			);
+			const loaded: number = raukkCruiseSpeed(
+				875,
+				100_000 / 6672,
+				RAUKK_STL_ENGINES.FSE.fuelRatePerSecond,
+				RAUKK_STL_ENGINES.FSE.topSpeedKmPerSecond
 			);
 
-			// a loaded ship always flies longer than its empty prediction
-			expect(raukkTransitSeconds(31.8, cap)).toBeCloseTo(
-				raukkTransitSeconds(31.8),
-				10
+			expect(empty).toBe(RAUKK_STL_ENGINES.FSE.topSpeedKmPerSecond);
+			expect(loaded).toBe(empty);
+			expect(raukkTransitSeconds(25_084_752, loaded)).toBeCloseTo(
+				2627,
+				-2
 			);
+		});
+
+		it("lets a thin budget fall short of the ceiling", () => {
+			// MIN on a heavily loaded fuel saver: batch 1 flew 2h24m
+			const cruise: number = raukkCruiseSpeed(
+				49,
+				100_000 / 6672,
+				RAUKK_STL_ENGINES.FSE.fuelRatePerSecond,
+				RAUKK_STL_ENGINES.FSE.topSpeedKmPerSecond
+			);
+
+			expect(cruise).toBeLessThan(
+				RAUKK_STL_ENGINES.FSE.topSpeedKmPerSecond
+			);
+			expect(raukkTransitSeconds(24_136_995, cruise)).toBeGreaterThan(
+				2627
+			);
+		});
+	});
+
+	describe("the sublight block", () => {
+		it("is a surface hop and the two transit legs of one flight", () => {
+			const block = raukkStlBlock({
+				accelerationMax: BATCH_9_ACCELERATION,
+				fuelRatePerSecond: RAUKK_STL_ENGINES.ENG.fuelRatePerSecond,
+				topSpeedKmPerSecond: RAUKK_STL_ENGINES.ENG.topSpeedKmPerSecond,
+				tankCapacity: RAUKK_STL_TANKS.SSL,
+				sliderFraction: 0,
+				meteoroidDensity: 3.28,
+			});
+
+			expect(block.seconds).toBeCloseTo(
+				block.surfaceSeconds +
+					block.planetTransitSeconds +
+					block.stationTransitSeconds,
+				6
+			);
+			// the planet side leg is the long one, by a factor of three
+			expect(block.planetTransitSeconds).toBeGreaterThan(
+				3 * block.stationTransitSeconds
+			);
+			// two transit budgets plus the surface hop's rated burn
+			expect(block.fuel).toBeCloseTo(
+				2 * 40 +
+					raukkSurfaceLegFuel(
+						RAUKK_STL_ENGINES.ENG.fuelRatePerSecond,
+						block.surfaceSeconds
+					),
+				6
+			);
+		});
+
+		it("carries the meteoroid law of both transit legs", () => {
+			const dense = raukkStlBlock({
+				accelerationMax: 98.1,
+				fuelRatePerSecond: 0.0075,
+				topSpeedKmPerSecond: 9_550,
+				tankCapacity: RAUKK_STL_TANKS.MSL,
+				sliderFraction: 0.05,
+				meteoroidDensity: 2.93,
+			});
+			const clean = raukkStlBlock({
+				accelerationMax: 98.1,
+				fuelRatePerSecond: 0.0075,
+				topSpeedKmPerSecond: 9_550,
+				tankCapacity: RAUKK_STL_TANKS.MSL,
+				sliderFraction: 0.05,
+				meteoroidDensity: 0.028,
+			});
+
+			expect(dense.damage).toBeGreaterThan(clean.damage);
+			// and both include the one landing a one way flight ends with
+			expect(clean.damage).toBeGreaterThan(0.018 / 100);
 		});
 	});
 
 	describe("the fuel slider", () => {
 		it("spends a fraction of the TANK, not of the engine", () => {
 			// 25 % of a 3,500 unit MSL burned 874 units on batch 1
-			expect(
-				raukkTransitFuel(
-					RAUKK_STL_ENGINES.FSE.fuelRatePerSecond,
-					2627,
-					RAUKK_STL_TANKS.MSL,
-					0.25
-				)
-			).toBeCloseTo(875, 10);
-			// and 50 % burned 1,723-1,734, engine and mass independent
-			expect(
-				raukkTransitFuel(
-					RAUKK_STL_ENGINES.HTE.fuelRatePerSecond,
-					700,
-					RAUKK_STL_TANKS.MSL,
-					0.5
-				)
-			).toBeCloseTo(875, 10);
+			expect(raukkTransitFuel(RAUKK_STL_TANKS.MSL, 0.25)).toBeCloseTo(
+				875,
+				10
+			);
+			// a smaller tank at the same slider costs proportionally less
+			expect(raukkTransitFuel(RAUKK_STL_TANKS.SSL, 0.25)).toBeCloseTo(
+				375,
+				10
+			);
 		});
 
-		it("burns at the rated rate at MIN instead", () => {
-			expect(
-				raukkTransitFuel(
-					RAUKK_STL_ENGINES.FSE.fuelRatePerSecond,
-					2627,
-					RAUKK_STL_TANKS.MSL,
-					0
-				)
-			).toBeCloseTo(19.7, 1);
+		it("clamps past the quarter tank nobody flies beyond", () => {
+			expect(raukkTransitFuel(RAUKK_STL_TANKS.MSL, 1)).toBeCloseTo(
+				raukkTransitFuel(RAUKK_STL_TANKS.MSL, 0.25),
+				10
+			);
+		});
+
+		it("burns a flat economy budget at MIN instead", () => {
+			// §1.1 and every MIN leg of batches 4, 7 and 9: 37 to 49 units,
+			// whatever the tank, the mass and above all the distance
+			expect(raukkTransitFuel(RAUKK_STL_TANKS.MSL, 0)).toBe(40);
+			expect(raukkTransitFuel(RAUKK_STL_TANKS.SSL, 0)).toBe(40);
+		});
+	});
+
+	describe("defaults", () => {
+		it("assumes the fleet the user actually flies", () => {
+			// USER DECISION: fuel saver and Lightweight Hull Plate
+			expect(RAUKK_DEFAULT_G_FACTOR).toBe(10);
+			expect(RAUKK_STL_ENGINES.FSE.fuelRatePerSecond).toBe(0.0075);
 		});
 	});
 
