@@ -105,7 +105,7 @@ export const useRaukkSourcingStore = defineStore(
 		 * fleet itself, and a pure DISPLAY mode: nothing recomputes and
 		 * nothing goes stale when it flips.
 		 */
-		const fleetSpillover: Ref<boolean> = ref(false);
+		const fleetSpillover: Ref<boolean> = ref(true);
 		/** Account global, like the shipping configuration next to it */
 		const chainConfig: Ref<IRaukkChainConfig> = ref(
 			raukkDefaultChainConfig()
@@ -131,7 +131,7 @@ export const useRaukkSourcingStore = defineStore(
 			chainResults.value = {};
 			fleet.value = {};
 			assignments.value = {};
-			fleetSpillover.value = false;
+			fleetSpillover.value = true;
 			chainConfig.value = raukkDefaultChainConfig();
 			depots.value = {};
 		}

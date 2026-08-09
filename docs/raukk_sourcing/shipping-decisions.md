@@ -498,11 +498,15 @@ LM rate and ship assignment are pair-keyed.
 
 ## Round 17 (WO-3: utilization spillover display)
 
-1. **Spillover is an opt-in DISPLAY mode** (2026-08-09): the fleet
-   section gains a "Show spillover" toggle, persisted account-globally
-   as `fleetSpillover` (defaulted off, in persist.pick and the export
-   schema like the fleet slice). Flipping it stales nothing — it is a
-   way of reading the utilization rollup, not an input.
+1. **Spillover is a DISPLAY mode, defaulted on** (2026-08-09): the
+   fleet section gains a "Show spillover" toggle, persisted
+   account-globally as `fleetSpillover` (in persist.pick and the
+   export schema like the fleet slice). User decision (2026-08-08)
+   revised the default from off to on, changed in both places it
+   lives: the store ref (fresh store, `$reset`) and the zod schema
+   default (imports without the field); an explicitly persisted false
+   still imports as false. Flipping it stales nothing — it is a way
+   of reading the utilization rollup, not an input.
 2. **v1 moves raw ship-minutes 1:1** between types, a stated
    approximation: the same work costs different minutes on a different
    hull, and re-costing on the recipient hull is explicitly out of

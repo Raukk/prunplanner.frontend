@@ -96,9 +96,10 @@ Verified against user BTF runs (ZV-759c → ANT, 4 pc, both hulls):
 
 ## Utilization spillover (WO-3)
 
-Opt-in display mode on the fleet section ("Show spillover"), persisted
+Display mode on the fleet section ("Show spillover"), persisted
 account-globally (`fleetSpillover` on raukkSourcingStore, defaulted
-off). When a type is over 100%, its overflow ship-minutes are
+on — user decision revising round 17, see shipping-decisions.md).
+When a type is over 100%, its overflow ship-minutes are
 NOTIONALLY redistributed onto owned types with spare capacity —
 "this work fits in the fleet overall, but on the wrong hulls". A
 reading only: assignments, costs and snapshots never move, and with
