@@ -764,7 +764,7 @@ export function buildInputRows(
 				fromPlanUuid: resolved.fromPlanUuid,
 			};
 		})
-		.sort((a, b) => b.costPerDay - a.costPerDay);
+		.sort((a, b) => sortCost(b) - sortCost(a));
 
 	const materialRows: IRaukkInputRow[] = Object.entries(units)
 		.map(([ticker, unitsPerDay]) => {

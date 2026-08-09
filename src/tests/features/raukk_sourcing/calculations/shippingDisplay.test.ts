@@ -121,6 +121,21 @@ describe("raukk shipping display helpers", () => {
 			expect(row.ownCostPerTrip).toBe(200 + 100);
 		});
 
+		it("states the own fleet wear of the lane", () => {
+			const pair: IRaukkShippingPair = sourcingPair();
+			pair.profile = { ...profile, damagePerParsec: 0.01 };
+
+			// 2 * 5 * 0.01 = 10% damage per trip, half a trip a day
+			const [row] = buildLmComparison([pair], config, 800, caps);
+
+			expect(row.ownWear.damagePerTrip).toBeCloseTo(0.1, 10);
+			// 0.8 / 0.1 trips, at 0.5 trips a day twice that in days
+			expect(row.ownWear.tripsUntilRepair).toBeCloseTo(8, 10);
+			expect(row.ownWear.daysUntilRepair).toBeCloseTo(16, 10);
+			// the same 100 ȼ the cost per trip test charges
+			expect(row.ownWear.repairCostPerTrip).toBeCloseTo(100, 10);
+		});
+
 		it("compares a hired rate against the own fleet", () => {
 			const pairKey: string = raukkSourcingPairKey("consumer", "source");
 

@@ -5,11 +5,13 @@
 // and everything testable lives here.
 
 // Calculations
+import { RAUKK_REPAIR_AT_DAMAGE } from "@/features/raukk_sourcing/calculations/shipping";
 import {
 	RAUKK_FTL_REACTORS,
 	RAUKK_SHIP_HULLS,
 	raukkShipProfileId,
 } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import { raukkDaysUntilRepair } from "@/features/raukk_sourcing/calculations/shippingWear";
 import {
 	RAUKK_EPSILON_EQUAL,
 	raukkEqualWithin,
@@ -24,6 +26,7 @@ import {
 	RAUKK_FTL_REACTOR,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 import { IRaukkFleetUtilization } from "@/features/raukk_sourcing/calculations/shippingFleet";
+import { IRaukkFleetSpillover } from "@/features/raukk_sourcing/calculations/shippingFleetSpillover";
 
 /**
  * Bay code of every hull the model knows, by cargo hold.
@@ -45,6 +48,26 @@ export const RAUKK_BAY_CODE_BY_HULL: Record<string, string> = {
 	"1000x3000": "VCB",
 };
 
+/**
+ * Spillover overlay of one fleet row, present only while the spillover
+ * display is on and the row owns at least one hull.
+ *
+ * All percentages are UNCAPPED readings — the bar width helpers cap
+ * separately, exactly as the base row splits number and bar.
+ */
+export interface IRaukkFleetRowSpill {
+	/** Own load in percent, the base (green) bar segment */
+	ownPercent: number;
+	/** Notionally received share in percent, the amber appended segment */
+	spilledInPercent: number;
+	/** The number the row prints: combined for a recipient, residual for a donor */
+	printedPercent: number;
+	/** Red + bold: only a donor whose residual is still past 100% */
+	over: boolean;
+	/** The row received spilled work and states "own X % + spilled Y %" */
+	received: boolean;
+}
+
 /** One ship type as the fleet table renders it */
 export interface IRaukkFleetRow {
 	shipTypeId: string;
@@ -64,6 +87,30 @@ export interface IRaukkFleetRow {
 	over: boolean;
 	/** Number of lanes and chains assigned to this type */
 	assignedCount: number;
+	/**
+	 * True while at least one stored result of this type predates the
+	 * wear rollup: the wear is UNKNOWN then, never zero, and the row says
+	 * so instead of promising an eternity between repairs.
+	 */
+	wearUnknown: boolean;
+	/**
+	 * Days one hull of this type flies between two repairs, the work
+	 * spread over the count exactly as the utilization spreads it. Null
+	 * while the wear is unknown, no hull is owned, or nothing assigned
+	 * takes damage — the cell prints an em-dash either way, the tooltip
+	 * tells the cases apart via {@link wearUnknown}.
+	 */
+	drydockDays: number | null;
+	/** Hull damage of one hull per day in PERCENT, null as above */
+	damagePercentPerDay: number | null;
+	/**
+	 * ȼ of wear per day over ALL hulls of the type,
+	 * `(damagePerDay / repair threshold) × bill`. Null while the wear is
+	 * unknown or no bill cost was handed in.
+	 */
+	repairCostPerDay: number | null;
+	/** Spillover overlay, absent with the display off or no hull owned */
+	spill?: IRaukkFleetRowSpill;
 }
 
 /** One piece of fleet advice, rolled up over the whole account */
@@ -109,6 +156,28 @@ export function raukkBayCode(
 }
 
 /**
+ * Compact label of a ship type id, for surfaces that only carry the id.
+ *
+ * A ship type id is `${cargoWeight}x${cargoVolume}-${ftlReactor}`
+ * (`raukkShipProfileId`), so the hull key is everything before the first
+ * dash — the reactor flag may contain dashes itself, the hull key never
+ * does. A preset hull reads as its in-game bay code ("WCB"), anything
+ * else falls back to the raw hull key ("1500x1500").
+ *
+ * @author raukk
+ *
+ * @param {string} shipTypeId Ship type id
+ * @returns {string} Bay code, or the hull key where none exists
+ */
+export function raukkShipTypeLabel(shipTypeId: string): string {
+	const separator: number = shipTypeId.indexOf("-");
+	const hullKey: string =
+		separator < 0 ? shipTypeId : shipTypeId.slice(0, separator);
+
+	return RAUKK_BAY_CODE_BY_HULL[hullKey] ?? hullKey;
+}
+
+/**
  * Every hull times reactor flag, as the add row offers them.
  *
  * @author raukk
@@ -139,18 +208,39 @@ export function raukkShipTypeOptions(): IRaukkShipTypeOption[] {
  * untouched: a held type at count zero has no denominator, and a zero
  * there would read as infinite capacity.
  *
+ * Wear is stated per HULL: the assigned damage per day is spread over
+ * the count — the same denominator the utilization uses — and inverted
+ * into the days one ship flies between two repairs. An unknown wear
+ * (a stored result predating the rollup) stays unknown, never zero.
+ *
  * @author raukk
  *
  * @param {IRaukkFleetUtilization[]} utilization Rollup per ship type
  * @param {(shipTypeId: string) => IRaukkShipProfile} profileOf Profiles
+ * @param {number} repairBillCost ȼ of a full repair bill, 0 unpriced
  * @returns {IRaukkFleetRow[]} Fleet rows
  */
 export function raukkFleetRows(
 	utilization: IRaukkFleetUtilization[],
-	profileOf: (shipTypeId: string) => IRaukkShipProfile
+	profileOf: (shipTypeId: string) => IRaukkShipProfile,
+	repairBillCost: number = 0
 ): IRaukkFleetRow[] {
 	return utilization.map((entry) => {
 		const profile: IRaukkShipProfile = profileOf(entry.shipTypeId);
+
+		const wearUnknown: boolean = entry.damagePerDay === null;
+
+		/** Damage one hull accrues per day, null without a denominator */
+		const damagePerShipPerDay: number | null =
+			entry.damagePerDay === null || entry.count <= 0
+				? null
+				: entry.damagePerDay / entry.count;
+
+		const drydockDays: number | null =
+			damagePerShipPerDay === null ||
+			!Number.isFinite(raukkDaysUntilRepair(damagePerShipPerDay))
+				? null
+				: raukkDaysUntilRepair(damagePerShipPerDay);
 
 		return {
 			shipTypeId: entry.shipTypeId,
@@ -167,6 +257,15 @@ export function raukkFleetRows(
 				entry.utilization !== null &&
 				entry.utilization > 1 + RAUKK_EPSILON_EQUAL,
 			assignedCount: entry.keys.length,
+			wearUnknown,
+			drydockDays,
+			damagePercentPerDay:
+				damagePerShipPerDay === null ? null : damagePerShipPerDay * 100,
+			repairCostPerDay:
+				entry.damagePerDay === null || repairBillCost <= 0
+					? null
+					: (entry.damagePerDay / RAUKK_REPAIR_AT_DAMAGE) *
+						repairBillCost,
 		};
 	});
 }
@@ -293,4 +392,100 @@ export function raukkUtilizationBarWidth(utilization: number | null): number {
 	if (utilization === null || !Number.isFinite(utilization)) return 0;
 
 	return Math.min(Math.max(utilization, 0), 1) * 100;
+}
+
+/**
+ * Dresses the fleet rows with their spillover overlay.
+ *
+ * A DONOR — a type that handed overflow away or kept a residual — draws
+ * a full bar and prints its RESIDUAL percentage: 100% when everything
+ * fit elsewhere, its uncapped remainder in red when the fleet as a
+ * whole is short. A RECIPIENT prints the combined percentage and states
+ * the split; every other row prints exactly what it prints today. A
+ * count-0 row gets no overlay at all — no hull, no denominator, the
+ * null convention carries through.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkFleetRow[]} rows Fleet rows, spillover off
+ * @param {IRaukkFleetSpillover[]} spillover Redistribution per ship type
+ * @returns {IRaukkFleetRow[]} The same rows, overlay attached
+ */
+export function raukkFleetSpilloverRows(
+	rows: IRaukkFleetRow[],
+	spillover: IRaukkFleetSpillover[]
+): IRaukkFleetRow[] {
+	const byType: Map<string, IRaukkFleetSpillover> = new Map(
+		spillover.map((entry) => [entry.shipTypeId, entry])
+	);
+
+	return rows.map((row) => {
+		const entry: IRaukkFleetSpillover | undefined = byType.get(
+			row.shipTypeId
+		);
+
+		if (
+			entry === undefined ||
+			entry.capacityMinutes <= 0 ||
+			row.utilizationPercent === null
+		)
+			return row;
+
+		if (entry.spilledOutMinutes > 0 || entry.residualOverflowMinutes > 0) {
+			const printedPercent: number =
+				((entry.capacityMinutes + entry.residualOverflowMinutes) /
+					entry.capacityMinutes) *
+				100;
+
+			return {
+				...row,
+				spill: {
+					ownPercent: 100,
+					spilledInPercent: 0,
+					printedPercent,
+					over: printedPercent / 100 > 1 + RAUKK_EPSILON_EQUAL,
+					received: false,
+				},
+			};
+		}
+
+		const spilledInPercent: number =
+			(entry.spilledInMinutes / entry.capacityMinutes) * 100;
+
+		return {
+			...row,
+			spill: {
+				ownPercent: row.utilizationPercent,
+				spilledInPercent,
+				printedPercent: row.utilizationPercent + spilledInPercent,
+				over: row.over,
+				received: entry.spilledInMinutes > 0,
+			},
+		};
+	});
+}
+
+/**
+ * Widths of the two spillover bar segments, together never past the
+ * track: the own segment caps at the full bar, the spilled one at
+ * whatever the own segment left over — the same "a bar cannot draw past
+ * its track" rule {@link raukkUtilizationBarWidth} states, applied to
+ * the pair.
+ *
+ * @author raukk
+ *
+ * @param {number} ownPercent Own load in percent, uncapped
+ * @param {number} spilledInPercent Spilled-in share in percent, uncapped
+ * @returns {{ own: number; spilled: number }} Segment widths, 0 to 100
+ */
+export function raukkSpilloverBarWidths(
+	ownPercent: number,
+	spilledInPercent: number
+): { own: number; spilled: number } {
+	const own: number = Math.min(Math.max(ownPercent, 0), 100);
+
+	return {
+		own,
+		spilled: Math.min(Math.max(spilledInPercent, 0), 100 - own),
+	};
 }

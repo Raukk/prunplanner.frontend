@@ -6,8 +6,13 @@
 // Calculations
 import {
 	calculateCostPerTrip,
+	calculateTripDamage,
 	raukkLaneLegs,
 } from "@/features/raukk_sourcing/calculations/shipping";
+import {
+	IRaukkShipWear,
+	raukkWearOf,
+} from "@/features/raukk_sourcing/calculations/shippingWear";
 
 // Types & Interfaces
 import {
@@ -68,6 +73,12 @@ export interface IRaukkLmComparisonRow {
 	hiredCostPerUnit: number | undefined;
 	/** `own − hired`, positive means hiring is the cheaper option */
 	savingPerUnit: number | undefined;
+	/**
+	 * Wear of the OWN fleet flying this lane, trip weighted over the
+	 * legs. Stated even while the lane is hired — the comparison is what
+	 * hiring buys, and part of it is the wear the own hulls are spared.
+	 */
+	ownWear: IRaukkShipWear;
 }
 
 /** Counterpart marker of the exchange pair, see `raukkCxPairKey` */
@@ -185,6 +196,19 @@ export function buildLmComparison(
 						repairBillCost
 					);
 
+		/** Trip weighted damage of the own fleet, the pairs own profile
+		 * standing in while nothing moves — same fallback as the cost */
+		const ownDamagePerTrip: number =
+			tripsPerDay > 0
+				? legs.reduce(
+						(sum, leg) =>
+							sum +
+							leg.tripsPerDay *
+								calculateTripDamage(pair.route, leg.profile),
+						0
+					) / tripsPerDay
+				: calculateTripDamage(pair.route, pair.profile);
+
 		const lmRatePerTrip: number | undefined =
 			config.lmRates?.[pair.pairKey];
 
@@ -219,6 +243,7 @@ export function buildLmComparison(
 				hiredCostPerUnit === undefined
 					? undefined
 					: ownCostPerUnit - hiredCostPerUnit,
+			ownWear: raukkWearOf(ownDamagePerTrip, tripsPerDay, repairBillCost),
 		};
 	});
 }

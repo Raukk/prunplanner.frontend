@@ -673,6 +673,27 @@ describe("Raukk Sourcing Pricing", () => {
 				});
 			});
 
+			it("keeps the default price order when a source flips costs", () => {
+				// resolved: FF 80*60=4800 beats SF 120*5=600, but at the
+				// default price SF 120*50=6000 beats FF 80*10=800 — the
+				// default keeps sorting so configuring a source does not
+				// swap the rows under the users cursor
+				const rows = buildInputRows(
+					planResult,
+					{},
+					{},
+					fuelResolve,
+					{},
+					(ticker: string) => (ticker === "SF" ? 50 : 10),
+					{ FF: 80, SF: 120 }
+				);
+
+				expect(rows.slice(-2).map((r) => r.ticker)).toStrictEqual([
+					"SF",
+					"FF",
+				]);
+			});
+
 			it("prices the burn without any freight of its own", () => {
 				const rows = buildInputRows(
 					planResult,

@@ -5,9 +5,13 @@ import {
 	raukkBayCode,
 	raukkFleetAdvisoryRows,
 	raukkFleetRows,
+	raukkFleetSpilloverRows,
+	raukkShipTypeLabel,
 	raukkShipTypeOptions,
+	raukkSpilloverBarWidths,
 	raukkUtilizationBarWidth,
 } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
+import { raukkFleetSpillover } from "@/features/raukk_sourcing/calculations/shippingFleetSpillover";
 import {
 	raukkShipProfilePreset,
 	raukkShipProfilePresets,
@@ -50,6 +54,25 @@ describe("Raukk Shipping: Fleet Display", () => {
 		});
 	});
 
+	describe("raukkShipTypeLabel", () => {
+		it("labels a preset hull with its bay code, either reactor", () => {
+			expect(raukkShipTypeLabel("3000x1000-standard")).toBe("WCB");
+			expect(raukkShipTypeLabel("5000x5000-quick-charge")).toBe("HCB");
+		});
+
+		it("falls back to the hull key of an off-preset hull", () => {
+			expect(raukkShipTypeLabel("1500x1500-standard")).toBe("1500x1500");
+			expect(raukkShipTypeLabel("1500x1500-quick-charge")).toBe(
+				"1500x1500"
+			);
+		});
+
+		it("passes an id without a reactor part through unchanged", () => {
+			expect(raukkShipTypeLabel("3000x1000")).toBe("WCB");
+			expect(raukkShipTypeLabel("mystery")).toBe("mystery");
+		});
+	});
+
 	describe("raukkShipTypeOptions", () => {
 		it("offers every hull times both reactor flags, all with a bay", () => {
 			const options = raukkShipTypeOptions();
@@ -71,6 +94,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 					designName: "FSE_WCB_QCR",
 					shipMinutesPerDay: 1440,
 					utilization: 0.5,
+					damagePerDay: 0.004,
 					keys: ["a>CX", "chain:c1"],
 				},
 			];
@@ -95,6 +119,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						designName: undefined,
 						shipMinutesPerDay: 1930,
 						utilization: 1.34,
+						damagePerDay: 0,
 						keys: [],
 					},
 				],
@@ -115,6 +140,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						designName: undefined,
 						shipMinutesPerDay: 1444,
 						utilization: 1.005,
+						damagePerDay: 0,
 						keys: [],
 					},
 				],
@@ -135,6 +161,7 @@ describe("Raukk Shipping: Fleet Display", () => {
 						designName: undefined,
 						shipMinutesPerDay: 720,
 						utilization: null,
+						damagePerDay: 0.004,
 						keys: ["a>CX"],
 					},
 				],
@@ -144,6 +171,79 @@ describe("Raukk Shipping: Fleet Display", () => {
 			expect(row.utilization).toBeNull();
 			expect(row.utilizationPercent).toBeNull();
 			expect(row.over).toBe(false);
+			// count 0: wear is known but has no hull to land on
+			expect(row.wearUnknown).toBe(false);
+			expect(row.drydockDays).toBeNull();
+		});
+
+		it("states the drydock cadence per hull of the type", () => {
+			const [row] = raukkFleetRows(
+				[
+					{
+						shipTypeId: "3000x1000-standard",
+						count: 2,
+						designName: undefined,
+						shipMinutesPerDay: 1440,
+						utilization: 0.5,
+						// 0.4 % per day over both hulls, 0.2 % each
+						damagePerDay: 0.004,
+						keys: ["a>CX"],
+					},
+				],
+				profileOf,
+				2400
+			);
+
+			expect(row.wearUnknown).toBe(false);
+			expect(row.damagePercentPerDay).toBeCloseTo(0.2, 10);
+			// 0.8 / 0.002
+			expect(row.drydockDays).toBeCloseTo(400, 10);
+			// (0.004 / 0.8) * 2400, over ALL hulls of the type
+			expect(row.repairCostPerDay).toBeCloseTo(12, 10);
+		});
+
+		it("keeps an unknown wear unknown instead of eternal", () => {
+			const [row] = raukkFleetRows(
+				[
+					{
+						shipTypeId: "3000x1000-standard",
+						count: 2,
+						designName: undefined,
+						shipMinutesPerDay: 1440,
+						utilization: 0.5,
+						// a stored result predating the wear rollup
+						damagePerDay: null,
+						keys: ["a>CX"],
+					},
+				],
+				profileOf,
+				2400
+			);
+
+			expect(row.wearUnknown).toBe(true);
+			expect(row.drydockDays).toBeNull();
+			expect(row.damagePercentPerDay).toBeNull();
+			expect(row.repairCostPerDay).toBeNull();
+		});
+
+		it("prices no wear without a repair bill cost", () => {
+			const [row] = raukkFleetRows(
+				[
+					{
+						shipTypeId: "3000x1000-standard",
+						count: 1,
+						designName: undefined,
+						shipMinutesPerDay: 720,
+						utilization: 0.5,
+						damagePerDay: 0.004,
+						keys: ["a>CX"],
+					},
+				],
+				profileOf
+			);
+
+			expect(row.drydockDays).toBeCloseTo(200, 10);
+			expect(row.repairCostPerDay).toBeNull();
 		});
 	});
 
@@ -297,6 +397,141 @@ describe("Raukk Shipping: Fleet Display", () => {
 			expect(raukkUtilizationBarWidth(-1)).toBe(0);
 			expect(raukkUtilizationBarWidth(null)).toBe(0);
 			expect(raukkUtilizationBarWidth(Infinity)).toBe(0);
+		});
+	});
+
+	describe("raukkFleetSpilloverRows", () => {
+		const MINUTES_PER_DAY: number = 24 * 60;
+
+		/** Utilization fixture of one preset ship type */
+		function utilizationOf(
+			shipTypeId: string,
+			count: number,
+			shipMinutesPerDay: number
+		): IRaukkFleetUtilization {
+			return {
+				shipTypeId,
+				count,
+				designName: undefined,
+				shipMinutesPerDay,
+				utilization:
+					count > 0
+						? shipMinutesPerDay / (MINUTES_PER_DAY * count)
+						: null,
+				keys: [],
+			};
+		}
+
+		it("prints the donors residual over a full bar", () => {
+			// HCB is 50% over, LCB absorbs a fifth of the overflow
+			const utilization: IRaukkFleetUtilization[] = [
+				utilizationOf(
+					"5000x5000-quick-charge",
+					1,
+					MINUTES_PER_DAY * 1.5
+				),
+				utilizationOf(
+					"2000x2000-standard",
+					1,
+					MINUTES_PER_DAY - 0.1 * MINUTES_PER_DAY
+				),
+			];
+
+			const [donor, recipient] = raukkFleetSpilloverRows(
+				raukkFleetRows(utilization, profileOf),
+				raukkFleetSpillover(utilization)
+			);
+
+			expect(donor.spill?.ownPercent).toBe(100);
+			expect(donor.spill?.spilledInPercent).toBe(0);
+			// 50 points over, 10 absorbed: 140 stays on the donor, red
+			expect(donor.spill?.printedPercent).toBeCloseTo(140, 8);
+			expect(donor.spill?.over).toBe(true);
+			expect(donor.spill?.received).toBe(false);
+
+			expect(recipient.spill?.ownPercent).toBeCloseTo(90, 8);
+			expect(recipient.spill?.spilledInPercent).toBeCloseTo(10, 8);
+			expect(recipient.spill?.printedPercent).toBeCloseTo(100, 8);
+			expect(recipient.spill?.over).toBe(false);
+			expect(recipient.spill?.received).toBe(true);
+		});
+
+		it("prints a fully relieved donor at 100 without the red", () => {
+			const utilization: IRaukkFleetUtilization[] = [
+				utilizationOf(
+					"5000x5000-quick-charge",
+					1,
+					MINUTES_PER_DAY * 1.2
+				),
+				utilizationOf("2000x2000-standard", 1, 0),
+			];
+
+			const [donor] = raukkFleetSpilloverRows(
+				raukkFleetRows(utilization, profileOf),
+				raukkFleetSpillover(utilization)
+			);
+
+			expect(donor.spill?.printedPercent).toBeCloseTo(100, 8);
+			expect(donor.spill?.over).toBe(false);
+			// the base row keeps its uncapped reading, only the overlay
+			// states the residual
+			expect(donor.utilizationPercent).toBeCloseTo(120, 8);
+			expect(donor.over).toBe(true);
+		});
+
+		it("carries a count-0 row through without an overlay", () => {
+			const utilization: IRaukkFleetUtilization[] = [
+				utilizationOf("5000x5000-quick-charge", 0, 5000),
+			];
+
+			const [row] = raukkFleetSpilloverRows(
+				raukkFleetRows(utilization, profileOf),
+				raukkFleetSpillover(utilization)
+			);
+
+			expect(row.spill).toBeUndefined();
+			expect(row.utilizationPercent).toBeNull();
+		});
+
+		it("leaves an uninvolved row printing exactly its own number", () => {
+			const utilization: IRaukkFleetUtilization[] = [
+				utilizationOf("3000x1000-standard", 1, MINUTES_PER_DAY / 2),
+			];
+
+			const [row] = raukkFleetSpilloverRows(
+				raukkFleetRows(utilization, profileOf),
+				raukkFleetSpillover(utilization)
+			);
+
+			expect(row.spill?.printedPercent).toBe(50);
+			expect(row.spill?.spilledInPercent).toBe(0);
+			expect(row.spill?.received).toBe(false);
+			expect(row.spill?.over).toBe(false);
+		});
+	});
+
+	describe("raukkSpilloverBarWidths", () => {
+		it("never draws the pair past the track", () => {
+			expect(raukkSpilloverBarWidths(60, 30)).toStrictEqual({
+				own: 60,
+				spilled: 30,
+			});
+			expect(raukkSpilloverBarWidths(90, 30)).toStrictEqual({
+				own: 90,
+				spilled: 10,
+			});
+			expect(raukkSpilloverBarWidths(140, 30)).toStrictEqual({
+				own: 100,
+				spilled: 0,
+			});
+			expect(raukkSpilloverBarWidths(-5, 30)).toStrictEqual({
+				own: 0,
+				spilled: 30,
+			});
+			expect(raukkSpilloverBarWidths(50, -5)).toStrictEqual({
+				own: 50,
+				spilled: 0,
+			});
 		});
 	});
 });

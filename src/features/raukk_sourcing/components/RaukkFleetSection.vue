@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, ComputedRef, ref, Ref } from "vue";
+	import { computed, ComputedRef, PropType, ref, Ref } from "vue";
 
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
@@ -15,19 +15,32 @@
 	import RaukkCalibrationModal from "@/features/raukk_sourcing/components/RaukkCalibrationModal.vue";
 
 	// Calculations
+	import { RAUKK_REPAIR_BILL } from "@/features/raukk_sourcing/calculations/shipping";
 	import {
 		raukkBayCode,
 		raukkFleetAdvisoryRows,
 		raukkFleetRows,
+		raukkFleetSpilloverRows,
 		raukkShipTypeOptions,
+		raukkSpilloverBarWidths,
 		raukkUtilizationBarWidth,
 	} from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
+	import { raukkFleetSpillover } from "@/features/raukk_sourcing/calculations/shippingFleetSpillover";
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PButton, PInput, PInputNumber, PSelect, PTable, PTag } from "@/ui";
+	import {
+		PButton,
+		PCheckbox,
+		PInput,
+		PInputNumber,
+		PSelect,
+		PTable,
+		PTag,
+		PTooltip,
+	} from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -38,12 +51,38 @@
 	} from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 	import { IRaukkShipProfile } from "@/features/raukk_sourcing/raukkSourcing.types";
 
+	const props = defineProps({
+		/** ȼ of one full ship repair bill, 0 while unpriced — the drydock
+		 * column then states the cadence without a ȼ per day figure */
+		repairBillCost: {
+			type: Number as PropType<number>,
+			required: false,
+			default: 0,
+		},
+	});
+
 	const { utilization, advisories } = useRaukkFleet();
 
 	const rows: ComputedRef<IRaukkFleetRow[]> = computed(() =>
-		raukkFleetRows(utilization.value, (shipTypeId: string) =>
-			sourcingStore.getShipProfile(shipTypeId)
+		raukkFleetRows(
+			utilization.value,
+			(shipTypeId: string) => sourcingStore.getShipProfile(shipTypeId),
+			props.repairBillCost
 		)
+	);
+
+	/**
+	 * Rows the table renders: with the spillover display on, the base
+	 * rows carry their spillover overlay — with it off, exactly the base
+	 * rows, so the section renders as it always did.
+	 */
+	const displayRows: ComputedRef<IRaukkFleetRow[]> = computed(() =>
+		sourcingStore.fleetSpillover
+			? raukkFleetSpilloverRows(
+					rows.value,
+					raukkFleetSpillover(utilization.value)
+				)
+			: rows.value
 	);
 
 	const advisoryRows: ComputedRef<IRaukkFleetAdvisoryRow[]> = computed(() =>
@@ -145,6 +184,11 @@
 		refCalibrateShipTypeId.value = shipTypeId;
 		refShowCalibration.value = true;
 	}
+
+	/** The full repair bill, spelled out for the drydock tooltip */
+	const billLabel: string = Object.entries(RAUKK_REPAIR_BILL)
+		.map(([ticker, units]) => `${units} ${ticker}`)
+		.join(" · ");
 </script>
 
 <template>
@@ -153,6 +197,20 @@
 	</h4>
 	<div class="text-white/50 pb-3">
 		{{ $t("raukk_sourcing.fleet.info") }}
+	</div>
+
+	<div class="flex flex-row gap-x-2 child:my-auto pb-3">
+		<PCheckbox
+			:checked="sourcingStore.fleetSpillover"
+			@update:checked="
+				(v) => sourcingStore.setFleetSpillover(v === true)
+			" />
+		<div class="font-bold">
+			{{ $t("raukk_sourcing.fleet.spillover.toggle") }}
+		</div>
+	</div>
+	<div v-if="sourcingStore.fleetSpillover" class="text-white/50 pb-3">
+		{{ $t("raukk_sourcing.fleet.spillover.info") }}
 	</div>
 
 	<PTable striped>
@@ -166,13 +224,18 @@
 				</th>
 				<th>{{ $t("raukk_sourcing.fleet.utilization") }}</th>
 				<th class="text-right!">
+					{{ $t("raukk_sourcing.fleet.drydock") }}
+				</th>
+				<th class="text-right!">
 					{{ $t("raukk_sourcing.fleet.assigned") }}
 				</th>
 				<th></th>
 			</tr>
 		</thead>
 		<tbody>
-			<tr v-for="row in rows" :key="`RAUKKFLEET#${row.shipTypeId}`">
+			<tr
+				v-for="row in displayRows"
+				:key="`RAUKKFLEET#${row.shipTypeId}`">
 				<td>
 					<PTag size="sm" type="secondary">
 						{{ row.bayCode ?? "—" }}
@@ -210,7 +273,60 @@
 						@update:value="(v) => changeCount(row.shipTypeId, v)" />
 				</td>
 				<td>
-					<div class="flex flex-row gap-x-2 child:my-auto min-w-40">
+					<div
+						v-if="row.spill"
+						class="flex flex-row gap-x-2 child:my-auto min-w-40">
+						<div
+							class="w-full bg-gray-800 size-2 rounded-full overflow-hidden flex flex-row">
+							<div
+								class="h-full transition-all duration-300 ease-out"
+								:class="
+									row.spill.over
+										? 'bg-negative'
+										: 'bg-prunplanner'
+								"
+								:style="{
+									width: `${
+										raukkSpilloverBarWidths(
+											row.spill.ownPercent,
+											row.spill.spilledInPercent
+										).own
+									}%`,
+								}"></div>
+							<div
+								class="h-full bg-amber-400 transition-all duration-300 ease-out"
+								:style="{
+									width: `${
+										raukkSpilloverBarWidths(
+											row.spill.ownPercent,
+											row.spill.spilledInPercent
+										).spilled
+									}%`,
+								}"></div>
+						</div>
+						<span
+							class="text-nowrap"
+							:class="
+								row.spill.over ? 'text-negative font-bold' : ''
+							">
+							{{ formatNumber(row.spill.printedPercent) }} %
+							<span
+								v-if="row.spill.received"
+								class="text-xs text-white/50">
+								{{
+									$t("raukk_sourcing.fleet.spillover.split", {
+										own: formatNumber(row.spill.ownPercent),
+										spilled: formatNumber(
+											row.spill.spilledInPercent
+										),
+									})
+								}}
+							</span>
+						</span>
+					</div>
+					<div
+						v-else
+						class="flex flex-row gap-x-2 child:my-auto min-w-40">
 						<div
 							class="w-full bg-gray-800 size-2 rounded-full overflow-hidden">
 							<div
@@ -234,6 +350,41 @@
 					</div>
 				</td>
 				<td class="text-right text-white/60">
+					<PTooltip v-if="row.drydockDays !== null">
+						<template #trigger>
+							<span class="hover:cursor-help">
+								{{
+									$t("raukk_sourcing.fleet.drydock_days", {
+										days: formatNumber(row.drydockDays),
+									})
+								}}
+							</span>
+						</template>
+						{{
+							$t("raukk_sourcing.fleet.drydock_tooltip", {
+								damage: formatNumber(
+									row.damagePercentPerDay ?? 0
+								),
+								bill: billLabel,
+							})
+						}}
+						<template v-if="row.repairCostPerDay !== null">
+							{{
+								$t("raukk_sourcing.fleet.drydock_cost", {
+									daily: formatNumber(row.repairCostPerDay),
+								})
+							}}
+						</template>
+					</PTooltip>
+					<PTooltip v-else-if="row.wearUnknown">
+						<template #trigger>
+							<span class="hover:cursor-help">—</span>
+						</template>
+						{{ $t("raukk_sourcing.fleet.drydock_unknown") }}
+					</PTooltip>
+					<span v-else>—</span>
+				</td>
+				<td class="text-right text-white/60">
 					{{ row.assignedCount }}
 				</td>
 				<td>
@@ -254,12 +405,12 @@
 				</td>
 			</tr>
 			<tr v-if="rows.length === 0">
-				<td colspan="7" class="text-center text-white/50">
+				<td colspan="8" class="text-center text-white/50">
 					{{ $t("raukk_sourcing.fleet.empty") }}
 				</td>
 			</tr>
 			<tr>
-				<td colspan="7">
+				<td colspan="8">
 					<div class="flex flex-row flex-wrap gap-3 child:my-auto">
 						<PSelect
 							class="w-80!"

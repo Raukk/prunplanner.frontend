@@ -302,6 +302,8 @@ export const RaukkChainResultSchema = z.object({
 	dailyCost: z.number(),
 	shippingFraction: z.number(),
 	shipMinutesPerDay: z.number(),
+	// absent on results computed before the wear rollup
+	damagePerDay: z.number().optional(),
 	flows: z.array(RaukkChainFlowCostSchema).default([]),
 	perUnit: z.record(z.string(), z.number()).default({}),
 	memberPlanUuids: z.array(z.string()).default([]),
@@ -336,6 +338,8 @@ export const RaukkSnapshotLaneSchema = z.object({
 	tripsPerDay: z.number(),
 	roundTripMinutes: z.number(),
 	hired: z.boolean(),
+	// absent on snapshots frozen before the wear rollup
+	damagePerTrip: z.number().optional(),
 });
 
 export const RaukkPlanConfigSchema = z.object({
@@ -414,6 +418,10 @@ export const RaukkSourcingExportSchema = z.object({
 	chainResults: z.record(z.string(), RaukkChainResultSchema).default({}),
 	fleet: z.record(z.string(), RaukkFleetShipSchema).default({}),
 	assignments: z.record(z.string(), z.string()).default({}),
+	// raukk: fleet page spillover display flag, defaulted on — every
+	// payload written before the display existed knows nothing of it,
+	// while an explicitly persisted false always wins over the default
+	fleetSpillover: z.boolean().default(true),
 	chainConfig: RaukkChainConfigSchema.prefault({}),
 	// raukk: depots, keyed by planet natural id. Defaulted for the very
 	// same reason the five v2 slices are: every payload written before

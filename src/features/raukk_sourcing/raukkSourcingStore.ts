@@ -100,6 +100,12 @@ export const useRaukkSourcingStore = defineStore(
 		const fleet: Ref<Record<string, IRaukkFleetShip>> = ref({});
 		/** Key: lane pair key or chain key. Absent means auto. */
 		const assignments: Ref<Record<string, string>> = ref({});
+		/**
+		 * Fleet page spillover display on/off. Account global like the
+		 * fleet itself, and a pure DISPLAY mode: nothing recomputes and
+		 * nothing goes stale when it flips.
+		 */
+		const fleetSpillover: Ref<boolean> = ref(true);
 		/** Account global, like the shipping configuration next to it */
 		const chainConfig: Ref<IRaukkChainConfig> = ref(
 			raukkDefaultChainConfig()
@@ -125,6 +131,7 @@ export const useRaukkSourcingStore = defineStore(
 			chainResults.value = {};
 			fleet.value = {};
 			assignments.value = {};
+			fleetSpillover.value = true;
 			chainConfig.value = raukkDefaultChainConfig();
 			depots.value = {};
 		}
@@ -743,10 +750,17 @@ export const useRaukkSourcingStore = defineStore(
 		 * Sets the ship count and, optionally, the design label of one
 		 * ship type.
 		 *
-		 * Deliberately marks NOTHING stale: the fleet count is the
-		 * denominator of the utilization rollup, which is derived at read
-		 * time from the stored lane and chain numbers. No cost, no trip
-		 * and no snapshot value depends on how many hulls the user owns.
+		 * The count itself is only the read time denominator of the
+		 * utilization rollup and moves no stored number — but the OWNED
+		 * SET does: the automatic hull pick assigns owned types only
+		 * (`raukkOwnedHullCandidates`, counts above zero with the
+		 * starter fallback), so a type entering or leaving ownership —
+		 * its count crossing zero in either direction, a type newly
+		 * added with hulls — changes the candidate list every stored
+		 * lane and chain was costed with, and everything goes stale
+		 * exactly as on a profile change, while shipping is enabled. A
+		 * count change on the same side of zero (2 → 3) and a design
+		 * name edit stale nothing.
 		 * @author raukk
 		 *
 		 * @param {string} shipTypeId Ship Type Id
@@ -757,11 +771,31 @@ export const useRaukkSourcingStore = defineStore(
 			patch: Partial<IRaukkFleetShip>
 		): void {
 			const known: IRaukkFleetShip | undefined = fleet.value[shipTypeId];
+			const wasOwned: boolean = (known?.count ?? 0) > 0;
 
 			fleet.value[shipTypeId] = {
 				...(known ?? { count: 0 }),
 				...inertClone(patch),
 			};
+
+			const isOwned: boolean = fleet.value[shipTypeId].count > 0;
+
+			if (wasOwned !== isOwned && shippingConfig.value.enabled)
+				markAllStale();
+		}
+
+		/**
+		 * Turns the fleet pages spillover display on or off.
+		 *
+		 * Deliberately marks NOTHING stale, exactly like a fleet count:
+		 * spillover is a way of READING the utilization rollup — no cost,
+		 * no trip and no snapshot value depends on it.
+		 * @author raukk
+		 *
+		 * @param {boolean} enabled Spillover display on
+		 */
+		function setFleetSpillover(enabled: boolean): void {
+			fleetSpillover.value = enabled;
 		}
 
 		/**
@@ -847,12 +881,24 @@ export const useRaukkSourcingStore = defineStore(
 		 * naming the type stay — removing a hull is not un-assigning the
 		 * work — the type is simply no longer one the account owns, and
 		 * a hull nobody owns surfaces as an advisory, not as a row.
+		 *
+		 * Deleting a type the fleet actually OWNED (count above zero)
+		 * removes it from the automatic hull picks candidate list, so
+		 * everything goes stale exactly as on a count crossing zero
+		 * (see {@link setFleetShip}), while shipping is enabled.
+		 * Deleting a hull-less row changes no candidate and stales
+		 * nothing.
 		 * @author raukk
 		 *
 		 * @param {string} shipTypeId Ship Type Id
 		 */
 		function deleteFleetShip(shipTypeId: string): void {
+			const wasOwned: boolean =
+				(fleet.value[shipTypeId]?.count ?? 0) > 0;
+
 			delete fleet.value[shipTypeId];
+
+			if (wasOwned && shippingConfig.value.enabled) markAllStale();
 		}
 
 		/**
@@ -1222,6 +1268,7 @@ export const useRaukkSourcingStore = defineStore(
 				chainResults: inertClone(chainResults.value),
 				fleet: inertClone(fleet.value),
 				assignments: inertClone(assignments.value),
+				fleetSpillover: fleetSpillover.value,
 				chainConfig: inertClone(chainConfig.value),
 				depots: inertClone(depots.value),
 			};
@@ -1271,6 +1318,9 @@ export const useRaukkSourcingStore = defineStore(
 			chainResults.value = validated.chainResults;
 			fleet.value = validated.fleet;
 			assignments.value = validated.assignments;
+			// raukk: absent in every payload written before the spillover
+			// display existed, the schema defaults it off
+			fleetSpillover.value = validated.fleetSpillover;
 			chainConfig.value = validated.chainConfig;
 			// raukk: absent in every payload written before depots existed
 			depots.value = validated.depots;
@@ -1286,6 +1336,7 @@ export const useRaukkSourcingStore = defineStore(
 			chainResults,
 			fleet,
 			assignments,
+			fleetSpillover,
 			chainConfig,
 			depots,
 			// reset
@@ -1328,6 +1379,7 @@ export const useRaukkSourcingStore = defineStore(
 			setChainConfig,
 			setFleetShip,
 			deleteFleetShip,
+			setFleetSpillover,
 			setDepot,
 			deleteDepot,
 			setAssignment,
@@ -1348,6 +1400,7 @@ export const useRaukkSourcingStore = defineStore(
 				"chainResults",
 				"fleet",
 				"assignments",
+				"fleetSpillover",
 				"chainConfig",
 				"depots",
 			],

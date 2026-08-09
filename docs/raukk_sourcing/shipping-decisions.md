@@ -496,6 +496,73 @@ LM rate and ship assignment are pair-keyed.
 3. **Read-only v1**: no assignment pickers in the scoped view; it
    links to `/shipping` for edits.
 
+## Round 17 (WO-3: utilization spillover display)
+
+1. **Spillover is a DISPLAY mode, defaulted on** (2026-08-09): the
+   fleet section gains a "Show spillover" toggle, persisted
+   account-globally as `fleetSpillover` (in persist.pick and the
+   export schema like the fleet slice). User decision (2026-08-08)
+   revised the default from off to on, changed in both places it
+   lives: the store ref (fresh store, `$reset`) and the zod schema
+   default (imports without the field); an explicitly persisted false
+   still imports as false. Flipping it stales nothing — it is a way
+   of reading the utilization rollup, not an input.
+2. **v1 moves raw ship-minutes 1:1** between types, a stated
+   approximation: the same work costs different minutes on a different
+   hull, and re-costing on the recipient hull is explicitly out of
+   scope for v1 (candidate for a v2).
+3. **Proportional fill, donors keep the remainder**: recipients absorb
+   overflow proportionally to their spare minutes; count-0 types take
+   no part; overflow past the total spare stays on the donors, whose
+   numbers stay red and uncapped. The donor/no-spill boundary is the
+   over-flag epsilon (`RAUKK_EPSILON_EQUAL`), so a type a hair over
+   100% neither reads as over nor spills.
+4. **Rendering**: donor bar draws full and prints its residual (red
+   only while still > 100%); recipient appends an amber segment
+   (`amber-400`, the established warning tone) and prints the combined
+   number with an "own X % + spilled Y %" note. Toggle off renders
+   exactly as before. See shipping-fleet.md, "Utilization spillover".
+
+## Round 18 (hub/spoke: grouped rows actually group)
+
+1. **"Group by base" orders by base pair, not by global share**
+   (2026-08-08, user bug report): with the toggle on, the table showed
+   one row per (ticker, bucket, pair) but kept the ungrouped
+   share-descending sort, so pairs interleaved and nothing visually
+   grouped. Fixed in `raukkHubSpokeRows`: grouped rows are sorted pair
+   first — pairs by their summed share descending (heaviest lane
+   first, same spirit as the global sort), tiebreak on the
+   `from|to` stop labels — and by share descending inside a pair,
+   ticker as the final tiebreak. Ungrouped ordering is unchanged. Pure
+   ordering fix, no headers/rowspans, no table markup change.
+## Round 19 (fleet ownership: advisory filter, owned-set staleness)
+
+Bug: adding the advised hull to the fleet (e.g. MCB, count 1) neither
+removed the "MCB … now on SCB" advisory nor moved any work onto the
+new hull — the MCB row stayed at 0%.
+
+1. **An advisory is dropped the moment its hull is owned**: an
+   advisory's whole meaning is "a hull the fleet does NOT own would
+   serve this better", so `useRaukkFleet` now filters the stored
+   (frozen) advisories at READ time against the current fleet —
+   advice whose `suggestedShipTypeId` has a count above zero
+   disappears immediately, without waiting for any recompute. A row
+   at count 0 does not count as ownership.
+2. **The owned set is a costing input and stales everything**: the
+   automatic hull pick assigns OWNED types only
+   (`raukkOwnedHullCandidates`, starter fallback included), so
+   `setFleetShip`/`deleteFleetShip` no longer stale nothing — a type
+   entering or leaving ownership (newly added with hulls, count
+   crossing zero in either direction, an owned type deleted) calls
+   `markAllStale()`, the established account-global precedent
+   (shipping config, ship profiles), gated on shipping being enabled
+   like `setShipProfile`. That is what moves the work onto the newly
+   bought hull once the recompute flows answer the flags.
+3. **A count change on the same side of zero still stales nothing**:
+   2→3 hulls, a design-name edit, adding or deleting a count-0 row —
+   all pure utilization-denominator reads, exactly the old rule,
+   which was simply overbroad in claiming ALL fleet edits were that.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,

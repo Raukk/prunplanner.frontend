@@ -280,24 +280,105 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.chainResults.c1.stale).toBe(false);
 		});
 
-		it("leaves everything alone on a fleet count change", () => {
-			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
-			store.setChainResult("c1", makeChainResult("c1", ["source"]));
-			store.setSnapshot("source", makeSnapshot("Source", "ZV-194a"));
+		/*
+		 * The automatic hull pick assigns OWNED types only, so the owned
+		 * set — types with a count above zero — is a costing input: a
+		 * type entering or leaving it stales every stored result. The
+		 * count on the same side of zero stays what it always was, the
+		 * read time denominator of the utilization rollup.
+		 */
+		describe("fleet ownership staleness", () => {
+			/** Fresh chain result and source snapshot to stale */
+			function freshResults(): void {
+				store.setSnapshot("source", makeSnapshot("Source", "ZV-194a"));
+				store.setChainResult("c1", makeChainResult("c1", ["source"]));
+			}
 
-			store.setFleetShip(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
-				count: 4,
-				designName: "FSE_MCB_STD",
-			});
-			store.setFleetShip(RAUKK_DEFAULT_SHIP_PROFILE_ID, { count: 5 });
+			it("stales everything when a type is added with hulls", () => {
+				freshResults();
 
-			expect(store.fleet[RAUKK_DEFAULT_SHIP_PROFILE_ID]).toStrictEqual({
-				count: 5,
-				designName: "FSE_MCB_STD",
+				store.setFleetShip("WCB", { count: 1 });
+
+				expect(store.snapshots.source.stale).toBe(true);
+				expect(store.chainResults.c1.stale).toBe(true);
 			});
-			// utilization is derived at read time, no number moved
-			expect(store.snapshots.source.stale).toBe(false);
-			expect(store.chainResults.c1.stale).toBe(false);
+
+			it("stales everything when a count crosses zero", () => {
+				store.setFleetShip("WCB", { count: 0 });
+				freshResults();
+
+				store.setFleetShip("WCB", { count: 1 });
+
+				expect(store.snapshots.source.stale).toBe(true);
+				expect(store.chainResults.c1.stale).toBe(true);
+
+				freshResults();
+
+				store.setFleetShip("WCB", { count: 0 });
+
+				expect(store.snapshots.source.stale).toBe(true);
+				expect(store.chainResults.c1.stale).toBe(true);
+			});
+
+			it("leaves everything alone while the owned set holds", () => {
+				store.setFleetShip(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
+					count: 2,
+					designName: "FSE_MCB_STD",
+				});
+				freshResults();
+
+				// still owned: only the utilization denominator moved
+				store.setFleetShip(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
+					count: 3,
+				});
+				// a label is no costing input at all
+				store.setFleetShip(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
+					designName: "FSE_MCB_QCR",
+				});
+				// a hull-less row never was a candidate
+				store.setFleetShip("VCB", { count: 0 });
+
+				expect(
+					store.fleet[RAUKK_DEFAULT_SHIP_PROFILE_ID]
+				).toStrictEqual({
+					count: 3,
+					designName: "FSE_MCB_QCR",
+				});
+				expect(store.snapshots.source.stale).toBe(false);
+				expect(store.chainResults.c1.stale).toBe(false);
+			});
+
+			it("stales everything when an owned type is deleted", () => {
+				store.setFleetShip("WCB", { count: 2 });
+				freshResults();
+
+				store.deleteFleetShip("WCB");
+
+				expect(store.snapshots.source.stale).toBe(true);
+				expect(store.chainResults.c1.stale).toBe(true);
+			});
+
+			it("leaves everything alone deleting a hull-less type", () => {
+				store.setFleetShip("WCB", { count: 0 });
+				freshResults();
+
+				store.deleteFleetShip("WCB");
+
+				expect(store.snapshots.source.stale).toBe(false);
+				expect(store.chainResults.c1.stale).toBe(false);
+			});
+
+			it("leaves everything fresh while shipping stays off", () => {
+				store.setShippingConfig({ enabled: false });
+				freshResults();
+
+				// off before and off after: nothing can have moved
+				store.setFleetShip("WCB", { count: 1 });
+				store.deleteFleetShip("WCB");
+
+				expect(store.snapshots.source.stale).toBe(false);
+				expect(store.chainResults.c1.stale).toBe(false);
+			});
 		});
 
 		it("stales the owning plan when a lane changes its ship type", () => {
@@ -429,6 +510,19 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			// removing a hull is not un-assigning the work: the lane keeps
 			// naming the type, it just no longer has a fleet row
 			expect(store.assignments["source>CX"]).toBe("WCB");
+		});
+
+		it("toggles the spillover display without staling anything", () => {
+			store.setSnapshot("source", makeSnapshot("A", "ZV-759b"));
+
+			// defaulted on for a fresh store
+			expect(store.fleetSpillover).toBe(true);
+
+			store.setFleetSpillover(false);
+
+			expect(store.fleetSpillover).toBe(false);
+			// a display mode, not an input: nothing recomputes
+			expect(store.snapshots.source.stale).toBe(false);
 		});
 	});
 
@@ -680,6 +774,9 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			store.setFleetShip("WCB", { count: 3, designName: "FSE_WCB_QCR" });
 			store.setAssignment(raukkChainAssignmentKey("c1"), "WCB");
 			store.setChainConfig({ densityRef: 2.5 });
+			// against the on-default: an explicitly persisted false must
+			// survive the round trip, never be overwritten by the default
+			store.setFleetSpillover(false);
 
 			const exported: string = store.exportJSON();
 			const before = JSON.parse(
@@ -696,8 +793,10 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.chains).toStrictEqual({});
 			expect(store.chainConfig).toStrictEqual(raukkDefaultChainConfig());
 			expect(store.depots).toStrictEqual({});
+			expect(store.fleetSpillover).toBe(true);
 
 			store.importJSON(exported);
+			expect(store.fleetSpillover).toBe(false);
 
 			expect(
 				JSON.parse(
@@ -715,6 +814,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 		it("imports a v2.0 payload that predates chains and the fleet", () => {
 			store.setChain({ chainId: "c1", stops: ["A", "B"] });
 			store.setFleetShip("WCB", { count: 3 });
+			store.setFleetSpillover(false);
 
 			// exactly what the shipped v2.0 exportJSON produced
 			store.importJSON(
@@ -739,6 +839,8 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.assignments).toStrictEqual({});
 			expect(store.chainConfig).toStrictEqual(raukkDefaultChainConfig());
 			expect(store.depots).toStrictEqual({});
+			// absent before the spillover display existed, defaults on
+			expect(store.fleetSpillover).toBe(true);
 		});
 
 		it("defaults the phase 2 fields of an older payload", () => {

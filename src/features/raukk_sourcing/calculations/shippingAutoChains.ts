@@ -907,6 +907,11 @@ export function raukkFlowConcernsPlan(
  * base to base flows appear — a flow already addressed to an exchange is
  * a plain market lane and was never a candidate for a direct haul.
  *
+ * Ordering: ungrouped rows list largest share first. Grouped rows keep
+ * each base pair CONTIGUOUS — pairs ordered by their summed share
+ * descending (heaviest lane first), rows within a pair by share
+ * descending, ties broken by the pair's stop labels and the ticker.
+ *
  * @author raukk
  *
  * @param {IRaukkChainFlow[]} flows Flows no chain claimed
@@ -959,17 +964,50 @@ export function raukkHubSpokeRows(
 		});
 	});
 
-	return Array.from(rows.values())
-		.map((row) => ({
+	const shared: IRaukkHubSpokeRow[] = Array.from(rows.values()).map(
+		(row) => ({
 			...row,
 			share: Math.max(
 				totalWeight > 0 ? row.weightPerDay / totalWeight : 0,
 				totalVolume > 0 ? row.volumePerDay / totalVolume : 0
 			),
-		}))
-		.sort((left, right) =>
+		})
+	);
+
+	if (!grouped) {
+		return shared.sort((left, right) =>
 			left.share === right.share
 				? left.ticker.localeCompare(right.ticker)
 				: right.share - left.share
 		);
+	}
+
+	// pairs contiguous, heaviest lane first, stop labels as the tiebreak
+	const pairOf = (row: IRaukkHubSpokeRow): string =>
+		`${row.fromStop}|${row.toStop}`;
+
+	const pairShares: Map<string, number> = new Map();
+
+	shared.forEach((row) => {
+		const pair: string = pairOf(row);
+		pairShares.set(pair, (pairShares.get(pair) ?? 0) + row.share);
+	});
+
+	return shared.sort((left, right) => {
+		const leftPair: string = pairOf(left);
+		const rightPair: string = pairOf(right);
+
+		if (leftPair !== rightPair) {
+			const leftShare: number = pairShares.get(leftPair) ?? 0;
+			const rightShare: number = pairShares.get(rightPair) ?? 0;
+
+			return leftShare === rightShare
+				? leftPair.localeCompare(rightPair)
+				: rightShare - leftShare;
+		}
+
+		return left.share === right.share
+			? left.ticker.localeCompare(right.ticker)
+			: right.share - left.share;
+	});
 }

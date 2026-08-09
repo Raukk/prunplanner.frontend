@@ -330,12 +330,14 @@ describe("Raukk Oversubscription Report", () => {
 					shipTypeId: "WCB",
 					tripsPerDay: 2,
 					roundTripMinutes: 100,
+					damagePerDay: undefined,
 				},
 				{
 					key: "chain:c1",
 					shipTypeId: "WCB",
 					tripsPerDay: 1,
 					roundTripMinutes: 300,
+					damagePerDay: undefined,
 				},
 			]);
 		});
