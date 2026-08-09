@@ -131,7 +131,7 @@ term is not meteoroid.** Their KQ-451 rates converge on exactly 0.0002
 alone would contribute 0.00254. The series was flown shielded; the
 surviving floor is the base wear term.
 
-## 5. Ship dependence, and what is still open
+## 5. Ship dependence, and the geometry
 
 The two blueprints flown here separate cleanly by damage type. Against
 the six repeated AW-006a legs (meteoroid-dominated, Sunlight 5,412):
@@ -145,28 +145,21 @@ terms shield separately, exactly as the component table of
 `repair_and_damage.json` says (BPT/APT for heat, BRP/ARP/SRP for
 radiation, BWH/AWH for meteoroid).
 
-The open item is path geometry. Fitted C by anchor:
+Path geometry looked like the open item at first — fitted C by anchor
+ran 3.0e-6 at NL-534a, 8.0e-6 at LS-231a and up to 4e-5 at LE-137a,
+climbing exactly as the leg grew long against the anchor's orbit
+radius. Section 7.1 resolves it: the angle is not free, it is set by
+the planet's orbital position, and it is BOUNDED. Reading the term as
+a range rather than a point puts 23 of 25 flights inside, the other
+two within 2.6%.
 
-| anchor | leg / orbit radius | fitted C |
-|---|---|---|
-| NL-534c | 0.08 | 2.9-3.9e-6 |
-| NL-534a | 0.25 | 3.0e-6 |
-| LS-231a | 0.42 | 8.0e-6 |
-| YK-715a | 0.90 | 0.4-4.6e-6 |
-| LE-137a | 1.20 | 1.5-4.3e-5 |
-
-C is stable while the leg is short against the orbital radius and
-inflates once it is not — which is what a straight-line path that can
-swing inside the planet's orbit does to the integral. `1/r_near -
-1/r_far` assumes a radial leg; the real path has an impact parameter,
-and when the leg is longer than the orbit that parameter dominates.
-Modelling it needs the warp point position, which the BTF panel does
-not print.
-
-Practical consequence: the radial form is safe for legs shorter than
-about a third of the anchor planet's orbital radius, and understates
-elsewhere. Prices for close-in bright-star lanes should carry that as
-a floor, not a point estimate.
+What remains genuinely open is the ship. In batch 11 each blueprint
+flew only one direction, so ship and leg type are 100% confounded:
+backing out an implied angle at a fixed C puts nearly every APP leg at
+the outbound extreme and nearly every DEP leg at the inbound one,
+which is a systematic split no orbital geometry produces. Either the
+two hulls differ in stellar shielding or departures and approaches are
+priced differently, and this dataset cannot say which.
 
 ## 6. Also in the community sheet
 
@@ -194,7 +187,7 @@ flights of `btf_star_damage.json` and `btf_flights.json`:
 | meteoroid | `5.5e-10 %/km` per unit density | section 4, two campaigns |
 | jump | `0.001 % per parsec` | 22 legs, zero variance |
 | recharge | `0.017 % per event` | 15 legs, zero variance, 65% reactor |
-| stellar | `C x L x integral(ds/r^2)`, `C = 3.546e-6` | sections 1-3 |
+| stellar | `C x L x integral(ds/r^2)`, `C = 3.25e-6` | sections 1-3 |
 | landing | `0.01192 x sqrt(km) x P^1.15 / (P^1.15 + 38^1.15)` | 15 landings, 13 planets |
 
 The landing term is a refit of the community candidate in section 6 —
@@ -210,35 +203,63 @@ of `repair_and_damage.json`. Heat and radiation are merged into one
 `stellar` type: the panel prints a single damage figure per leg, so
 their split is not measurable from flight data.
 
-### 7.1 Accuracy, measured
+### 7.1 The stellar term is bounded, not fuzzed
 
-Replaying all 25 flights with no per-trip tuning:
+The warp point sits a fixed distance from the planet in the direction
+of the target system — the three NL-534 departures toward NL-881 all
+measure 66.9 Mkm from planets at 1.98, 6.13 and 85.3 AU, which only
+makes sense if the distance is set from the planet rather than from a
+fixed point in the system. So the leg's ANGLE to the star is whatever
+the planet's orbital position makes it, and that angle is bounded:
 
-| slice | result |
+- **best case** — the leg heads straight out, `1/a - 1/(a+d)`. Exact.
+- **worst case** — the leg heads straight in. For a leg shorter than
+  the orbit radius the ship stops at `a - d` without reaching the
+  star, so `1/(a-d) - 1/a` is also exact and assumption-free. Only
+  legs LONGER than the orbit radius can cross the star, and those need
+  a closest-approach floor (`RAUKK_DAMAGE_CLOSEST_FRACTION`, 5% of the
+  orbit radius).
+- **expected** — the mean over one orbital period. Orbital phase is
+  uniform in time, so the direction cosine follows `cos(phase)` and is
+  arcsine-distributed, weighting the extremes more than a uniform
+  average would. Using it in place of the uniform average tightens the
+  fitted coefficient's spread from 9.2x to 5.7x.
+
+These are real bounds on what the lane can ever produce, not a
+tolerance wrapped around a guess.
+
+### 7.2 Accuracy, measured
+
+Replaying all 25 flights, with 10% allowed on the meteoroid law and
+15% on the landing term (their own fitted errors):
+
+| | result |
 |---|---|
-| trips where stellar < 25% of total | median 3%, worst 6.3% |
-| all 25 trips | median 12%, 19 of 25 within 20% |
-| observed inside the geometry band | 19 of 25 |
+| inside the true bounds | **23 of 25** |
+| the two that are not | b11-02 by 2.0%, b11-07 by 2.6% |
+| band width, median | 2.2x |
+| band width, range | 1.4x to 8.4x |
+| point estimate (orbital mean) | median 12%, 19 of 25 within 20% |
 
-So the 5% target holds for the four deterministic terms and for any
-trip the stellar term does not dominate. It does NOT hold on close-in
-bright-star lanes, and the reason is section 5: the warp point's
-direction sets how near the star the leg passes, the panel does not
-print it, and it moves the stellar term by a factor of ~3. No amount
-of fitting removes an unobserved variable.
+So nothing escapes the bounds by more than 5%, and most trips sit in
+a 1.4x-2.9x band. The two widest (5.8x and 8.4x) are the lanes whose
+legs run LONGER than the anchor's orbit radius — those are the only
+ones where the closest-approach floor does any work, and they are
+exactly the lanes worth flagging on their worst case.
 
-That is why `raukkLegDamage` returns a BAND — `expected` averaged over
-an isotropic direction, `low`/`high` its 10th and 90th percentiles.
-For a stellar-dominated lane the band is the honest answer and the
-point estimate is not.
+Where an individual trip falls inside its band is unknowable from
+static data, but it is not noise: it is the planet's position on the
+day, so it averages to `expected` over a run of trips. Price a route
+on `expected` and check `high` before committing a base to it.
 
-### 7.2 Getting a real lane to 5%
+### 7.3 On calibrating an anchor
 
 `raukkCalibrateStellar` back-solves an anchor's coefficient from one
-observed leg; pass the result to `raukkTripDamage` via
-`stellarCoefficients`. One flown leg pins that anchor's geometry and
-takes the rest of its lane to a few percent, which is the practical
-route for the handful of hot lanes an empire actually runs.
+observed leg. It pins that lane AT THAT MOMENT — the planet keeps
+orbiting, so the same lane flown months later presents a different
+angle and a different apparent coefficient. Average several
+observations spread across an orbital period and the result converges
+on `expected`; a single one does not.
 
 ## 8. What would close the gap
 

@@ -9,6 +9,7 @@ import {
 	raukkLandingDamage,
 	raukkLegDamage,
 	raukkOrbitAu,
+	raukkStellarClosestApproach,
 	raukkStellarGeometry,
 	raukkStellarPathIntegral,
 	raukkCalibrateStellar,
@@ -133,6 +134,51 @@ describe("shippingDamage — stellar geometry", () => {
 
 		expect(band.low).toBeLessThan(band.expected);
 		expect(band.expected).toBeLessThan(band.high);
+	});
+
+	it("bounds are the true extremes over direction, not percentiles", () => {
+		const a = 1;
+		const d = 0.5;
+		const band = raukkStellarGeometry(a, d);
+
+		// sample the whole legal direction range: nothing may escape
+		for (let i = 0; i <= 500; i++) {
+			const cosine: number = -1 + (2 * i) / 500;
+
+			if (raukkStellarClosestApproach(a, d, cosine) < 0.05 * a) continue;
+
+			const value: number = raukkStellarPathIntegral(a, d, cosine);
+
+			if (!Number.isFinite(value)) continue;
+
+			expect(value).toBeGreaterThanOrEqual(band.low * (1 - 1e-9));
+			expect(value).toBeLessThanOrEqual(band.high * (1 + 1e-9));
+		}
+	});
+
+	it("puts the minimum exactly at a radially outbound leg", () => {
+		const band = raukkStellarGeometry(2, 0.5);
+
+		expect(band.low).toBeCloseTo(1 / 2 - 1 / 2.5, 9);
+	});
+
+	it("bounds a leg shorter than its orbit without any floor assumption", () => {
+		// the ship cannot reach the star, so the worst case is the leg
+		// run straight inwards, stopping at a - d
+		const a = 1;
+		const d = 0.4;
+		const band = raukkStellarGeometry(a, d);
+
+		expect(band.high).toBeCloseTo(1 / (a - d) - 1 / a, 3);
+	});
+
+	it("keeps the closest approach on the segment, not the infinite line", () => {
+		// straight outbound: nearest point is the planet itself
+		expect(raukkStellarClosestApproach(1, 0.5, 1)).toBeCloseTo(1, 10);
+		// straight inbound over a short leg: stops at a - d
+		expect(raukkStellarClosestApproach(1, 0.4, -1)).toBeCloseTo(0.6, 10);
+		// sideways: the perpendicular foot is the planet
+		expect(raukkStellarClosestApproach(1, 0.5, 0)).toBeCloseTo(1, 10);
 	});
 
 	it("collapses to zero for degenerate inputs", () => {
