@@ -606,6 +606,20 @@ export function useQueryRepository() {
 					return [];
 				}
 			},
+			hydrateFn: async (params: { empireUuid: string }) => {
+				const empire = planningStore.empires[params.empireUuid];
+				if (!empire) return null;
+
+				const plans = empire.plans.map(
+					(p) => planningStore.plans[p.uuid]
+				);
+
+				// a plan of the empire was never stored individually =>
+				// the rebuilt list would be incomplete
+				if (plans.length === 0 || plans.some((p) => !p)) return null;
+
+				return plans;
+			},
 			autoRefetch: false,
 			persist: true,
 		} as IQueryDefinition<{ empireUuid: string }, IPlan[]>,
@@ -714,6 +728,14 @@ export function useQueryRepository() {
 				if (isCurrentSession(session)) planningStore.setPlan(data);
 				return data;
 			},
+			hydrateFn: async (params: { planUuid: string }) => {
+				// getPlan throws when the plan was never stored
+				try {
+					return await planningStore.getPlan(params.planUuid);
+				} catch {
+					return null;
+				}
+			},
 			autoRefetch: false,
 			persist: true,
 		} as IQueryDefinition<{ planUuid: string }, IPlan>,
@@ -724,7 +746,11 @@ export function useQueryRepository() {
 				const session: number = queryStore.sessionGeneration;
 				try {
 					const data = await callGetPlanlist();
-					if (isCurrentSession(session)) planningStore.setPlans(data);
+					// authoritative list: drop plans it does not contain,
+					// otherwise the record accumulates every plan ever
+					// loaded and hydration rebuilds a superset
+					if (isCurrentSession(session))
+						planningStore.setPlans(data, true);
 
 					// manually set individual plans
 					data.forEach((p) =>
@@ -741,6 +767,10 @@ export function useQueryRepository() {
 				} catch {
 					return [];
 				}
+			},
+			hydrateFn: async () => {
+				const data = Object.values(planningStore.plans);
+				return data.length > 0 ? data : null;
 			},
 			autoRefetch: false,
 			persist: true,

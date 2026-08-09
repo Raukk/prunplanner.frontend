@@ -52,12 +52,50 @@ export const REFRESH_CONCURRENCY: number = 6;
  */
 export const REVALIDATE_RETRY_MS: number = 60_000;
 
+/**
+ * Channel other tabs of this browser listen on. Tabs share localStorage
+ * and IndexedDB but not memory, so an invalidation performed by the tab
+ * that saved would otherwise be invisible everywhere else — leaving the
+ * other tabs serving, and hydrating, the pre-save plan.
+ */
+export const CACHE_CHANNEL_NAME: string = "prunplanner_query_cache";
+
+/** Message a tab publishes after a mutation invalidated cache keys. */
+export interface IQueryCacheMessage {
+	type: "invalidate" | "reset";
+	key?: JSONValue;
+	exact?: boolean;
+}
+
 export const useQueryStore = defineStore(
 	"prunplanner_query_store",
 	() => {
 		const inFlight = new Map<string, Promise<unknown>>();
 
 		const queryRepository = useQueryRepository();
+
+		/**
+		 * Cross tab channel. Absent in environments without
+		 * BroadcastChannel, in which case the cache simply behaves as a
+		 * single tab one.
+		 */
+		let channel: BroadcastChannel | null = null;
+		try {
+			channel =
+				typeof BroadcastChannel !== "undefined"
+					? new BroadcastChannel(CACHE_CHANNEL_NAME)
+					: null;
+		} catch {
+			channel = null;
+		}
+
+		function publish(message: IQueryCacheMessage): void {
+			try {
+				channel?.postMessage(message);
+			} catch (err) {
+				console.error("Query cache broadcast failed", err);
+			}
+		}
 
 		const cacheState: Reactive<
 			Record<string, IQueryState<unknown, unknown>>
@@ -182,7 +220,47 @@ export const useQueryStore = defineStore(
 			*/
 		}
 
-		function $reset(): void {
+		/**
+		 * Applies an invalidation another tab performed. Never refetches:
+		 * a background tab has nothing on screen to refresh, and N tabs
+		 * stampeding the backend after one save would be worse than
+		 * letting each fetch lazily on its next read.
+		 *
+		 * @author jplacht
+		 *
+		 * @param {MessageEvent<IQueryCacheMessage>} event Channel message
+		 */
+		function onChannelMessage(event: MessageEvent<IQueryCacheMessage>) {
+			const message = event.data;
+			if (!message) return;
+
+			if (message.type === "reset") {
+				$reset(true);
+				return;
+			}
+
+			if (message.type === "invalidate" && message.key !== undefined) {
+				invalidateKey(message.key, {
+					exact: message.exact ?? true,
+					skipRefetch: true,
+					fromRemote: true,
+				});
+			}
+		}
+
+		if (channel) channel.onmessage = onChannelMessage;
+
+		/**
+		 * Clears the whole cache, e.g. on logout.
+		 *
+		 * @author jplacht
+		 *
+		 * @param {boolean} [fromRemote=false] Set when another tab asked
+		 * 		for this, which must not be echoed back to it
+		 */
+		function $reset(fromRemote: boolean = false): void {
+			if (!fromRemote) publish({ type: "reset" });
+
 			Object.keys(cacheState).forEach((key) => {
 				delete cacheState[key];
 				bumpEpoch(key);
@@ -774,6 +852,7 @@ export const useQueryStore = defineStore(
 				exact?: boolean;
 				forceRefetch?: boolean;
 				skipRefetch?: boolean;
+				fromRemote?: boolean;
 			} = {
 				exact: true,
 				forceRefetch: false,
@@ -789,6 +868,21 @@ export const useQueryStore = defineStore(
 				mutation and must not disable hydration for the key.
 			*/
 			if (!options.keepHydration) blockHydration(key);
+
+			/*
+				Tell the other tabs. They hold their own copy of this key
+				in their own memory, and their own planningStore that
+				hydration reads from, neither of which this mutation
+				touched. `fromRemote` stops a received message being
+				echoed straight back out.
+			*/
+			if (!options.keepHydration && !options.fromRemote) {
+				publish({
+					type: "invalidate",
+					key,
+					exact: options.exact ?? true,
+				});
+			}
 
 			const toRefetch: {
 				definitionKey: K;

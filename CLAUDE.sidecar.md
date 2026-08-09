@@ -474,3 +474,30 @@ anywhere in the repo. Not retroactive.
   will. `hasUnknownDataAge` drives a distinct message; a cache whose
   purpose is serving old data should never be silent about not knowing
   how old.
+- 2026-08-09: Plans are cached again — REVISES the same-day decision to
+  never serve them from local storage (user decision). The reasoning
+  that removed them assumed the dangerous case was unfixable without a
+  backend change; it is not, for the case that actually occurs here.
+  Tabs of one browser share localStorage and IndexedDB but NOT memory,
+  so the saving tab's `invalidateKey` was invisible to the others,
+  which kept serving and re-hydrating the pre-save plan. `queryStore`
+  now broadcasts invalidations and logout on a `BroadcastChannel`
+  (`CACHE_CHANNEL_NAME`); receivers apply the same invalidation with
+  `fromRemote` so it is not echoed, and with `skipRefetch` because a
+  background tab has nothing on screen to refresh and N tabs
+  stampeding after one save is worse than each refetching lazily. A
+  remote invalidation blocks hydration too: the other tab's save never
+  touched THIS tab's planningStore, so local storage here is still
+  pre-save. Absent BroadcastChannel the cache degrades to single tab
+  behaviour. `setPlans` gained a `replace` flag used only by
+  `GetAllPlans`, the one authoritative full list — that fixes the
+  superset (the record accumulated every plan ever loaded, so
+  hydration rebuilt ghost rows that survived the whole session).
+  STILL NOT SOLVED and inherent without a backend change: a plan open
+  in an editor at the moment another tab saves it. The cache is
+  invalidated but `refPlanData` is a mount-time clone, so that editor
+  keeps the old copy and its next save PUTs over the newer version —
+  `PatchPlan` is a full PUT with no etag. Cross-machine is the same
+  problem with no broadcast at all. Mitigation available today is the
+  sidebar refresh, or PlanView's reload button which reads
+  planningStore directly.

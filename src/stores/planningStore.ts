@@ -96,8 +96,19 @@ export const usePlanningStore = defineStore(
 		 * @author jplacht
 		 *
 		 * @param {IPlan[]} data Plan Data List
+		 * @param {boolean} [replace=false] Treat the list as authoritative
+		 * 		and drop plans it does not contain. Only correct for a
+		 * 		full account plan list, a subset like an empires plans
+		 * 		must merge or it would delete everything else.
 		 */
-		function setPlans(data: IPlan[]): void {
+		function setPlans(data: IPlan[], replace: boolean = false): void {
+			if (replace) {
+				const keep = new Set(data.map((p) => p.uuid));
+				Object.keys(plans.value)
+					.filter((uuid) => !keep.has(uuid))
+					.forEach((uuid) => delete plans.value[uuid]);
+			}
+
 			data.forEach((p) => setPlan(p));
 		}
 
