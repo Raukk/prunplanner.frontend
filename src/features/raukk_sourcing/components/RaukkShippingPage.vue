@@ -360,7 +360,7 @@
 				@reset:profile="resetProfile" />
 		</div>
 
-		<RaukkFleetSection />
+		<RaukkFleetSection :repair-bill-cost="repairBillCost" />
 
 		<RaukkChainSection
 			:fuel-prices="fuelPrices"

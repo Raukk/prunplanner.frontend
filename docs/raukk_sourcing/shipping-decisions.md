@@ -563,6 +563,43 @@ new hull — the MCB row stayed at 0%.
    all pure utilization-denominator reads, exactly the old rule,
    which was simply overbroad in claiming ALL fleet edits were that.
 
+## Round 20 (depot add row: why the button is off)
+
+Bug: the "Add Depot" button sat disabled next to an empty planet field
+and read as a working button — nothing said the field had to be filled
+(2026-08-09, user bug report, dark UI).
+
+1. **A disabled P-button has to READ disabled**: the shared
+   `buttonConfig` tinted the disabled state to `bg-<hue>/50` with
+   `text-white/80`, which on the near-black page is still a saturated
+   button, and the `hover:` tint applied on top because `:hover`
+   matches disabled elements too. Disabled backgrounds now drop to
+   `/20`–`/40`, text to `white/35`, the cursor to `not-allowed`, and
+   every colour re-states its background under `disabled:hover:` so
+   the button no longer lights up under the pointer. App-wide, on
+   purpose: the affordance is the buttons job, not each callers.
+2. **The add row states WHY it is off**: a hint next to the button
+   reads "Type a planet id to enable Add Depot." while the field is
+   empty and "That planet is already a depot." on a duplicate. The
+   disabled button alone is not an explanation.
+3. **The duplicate guard is case blind, like the store key**: it
+   compared the typed id upper-cased against the ids as TYPED, so
+   `zv-307c` against a stored `ZV-307c` passed the guard and then
+   patched the existing depot — an "add" that changed nothing
+   visible. Both sides now go through `raukkDepotStopKey`.
+4. **An unplaceable planet warns, it does not block**: an id
+   `resolveSystemId` cannot place anchors nothing (`raukkChainAnchors`
+   drops it silently), so the add row warns and the row carries an
+   "Unknown Planet" tag — but the add still goes through, since a
+   depot may legitimately be a stop the user names before the bundled
+   systems JSON knows it.
+5. **Rent edits stale NOTHING**: `setDepot` called `markAllChainsStale`
+   unconditionally, so typing a warehouse rent invalidated every chain
+   result for a number that is no input of the chain math — it is
+   summed at read time in `useRaukkDepotCosts`. Only marking a planet
+   new to the anchor list (or un-marking one) stales now, the same
+   line round 19 drew for the fleet count.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,

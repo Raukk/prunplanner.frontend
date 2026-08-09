@@ -10,8 +10,15 @@ import {
 	PTooltipConfig,
 } from "@/ui/ui.types";
 
+// A disabled button has to READ disabled: the app is dark throughout, and
+// a half transparent tint of the buttons own hue is still a saturated
+// button on a near black page. The disabled states below drop far enough
+// out of the accent colour to be told apart at a glance, and each of them
+// re-states its background under `disabled:hover:` — `:hover` matches a
+// disabled element too, so the hover tint would otherwise light the button
+// up exactly as a working one.
 export const buttonConfig: PButtonConfig = {
-	base: "flex flex-row items-center justify-center leading-none rounded-sm cursor-pointer disabled:cursor-auto text-nowrap",
+	base: "flex flex-row items-center justify-center leading-none rounded-sm cursor-pointer disabled:cursor-not-allowed text-nowrap",
 	defaultSize: "md",
 	defaultColor: "primary",
 	sizes: {
@@ -30,27 +37,32 @@ export const buttonConfig: PButtonConfig = {
 		primary: {
 			base: "bg-blue-800 text-white active:bg-blue-600",
 			hover: "hover:bg-blue-700",
-			disabled: "disabled:bg-blue-800/50 disabled:text-white/80",
+			disabled:
+				"disabled:bg-blue-800/20 disabled:text-white/35 disabled:hover:bg-blue-800/20",
 		},
 		success: {
 			base: "bg-lime-500 text-black active:bg-lime-300",
 			hover: "hover:bg-lime-400",
-			disabled: "disabled:bg-lime-500/50 disabled:text-white/80",
+			disabled:
+				"disabled:bg-lime-500/20 disabled:text-white/35 disabled:hover:bg-lime-500/20",
 		},
 		secondary: {
 			base: "bg-gray-800 text-white active:bg-gray-600",
 			hover: "hover:bg-gray-700",
-			disabled: "disabled:bg-gray-800/50 disabled:text-white/80",
+			disabled:
+				"disabled:bg-gray-800/40 disabled:text-white/35 disabled:hover:bg-gray-800/40",
 		},
 		error: {
 			base: "bg-red-600 text-white active:bg-red-500",
 			hover: "hover:bg-red-700",
-			disabled: "disabled:bg-red-600/50 disabled:text-white/80",
+			disabled:
+				"disabled:bg-red-600/20 disabled:text-white/35 disabled:hover:bg-red-600/20",
 		},
 		warning: {
 			base: "bg-gray-100 text-gray-900 active:bg-gray-300",
 			hover: "hover:bg-gray-200",
-			disabled: "disabled:bg-gray-100/50 disabled:text-gray-900",
+			disabled:
+				"disabled:bg-gray-100/25 disabled:text-white/35 disabled:hover:bg-gray-100/25",
 		},
 	},
 };

@@ -111,14 +111,15 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 	});
 
 	/** Mounts the composable inside its own effect scope */
-	function mount(): void {
+	function mount(): Readonly<Ref<boolean>> {
 		scope = effectScope();
-		scope.run(() =>
+
+		return scope.run(() =>
 			useRaukkEmpireAutoSnapshot({
 				planUuids,
 				calculating,
 			})
-		);
+		)!;
 	}
 
 	/** Finishes the empire calculation and runs the debounced upkeep */
@@ -329,6 +330,38 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 
 		expect(mockExecute).not.toHaveBeenCalled();
 		expect(mockComputePlanSnapshot).not.toHaveBeenCalled();
+	});
+
+	it("exposes a running signal that tracks the upkeep run", async () => {
+		let resolveRun: (() => void) | undefined;
+		mockComputePlanSnapshot.mockImplementation(
+			async (context: { planUuid: string; planName: string }) => {
+				if (resolveRun === undefined)
+					await new Promise<void>((resolve) => {
+						resolveRun = resolve;
+					});
+
+				sourcingStore.setSnapshot(
+					context.planUuid,
+					makeSnapshot(context.planName)
+				);
+				return {};
+			}
+		);
+		planUuids.value = ["a"];
+
+		const running: Readonly<Ref<boolean>> = mount();
+		expect(running.value).toBe(false);
+
+		// the run hangs on plan a — the signal must hold true meanwhile
+		calculating.value = false;
+		await nextTick();
+		await vi.advanceTimersByTimeAsync(1100);
+		expect(running.value).toBe(true);
+
+		resolveRun?.();
+		await vi.advanceTimersByTimeAsync(100);
+		expect(running.value).toBe(false);
 	});
 
 	it("folds triggers during a run into the same upkeep", async () => {

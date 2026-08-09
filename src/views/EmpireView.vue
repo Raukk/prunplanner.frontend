@@ -51,6 +51,12 @@
 		() => import("@/features/wrapper/components/WrapperGenericError.vue")
 	);
 
+	// raukk: oversubscription report, rendered in place of the material io
+	const AsyncRaukkOversubReportSection = defineAsyncComponent(
+		() =>
+			import("@/features/raukk_sourcing/components/RaukkOversubReportSection.vue")
+	);
+
 	// Types & Interfaces
 	import { IPlan, IPlanEmpireElement } from "@/stores/planningStore.types";
 	import { IPlanResult } from "@/features/planning/usePlanCalculation.types";
@@ -98,9 +104,16 @@
 	const progressCurrent = ref(0);
 	const progressTotal = ref(0);
 
-	// raukk: compute first sourcing snapshots of plans that never had one
-	useRaukkEmpireAutoSnapshot({
-		planUuids: computed(() => planData.value.map((plan) => plan.uuid)),
+	// raukk: plan uuids of the loaded empire, the scope of the auto
+	// snapshots and of the oversubscription report
+	const empirePlanUuids = computed(() =>
+		planData.value.map((plan) => plan.uuid)
+	);
+
+	// raukk: compute first sourcing snapshots of plans that never had
+	// one; the running signal gates the report's recompute buttons
+	const raukkSnapshotUpkeepRunning = useRaukkEmpireAutoSnapshot({
+		planUuids: empirePlanUuids,
 		calculating: isCalculating,
 	});
 
@@ -305,8 +318,18 @@
 		})
 	);
 
-	const mainContent = ref<"materialio" | "analysis" | "opportunities">(
-		"materialio"
+	// raukk: "oversubscription" joined the union; the material io child
+	// keeps its own three-way union and never receives it — see below
+	const mainContent = ref<
+		"materialio" | "analysis" | "opportunities" | "oversubscription"
+	>("materialio");
+
+	// raukk: what the always-typed material io child renders; while the
+	// report is selected the child is not mounted, the value is unused
+	const materialIOContent = computed(() =>
+		mainContent.value === "oversubscription"
+			? ("materialio" as const)
+			: mainContent.value
 	);
 </script>
 
@@ -384,6 +407,22 @@
 										)
 									}}
 								</PButton>
+								<!-- raukk: oversubscription report -->
+								<PButton
+									:type="
+										mainContent === 'oversubscription'
+											? 'primary'
+											: 'secondary'
+									"
+									@click="
+										() => (mainContent = 'oversubscription')
+									">
+									{{
+										$t(
+											"raukk_sourcing.oversub_report.title"
+										)
+									}}
+								</PButton>
 							</PButtonGroup>
 							<HelpDrawer file-name="empire" />
 						</div>
@@ -434,8 +473,17 @@
 						<div
 							class="xl:sticky xl:top-1 h-[calc(100vh-theme(spacing.12))] flex flex-col">
 							<div class="flex flex-col flex-1 overflow-auto">
+								<!-- raukk: report branch, the child keeps
+								 its own prop union -->
+								<AsyncRaukkOversubReportSection
+									v-if="mainContent === 'oversubscription'"
+									:plan-uuids="empirePlanUuids"
+									:auto-snapshot-running="
+										raukkSnapshotUpkeepRunning
+									" />
 								<EmpireMaterialIOFiltered
-									:content="mainContent"
+									v-else
+									:content="materialIOContent"
 									:empire-material-i-o="
 										combinedEmpireMaterialIO
 									"

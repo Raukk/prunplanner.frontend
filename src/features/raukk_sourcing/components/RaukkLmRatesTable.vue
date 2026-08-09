@@ -6,6 +6,8 @@
 
 	// Calculations
 	import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
+	import { RAUKK_REPAIR_BILL } from "@/features/raukk_sourcing/calculations/shipping";
+	import { IRaukkShipWear } from "@/features/raukk_sourcing/calculations/shippingWear";
 
 	// Components
 	import RaukkVisitCadence from "@/features/raukk_sourcing/components/RaukkVisitCadence.vue";
@@ -81,6 +83,26 @@
 		return props.planNames[sourcePlanUuid] ?? sourcePlanUuid;
 	}
 
+	/** The full repair bill, spelled out for the wear tooltip */
+	const billLabel: string = Object.entries(RAUKK_REPAIR_BILL)
+		.map(([ticker, units]) => `${units} ${ticker}`)
+		.join(" · ");
+
+	/**
+	 * Days until the repair threshold as the wear cell prints them: an
+	 * em-dash while the lane takes no damage or flies no trips.
+	 *
+	 * @author raukk
+	 *
+	 * @param {IRaukkShipWear} wear Own fleet wear of the lane
+	 * @returns {string} Days label
+	 */
+	function wearDaysLabel(wear: IRaukkShipWear): string {
+		return Number.isFinite(wear.daysUntilRepair)
+			? formatNumber(wear.daysUntilRepair)
+			: "—";
+	}
+
 	function change(pairKey: string, value: number | null | undefined): void {
 		if (props.disabled) return;
 
@@ -121,6 +143,9 @@
 				</th>
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.shipping.lm.own_per_trip") }}
+				</th>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.shipping.lm.wear") }}
 				</th>
 				<th class="text-right!">
 					{{ $t("raukk_sourcing.shipping.lm.rate_per_trip") }}
@@ -197,6 +222,34 @@
 						{{ formatNumber(row.ownCostPerTrip) }}
 					</template>
 				</td>
+				<td class="text-right text-white/60">
+					<PTooltip v-if="row.ownWear.damagePerTrip > 0">
+						<template #trigger>
+							<span class="hover:cursor-help">
+								{{
+									$t("raukk_sourcing.shipping.lm.wear_days", {
+										days: wearDaysLabel(row.ownWear),
+									})
+								}}
+							</span>
+						</template>
+						{{
+							$t("raukk_sourcing.shipping.lm.wear_tooltip", {
+								damage: formatNumber(
+									row.ownWear.damagePerTrip * 100
+								),
+								trips: formatNumber(
+									row.ownWear.tripsUntilRepair
+								),
+								cost: formatNumber(
+									row.ownWear.repairCostPerTrip
+								),
+								bill: billLabel,
+							})
+						}}
+					</PTooltip>
+					<span v-else>—</span>
+				</td>
 				<td class="text-right">
 					<PInputNumber
 						class="min-w-30"
@@ -235,7 +288,7 @@
 				</td>
 			</tr>
 			<tr v-if="rows.length === 0">
-				<td colspan="9" class="text-center text-white/50">
+				<td colspan="10" class="text-center text-white/50">
 					{{ $t("raukk_sourcing.shipping.lm.empty") }}
 				</td>
 			</tr>

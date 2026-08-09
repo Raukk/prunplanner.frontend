@@ -1,0 +1,130 @@
+{
+	"source": "https://pct.fnar.net/ship-blueprints/index.html",
+	"retrieved": "2026-08-09",
+	"description": "PrUn community-derived ship BLUEPRINT construction data: component volumes, component mass observations, structural element and build-time formulas. Complements shippingBlueprint.ts (which covers the blueprint Performance panel, not construction). Values transcribed verbatim; unknowns from the source ('?') are null.",
+	"formulas": {
+		"structuralElements": {
+			"formula": "floor(shipVolume / 21)",
+			"note": "Number of SSC materials needed for the ship."
+		},
+		"buildTime": {
+			"formula": "operatingEmptyMass / 50"
+		},
+		"cargoBayVolume": {
+			"formula": "ceil(capacityM3 * 1.05)"
+		}
+	},
+	"componentVolumesM3": {
+		"note": "Component volume is consistent regardless of other blueprint choices.",
+		"cargoBays": {
+			"T": 105,
+			"VS": 263,
+			"S": 525,
+			"M": 1050,
+			"L": 2100,
+			"HL": 1050,
+			"HV": 3150
+		},
+		"ftlTanks": {
+			"note": "Exact — an STL ship can be built without an FTL tank (no tank contributes no volume).",
+			"None": 0,
+			"Small": 3,
+			"Medium": 9,
+			"Large": 21
+		},
+		"stlTanks": {
+			"note": "Relative volumes exact, absolute anchor unclear (no ship exists without a tank); Small = 70 m3 chosen because it produces round numbers.",
+			"Small": 70,
+			"Medium": 196,
+			"Large": 480
+		},
+		"ftlEngines": {
+			"note": "Exact, relative to the no-drive scenario.",
+			"None": 0,
+			"Standard": 126,
+			"Quickcharge": 133,
+			"High-power": 243,
+			"Hyper-power": 253
+		},
+		"stlEngines": {
+			"note": "Relative volumes — the STL drive cannot be removed. Optimized to account for all remaining ship volume (the made-up remainder could instead be split between the small STL tank and the Standard engine).",
+			"Standard": 239,
+			"Fuel Saving": 238,
+			"Glass": 238,
+			"Advanced": 452,
+			"High-power": 456
+		}
+	},
+	"componentMass": {
+		"note": "Mass of components is NOT consistent — it changes with other design choices. Larger cargo bays sometimes make tanks add more mass, sometimes less.",
+		"cargoBayMassByTankLoadout": {
+			"note": "Mass added per cargo bay, by fuel-tank loadout.",
+			"withTwoSmallTanks": {
+				"T": 0,
+				"VS": 83,
+				"S": 213,
+				"M": 448,
+				"L": 883,
+				"HL": 548,
+				"HV": 1199
+			},
+			"withTwoMediumTanks": {
+				"T": 0,
+				"VS": 72,
+				"S": 203,
+				"M": 428,
+				"L": 873,
+				"HL": null,
+				"HV": 1179
+			}
+		},
+		"tankMassByCargoBay": {
+			"note": "Mass added by a tank depending on the installed cargo bay. Uncertain source values ('251?', '52?') kept with certain: false.",
+			"STL Fuel Med": {
+				"T": 76,
+				"VS": 76,
+				"S": 76,
+				"M": 66,
+				"L": 66,
+				"HV": 56,
+				"HL": null
+			},
+			"FTL Fuel Med": {
+				"T": 16,
+				"VS": 15,
+				"S": 16,
+				"M": 16,
+				"L": 26,
+				"HV": 16,
+				"HL": null
+			},
+			"STL Fuel Large": {
+				"T": 410,
+				"VS": 409,
+				"S": 245,
+				"M": 260,
+				"L": 251,
+				"HV": 205,
+				"HL": { "value": 251, "certain": false }
+			},
+			"FTL Fuel Large": {
+				"T": 52,
+				"VS": 52,
+				"S": 52,
+				"M": 52,
+				"L": 62,
+				"HV": 52,
+				"HL": { "value": 52, "certain": false }
+			}
+		}
+	},
+	"componentSizeEffect": {
+		"note": "Do individual component sizes adjust ship mass/volume when installed? Evidence points to no — component mass/vol is irrelevant to ship size."
+	},
+	"ftlFieldEmitters": {
+		"note": "Source-code numbers; no known way to apply them correctly. Dev blog (2020-07-20 warp-drive-time-244) says emitters must together span at least the ship's total volume, but requirements neither add up to the span numbers nor match sphere radii/diameters.",
+		"FTL_FIELD_EMITTER_SMALL": { "ftlVolumeSpan": 250, "powerRequirement": 100 },
+		"FTL_FIELD_EMITTER_MED": { "ftlVolumeSpan": 500, "powerRequirement": 175 },
+		"FTL_FIELD_EMITTER_LARGE": { "ftlVolumeSpan": 1000, "powerRequirement": 300 }
+	}
+}
