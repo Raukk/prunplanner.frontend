@@ -422,7 +422,9 @@
 			"waffle": "Waffle",
 			"grid": "Grid",
 			"blocks": "Blocks",
-			"bubbles": "Bubbles"
+			"bubbles": "Bubbles",
+			"map": "Map",
+			"starmap": "Star Map"
 		},
 		"legend": {
 			"other": "Other ({count} plans)",
@@ -653,6 +655,47 @@
 			"tooltip_open_hint": "click: open consumer breakdown",
 			"tooltip_close_hint": "click: close consumer breakdown",
 			"footnote": "Fill deepens with utilization on the blue ramp; red + ▲ = over; hatched ring + n/a = no denominator. Radius compares subscribed volume only inside its own unit cluster. ◷ = stale."
+		},
+		"map": {
+			"heading": "Materials — flow",
+			"heading_note": "node height = net capacity · ribbon = draw · overflow runs past the node over red hatching",
+			"showing": "showing {shown} of {total} — the rest are under {threshold} %",
+			"tracing": "tracing one producer — Esc to clear",
+			"over_bracket": "+{amount} {unit} over",
+			"node_net": "net {net} {unit}",
+			"node_net_self": "net {net} {unit} ⌂",
+			"node_no_net": "no net capacity (net {net})",
+			"consumer_drawn": "{amount} u/d drawn",
+			"consumer_external": "outside this empire",
+			"tooltip_consumer_draws": "draws {amount} u/d across the shown producers",
+			"tooltip_trace_hint": "click: trace only this producer's ribbons · Esc clears",
+			"footnote": "Ribbons keep true scale — overflow is never rescaled, it runs past the node bottom over the hatched field. Dashed amber edge = stale draw. Fleet rows have no plan-to-plan flow; see the Ledger for the fleet domain."
+		},
+		"starmap": {
+			"heading": "Star Map",
+			"heading_note": "the empire drawn spatially · node = plan · edge = supply flow, arrowhead toward the consumer",
+			"coordinates_note": "positions come from the real system coordinates of the game's star map",
+			"dim_note": "problems-only dims healthy nodes and edges to ~25 % instead of hiding them — spatial context matters",
+			"fleet_toggle": "show fleet routes",
+			"reset_view": "⤢ reset view",
+			"pan_hint": "drag = pan · wheel = zoom · double-click = reset",
+			"unmapped_label": "unmapped",
+			"unlocated_routes": "fleet claims without a map position",
+			"external_label": "outside empire",
+			"external_drawn": "{amount} u/d drawn",
+			"utilization_na": "n/a",
+			"tooltip_row": "{ticker} · {utilization} · {subscribed} / net {net} {unit}",
+			"tooltip_consumer_only": "consumer plan — no producer rows in the current slice",
+			"tooltip_draws": "draws {amount} u/d from {count} producer(s)",
+			"tooltip_open_plan": "click: open plan",
+			"tooltip_edge_total": "total {amount} u/d across {count} ticker(s)",
+			"tooltip_edge_part": "{ticker} · {amount} {unit} · row {utilization}",
+			"tooltip_route_claim": "{amount} ship-min/d on {shipType}",
+			"tooltip_route_over": "{shipType} is overbooked ▲",
+			"tooltip_route_no_ships": "no ships — this claim has no capacity at all",
+			"tooltip_route_unlocated": "route endpoints live in the shipping data, not in this report's rows — listed here, not placed",
+			"tooltip_open_shipping": "click: open /shipping",
+			"footnote": "Node area ∝ total subscribed volume touching the plan (u/d domain only); fill deepens with the plan's worst row utilization. Red + ▲ ring = a row is over; hatched ring = a null-utilization row; ◷ = stale. Edge thickness ∝ aggregate u/d, colored by the consumer's slot; red dashes on an edge = a contributing producer row is over. Thin dashed neutral lines = stored fleet claims (red-dashed = that ship type is over; hatched break = no ships); they carry no thickness scale."
 		}
 	}
 }

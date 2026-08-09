@@ -40,6 +40,8 @@
 	import RaukkOversubGridTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubGridTab.vue";
 	import RaukkOversubBlocksTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubBlocksTab.vue";
 	import RaukkOversubBubblesTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubBubblesTab.vue";
+	import RaukkOversubMapTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubMapTab.vue";
+	import RaukkOversubStarMapTab from "@/features/raukk_sourcing/components/oversub/RaukkOversubStarMapTab.vue";
 	import RaukkOversubLegend from "@/features/raukk_sourcing/components/oversub/RaukkOversubLegend.vue";
 	import RaukkOversubTooltip from "@/features/raukk_sourcing/components/oversub/RaukkOversubTooltip.vue";
 
@@ -401,6 +403,16 @@
 			key: "bubbles",
 			labelKey: "raukk_sourcing.oversub_report.tabs.bubbles",
 			component: RaukkOversubBubblesTab,
+		},
+		{
+			key: "map",
+			labelKey: "raukk_sourcing.oversub_report.tabs.map",
+			component: RaukkOversubMapTab,
+		},
+		{
+			key: "starmap",
+			labelKey: "raukk_sourcing.oversub_report.tabs.starmap",
+			component: RaukkOversubStarMapTab,
 		},
 	];
 

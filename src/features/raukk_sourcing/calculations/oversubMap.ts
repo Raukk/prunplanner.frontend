@@ -256,18 +256,14 @@ export function raukkOversubMapLayout(
 
 	// one shared u/d scale: the taller column fills the height budget
 	const leftUnits: number = rows.reduce(
-		(sum, row) =>
-			sum + Math.max(row.netPerDay, 0, row.subscribedPerDay),
+		(sum, row) => sum + Math.max(row.netPerDay, 0, row.subscribedPerDay),
 		0
 	);
 	const rightUnits: number = ordered.reduce(
 		(sum, group) => sum + group.totalPerDay,
 		0
 	);
-	const budget: number = Math.max(
-		300,
-		Math.min(560, 90 * rows.length + 120)
-	);
+	const budget: number = Math.max(300, Math.min(560, 90 * rows.length + 120));
 	const scale: number =
 		(budget - STACK_GAP * Math.max(rows.length, ordered.length)) /
 		Math.max(leftUnits, rightUnits, 1);

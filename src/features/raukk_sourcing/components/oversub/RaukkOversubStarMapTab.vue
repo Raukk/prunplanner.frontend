@@ -22,7 +22,6 @@
 		RAUKK_OVERSUB_STATUS_COLORS,
 	} from "@/features/raukk_sourcing/calculations/oversubDisplay";
 	import {
-		RAUKK_OVERSUB_EXTERNAL_KEY,
 		raukkOversubBlueRamp,
 		raukkOversubPairAggregate,
 	} from "@/features/raukk_sourcing/calculations/oversubMatrix";
@@ -102,6 +101,7 @@
 		},
 		/** Shared axis domain in percent — unused here, the map encodes
 		 * absolute volumes spatially, part of the shared tab contract */
+		// eslint-disable-next-line vue/no-unused-properties -- contract prop
 		axisMax: {
 			type: Number,
 			required: true,
@@ -208,8 +208,7 @@
 				passingRowKeys.value.has(
 					`${row.producerPlanUuid}|${row.ticker}`
 				)
-			) ||
-			(inboundPairs.value.get(node.planUuid) ?? []).some(pairPasses)
+			) || (inboundPairs.value.get(node.planUuid) ?? []).some(pairPasses)
 		);
 	}
 
@@ -301,8 +300,8 @@
 			const targetRadius: number = pair.external
 				? 12
 				: raukkStarNodeRadius(
-						nodeByUuid.value.get(pair.consumerKey)
-							?.volumePerDay ?? 0,
+						nodeByUuid.value.get(pair.consumerKey)?.volumePerDay ??
+							0,
 						maxVolume.value
 					);
 
@@ -346,8 +345,8 @@
 		() => new Set(props.fleetRows.map((row) => row.shipTypeId))
 	);
 
-	const fleetMarks: ComputedRef<IRaukkOversubStarFleetMark[]> = computed(
-		() => raukkOversubStarFleetMarks(props.softFleetRows)
+	const fleetMarks: ComputedRef<IRaukkOversubStarFleetMark[]> = computed(() =>
+		raukkOversubStarFleetMarks(props.softFleetRows)
 	);
 
 	interface IAnchoredMark {
@@ -489,9 +488,7 @@
 
 	function nodeStroke(node: IRaukkOversubStarNode): string {
 		if (node.producerRows.length === 0)
-			return (
-				props.consumerSlots.colorByUuid[node.planUuid] ?? "#565650"
-			);
+			return props.consumerSlots.colorByUuid[node.planUuid] ?? "#565650";
 		if (node.anyOver) return RAUKK_OVERSUB_STATUS_COLORS.over;
 		if (node.worstUtilization === null) return "#898781";
 		return "rgba(57, 135, 229, 0.85)";
@@ -770,11 +767,7 @@
 				<svg
 					ref="refSvg"
 					class="block w-full h-auto touch-none"
-					:class="
-						refPanning
-							? 'cursor-grabbing'
-							: 'cursor-grab'
-					"
+					:class="refPanning ? 'cursor-grabbing' : 'cursor-grab'"
 					:viewBox="viewBox"
 					@pointerdown="onPointerDown"
 					@pointermove="onPointerMove"
@@ -844,7 +837,13 @@
 
 					<!-- material edges, aggregated per producer → consumer
 					 pair, arrowhead toward the consumer -->
-					<g v-for="edge in edges" :key="edge.pair.consumerKey + '|' + edge.pair.producerPlanUuid">
+					<g
+						v-for="edge in edges"
+						:key="
+							edge.pair.consumerKey +
+							'|' +
+							edge.pair.producerPlanUuid
+						">
 						<path
 							class="sedge"
 							:d="edge.d"
@@ -921,9 +920,7 @@
 
 						<!-- chain claims carry no place in the row model:
 						 listed here, stated as unlocated, never guessed -->
-						<g
-							v-if="unlocatedMarks.length > 0"
-							class="sroute">
+						<g v-if="unlocatedMarks.length > 0" class="sroute">
 							<text class="ssysname" x="16" y="20">
 								{{ $t(`${I18N}.starmap.unlocated_routes`) }}
 							</text>
@@ -932,9 +929,7 @@
 								:key="mark.key"
 								:opacity="markDimmed(mark) ? 0.22 : 0.8"
 								@click="onMarkClick"
-								@mouseenter="
-									onEnter(markTooltip(mark), $event)
-								"
+								@mouseenter="onEnter(markTooltip(mark), $event)"
 								@mouseleave="onLeave">
 								<line
 									x1="16"
@@ -1084,7 +1079,9 @@
 
 <style scoped>
 	svg text {
-		font: 11px system-ui, sans-serif;
+		font:
+			11px system-ui,
+			sans-serif;
 		fill: rgba(255, 255, 255, 0.7);
 		pointer-events: none;
 	}

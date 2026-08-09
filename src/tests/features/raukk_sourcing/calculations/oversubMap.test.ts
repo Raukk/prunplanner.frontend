@@ -141,9 +141,7 @@ describe("raukkOversubMapRibbonPath", () => {
 	it("builds a closed cubic Bézier outline", () => {
 		const path: string = raukkOversubMapRibbonPath(231, 30, 742, 60, 10);
 
-		expect(path.startsWith("M231,30 C486.5,30 486.5,60 742,60")).toBe(
-			true
-		);
+		expect(path.startsWith("M231,30 C486.5,30 486.5,60 742,60")).toBe(true);
 		expect(path).toContain("L742,70");
 		expect(path.endsWith("231,40 Z")).toBe(true);
 	});
@@ -221,9 +219,7 @@ describe("raukkOversubMapLayout", () => {
 			registry
 		);
 
-		const keys: string[] = layout.consumers.map(
-			(consumer) => consumer.key
-		);
+		const keys: string[] = layout.consumers.map((consumer) => consumer.key);
 		expect(keys).toStrictEqual([
 			...registry.slots.map((slot) => slot.planUuid),
 			"other",

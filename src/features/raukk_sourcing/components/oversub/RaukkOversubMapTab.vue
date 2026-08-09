@@ -46,6 +46,10 @@
 		IRaukkOversubTooltipPayload,
 	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
 
+	/* eslint-disable vue/no-unused-properties -- the viz tab contract of
+	 `IRaukkOversubVizTab` fixes this exact prop set; the flow map renders
+	 the material domain only (see the footnote), so the fleet props and
+	 the percent axis stay untouched here */
 	const props = defineProps({
 		/** Materials rows, filtered and sorted by the section */
 		tickerRows: {
@@ -85,6 +89,7 @@
 			required: true,
 		},
 	});
+	/* eslint-enable vue/no-unused-properties */
 
 	const emit = defineEmits<{
 		/** Empty state asks the section to flip problems-only off */
@@ -128,7 +133,8 @@
 
 	/** Consumer selection, hidden while a trace holds the selection */
 	const consumerKey: ComputedRef<string | null> = computed(() =>
-		selectedKey.value !== null && !selectedKey.value.startsWith(TRACE_PREFIX)
+		selectedKey.value !== null &&
+		!selectedKey.value.startsWith(TRACE_PREFIX)
 			? selectedKey.value
 			: null
 	);
@@ -157,7 +163,10 @@
 	function ribbonOpacity(ribbon: IRaukkOversubMapRibbon): number {
 		if (traceKey.value !== null && traceKey.value !== ribbon.producerKey)
 			return 0.05;
-		if (consumerKey.value !== null && consumerKey.value !== ribbon.consumerKey)
+		if (
+			consumerKey.value !== null &&
+			consumerKey.value !== ribbon.consumerKey
+		)
 			return 0.1;
 		return 0.55;
 	}
@@ -549,7 +558,9 @@
 
 <style scoped>
 	svg text {
-		font: 11.5px system-ui, sans-serif;
+		font:
+			11.5px system-ui,
+			sans-serif;
 		fill: rgba(255, 255, 255, 0.7);
 	}
 	svg text.mname {

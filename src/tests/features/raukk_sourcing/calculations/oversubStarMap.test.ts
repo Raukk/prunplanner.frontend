@@ -156,9 +156,7 @@ describe("raukkStarSystemNaturalId", () => {
 
 describe("raukkStarConsumerPlanet", () => {
 	it("reads the planet of a plan nav target", () => {
-		expect(raukkStarConsumerPlanet("/plan/XK-745b/uuid-a")).toBe(
-			"XK-745b"
-		);
+		expect(raukkStarConsumerPlanet("/plan/XK-745b/uuid-a")).toBe("XK-745b");
 	});
 
 	it("returns null on non-plan targets and null", () => {
@@ -229,9 +227,9 @@ describe("raukkStarPlacement", () => {
 			SYSTEMS
 		);
 
-		expect(
-			placement.systems.map((ring) => ring.name).sort()
-		).toStrictEqual(["Hortus", "UV-351"]);
+		expect(placement.systems.map((ring) => ring.name).sort()).toStrictEqual(
+			["Hortus", "UV-351"]
+		);
 	});
 
 	it("clusters unresolvable planets into the unmapped region", () => {
@@ -244,10 +242,7 @@ describe("raukkStarPlacement", () => {
 			SYSTEMS
 		);
 
-		expect(placement.unmappedKeys.sort()).toStrictEqual([
-			"ghost",
-			"none",
-		]);
+		expect(placement.unmappedKeys.sort()).toStrictEqual(["ghost", "none"]);
 		expect(placement.unmappedAnchor).not.toBeNull();
 		expect(placement.positionByKey["ghost"]).toBeDefined();
 		expect(placement.positionByKey["none"]).toBeDefined();
@@ -314,9 +309,7 @@ describe("raukkOversubStarNodes", () => {
 	}
 
 	it("merges producer rows per plan and reads the worst reading", () => {
-		const producer = nodesOf().find(
-			(node) => node.planUuid === "prod-1"
-		)!;
+		const producer = nodesOf().find((node) => node.planUuid === "prod-1")!;
 
 		expect(producer.name).toBe("Hortus HQ");
 		expect(producer.planetNaturalId).toBe("OT-580b");
@@ -329,9 +322,7 @@ describe("raukkOversubStarNodes", () => {
 	});
 
 	it("creates consumer nodes with planet and draws from the pairs", () => {
-		const consumer = nodesOf().find(
-			(node) => node.planUuid === "cons-1"
-		)!;
+		const consumer = nodesOf().find((node) => node.planUuid === "cons-1")!;
 
 		expect(consumer.name).toBe("Antares Fab");
 		expect(consumer.planetNaturalId).toBe("XK-745b");
@@ -343,15 +334,14 @@ describe("raukkOversubStarNodes", () => {
 	});
 
 	it("never turns the external aggregate into a node", () => {
-		expect(
-			nodesOf().map((node) => node.planUuid)
-		).toStrictEqual(["cons-1", "prod-1"]);
+		expect(nodesOf().map((node) => node.planUuid)).toStrictEqual([
+			"cons-1",
+			"prod-1",
+		]);
 	});
 
 	it("adds outbound and inbound into one u/d volume", () => {
-		const producer = nodesOf().find(
-			(node) => node.planUuid === "prod-1"
-		)!;
+		const producer = nodesOf().find((node) => node.planUuid === "prod-1")!;
 
 		expect(producer.volumePerDay).toBe(
 			producer.subscribedOutPerDay + producer.drawsInPerDay
@@ -392,10 +382,7 @@ describe("edge geometry", () => {
 
 		expect(raukkStarQuadPoint(from, control, to, 0)).toStrictEqual(from);
 		expect(raukkStarQuadPoint(from, control, to, 1)).toStrictEqual(to);
-		expect(raukkStarQuadPoint(from, control, to, 0.5).y).toBeCloseTo(
-			10,
-			6
-		);
+		expect(raukkStarQuadPoint(from, control, to, 0.5).y).toBeCloseTo(10, 6);
 	});
 
 	it("pulls the arrowhead back to the target rim", () => {
