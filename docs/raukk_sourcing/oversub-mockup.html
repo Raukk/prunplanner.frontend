@@ -1614,8 +1614,54 @@
 				" L" + (x + w).toFixed(1) + "," + (y + 9).toFixed(1) + " Z",
 			fill: "#fab219" }));
 	}
+	function drawHeadroomBlock(svg, r, bx, by, bw, bh, level) {
+		// headroom view: box = unused net capacity. No consumer strips —
+		// the area answers "where can I still draw from?", not "who draws".
+		const hs = headroomShare(r.net, r.subscribed);
+		const free = hs === null ? 0 : r.net - r.subscribed;
+		const g = svgEl("g", {});
+		g.appendChild(svgEl("rect", { x: bx, y: by, width: bw, height: bh,
+			fill: hs === null ? "url(#bHatchRed)" : "#252525", rx: 2,
+			stroke: hs === null ? "#c70039" : "#565650",
+			"stroke-width": hs === null ? "0.9" : "0.7" }));
+		if (bw > 46 && bh > 17) {
+			const t = svgEl("text", { x: bx + 5, y: by + 13 });
+			const t1 = svgEl("tspan", { class: "bt mono" });
+			t1.textContent = r.ticker + " ";
+			const t2 = svgEl("tspan", { class: (hs === null ? "bpct-over" : "bsm") + " num" });
+			t2.textContent = hs === null ? "none ▲"
+				: Math.round(hs * 100) + "% free";
+			t.appendChild(t1); t.appendChild(t2);
+			g.appendChild(t);
+			if (hs !== null && bh > 32 && bw > 118) {
+				const s2 = svgEl("text", { x: bx + 5, y: by + 27, class: "bsm num" });
+				s2.textContent = fmtN(free) + " " + r.unit + " of net " + fmtN(r.net);
+				g.appendChild(s2);
+			}
+		}
+		if (r.anyStale) staleTick(g, bx, by, bw);
+		const hit = svgEl("rect", { x: bx, y: by, width: bw, height: bh,
+			fill: "rgba(0,0,0,0)" });
+		hit.style.cursor = "zoom-in";
+		hit.addEventListener("click", (e) => {
+			e.stopPropagation();
+			state.blocksZoom = [r.kind === "fleet" ? "b-fleet" : "b-" + r.producerKey, r.id];
+			renderPane();
+		});
+		bindTip(hit, () => rowTip(r) +
+			"<div class='sec num'>headroom <b>" + (hs === null
+				? "0 " + r.unit + (r.utilization === null ? " — no denominator" : " — oversubscribed ▲")
+				: fmtN(free) + " " + r.unit + " (" + Math.round(hs * 100) + "% of net)") +
+			"</b></div><div class='ter'>click: zoom into this row (load composition)</div>");
+		g.appendChild(hit);
+		svg.appendChild(g);
+	}
 	function drawRowBlock(svg, r, bx, by, bw, bh, level) {
 		// level: "mini" (inside branch at root) | "mid" (branch zoom) | "full"
+		if (state.blocksView === "headroom" && level !== "full") {
+			drawHeadroomBlock(svg, r, bx, by, bw, bh, level);
+			return;
+		}
 		const g = svgEl("g", {});
 		const noDenom = r.net <= 0 || r.utilization === null;
 		g.appendChild(svgEl("rect", { x: bx, y: by, width: bw, height: bh,
@@ -1753,10 +1799,13 @@
 		const abs = state.blocksMode === "abs";
 		groupHead(pane, "Blocks",
 			"Empire → producer → ticker → consumers · click zooms in · ← / Esc backs out");
+		const headview = state.blocksView === "headroom";
 		const sub = el("p", "mapsub");
-		sub.innerHTML = abs
-			? "<span style='color:var(--amber)'>area = absolute subscribed — u/d and ship-min/d are different units, so material and fleet areas are NOT comparable</span>"
-			: "area = draw share (subscribed ÷ net, dimensionless) — honest across rows and units; no-denominator rows get a fixed hatched area";
+		sub.innerHTML = headview
+			? "<b style='color:var(--ink-2)'>headroom view</b> — area = unused net capacity (max(net − subscribed, 0) ÷ net, dimensionless): where you can still draw from. Over / no-denominator rows get a fixed minimal hatched box — zero headroom never earns area"
+			: abs
+				? "<b style='color:var(--ink-2)'>load view</b> — <span style='color:var(--amber)'>area = absolute subscribed — u/d and ship-min/d are different units, so material and fleet areas are NOT comparable</span>"
+				: "<b style='color:var(--ink-2)'>load view</b> — area = draw share (subscribed ÷ net, dimensionless) — honest across rows and units; no-denominator rows get a fixed hatched area";
 		pane.appendChild(sub);
 
 		const bar = el("div", "btoolbar");
@@ -1781,16 +1830,30 @@
 			open.addEventListener("click", () => toast(row ? row.nav : branch.nav));
 			bar.appendChild(open);
 		}
-		const mode = el("span", "bmode");
-		[["share", "by draw share (% of net)"], ["abs", "by absolute u/d"]]
-			.forEach(([k, lbl]) => {
-				const btn = el("button", state.blocksMode === k ? "on" : "", lbl);
-				btn.addEventListener("click", () => {
-					if (state.blocksMode !== k) { state.blocksMode = k; renderPane(); }
-				});
-				mode.appendChild(btn);
+		const view = el("span", "bmode");
+		[["load", "load"], ["headroom", "headroom"]].forEach(([k, lbl]) => {
+			const btn = el("button", state.blocksView === k ? "on" : "", lbl);
+			btn.title = k === "load" ? "size boxes by what is drawn"
+				: "size boxes by unused net capacity (% of net)";
+			btn.addEventListener("click", () => {
+				if (state.blocksView !== k) { state.blocksView = k; renderPane(); }
 			});
-		bar.appendChild(mode);
+			view.appendChild(btn);
+		});
+		bar.appendChild(view);
+		if (!headview) { // sizing toggle applies to load view only
+			const mode = el("span", "bmode");
+			mode.style.marginLeft = "0";
+			[["share", "by draw share (% of net)"], ["abs", "by absolute u/d"]]
+				.forEach(([k, lbl]) => {
+					const btn = el("button", state.blocksMode === k ? "on" : "", lbl);
+					btn.addEventListener("click", () => {
+						if (state.blocksMode !== k) { state.blocksMode = k; renderPane(); }
+					});
+					mode.appendChild(btn);
+				});
+			bar.appendChild(mode);
+		}
 		pane.appendChild(bar);
 
 		if (!branches.length) {
@@ -2102,6 +2165,586 @@
 	}
 
 	// =====================================================================
+	// PURE-LAYOUT-START — deterministic layout helpers, node-testable
+	// (no DOM, no state; extracted verbatim by the sanity harness)
+	// =====================================================================
+	function beeDodge(points, gap) {
+		// points: [{x, r}] in placement order (caller sorts by utilization);
+		// returns vertical offsets. Greedy alternating scan — deterministic,
+		// no RNG: try 0, +gap, −gap, +2·gap, … until no circle overlap.
+		const placed = [];
+		return points.map((p) => {
+			let y = 0;
+			for (let k = 0; k < 400; k++) {
+				y = (k % 2 ? -1 : 1) * Math.ceil(k / 2) * gap;
+				const ok = placed.every((q) => {
+					const dx = p.x - q.x, dy = y - q.y, min = p.r + q.r + 1.5;
+					return dx * dx + dy * dy >= min * min;
+				});
+				if (ok) break;
+			}
+			placed.push({ x: p.x, y: y, r: p.r });
+			return y;
+		});
+	}
+	function waffleQuantum(value) {
+		// pick q from {1,2,5}×10^k so value ÷ q lands in [50, 100]
+		// (closest band edge wins when nothing lands inside)
+		if (value <= 0) return 1;
+		let best = 1, bestScore = Infinity;
+		for (let e = -2; e <= 6; e++) {
+			[1, 2, 5].forEach((m) => {
+				const q = m * Math.pow(10, e);
+				const n = value / q;
+				const score = n >= 50 && n <= 100 ? 0
+					: Math.min(Math.abs(n - 50), Math.abs(n - 100));
+				if (score < bestScore - 1e-9) { bestScore = score; best = q; }
+			});
+		}
+		return best;
+	}
+	function waffleAlloc(parts, q) {
+		// integer square counts by largest remainder: Σ = round(Σparts ÷ q),
+		// each part within one square of its true value; nonzero parts keep
+		// ≥ 1 square (a real draw never vanishes from the grid)
+		const total = parts.reduce((s, v) => s + v, 0);
+		const target = Math.round(total / q);
+		const raw = parts.map((v) => v / q);
+		const base = raw.map((v) => Math.floor(v));
+		let used = base.reduce((s, v) => s + v, 0);
+		const order = raw.map((v, i) => [v - base[i], i])
+			.sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+		for (let i = 0; used < target && i < order.length; i++) {
+			base[order[i][1]]++; used++;
+		}
+		parts.forEach((v, i) => { if (v > 0 && base[i] === 0) base[i] = 1; });
+		return base;
+	}
+	function headroomShare(net, subscribed) {
+		// max(net − subscribed, 0) ÷ net; null = no meaningful headroom
+		// (net ≤ 0 has no denominator; subscribed ≥ net has nothing left)
+		if (net <= 0) return null;
+		const h = (net - subscribed) / net;
+		return h > 0 ? h : null;
+	}
+	// PURE-LAYOUT-END
+
+	// =====================================================================
+	// BEESWARM tab — every row as a dot on one shared utilization axis.
+	// Utilization is dimensionless so the axis is shared; sizes are not —
+	// materials and fleet keep separate swarm lanes and radius scales.
+	// =====================================================================
+	function beeDomain(rows) {
+		let m = 0;
+		rows.forEach((r) => {
+			if (r.utilization !== null) m = Math.max(m, r.utilization * 100);
+		});
+		return Math.min(250, Math.max(140, Math.ceil(m / 10) * 10));
+	}
+	function renderBeeswarm(pane, S) {
+		const all = S.tick.concat(S.fleet);
+		groupHead(pane, "Beeswarm",
+			"one dot per row on a shared utilization axis · dot area ∝ subscribed within its unit lane");
+		const sub = el("p", "mapsub");
+		sub.innerHTML = "axis capped at 250% — clipped dots pin at the torn edge with the uncapped % printed · " +
+			"null-utilization rows sit in the hatched gutter · click a dot for its mini-ledger" +
+			(state.beeOpen ? " · <b style='color:var(--ink-2)'>Esc closes the detail</b>" : "");
+		pane.appendChild(sub);
+		if (!all.length) {
+			emptyState(pane, S.softTick.concat(S.softFleet), "t");
+			return;
+		}
+		if (state.beeOpen && !all.some((r) => r.id === state.beeOpen))
+			state.beeOpen = null;
+		const xMax = beeDomain(all);
+		const W = 1000, AX0 = 64, AX1 = 840, GX0 = 862, GX1 = 992;
+		const lanes = [];
+		if (S.tick.length) lanes.push({ rows: S.tick, label: "materials · u/d" });
+		if (S.fleet.length) lanes.push({ rows: S.fleet, label: "fleet · ship-min/d" });
+		const LH = 150, TOP = 26;
+		const H = TOP + LH * lanes.length + 8;
+		const xOf = (u) => AX0 + Math.min(u * 100, xMax) / xMax * (AX1 - AX0);
+
+		const wrap = el("div"); wrap.id = "beewrap";
+		const svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H });
+		svg.id = "beesvg";
+		svgHatchDefs(svg);
+		// axis ticks + 100% rule (strong) — shared by both lanes
+		for (let t = 0; t <= xMax; t += 50) {
+			const x = AX0 + t / xMax * (AX1 - AX0);
+			svg.appendChild(svgEl("line", { x1: x, y1: TOP - 6, x2: x, y2: H - 4,
+				stroke: t === 100 ? "rgba(255,255,255,0.38)" : "#2c2c2a",
+				"stroke-width": t === 100 ? "1.4" : "1" }));
+			const tx = svgEl("text", { x: x, y: TOP - 10, "text-anchor": "middle",
+				class: "bsm num" });
+			if (t === 100) tx.setAttribute("fill", "#c3c2b7");
+			tx.textContent = t + "%";
+			svg.appendChild(tx);
+		}
+		// no-capacity gutter — hatched, off the axis entirely
+		svg.appendChild(svgEl("rect", { x: GX0, y: TOP - 6, width: GX1 - GX0,
+			height: H - TOP + 2, fill: "url(#bHatchGray)",
+			stroke: "rgba(137,135,129,0.5)", rx: 3 }));
+		const gt = svgEl("text", { x: (GX0 + GX1) / 2, y: TOP - 10,
+			"text-anchor": "middle", class: "bsm" });
+		gt.textContent = "no capacity";
+		svg.appendChild(gt);
+
+		lanes.forEach((lane, li) => {
+			const cy = TOP + LH * li + LH / 2 + 4;
+			if (li > 0) svg.appendChild(svgEl("line", { x1: 0, y1: TOP + LH * li,
+				x2: GX0 - 8, y2: TOP + LH * li, stroke: "#2c2c2a",
+				"stroke-dasharray": "3 5" }));
+			const lt = svgEl("text", { x: 2, y: TOP + LH * li + 16, class: "bsm" });
+			lt.textContent = lane.label;
+			svg.appendChild(lt);
+			let maxSub = 1;
+			lane.rows.forEach((r) => { maxSub = Math.max(maxSub, r.subscribed); });
+			const rad = (r) => Math.max(6, Math.min(22,
+				20 * Math.sqrt(Math.max(r.subscribed, 1) / maxSub)));
+			// dodge: sorted by utilization, deterministic vertical offsets
+			const withU = lane.rows.filter((r) => r.utilization !== null)
+				.slice().sort((a, b) => a.utilization - b.utilization);
+			const pts = withU.map((r) => ({ x: xOf(r.utilization), r: rad(r) }));
+			const ys = beeDodge(pts, 5);
+			withU.forEach((r, i) => {
+				const x = pts[i].x, y = cy + ys[i], rr = pts[i].r;
+				const clipped = r.utilization * 100 > xMax + 1e-9;
+				const open = state.beeOpen === r.id;
+				const dim = state.sel && !foldSegs(r).some((s) => foldKey(s) === state.sel);
+				const g = svgEl("g", { class: "node", opacity: dim && !open ? "0.3" : "1" });
+				let fill, stroke;
+				if (r.over) { fill = "rgba(199,0,57,0.42)"; stroke = "#c70039"; }
+				else {
+					fill = "rgba(57,135,229," + (0.12 + 0.55 * r.utilization).toFixed(3) + ")";
+					stroke = "rgba(57,135,229,0.85)";
+				}
+				g.appendChild(svgEl("circle", { cx: x, cy: y, r: rr, fill: fill,
+					stroke: open ? "#c0e219" : stroke,
+					"stroke-width": open ? "2.2" : r.over ? "1.6" : "1.1" }));
+				if (r.over) { // ▲ ring — over is never color-alone
+					const a = svgEl("text", { x: x, y: y - rr - 3,
+						"text-anchor": "middle", class: "bpct-over" });
+					a.textContent = "▲";
+					g.appendChild(a);
+				}
+				if (r.anyStale) {
+					const st = svgEl("text", { x: x + rr * 0.75 + 3, y: y - rr * 0.75,
+						fill: "#fab219" });
+					st.textContent = "◷";
+					g.appendChild(st);
+				}
+				if (rr >= 11) { // ticker labels on dots when they fit
+					const t = svgEl("text", { x: x, y: y + 3.5,
+						"text-anchor": "middle", class: "bt mono" });
+					t.textContent = r.ticker;
+					g.appendChild(t);
+				}
+				if (clipped) { // torn edge + uncapped printed % (ledger convention)
+					g.appendChild(svgEl("path", {
+						d: "M" + (x + rr + 2) + "," + (y - rr) +
+							" l5,3 l-5,3 l5,3 l-5,3 l5,3 l-5,3 l5,3",
+						stroke: "#c70039", fill: "none", "stroke-width": "1.3" }));
+					const ct = svgEl("text", { x: x, y: y + rr + 13,
+						"text-anchor": "middle", class: "bpct-over num" });
+					ct.textContent = "→ " + fmtPct(r.utilization) + " ▲";
+					g.appendChild(ct);
+				} else if (r.over && rr >= 11) {
+					const ct = svgEl("text", { x: x, y: y + rr + 13,
+						"text-anchor": "middle", class: "bpct-over num" });
+					ct.textContent = fmtPct(r.utilization) + " ▲";
+					g.appendChild(ct);
+				}
+				g.addEventListener("click", () => {
+					state.beeOpen = open ? null : r.id;
+					renderPane();
+				});
+				bindTip(g, () => rowTip(r) +
+					"<div class='ter'>click: " + (open ? "close" : "open") +
+					" this row's mini-ledger below</div>");
+				svg.appendChild(g);
+			});
+			// null-utilization rows: pinned in the gutter with labels
+			const nulls = lane.rows.filter((r) => r.utilization === null);
+			nulls.forEach((r, i) => {
+				const rr = Math.max(7, Math.min(15, rad(r)));
+				const x = GX0 + 24, y = cy + (i - (nulls.length - 1) / 2) * 40;
+				const open = state.beeOpen === r.id;
+				const g = svgEl("g", { class: "node" });
+				g.appendChild(svgEl("circle", { cx: x, cy: y, r: rr, fill: "#1e1e1e",
+					stroke: open ? "#c0e219" : "#898781",
+					"stroke-width": open ? "2.2" : "1.2",
+					"stroke-dasharray": open ? "" : "4 3" }));
+				const t = svgEl("text", { x: x + rr + 6, y: y + 1, class: "bt mono" });
+				t.textContent = r.ticker;
+				g.appendChild(t);
+				const s2 = svgEl("text", { x: x + rr + 6, y: y + 13, class: "bsm num" });
+				s2.textContent = "n/a · " + fmtN(r.subscribed) + " " + r.unit;
+				g.appendChild(s2);
+				g.addEventListener("click", () => {
+					state.beeOpen = open ? null : r.id;
+					renderPane();
+				});
+				bindTip(g, () => rowTip(r) +
+					"<div class='ter'>click: " + (open ? "close" : "open") +
+					" this row's mini-ledger below</div>");
+				svg.appendChild(g);
+			});
+		});
+		wrap.appendChild(svg);
+		pane.appendChild(wrap);
+		const openRow = all.find((r) => r.id === state.beeOpen);
+		if (openRow) renderBeeDetail(pane, openRow);
+		pane.appendChild(el("div", "footnote",
+			"Fill deepens with utilization on the blue ramp; red + ▲ = over; the strong rule is 100%. " +
+			"Dots past the 250% cap pin at the torn edge — the printed % is never capped. " +
+			"Hatched gutter = no denominator (net ≤ 0 / no ships), off the axis entirely. " +
+			"Dodge offsets are layout only; only the x position carries data. ◷ = stale."));
+	}
+	function renderBeeDetail(pane, r) {
+		// drill strip: the clicked row's segments as a single mini-ledger bar
+		const head = el("div", "bubhead");
+		head.innerHTML = "<b class='mono'>" + r.ticker + "</b><span>· <span class='prodlink'>" +
+			r.producer + "</span> — mini-ledger</span>";
+		const pl = head.querySelector(".prodlink");
+		pl.style.cursor = "pointer";
+		pl.addEventListener("click", () => toast(r.nav));
+		const close = el("button", "rbtn", "× close (Esc)");
+		close.addEventListener("click", () => { state.beeOpen = null; renderPane(); });
+		head.appendChild(close);
+		pane.appendChild(head);
+		const xMax = Math.min(250, Math.max(140,
+			Math.ceil(Math.max((r.utilization || 0) * 100, 110) / 10) * 10));
+		const px = (p) => (p / xMax * 100).toFixed(3) + "%";
+		const box = el("div", "ledger");
+		const ax = el("div", "laxis");
+		ax.appendChild(el("div"));
+		const axb = el("div", "laxisbar");
+		for (let t = 0; t <= xMax; t += 50) {
+			const k = el("span", "tick num", t + "%");
+			k.style.left = px(t);
+			if (t === 100) k.style.color = "var(--ink-2)";
+			axb.appendChild(k);
+		}
+		ax.appendChild(axb); ax.appendChild(el("div"));
+		box.appendChild(ax);
+		const row = el("div", "lrow" + (state.sel ? " sel-dim" : ""));
+		row.appendChild(el("div", "llabel",
+			"<span class='tick mono'>" + r.ticker + "</span>" +
+			(r.over ? " <span class='overglyph'>▲</span>" : "") +
+			(r.anyStale ? " <span class='clock'>◷</span>" : "") +
+			"<span class='who'>" + r.producer + "</span>"));
+		const bar = el("div", "lbar");
+		const wash = el("div", "lwash");
+		wash.style.left = px(100); wash.style.right = "0";
+		bar.appendChild(wash);
+		if (r.net <= 0 || r.utilization === null) {
+			const c = el("div", "lcollapsed");
+			c.style.width = px(100);
+			bar.appendChild(c);
+			const badge = el("span", "badge nonet",
+				r.kind === "fleet" ? "no ships" : "no net capacity");
+			badge.style.cssText = "position:absolute;left:8px;top:4px;background:var(--surface)";
+			bar.appendChild(badge);
+			bindTip(bar, () => rowTip(r));
+		} else {
+			const track = el("div", "ltrack");
+			track.style.width = px(100);
+			bar.appendChild(track);
+			bindTip(track, () => rowTip(r));
+			if (r.self > 0) {
+				const n = el("div", "lnotch");
+				const selfPct = r.self / r.net * 100;
+				const capped = selfPct / xMax > 0.09;
+				n.style.width = capped ? "9%" : px(selfPct);
+				if (capped) n.classList.add("clipped");
+				bindTip(n, () => "<div class='big'>self-reserve ⌂</div><div class='sec num'>" +
+					fmtU(r.self, r.unit) + " off the top — never a consumer segment</div>" +
+					(capped ? "<div class='ter'>notch clipped — " +
+						Math.round(selfPct) + "% of net on this scale</div>" : ""));
+				bar.appendChild(n);
+			}
+			let cur = 0;
+			foldSegs(r).forEach((seg, i) => {
+				const upct = seg.amount / r.net * 100;
+				const from = cur, to = cur + upct;
+				cur = to;
+				if (from >= xMax) return;
+				const s = el("div", "lseg" + (seg.stale ? " stale" : "") +
+					(to > 100 + 1e-9 ? " overpart" : "") + (foldDim(seg) ? "" : " hit"));
+				s.style.left = "calc(" + px(from) + " + " + (i ? 2 : 0) + "px)";
+				s.style.width = "calc(" + px(Math.min(to, xMax) - from) + " - " + (i ? 2 : 0) + "px)";
+				s.style.background = foldColor(seg);
+				if (seg.segmentKind === "plan" || seg.isOther)
+					s.addEventListener("click", () => setSel(foldKey(seg)));
+				else if (seg.segmentKind === "external") s.style.cursor = "default";
+				else s.addEventListener("click", () => toast(seg.nav));
+				bindTip(s, () => segTip(seg, r));
+				bar.appendChild(s);
+			});
+			if (r.utilization * 100 > xMax + 1e-9) bar.appendChild(el("div", "ljag"));
+			const rule = el("div", "lrule");
+			rule.style.left = px(100);
+			bar.appendChild(rule);
+		}
+		row.appendChild(bar);
+		const val = el("div", "lval num");
+		if (r.net <= 0 || r.utilization === null)
+			val.innerHTML = "<b style='color:var(--neg-text)'>" +
+				(r.kind === "fleet" ? "n/a" : "net " + fmtN(r.net)) + "</b>" +
+				"<span class='u'>" + fmtN(r.subscribed) + " " + r.unit + " subscribed</span>";
+		else
+			val.innerHTML = "<b" + (r.over ? " style='color:var(--neg-text)'" : "") + ">" +
+				fmtPct(r.utilization) + (r.over ? " ▲" : "") + "</b>" +
+				"<span class='u'>" + fmtN(r.subscribed) + " / " + fmtN(r.net) + "</span>";
+		row.appendChild(val);
+		box.appendChild(row);
+		pane.appendChild(box);
+	}
+
+	// =====================================================================
+	// DUMBBELL tab — net capacity (hollow) vs subscribed (filled) on one
+	// absolute linear scale per unit group; the joining line states the
+	// direction, the printed Δ states the amount (uncapped, always).
+	// =====================================================================
+	function dumbTip(r) {
+		const segs = foldSegs(r);
+		return rowTip(r) + "<div class='ter'>" +
+			segs.slice(0, 4).map((s) => s.label + " " + fmtN(s.amount)).join(" · ") +
+			(segs.length > 4 ? " · +" + (segs.length - 4) + " more" : "") +
+			"</div><div class='ter'>click: open producer</div>";
+	}
+	function renderDumbbell(pane, S) {
+		function group(rows, unit) {
+			const wrapG = el("div", "ledger");
+			let dMax = 1;
+			rows.forEach((r) => { dMax = Math.max(dMax, r.net, r.subscribed); });
+			const px = (v) => (Math.max(v, 0) / dMax * 100).toFixed(3) + "%";
+			const ax = el("div", "daxis");
+			ax.appendChild(el("div"));
+			const axb = el("div", "daxisbar");
+			[0, 0.25, 0.5, 0.75, 1].forEach((f) => {
+				const k = el("span", "tick num", fmtN(dMax * f));
+				k.style.left = (f * 100) + "%";
+				axb.appendChild(k);
+			});
+			ax.appendChild(axb);
+			ax.appendChild(el("div", "", "<span style='float:right'>" + unit + "</span>"));
+			wrapG.appendChild(ax);
+			rows.forEach((r) => {
+				const row = el("div", "drow");
+				const lab = el("div", "llabel",
+					"<span class='tick mono'>" + r.ticker + "</span>" +
+					(r.over ? " <span class='overglyph'>▲</span>" : "") +
+					(r.anyStale ? " <span class='clock'>◷</span>" : "") +
+					"<span class='who'><span class='prodlink'>" + r.producer + "</span>" +
+					(r.kind === "fleet" ? " · " + r.count + " ship" + (r.count === 1 ? "" : "s") : "") +
+					"</span>");
+				lab.querySelector(".prodlink").addEventListener("click", () => toast(r.nav));
+				bindTip(lab, () => dumbTip(r));
+				row.appendChild(lab);
+				const bar = el("div", "dbar");
+				bar.appendChild(el("div", "dtrack"));
+				const noNet = r.net <= 0;
+				const delta = r.net - r.subscribed;
+				if (noNet) {
+					// capacity dot parked in the hatched gutter, off the scale
+					const gut = el("div", "dgut");
+					bindTip(gut, () => "<div class='big'>no net capacity</div><div class='sec num'>net " +
+						fmtN(r.net) + " " + r.unit +
+						" — the hollow dot has no place on this scale</div>");
+					bar.appendChild(gut);
+					const nd = el("span", "ddot netd");
+					nd.style.cssText = "left:auto;right:calc(100% + 20px);transform:none";
+					bar.appendChild(nd);
+					const badge = el("span", "badge nonet",
+						r.kind === "fleet" ? "no ships" : "no net capacity");
+					badge.style.cssText = "position:absolute;left:4px;top:4px;background:var(--surface)";
+					bar.appendChild(badge);
+					// deficit line: origin → subscribed (the whole draw is deficit)
+					const ln = el("div", "dline def");
+					ln.style.left = "0"; ln.style.width = px(r.subscribed);
+					bar.appendChild(ln);
+				} else {
+					const ln = el("div", "dline " + (delta > 0 ? "head" : delta < 0 ? "def" : "head"));
+					ln.style.left = px(Math.min(r.net, r.subscribed));
+					ln.style.width = "calc(" + px(Math.abs(delta)) + ")";
+					if (delta === 0) ln.style.width = "0";
+					bar.appendChild(ln);
+					const nd = el("span", "ddot netd");
+					nd.style.left = px(r.net);
+					nd.title = "net capacity";
+					bar.appendChild(nd);
+				}
+				const sd = el("span", "ddot subd" + (r.over ? " over" : ""));
+				sd.style.left = px(r.subscribed);
+				bar.appendChild(sd);
+				bar.addEventListener("click", () => toast(r.nav));
+				bindTip(bar, () => dumbTip(r));
+				row.appendChild(bar);
+				const val = el("div", "dval num");
+				const dTxt = noNet
+					? "<span class='defc'>Δ −" + fmtN(r.subscribed - Math.max(r.net, 0)) + " ▲</span>"
+					: delta >= 0
+						? "<span class='free'>Δ +" + fmtN(delta) + " free</span>"
+						: "<span class='defc'>Δ −" + fmtN(-delta) + " over ▲</span>";
+				val.innerHTML = "net <b>" + fmtN(r.net) + "</b> · sub <b" +
+					(r.over ? " style='color:var(--neg-text)'" : "") + ">" +
+					fmtN(r.subscribed) + "</b><span class='u'>" + dTxt + "</span>";
+				row.appendChild(val);
+				wrapG.appendChild(row);
+			});
+			return wrapG;
+		}
+		groupHead(pane, "Materials",
+			"hollow dot = net capacity · filled dot = subscribed · line: green tint = headroom, red = deficit");
+		if (!S.tick.length) emptyState(pane, S.softTick, "t");
+		else pane.appendChild(group(S.tick, "u/d"));
+		groupHead(pane, "Fleet", "account-wide · own absolute scale — ship-min/d never shares the materials scale");
+		if (!S.fleet.length) emptyState(pane, S.softFleet, "f");
+		else pane.appendChild(group(S.fleet, "ship-min/d"));
+		pane.appendChild(el("div", "footnote",
+			"Line color states direction but never alone — the Δ is printed uncapped and deficits carry ▲. " +
+			"Net ≤ 0 / no-ships rows park the hollow dot in the hatched gutter left of the origin; " +
+			"the filled dot stays on the real scale. Each unit group keeps its own linear scale."));
+	}
+
+	// =====================================================================
+	// WAFFLE tab — unit-square grids. One quantum per row (printed), the
+	// capacity boundary as a heavy rule, overflow squares past it in red.
+	// =====================================================================
+	function renderWaffleRow(pane, r) {
+		const capBase = r.net > 0 ? r.net : Math.max(r.subscribed, 1);
+		const q = waffleQuantum(capBase);
+		const netSq = r.net > 0 ? Math.round(r.net / q) : 0;
+		const segs = foldSegs(r);
+		const counts = waffleAlloc(segs.map((s) => s.amount), q);
+		const wrapR = el("div", "wrow");
+		const head = el("div", "whead");
+		head.innerHTML = "<b class='mono prodlink'>" + r.ticker + "</b>" +
+			"<span class='who' style='color:var(--muted)'>" + r.producer + "</span>" +
+			(r.net <= 0 ? "<span class='badge nonet'>" +
+				(r.kind === "fleet" ? "no ships" : "no net capacity") + "</span>" : "") +
+			(r.anyStale ? "<span class='badge stale'>◷ stale</span>" : "") +
+			"<span class='q num'>1 ■ = " + fmtN(q) + " " + r.unit +
+			(r.net > 0 ? " · net " + fmtN(r.net) + " " + r.unit + " ≈ " + netSq + " ■" : "") +
+			"</span>" +
+			"<span class='upct num" + (r.over ? " over" : "") + "'>" +
+			(r.utilization === null ? "n/a" : fmtPct(r.utilization) + (r.over ? " ▲" : "")) +
+			" · " + fmtN(r.subscribed) + " / " + fmtN(Math.max(r.net, 0)) + " " + r.unit + "</span>";
+		head.querySelector(".prodlink").addEventListener("click", () => toast(r.nav));
+		bindTip(head, () => rowTip(r));
+		wrapR.appendChild(head);
+		const grid = el("div", "wgrid");
+		// self-reserve: hatched squares BEFORE the origin boundary — off the
+		// top, never a consumer. Display caps at 12 ■ with the true count.
+		if (r.self > 0) {
+			const selfSq = Math.max(1, Math.round(r.self / q));
+			const shown = Math.min(selfSq, 12);
+			for (let i = 0; i < shown; i++) {
+				const sq = el("span", "wsq selfq");
+				bindTip(sq, () => "<div class='big'>self-reserve ⌂</div><div class='sec num'>" +
+					fmtU(r.self, r.unit) + " ≈ " + selfSq + " ■ off the top — never a consumer</div>" +
+					(selfSq > shown ? "<div class='ter'>block clipped to " + shown +
+						" ■ — the count here is the truth</div>" : ""));
+				grid.appendChild(sq);
+			}
+			if (selfSq > shown)
+				grid.appendChild(el("span", "wclip gray num", "… ×" + selfSq + " ■"));
+			grid.appendChild(el("span", "wbound origin"));
+		}
+		// consumer squares, largest first (ledger order); red past capacity
+		const capDisp = netSq > 0 ? Math.ceil(netSq * 2.5) : 150;
+		let idx = 0, clippedSq = 0, triDone = false, boundDone = netSq === 0;
+		if (netSq === 0) { // zero capacity: boundary sits at the origin
+			const b = el("span", "wbound");
+			b.title = "capacity boundary — net ≤ 0, everything past this is overdraw";
+			grid.appendChild(b);
+		}
+		segs.forEach((seg, si) => {
+			for (let sqi = 0; sqi < counts[si]; sqi++) {
+				if (!boundDone && idx === netSq) {
+					const b = el("span", "wbound");
+					b.title = "capacity boundary — net " + fmtN(r.net) + " " + r.unit;
+					grid.appendChild(b);
+					boundDone = true;
+				}
+				if (idx >= capDisp) { clippedSq++; idx++; continue; }
+				const over = idx >= netSq;
+				const sq = el("span", "wsq" + (over ? " overq" : "") +
+					(over && !triDone ? " tri" : "") + (foldDim(seg) ? " dim" : ""));
+				if (over && !triDone) triDone = true;
+				if (!over) sq.style.background = foldColor(seg);
+				if (seg.segmentKind === "plan" || seg.isOther)
+					sq.addEventListener("click", () => setSel(foldKey(seg)));
+				else if (seg.segmentKind === "external") sq.style.cursor = "default";
+				else sq.addEventListener("click", () => toast(seg.nav));
+				bindTip(sq, () => segTip(seg, r) +
+					"<div class='ter num'>≈ " + counts[si] + " ■ of this row's grid" +
+					(over ? " · this square is past the capacity boundary" : "") + "</div>");
+				grid.appendChild(sq);
+				idx++;
+			}
+		});
+		if (clippedSq > 0)
+			grid.appendChild(el("span", "wclip num", "⇢ +" + clippedSq + " ■ clipped · " +
+				(r.utilization === null ? fmtN(r.subscribed) + " " + r.unit
+					: fmtPct(r.utilization)) + " ▲"));
+		// free squares up to the boundary when under capacity
+		if (idx < netSq) {
+			const freeSq = netSq - idx;
+			for (let i = 0; i < freeSq; i++) {
+				const sq = el("span", "wsq freeq");
+				bindTip(sq, () => "<div class='big'>free capacity</div><div class='sec num'>" +
+					freeSq + " ■ ≈ " + fmtU(r.net - r.subscribed, r.unit) + " unsubscribed</div>");
+				grid.appendChild(sq);
+			}
+			const b = el("span", "wbound");
+			b.title = "capacity boundary — net " + fmtN(r.net) + " " + r.unit;
+			grid.appendChild(b);
+		}
+		wrapR.appendChild(grid);
+		pane.appendChild(wrapR);
+	}
+	function renderWaffle(pane, S) {
+		const LIMIT = 8;
+		const total = S.tick.length + S.fleet.length;
+		let budget = state.waffleAll ? Infinity : LIMIT;
+		groupHead(pane, "Waffle",
+			"1 square = one row-local quantum (printed per row) · heavy rule = capacity boundary · red + ▲ past it");
+		const sub = el("p", "mapsub");
+		sub.innerHTML = "square counts are rounded to the quantum — printed numbers are exact and uncapped · " +
+			"hatched squares before the origin rule = self-reserve, off the top · gray = outside this empire";
+		pane.appendChild(sub);
+		[["Materials", S.tick, S.softTick, "producer × ticker · u/d"],
+			["Fleet", S.fleet, S.softFleet, "account-wide · ship-min/d"]]
+			.forEach(([title, rows, soft, subT]) => {
+				groupHead(pane, title, subT);
+				if (!rows.length) { emptyState(pane, soft, "t"); return; }
+				rows.forEach((r) => {
+					if (budget <= 0) return;
+					budget--;
+					renderWaffleRow(pane, r);
+				});
+			});
+		if (!state.waffleAll && total > LIMIT) {
+			const a = el("a", "fake",
+				"show all " + total + " rows (" + (total - LIMIT) + " more — waffles are tall)");
+			a.addEventListener("click", () => { state.waffleAll = true; renderPane(); });
+			pane.appendChild(a);
+		} else if (state.waffleAll && total > LIMIT) {
+			const a = el("a", "fake", "collapse to the top " + LIMIT + " by the current sort");
+			a.addEventListener("click", () => { state.waffleAll = false; renderPane(); });
+			pane.appendChild(a);
+		}
+		pane.appendChild(el("div", "footnote",
+			"Squares fill left-to-right per consumer, largest first (same order as Ledger). " +
+			"Overflow squares go flat red — the consumer behind each stays in its tooltip. " +
+			"Long self-reserve blocks and deep overdraws clip with the true counts printed at the clip. " +
+			"Click a square: highlight that consumer everywhere; click the ticker: open the producer."));
+	}
+
+	// =====================================================================
 	// tabs & top-level render
 	// =====================================================================
 	function renderPane() {
@@ -2113,6 +2756,9 @@
 		else if (state.tab === "matrix") renderMatrix(pane, S);
 		else if (state.tab === "map") renderMap(pane, S);
 		else if (state.tab === "blocks") renderBlocks(pane, S);
+		else if (state.tab === "beeswarm") renderBeeswarm(pane, S);
+		else if (state.tab === "dumbbell") renderDumbbell(pane, S);
+		else if (state.tab === "waffle") renderWaffle(pane, S);
 		else renderBubbles(pane, S);
 		if (state.computing) pane.classList.add("computing");
 	}
