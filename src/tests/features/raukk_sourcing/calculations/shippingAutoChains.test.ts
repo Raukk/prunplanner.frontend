@@ -570,11 +570,13 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			capDaysOf: (
 				planUuid: string | undefined,
 				bucket: RAUKK_CARGO_BUCKET
-			) => number = () => 14
+			) => number = () => 14,
+			isDepot: (stopRef: string) => boolean = () => false
 		): IRaukkAutoChain[] {
 			return raukkBuildAutoChains({
 				flows,
 				anchorOf,
+				isDepot,
 				capDaysOf,
 				chainConfig,
 				routes,
@@ -605,6 +607,56 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			// ZZ-900a is the only base of the CX2 region: a loop
 			// CX → A → CX is the lane that plan already flies
 			expect(build().some((chain) => chain.cxCode === "CX2")).toBe(false);
+		});
+
+		it("restocks a lone DEPOT, which flies no lane of its own", () => {
+			const chains: IRaukkAutoChain[] = build(
+				() => 14,
+				(stopRef: string) => stopRef === "ZZ-900a"
+			);
+
+			const restock: IRaukkAutoChain = chains.find(
+				(chain) => chain.cxCode === "CX2"
+			) as IRaukkAutoChain;
+
+			// the one stop loop the minimum normally refuses: its base
+			// hands cargo over at the warehouse and flies nothing itself
+			expect(restock).toBeDefined();
+			expect(restock.chainId).toBe("auto:production:CX2:ZZ-900a");
+			expect(restock.stops).toStrictEqual(["CX2", "ZZ-900a"]);
+			expect(
+				restock.flows.map((claimed) => claimed.ticker)
+			).toStrictEqual(["ORE"]);
+			expect(restock.memberPlanUuids).toStrictEqual(["far"]);
+		});
+
+		it("qualifies a depot however small its share", () => {
+			// BB-100a carries a sliver of the CX1 shipment and sits 20 pc
+			// out, far past any detour budget — as a depot it is a stop
+			// all the same, because nothing else would move its cargo
+			const tiny: IRaukkChainFlow[] = [
+				...flows,
+				flow("H2O", "BB-100a", "CX1", 1, 1, 1, "production", "tiny"),
+			];
+
+			const candidates: IRaukkAutoChainCandidate[] =
+				raukkAutoChainCandidates(
+					tiny,
+					"CX1",
+					chainConfig,
+					routes,
+					cxSystems,
+					(stopRef: string) => stopRef === "BB-100a"
+				);
+
+			const depot: IRaukkAutoChainCandidate = candidates.find(
+				(candidate) => candidate.planetNaturalId === "BB-100a"
+			) as IRaukkAutoChainCandidate;
+
+			expect(depot.share).toBeLessThan(
+				chainConfig.autoChainMinShare ?? 0.05
+			);
+			expect(depot.qualified).toBe(true);
 		});
 
 		it("flies at the tightest cap of its member plans", () => {
@@ -795,14 +847,14 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			);
 
 			// heaviest pair (150 units) first, share descending inside
-			expect(
-				rows.map((row) => [row.fromStop, row.ticker])
-			).toStrictEqual([
-				["AA-003c", "RAT"],
-				["AA-003c", "COF"],
-				["AA-001a", "ORE"],
-				["AA-001a", "DW"],
-			]);
+			expect(rows.map((row) => [row.fromStop, row.ticker])).toStrictEqual(
+				[
+					["AA-003c", "RAT"],
+					["AA-003c", "COF"],
+					["AA-001a", "ORE"],
+					["AA-001a", "DW"],
+				]
+			);
 		});
 
 		it("still sorts ungrouped rows by share alone", () => {

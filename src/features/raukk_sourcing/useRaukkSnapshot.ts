@@ -24,6 +24,7 @@ import {
 	RAUKK_REPAIR_BILL,
 } from "@/features/raukk_sourcing/calculations/shipping";
 import { buildShippingPairs } from "@/features/raukk_sourcing/calculations/shippingPairs";
+import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippingDepots";
 import {
 	buildPlanChainFlows,
 	mergeClaimedShipping,
@@ -718,6 +719,16 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 			input.localSales[ticker] !== undefined,
 		localBuyOf: (ticker: string): boolean =>
 			input.sources[ticker]?.mode === "local",
+		/*
+		 * A base standing ON a depot hands its exchange cargo over at the
+		 * warehouse next door and owns no exchange lane. The directed
+		 * FLOWS are untouched — a chain calling at the depot may still
+		 * claim the onward move and price it — only the plans own lane
+		 * disappears, which is the whole meaning of "hands it over".
+		 */
+		depotOf: (planetNaturalId: string): boolean =>
+			sourcingStore.depots[raukkDepotStopKey(planetNaturalId)] !==
+			undefined,
 		anchorCxCode: cxCode,
 		anchorCxSystemId: cxSystemId,
 	};
