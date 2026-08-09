@@ -120,6 +120,27 @@ export const useQueryStore = defineStore(
 		 */
 		const invalidationEpoch = new Map<string, number>();
 
+		/**
+		 * Key prefixes invalidated during this session. A mutation makes
+		 * the local stores behind the backend for its whole key space,
+		 * not just for keys that happen to be cached right now, so
+		 * hydration must stop trusting them — including keys read for the
+		 * first time after the mutation. Game data is never invalidated
+		 * by a mutation, so it keeps hydrating.
+		 */
+		const invalidatedPrefixes = new Map<string, JSONValue>();
+
+		function blockHydration(key: JSONValue): void {
+			invalidatedPrefixes.set(toCacheKey(key), key);
+		}
+
+		function isHydrationBlocked(key: JSONValue): boolean {
+			for (const prefix of invalidatedPrefixes.values()) {
+				if (isSubset(prefix, key)) return true;
+			}
+			return false;
+		}
+
 		function epochOf(key: string): number {
 			return invalidationEpoch.get(key) ?? 0;
 		}
@@ -158,6 +179,10 @@ export const useQueryStore = defineStore(
 			});
 			Object.keys(cacheMeta).forEach((key) => delete cacheMeta[key]);
 			hydrationAttempted.clear();
+			invalidatedPrefixes.clear();
+			// note: invalidationEpoch is deliberately NOT cleared, the
+			// bumps above are what stop a request still in flight for the
+			// previous user from writing its result back
 			inFlight.clear();
 		}
 
@@ -310,6 +335,10 @@ export const useQueryStore = defineStore(
 				return false;
 			}
 
+			// a mutation already made local storage stale for this key
+			// space, only the backend can be trusted for it now
+			if (isHydrationBlocked(definition.key(params))) return false;
+
 			const startEpoch = epochOf(keyHash);
 
 			try {
@@ -441,6 +470,8 @@ export const useQueryStore = defineStore(
 							hydrated: false,
 							error: null,
 							timestamp,
+							// the backend answered, drop any backoff
+							revalidateFailedAt: undefined,
 						});
 
 						writeMeta(
@@ -703,6 +734,10 @@ export const useQueryStore = defineStore(
 			}
 		): Promise<void> {
 			const keyHash: string = toCacheKey(key);
+
+			// everything under this key is now known to be behind the
+			// backend, whether or not it is currently cached
+			blockHydration(key);
 
 			const toRefetch: {
 				definitionKey: K;

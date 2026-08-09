@@ -14,6 +14,7 @@ import {
 	CACHE_META_VERSION,
 	CACHE_META_MAX_ENTRIES,
 	CACHE_GC_MS,
+	REVALIDATE_RETRY_MS,
 } from "@/lib/query_cache/queryStore";
 import { toCacheKey } from "@/lib/query_cache/cacheKeys";
 
@@ -1134,5 +1135,69 @@ describe("queryStore: refreshAll re-entrancy", () => {
 		expect(mocks.fetchTtl.mock.calls.length).toBe(callsBefore + 1);
 		expect(store.refreshGeneration).toBe(generationBefore + 1);
 		expect(store.refreshing).toBe(false);
+	});
+});
+
+describe("queryStore: invalidation blocks hydration for the whole key space", () => {
+	it("does not hydrate a key first read after a mutation invalidated it", async () => {
+		/*
+			The key was never cached, so there was nothing to delete. The
+			local stores are still behind the backend for that key space,
+			so hydration must not be trusted for it either.
+		*/
+		mocks.hydrateTtl.mockResolvedValue({ v: "local-pre-mutation" });
+		mocks.fetchTtl.mockResolvedValue({ v: "server-post-mutation" });
+
+		await store.invalidateKey(["ttlQuery"], {
+			exact: false,
+			skipRefetch: true,
+		});
+
+		const got = await exec("ttlQuery", "never-read-before");
+
+		expect(got).toStrictEqual({ v: "server-post-mutation" });
+		expect(mocks.hydrateTtl).not.toHaveBeenCalled();
+	});
+
+	it("keeps hydrating an unrelated key space", async () => {
+		mocks.hydrateUser.mockResolvedValue({ v: "local" });
+		mocks.fetchUser.mockResolvedValue({ v: "server" });
+
+		await store.invalidateKey(["ttlQuery"], {
+			exact: false,
+			skipRefetch: true,
+		});
+
+		const got = await exec("userQuery", "other");
+
+		// still painted from local storage, the mutation was elsewhere
+		expect(got).toStrictEqual({ v: "local" });
+		expect(mocks.hydrateUser).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("queryStore: revalidation backoff clears on success", () => {
+	it("drops revalidateFailedAt once the backend answers", async () => {
+		const hash: string = toCacheKey(["ttlQuery", "clr"]);
+
+		mocks.fetchTtl.mockResolvedValueOnce({ v: 1 });
+		await exec("ttlQuery", "clr");
+
+		// background revalidation fails
+		mocks.fetchTtl.mockRejectedValueOnce(new Error("down"));
+		vi.setSystemTime(NOW + 5000);
+		await exec("ttlQuery", "clr");
+		await flushPromises();
+
+		expect(store.cacheState[hash].revalidateFailedAt).toBe(NOW + 5000);
+
+		// past the cooldown the next read retries and succeeds
+		mocks.fetchTtl.mockResolvedValueOnce({ v: 2 });
+		vi.setSystemTime(NOW + 5000 + REVALIDATE_RETRY_MS + 1);
+		await exec("ttlQuery", "clr");
+		await flushPromises();
+
+		expect(store.cacheState[hash].data).toStrictEqual({ v: 2 });
+		expect(store.cacheState[hash].revalidateFailedAt).toBeUndefined();
 	});
 });
