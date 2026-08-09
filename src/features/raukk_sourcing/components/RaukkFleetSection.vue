@@ -19,15 +19,26 @@
 		raukkBayCode,
 		raukkFleetAdvisoryRows,
 		raukkFleetRows,
+		raukkFleetSpilloverRows,
 		raukkShipTypeOptions,
+		raukkSpilloverBarWidths,
 		raukkUtilizationBarWidth,
 	} from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
+	import { raukkFleetSpillover } from "@/features/raukk_sourcing/calculations/shippingFleetSpillover";
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PButton, PInput, PInputNumber, PSelect, PTable, PTag } from "@/ui";
+	import {
+		PButton,
+		PCheckbox,
+		PInput,
+		PInputNumber,
+		PSelect,
+		PTable,
+		PTag,
+	} from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -44,6 +55,20 @@
 		raukkFleetRows(utilization.value, (shipTypeId: string) =>
 			sourcingStore.getShipProfile(shipTypeId)
 		)
+	);
+
+	/**
+	 * Rows the table renders: with the spillover display on, the base
+	 * rows carry their spillover overlay — with it off, exactly the base
+	 * rows, so the section renders as it always did.
+	 */
+	const displayRows: ComputedRef<IRaukkFleetRow[]> = computed(() =>
+		sourcingStore.fleetSpillover
+			? raukkFleetSpilloverRows(
+					rows.value,
+					raukkFleetSpillover(utilization.value)
+				)
+			: rows.value
 	);
 
 	const advisoryRows: ComputedRef<IRaukkFleetAdvisoryRow[]> = computed(() =>
@@ -155,6 +180,20 @@
 		{{ $t("raukk_sourcing.fleet.info") }}
 	</div>
 
+	<div class="flex flex-row gap-x-2 child:my-auto pb-3">
+		<PCheckbox
+			:checked="sourcingStore.fleetSpillover"
+			@update:checked="
+				(v) => sourcingStore.setFleetSpillover(v === true)
+			" />
+		<div class="font-bold">
+			{{ $t("raukk_sourcing.fleet.spillover.toggle") }}
+		</div>
+	</div>
+	<div v-if="sourcingStore.fleetSpillover" class="text-white/50 pb-3">
+		{{ $t("raukk_sourcing.fleet.spillover.info") }}
+	</div>
+
 	<PTable striped>
 		<thead>
 			<tr>
@@ -172,7 +211,7 @@
 			</tr>
 		</thead>
 		<tbody>
-			<tr v-for="row in rows" :key="`RAUKKFLEET#${row.shipTypeId}`">
+			<tr v-for="row in displayRows" :key="`RAUKKFLEET#${row.shipTypeId}`">
 				<td>
 					<PTag size="sm" type="secondary">
 						{{ row.bayCode ?? "—" }}
@@ -210,7 +249,60 @@
 						@update:value="(v) => changeCount(row.shipTypeId, v)" />
 				</td>
 				<td>
-					<div class="flex flex-row gap-x-2 child:my-auto min-w-40">
+					<div
+						v-if="row.spill"
+						class="flex flex-row gap-x-2 child:my-auto min-w-40">
+						<div
+							class="w-full bg-gray-800 size-2 rounded-full overflow-hidden flex flex-row">
+							<div
+								class="h-full transition-all duration-300 ease-out"
+								:class="
+									row.spill.over
+										? 'bg-negative'
+										: 'bg-prunplanner'
+								"
+								:style="{
+									width: `${
+										raukkSpilloverBarWidths(
+											row.spill.ownPercent,
+											row.spill.spilledInPercent
+										).own
+									}%`,
+								}"></div>
+							<div
+								class="h-full bg-amber-400 transition-all duration-300 ease-out"
+								:style="{
+									width: `${
+										raukkSpilloverBarWidths(
+											row.spill.ownPercent,
+											row.spill.spilledInPercent
+										).spilled
+									}%`,
+								}"></div>
+						</div>
+						<span
+							class="text-nowrap"
+							:class="
+								row.spill.over ? 'text-negative font-bold' : ''
+							">
+							{{ formatNumber(row.spill.printedPercent) }} %
+							<span
+								v-if="row.spill.received"
+								class="text-xs text-white/50">
+								{{
+									$t("raukk_sourcing.fleet.spillover.split", {
+										own: formatNumber(row.spill.ownPercent),
+										spilled: formatNumber(
+											row.spill.spilledInPercent
+										),
+									})
+								}}
+							</span>
+						</span>
+					</div>
+					<div
+						v-else
+						class="flex flex-row gap-x-2 child:my-auto min-w-40">
 						<div
 							class="w-full bg-gray-800 size-2 rounded-full overflow-hidden">
 							<div

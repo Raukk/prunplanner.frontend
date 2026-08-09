@@ -57,6 +57,8 @@ export interface IRaukkExportPayload {
 	fleet: Record<string, IRaukkFleetShip>;
 	/** Key: lane pair key or chain key, value: ship type id */
 	assignments: Record<string, string>;
+	/** Fleet page spillover display flag, absent before it existed */
+	fleetSpillover: boolean;
 	chainConfig: IRaukkChainConfig;
 	/** raukk: depot planets by natural id, absent before depots existed */
 	depots: Record<string, IRaukkDepot>;
