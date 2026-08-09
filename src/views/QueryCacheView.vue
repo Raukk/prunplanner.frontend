@@ -44,14 +44,25 @@
 				</div>
 			</div>
 		</div>
-		<div>
+		<div class="flex flex-row gap-3 items-center">
 			<h2 class="text-2xl">Query Cache</h2>
+			<PButton
+				size="sm"
+				:loading="queryStore.refreshing"
+				@click="queryStore.refreshAll()">
+				Refresh All
+			</PButton>
+			<div class="text-white/60 text-sm">
+				{{ Object.keys(queryStore.cacheMeta).length }} persisted meta
+				entries, generation {{ queryStore.refreshGeneration }}
+			</div>
 		</div>
 		<PTable striped>
 			<thead>
 				<tr>
 					<th>Key</th>
 					<th>Loading</th>
+					<th>Source</th>
 					<th>Error</th>
 					<th>Timestamp</th>
 					<th>ExpireMs</th>
@@ -77,6 +88,21 @@
 							yes
 						</PTag>
 						<PTag v-else :bordered="false">no</PTag>
+					</td>
+					<td>
+						<PTag
+							v-if="entry.state.revalidating"
+							:bordered="false"
+							type="warning">
+							revalidating
+						</PTag>
+						<PTag
+							v-else-if="entry.state.hydrated"
+							:bordered="false"
+							type="success">
+							local
+						</PTag>
+						<PTag v-else :bordered="false">network</PTag>
 					</td>
 					<td>
 						<span v-if="entry.state.error">{{
@@ -131,7 +157,7 @@
 					</td>
 				</tr>
 				<tr v-if="entries.length === 0">
-					<td colspan="9">No queries in cache.</td>
+					<td colspan="10">No queries in cache.</td>
 				</tr>
 			</tbody>
 		</PTable>

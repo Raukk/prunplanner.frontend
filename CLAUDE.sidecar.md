@@ -219,3 +219,65 @@ anywhere in the repo. Not retroactive.
   replaced the material i/o column's hardcoded `top-12`. Opening a
   tool while scrolled down scrolls the panel into view, it would
   otherwise render off-screen above.
+- 2026-08-09: Offline query cache (user request — "tired of loading
+  screens when nothing has changed"). Three changes, app-wide, not
+  raukk-scoped. (1) `execute()` is stale-while-revalidate: cached data
+  returns immediately even past `expireTime` and refreshes in the
+  background under a new `revalidating` flag; `loading` stays false so
+  `isAnythingLoading` and the wrapper loading cards never gate on a
+  refresh. A failed background run keeps the cached payload and does
+  NOT set `error`. (2) Definitions may declare `hydrateFn`, rebuilding
+  their payload from data already on disk (IndexedDB game data,
+  persisted `planningStore` for plans/empires/cx/shared/FIO storage) —
+  the payloads were always stored locally, nothing read them back, so
+  every hard refresh refetched megabytes it already had. Only
+  payload-free `cacheMeta` (definition, params, timestamp, expireTime)
+  is persisted to localStorage, so the megabytes are never duplicated;
+  the persisted timestamp is what lets hydrated data keep its real age
+  instead of looking freshly fetched. Searches, market exploration, FIO
+  planet fees, POPR and analytics are deliberately NOT hydratable —
+  their result sets are server-side and were never stored. (3)
+  `checkEntryStatusAndRefresh` no longer deletes stale entries that
+  still hold usable data (it did, which actively destroyed what SWR
+  needs); it now drops only dataless entries and ones past
+  `CACHE_GC_MS` (24 h). User decision: hydrated data for definitions
+  with NO `expireTime` (plans/empires/cx — user owned, editable from
+  another browser) always background-confirms once per session, while
+  ttl-carrying game data is trusted until its ttl runs out. `hasData`
+  was added because `data !== null` cannot express "cached the value
+  null" (`GetFIOPlanetFees` returns null when FIO is down and would
+  otherwise refetch forever). Manual refresh (`refreshAll`, sidebar
+  footer button) force-refetches at concurrency 6 then bumps
+  `refreshGeneration`, which re-keys `RouterView`: a remount is the
+  known-good path that honours every view's `@data:*`/`@complete`
+  contract, versus surgically re-emitting into 15 views — several of
+  which (EmpireView, FIOBurnView) drive memoized recomputation off
+  `@complete`, and two of which (ExchangesView, EmpireView) flash a
+  hard error screen when their emit-populated refs are still empty.
+  NOT done, considered: live-updating wrapper slot props when a
+  background revalidation lands — they are `inertClone` snapshots taken
+  at resolve time and stay frozen until remount. That is pre-existing
+  behaviour (autoRefetch already refreshed under them), and changing it
+  risks PlanView's plan-identity watchers. TTL defaults raised:
+  exchanges 30 → 60 min, planets 3 → 12 h.
+- 2026-08-09: `usePlanningDataLoader`'s planet step read the shared plan
+  through `peekQueryState(...)!.data` (bug, latent): `peekQueryState`
+  returns undefined for entries past their expiry and `GetSharedPlan`
+  expires after 10 s, so a slow first paint would dereference
+  undefined. It now reads the completed `sharedPlan` step's own data.
+- 2026-08-09: Manual refresh must not eat unsaved work (bug found
+  during the caching work, never shipped): re-keying `RouterView` to
+  remount a view is NOT a route navigation, so PlanView's
+  `onBeforeRouteLeave` "unsaved changes will be lost" guard never
+  fires. `queryStore.registerRemountGuard(fn)` lets a view block the
+  post-refresh remount; PlanView registers `modified && !sharedPlanUuid`
+  and unregisters on unmount. A blocked refresh still refetches
+  everything into the cache, the view just keeps its own state until
+  the user navigates.
+- 2026-08-09: Known gap left open by the offline-cache work:
+  `peekQueryState`/`isKnownAndFresh` still report "not cached" for an
+  entry past `expireTime` that `execute()` would happily serve. Their
+  contract is freshness, not availability, so they were left alone —
+  consumers wanting the stale-but-usable payload should read
+  `cacheState[toCacheKey(key)]` directly. Not a regression: stale
+  entries used to be deleted outright, so peeking failed then too.

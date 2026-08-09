@@ -29,6 +29,11 @@
 			"fio": "FIO",
 			"fio_active": "FIO Active",
 			"fio_inactive": "FIO Inactive"
+		},
+		"data": {
+			"refresh": "Refresh Data",
+			"refreshing": "Refreshing...",
+			"as_of": "Data as of {when}"
 		}
 	},
 	"buttons": {

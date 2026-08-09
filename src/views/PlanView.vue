@@ -102,6 +102,7 @@
 	} from "@vicons/material";
 	// raukk: useRoute for the one-shot ?tool= deep link
 	import { onBeforeRouteLeave, useRoute } from "vue-router";
+	import { useQueryStore } from "@/lib/query_cache/queryStore";
 
 	const props = defineProps({
 		disabled: {
@@ -675,6 +676,16 @@
 				: `${props.planData.planet_natural_id} | PRUNplanner`
 		),
 	});
+
+	/*
+		A manual data refresh remounts the view, which is not a route
+		navigation and therefore bypasses the guard below. Block that
+		remount while the plan has unsaved changes.
+	*/
+	const unregisterRemountGuard = useQueryStore().registerRemountGuard(
+		() => modified.value && !props.sharedPlanUuid
+	);
+	onBeforeUnmount(unregisterRemountGuard);
 
 	// Route Guard
 	onBeforeRouteLeave(() => {

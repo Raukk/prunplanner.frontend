@@ -3,7 +3,6 @@ import { computed, reactive, ref, Ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 
 // Stores & Repository
-import { useQueryRepository } from "@/lib/query_cache/queryRepository";
 import { useQueryStore } from "@/lib/query_cache/queryStore";
 
 // Composables
@@ -151,15 +150,17 @@ export function usePlanningDataLoader(
 			dependsOn: props.sharedPlanUuid ? "sharedPlan" : undefined,
 			enabled: () => !!(props.sharedPlanUuid || props.planetNaturalId),
 			load: () => {
+				/*
+					Read the planet id off the completed sharedPlan step
+					rather than peeking the cache: peekQueryState hides
+					entries past their expiry, and GetSharedPlan expires
+					after 10 seconds, so a slow first paint could leave
+					this dereferencing undefined.
+				*/
 				const id = props.sharedPlanUuid
 					? (
-							queryStore.peekQueryState(
-								useQueryRepository().repository.GetSharedPlan.key(
-									{
-										sharedPlanUuid: props.sharedPlanUuid!,
-									}
-								)
-							)!.data as IPlanShare
+							steps.find((s) => s.cfg.key === "sharedPlan")
+								?.data as IPlanShare
 						).plan_details.planet_natural_id
 					: props.planetNaturalId!;
 				return queryStore.execute("GetPlanet", {

@@ -24,6 +24,31 @@ import {
 	buildingsStore,
 } from "@/database/stores";
 import { useDB } from "@/database/composables/useDB";
+import { useIndexedDBStore } from "@/database/composables/useIndexedDBStore";
+
+/**
+ * Rebuilds a full game data payload from its IndexedDB store instead of
+ * the network and warms the in-memory read cache the database services
+ * read through. Returns null when nothing is stored locally, the caller
+ * then falls back to fetching.
+ *
+ * @author jplacht
+ *
+ * @async
+ * @template T Record type
+ * @template K Key path
+ * @param {ReturnType<typeof useIndexedDBStore<T, K>>} store IndexedDB store
+ * @returns {Promise<T[] | null>} Stored records or null
+ */
+async function hydrateFromStore<T extends object, K extends keyof T & string>(
+	store: ReturnType<typeof useIndexedDBStore<T, K>>
+): Promise<T[] | null> {
+	const data = await store.getAll();
+	if (data.length === 0) return null;
+
+	await useDB(store).preload(true);
+	return data;
+}
 
 // API Calls
 import {
@@ -177,6 +202,7 @@ export function useQueryRepository() {
 
 				return data;
 			},
+			hydrateFn: () => hydrateFromStore(materialsStore),
 			autoRefetch: true,
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_MATERIALS,
 			persist: true,
@@ -190,6 +216,7 @@ export function useQueryRepository() {
 
 				return data;
 			},
+			hydrateFn: () => hydrateFromStore(exchangesStore),
 			autoRefetch: true,
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_EXCHANGES,
 			persist: true,
@@ -203,6 +230,7 @@ export function useQueryRepository() {
 
 				return data;
 			},
+			hydrateFn: () => hydrateFromStore(recipesStore),
 			autoRefetch: true,
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_RECIPES,
 			persist: true,
@@ -215,6 +243,7 @@ export function useQueryRepository() {
 				await useDB(buildingsStore).preload(true);
 				return data;
 			},
+			hydrateFn: () => hydrateFromStore(buildingsStore),
 			autoRefetch: true,
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_BUILDINGS,
 			persist: true,
@@ -233,6 +262,12 @@ export function useQueryRepository() {
 				await useDB(planetsStore).preload(true);
 
 				return data;
+			},
+			hydrateFn: async (params: { planetNaturalId: string }) => {
+				const db = useDB(planetsStore);
+				await db.preload();
+
+				return (await db.get(params.planetNaturalId)) ?? null;
 			},
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
 			autoRefetch: true,
@@ -269,6 +304,22 @@ export function useQueryRepository() {
 				} catch {
 					return [];
 				}
+			},
+			hydrateFn: async (params: { planetNaturalIds: string[] }) => {
+				if (params.planetNaturalIds.length === 0) return null;
+
+				const db = useDB(planetsStore);
+				await db.preload();
+
+				const planets = await Promise.all(
+					params.planetNaturalIds.map((id) => db.get(id))
+				);
+
+				// all-or-nothing: a partial set would silently hide
+				// planets from empire views until the refetch lands
+				if (planets.some((p) => !p)) return null;
+
+				return planets as IPlanet[];
 			},
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
 			autoRefetch: true,
@@ -331,6 +382,10 @@ export function useQueryRepository() {
 				const data = await callGetSharedList();
 				planningStore.setSharedList(data);
 				return data;
+			},
+			hydrateFn: async () => {
+				const data = planningStore.getSharedList();
+				return data.length > 0 ? (data as unknown as IShared[]) : null;
 			},
 			persist: true,
 			autoRefetch: true,
@@ -492,6 +547,10 @@ export function useQueryRepository() {
 				planningStore.setEmpires(data);
 				return data;
 			},
+			hydrateFn: async () => {
+				const data = Object.values(planningStore.empires);
+				return data.length > 0 ? data : null;
+			},
 			autoRefetch: false,
 			persist: true,
 		} as IQueryDefinition<void, IPlanEmpireElement[]>,
@@ -522,6 +581,20 @@ export function useQueryRepository() {
 				} catch {
 					return [];
 				}
+			},
+			hydrateFn: async (params: { empireUuid: string }) => {
+				const empire = planningStore.empires[params.empireUuid];
+				if (!empire) return null;
+
+				const plans = empire.plans.map(
+					(p) => planningStore.plans[p.uuid]
+				);
+
+				// a plan of the empire was never stored individually =>
+				// the rebuilt list would be incomplete
+				if (plans.length === 0 || plans.some((p) => !p)) return null;
+
+				return plans;
 			},
 			autoRefetch: false,
 			persist: true,
@@ -611,6 +684,10 @@ export function useQueryRepository() {
 				planningStore.setCXs(data);
 				return data;
 			},
+			hydrateFn: async () => {
+				const data = planningStore.getAllCX();
+				return data.length > 0 ? data : null;
+			},
 			autoRefetch: false,
 			persist: true,
 		} as IQueryDefinition<void, ICX[]>,
@@ -624,6 +701,14 @@ export function useQueryRepository() {
 				const data = await callGetPlan(params.planUuid);
 				planningStore.setPlan(data);
 				return data;
+			},
+			hydrateFn: async (params: { planUuid: string }) => {
+				// getPlan throws when the plan was never stored
+				try {
+					return await planningStore.getPlan(params.planUuid);
+				} catch {
+					return null;
+				}
 			},
 			autoRefetch: false,
 			persist: true,
@@ -649,6 +734,14 @@ export function useQueryRepository() {
 				} catch {
 					return [];
 				}
+			},
+			hydrateFn: async () => {
+				// note: the persisted record accumulates every plan ever
+				// loaded, so this can be a superset of the real list. It
+				// has no expireTime and is therefore always confirmed
+				// against the backend in the background.
+				const data = Object.values(planningStore.plans);
+				return data.length > 0 ? data : null;
 			},
 			autoRefetch: false,
 			persist: true,
@@ -797,6 +890,23 @@ export function useQueryRepository() {
 					planningStore.setFIOStorageData(data);
 					return data;
 				});
+			},
+			hydrateFn: async () => {
+				const lastModified = planningStore.fio_storage_timestamp;
+				if (!lastModified) return null;
+
+				// inverse of planningStore.setFIOStorageData, the pieces
+				// are persisted separately. Dates come back as strings
+				// from the JSON round trip and need coercing.
+				return {
+					storage_data: {
+						planets: planningStore.fio_storage_planets,
+						warehouses: planningStore.fio_storage_warehouses,
+						ships: planningStore.fio_storage_ships,
+					},
+					sites_data: planningStore.fio_sites_planets,
+					last_modified: new Date(lastModified),
+				} as IFIOStorage;
 			},
 			autoRefetch: true,
 			persist: true,

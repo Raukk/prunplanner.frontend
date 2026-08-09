@@ -27,7 +27,7 @@
 	import { IMenuSection } from "@/layout/components/navigation.types";
 
 	// UI
-	import { PTag, PTooltip, PTable, PIcon } from "@/ui";
+	import { PTag, PTooltip, PTable, PIcon, PSpin } from "@/ui";
 	import {
 		HomeSharp,
 		SearchRound,
@@ -49,6 +49,7 @@
 		RssFeedSharp,
 		ExtensionSharp,
 		RocketLaunchSharp,
+		RefreshSharp,
 	} from "@vicons/material";
 
 	const userStore = useUserStore();
@@ -82,6 +83,20 @@
 	);
 
 	const storageAge = computed(() => planningStore.fio_storage_timestamp ?? 0);
+
+	/**
+	 * Triggers a forced refresh of all cached data. Guarded against being
+	 * called again while a refresh is already running.
+	 * @author jplacht
+	 *
+	 * @async
+	 * @returns {Promise<void>}
+	 */
+	async function refreshAllData(): Promise<void> {
+		if (queryStore.refreshing) return;
+
+		await queryStore.refreshAll();
+	}
 
 	const menuItems: ComputedRef<IMenuSection[]> = computed(() => [
 		{
@@ -532,6 +547,15 @@
 			class="text-center child:my-auto"
 			:class="isFull ? 'py-2' : 'py-1'">
 			<div
+				v-if="isFull && queryStore.oldestDataTimestamp"
+				class="text-[10px] text-white/40">
+				{{
+					t("common.navigation.data.as_of", {
+						when: relativeFromDate(queryStore.oldestDataTimestamp),
+					})
+				}}
+			</div>
+			<div
 				class="flex gap-1 justify-between items-center"
 				:class="isFull ? 'flex-row' : 'flex-col'">
 				<div>
@@ -579,6 +603,41 @@
 							}}
 						</PTag>
 					</RouterLink>
+				</div>
+				<div>
+					<PTooltip :placement="isFull ? 'top' : 'right'">
+						<template #trigger>
+							<div
+								class="hover:bg-white/20 hover:rounded-sm p-2 cursor-pointer"
+								:class="
+									queryStore.refreshing
+										? 'pointer-events-none'
+										: ''
+								"
+								@click="refreshAllData">
+								<PSpin v-if="queryStore.refreshing" size="md" />
+								<PIcon v-else :size="20">
+									<RefreshSharp />
+								</PIcon>
+							</div>
+						</template>
+						<div>
+							{{
+								queryStore.refreshing
+									? t("common.navigation.data.refreshing")
+									: t("common.navigation.data.refresh")
+							}}
+						</div>
+						<div v-if="queryStore.oldestDataTimestamp">
+							{{
+								t("common.navigation.data.as_of", {
+									when: relativeFromDate(
+										queryStore.oldestDataTimestamp
+									),
+								})
+							}}
+						</div>
+					</PTooltip>
 				</div>
 				<div @click="toggleNavigationSize">
 					<div class="hover:bg-white/20 hover:rounded-sm p-2">

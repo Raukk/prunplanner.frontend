@@ -21,6 +21,11 @@ frontend; backend only stores/serves data.
   - Query cache `src/lib/query_cache/`: named queries in
     `queryRepository.ts`; each `fetchFn` = API call + store write-through
     + invalidation. Register ALL backend interactions here, never ad-hoc.
+    Stale-while-revalidate: cached data is served instantly and refreshed
+    in the background. Optional `hydrateFn` rebuilds a payload from
+    IndexedDB/`planningStore` on boot so a reload needs no network; only
+    payload-free `cacheMeta` is persisted. `refreshAll()` = manual
+    refetch, bumps `refreshGeneration` which re-keys `RouterView`.
   - IndexedDB `src/database/`: static game data only; read via
     `src/database/services/*` composables (useMaterialData etc.).
 - API: `call*` fns in `src/features/api/*.api.ts`; zod schemas in
