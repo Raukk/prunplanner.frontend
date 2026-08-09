@@ -17,6 +17,7 @@ import {
 	raukkClassDetourBudget,
 	raukkClusterChainStops,
 	raukkFlowConcernsPlan,
+	raukkFlowPrecedence,
 	raukkHubSpokeRows,
 	raukkIsAutoChainId,
 	raukkOrderChainStops,
@@ -162,6 +163,27 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 		});
 	});
 
+	describe("raukkFlowPrecedence", () => {
+		it("constrains base to base cargo only", () => {
+			const pairs: Set<string> = raukkFlowPrecedence(
+				[
+					flow("ALO", "AA-001a", "AA-002b", 10),
+					flow("AL", "AA-002b", "AA-003c", 10),
+					// bought at and sold to the exchange: no constraint,
+					// the loop opens and closes there anyway
+					flow("RAT", "CX1", "AA-001a", 10),
+					flow("FE", "AA-003c", "CX1", 10),
+				],
+				cxSystems
+			);
+
+			expect([...pairs].sort()).toStrictEqual([
+				"AA-001a>AA-002b",
+				"AA-002b>AA-003c",
+			]);
+		});
+	});
+
 	describe("loop ordering", () => {
 		it("solves the cheapest loop exactly, whatever the input order", () => {
 			const loop: IRaukkOrderedLoop | null = raukkOrderChainStops(
@@ -181,6 +203,52 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 				"AA-001a",
 				"AA-003c",
 			]);
+		});
+
+		it("loads before it unloads, even against the cheaper mirror", () => {
+			// AA-003c produces what AA-001a consumes, so the lap has to
+			// call at AA-003c first — the mirror image is the same parsecs
+			// and would deliver nothing
+			const loop: IRaukkOrderedLoop | null = raukkOrderChainStops(
+				"CX1",
+				["AA-001a", "AA-002b", "AA-003c"],
+				routes,
+				cxSystems,
+				new Set(["AA-003c>AA-001a"])
+			);
+
+			expect(loop?.stops).toStrictEqual([
+				"CX1",
+				"AA-003c",
+				"AA-002b",
+				"AA-001a",
+			]);
+			expect(loop?.parsecs).toBeCloseTo(8, 10);
+		});
+
+		it("refuses a loop whose stops feed each other both ways", () => {
+			// one lap cannot pick up at A before B and at B before A
+			expect(
+				raukkOrderChainStops(
+					"CX1",
+					["AA-001a", "AA-002b"],
+					routes,
+					cxSystems,
+					new Set(["AA-001a>AA-002b", "AA-002b>AA-001a"])
+				)
+			).toBeNull();
+		});
+
+		it("ignores precedence naming a stop the loop does not visit", () => {
+			const loop: IRaukkOrderedLoop | null = raukkOrderChainStops(
+				"CX1",
+				["AA-001a", "AA-002b"],
+				routes,
+				cxSystems,
+				new Set(["AA-004d>AA-001a"])
+			);
+
+			expect(loop?.stops).toStrictEqual(["CX1", "AA-001a", "AA-002b"]);
 		});
 
 		it("beats every other order of the same stops", () => {

@@ -18,6 +18,11 @@
 	import { useQuery } from "@/lib/query_cache/useQuery";
 	import { trackEvent } from "@/lib/analytics/useAnalytics";
 
+	// Stores
+	// raukk: assignments decide which plans the shipping steps speak for
+	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+	const raukkSourcingStore = useRaukkSourcingStore();
+
 	// Util
 	import { inertClone } from "@/util/data";
 
@@ -238,7 +243,27 @@
 		})
 			.execute()
 			.then(() => updateEmitEmpiresPlans())
+			.then(() => raukkInvalidateShipping())
 			.finally(() => (refIsPatching.value = false));
+	}
+
+	/**
+	 * Drops what the assignments just invalidated in the shipping state.
+	 *
+	 * Which plans the account operates decides which cargo builds loops,
+	 * so a plan leaving or joining an empire changes every chain. The
+	 * DERIVED loops are dropped outright — nobody authored them, they are
+	 * rebuilt from the flows on the next chain pass anyway, and a stored
+	 * one still listing the plan that just left would be plain wrong.
+	 * Authored chains are the users own and only go stale.
+	 *
+	 * Ship type pins survive both: `setAutoChainResults` keeps them
+	 * whenever the set it is handed is a purge rather than a computed one.
+	 * @author raukk
+	 */
+	function raukkInvalidateShipping(): void {
+		raukkSourcingStore.setAutoChainResults([], false);
+		raukkSourcingStore.markAllChainsStale();
 	}
 
 	async function clonePlan(

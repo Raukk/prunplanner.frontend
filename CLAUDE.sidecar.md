@@ -135,6 +135,26 @@ anywhere in the repo. Not retroactive.
   spread. `calculateRepairPerUnit` (Repair Analysis) still uses the OLD
   net-weight rule and is deliberately untouched — its per-unit repair
   therefore disagrees with `breakdown.repair` on self consuming bases.
+- 2026-08-09: Account shipping is EMPIRE SCOPED (user report: a plan
+  unassigned in Management still flew in the chains). `scopedSnapshots()`
+  = snapshots of plans in at least one empire; chains, fleet rollup,
+  hub/spoke and storage read it, per-plan reads still use `snapshots`
+  (an unassigned plan still opens, computes and can be sourced from) and
+  its snapshot is KEPT so re-assigning restores it without recomputing.
+  An EMPTY assigned set means "empires not loaded yet" and passes
+  everything — filtering on it would blank the page on every fresh load.
+  Saving assignments purges the derived chain results (nobody authored
+  them, they rebuild from flows) and stales the authored ones.
+- 2026-08-09: Auto chain order honours the CARGO (user correction): a
+  base-to-base flow must be picked up before it is dropped off, so the
+  producing stop precedes the consuming one and the mirror-image fold is
+  dropped whenever such a constraint exists. Mutually feeding stops
+  cannot share a lap → no loop, cargo stays hub/spoke; doubling back
+  pays its parsecs against the detour budget as usual. Equal-length
+  orders (a base in the exchange's own system is 0 parsecs away — e.g.
+  ZV-307c at AI1) now break to fewer jumps, then the shorter leg out of
+  the exchange, then stop refs: that tie, not a solver bug, is what made
+  the printed order look wonky.
 - 2026-08-07: Staleness epsilon aligned (bug: in an A↔B supply loop
   "the other plan" stayed stale forever): the chain settling epsilon
   (1e-6) and setSnapshot's materially-changed epsilon (was 1e-9) are

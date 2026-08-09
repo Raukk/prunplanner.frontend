@@ -48,7 +48,8 @@ export function useRaukkFleet() {
 	const entries: ComputedRef<IRaukkFleetLoadEntry[]> = computed(() => {
 		const result: IRaukkFleetLoadEntry[] = [];
 
-		Object.values(sourcingStore.snapshots).forEach(
+		// scoped: only plans the account still operates fly lanes
+		Object.values(sourcingStore.scopedSnapshots()).forEach(
 			(snapshot: IRaukkSnapshot) =>
 				(snapshot.lanes ?? []).forEach((lane: IRaukkSnapshotLane) => {
 					if (lane.hired) return;
@@ -104,7 +105,7 @@ export function useRaukkFleet() {
 	 */
 	const advisories: ComputedRef<IRaukkFleetAdvisory[]> = computed(() =>
 		[
-			...Object.values(sourcingStore.snapshots).flatMap(
+			...Object.values(sourcingStore.scopedSnapshots()).flatMap(
 				(snapshot: IRaukkSnapshot) => snapshot.advisories ?? []
 			),
 			...Object.values(sourcingStore.chainResults).flatMap(

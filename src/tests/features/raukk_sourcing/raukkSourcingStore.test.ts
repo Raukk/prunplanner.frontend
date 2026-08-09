@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 
 // stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+import { usePlanningStore } from "@/stores/planningStore";
 
 // Calculations
 import {
@@ -15,6 +16,7 @@ import { RaukkLocalPriceSchema } from "@/features/raukk_sourcing/raukkSourcingSt
 
 // Types & Interfaces
 import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
+import { IPlanEmpireElement } from "@/stores/planningStore.types";
 
 function makeSnapshot(
 	name: string,
@@ -331,6 +333,40 @@ describe("Raukk Sourcing Store", () => {
 
 			expect(store.snapshots.a.stale).toBe(true);
 			expect(store.snapshots.b.stale).toBe(true);
+		});
+	});
+
+	describe("scopedSnapshots", () => {
+		beforeEach(() => {
+			store.setSnapshot("assigned", makeSnapshot("Assigned", { FE: 10 }));
+			store.setSnapshot("dropped", makeSnapshot("Dropped", { FE: 10 }));
+		});
+
+		it("keeps every snapshot while no empire is loaded", () => {
+			expect(Object.keys(store.scopedSnapshots()).sort()).toStrictEqual([
+				"assigned",
+				"dropped",
+			]);
+		});
+
+		it("drops the plans no empire holds any more", () => {
+			usePlanningStore().setEmpires([
+				{
+					uuid: "empire",
+					name: "My Empire",
+					plans: [
+						{
+							uuid: "assigned",
+							plan_name: "Assigned",
+							planet_natural_id: "OT-580b",
+						},
+					],
+				} as unknown as IPlanEmpireElement,
+			]);
+
+			expect(Object.keys(store.scopedSnapshots())).toStrictEqual([
+				"assigned",
+			]);
 		});
 	});
 

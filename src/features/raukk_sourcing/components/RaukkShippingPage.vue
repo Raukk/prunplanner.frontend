@@ -95,7 +95,8 @@
 	> = computed(() => {
 		const worst: Map<string, number | null> = new Map();
 
-		Object.values(sourcingStore.snapshots).forEach(
+		// scoped: an unassigned plans bridge is not the accounts problem
+		Object.values(sourcingStore.scopedSnapshots()).forEach(
 			(snapshot: IRaukkSnapshot) => {
 				const days: number | null = snapshot.storageFilledDays ?? null;
 				const known: number | null | undefined = worst.get(

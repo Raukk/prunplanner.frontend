@@ -163,7 +163,8 @@
 
 	/** Every frozen flow of the account, the hub/spoke input */
 	const accountFlows: ComputedRef<IRaukkChainFlow[]> = computed(() =>
-		Object.values(sourcingStore.snapshots).flatMap(
+		// scoped: a plan assigned to no empire ships nothing account wide
+		Object.values(sourcingStore.scopedSnapshots()).flatMap(
 			(snapshot: IRaukkSnapshot) => snapshot.flows ?? []
 		)
 	);

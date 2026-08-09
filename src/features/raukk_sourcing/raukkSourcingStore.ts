@@ -1,6 +1,9 @@
 import { defineStore } from "pinia";
 import { ref, Ref } from "vue";
 
+// Stores
+import { usePlanningStore } from "@/stores/planningStore";
+
 // Util
 import { inertClone } from "@/util/data";
 
@@ -40,6 +43,11 @@ import {
 import { raukkIsAutoChainId } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 // raukk: depot ids are normalized exactly as the chain math compares them
 import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippingDepots";
+// raukk: only plans assigned to an empire take part account wide
+import {
+	raukkEmpirePlanUuids,
+	raukkScopedSnapshots,
+} from "@/features/raukk_sourcing/calculations/shippingPlanScope";
 
 // Types & Interfaces
 import {
@@ -168,6 +176,27 @@ export const useRaukkSourcingStore = defineStore(
 				snapshots.value[planUuid];
 
 			return findSnapshot ? inertClone(findSnapshot) : undefined;
+		}
+
+		/**
+		 * Snapshots of the plans the account really operates: everything
+		 * assigned to at least one empire on the management screen.
+		 *
+		 * The ACCOUNT LEVEL steps — chains, the fleet rollup, hub/spoke,
+		 * storage — read this instead of `snapshots`, so a plan the user
+		 * unassigned stops flying cargo the moment the assignment is
+		 * saved. Per plan reads keep using `snapshots` directly: an
+		 * unassigned plan still opens, still computes and can still be
+		 * sourced from.
+		 * @author raukk
+		 *
+		 * @returns {Record<string, IRaukkSnapshot>} Snapshots in scope
+		 */
+		function scopedSnapshots(): Record<string, IRaukkSnapshot> {
+			return raukkScopedSnapshots(
+				snapshots.value,
+				raukkEmpirePlanUuids(usePlanningStore().empires)
+			);
 		}
 
 		/**
@@ -1344,6 +1373,7 @@ export const useRaukkSourcingStore = defineStore(
 			// getters
 			getConfig,
 			getSnapshot,
+			scopedSnapshots,
 			getShipProfile,
 			listShipProfiles,
 			producersOf,

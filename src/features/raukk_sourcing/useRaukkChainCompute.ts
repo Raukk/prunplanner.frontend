@@ -422,7 +422,8 @@ function unclaimedAccountFlows(
 ): IRaukkChainFlow[] {
 	const sourcingStore = useRaukkSourcingStore();
 
-	return Object.entries(sourcingStore.snapshots)
+	// scoped: a plan assigned to no empire flies nothing account wide
+	return Object.entries(sourcingStore.scopedSnapshots())
 		.sort(([left], [right]) => (left < right ? -1 : 1))
 		.flatMap(([planUuid, snapshot]: [string, IRaukkSnapshot]) =>
 			(snapshot.flows ?? []).filter(

@@ -361,7 +361,7 @@
 	},
 	"auto_chains": {
 		"title": "Automatic Chains",
-		"info": "Loops nobody authored: one per cargo class per exchange region, CX → base → … → CX, at most five stops in the cheapest order. They are rebuilt on every chain recomputation from the flows the authored chains left, so they cannot be edited — widen a detour budget, pin a ship type, or author a chain of your own instead.",
+		"info": "Loops nobody authored: one per cargo class per exchange region, CX → base → … → CX, at most five stops in the cheapest order the cargo allows — a base is always visited before the base it feeds, so one lap really delivers. Stops that would only fit by doubling back cost more than their detour budget and stay with the exchange hub/spoke. They are rebuilt on every chain recomputation from the flows the authored chains left, so they cannot be edited — widen a detour budget, pin a ship type, or author a chain of your own instead.",
 		"tag": "Auto",
 		"cap_days": "Days / Visit Cap",
 		"cap_days_tooltip": "Longest gap between two visits this loop accepts, the tightest cadence of the bases it serves. A loop reaching the cap flies before its hold is full, and that partial trip pays a full trip.",

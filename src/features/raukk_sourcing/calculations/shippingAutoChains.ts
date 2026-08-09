@@ -159,8 +159,16 @@ export function raukkClassDetourBudget(
 		: (chainConfig.autoChainDetourLooseParsecs ?? 6);
 }
 
-/** Every permutation of `0 … count-1`, mirrored loops folded away */
-function loopPermutations(count: number): number[][] {
+/**
+ * Every permutation of `0 … count-1`.
+ *
+ * Mirrored loops are folded away only when nothing tells the two
+ * directions apart: a loop flown backwards covers the same parsecs, but
+ * it does NOT carry the same cargo — reversing a loop that picks up at
+ * one stop and drops off at the next breaks exactly that. With
+ * precedence to honour both directions are enumerated.
+ */
+function loopPermutations(count: number, foldMirrors: boolean): number[][] {
 	if (count <= 0) return [];
 	if (count === 1) return [[0]];
 
@@ -168,9 +176,8 @@ function loopPermutations(count: number): number[][] {
 
 	function walk(prefix: number[], rest: number[]): void {
 		if (rest.length === 0) {
-			// a loop and its mirror image are the same loop flown
-			// backwards and cost the same parsecs: only keep one of them
-			if (prefix[0] < prefix[prefix.length - 1]) result.push([...prefix]);
+			if (!foldMirrors || prefix[0] < prefix[prefix.length - 1])
+				result.push([...prefix]);
 			return;
 		}
 
@@ -190,6 +197,66 @@ function loopPermutations(count: number): number[][] {
 	return result;
 }
 
+/** One candidate order, with everything the comparison ranks it by */
+interface IRaukkLoopCandidate {
+	stops: RAUKK_STOP_REF[];
+	parsecs: number;
+	jumps: number;
+	/** Parsecs of the leg that leaves the exchange */
+	firstLeg: number;
+}
+
+/**
+ * Parsec difference below which two loops are the SAME length.
+ *
+ * Equal loops are summed from the same legs in a different order, which
+ * floating point does not have to answer bit for bit — without a floor
+ * the tie breaks below would never even be reached.
+ */
+const RAUKK_LOOP_PARSEC_EPSILON: number = 1e-9;
+
+/**
+ * Whether one candidate order beats another.
+ *
+ * Parsecs decide, and ties are common rather than exotic: a base in the
+ * exchanges OWN system is zero parsecs from it, so every position that
+ * base could take costs the same. Left to enumeration order the loop
+ * then reads wonky — the base next door shows up as the last stop of a
+ * long trip. The tie breaks are ordered by how much they actually cost:
+ *
+ *  1. fewer JUMPS — every jump is its own overhead in minutes and fuel,
+ *     so two loops of the same length are not equally cheap;
+ *  2. the shorter leg OUT of the exchange, which puts the nearest base
+ *     first and reads like the trip is actually flown;
+ *  3. the stop refs themselves, so the answer is stable across runs
+ *     instead of following object order.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkLoopCandidate} candidate Order under test
+ * @param {IRaukkLoopCandidate} best Best order so far
+ * @returns {boolean} The candidate wins
+ */
+function cheaperLoop(
+	candidate: IRaukkLoopCandidate,
+	best: IRaukkLoopCandidate
+): boolean {
+	const difference: number = candidate.parsecs - best.parsecs;
+
+	if (Math.abs(difference) > RAUKK_LOOP_PARSEC_EPSILON)
+		return difference < 0;
+
+	if (candidate.jumps !== best.jumps) return candidate.jumps < best.jumps;
+
+	if (
+		Math.abs(candidate.firstLeg - best.firstLeg) >
+		RAUKK_LOOP_PARSEC_EPSILON
+	)
+		return candidate.firstLeg < best.firstLeg;
+
+	return candidate.stops.join(">") < best.stops.join(">");
+}
+
 /**
  * The cheapest loop through a fixed set of stops, solved EXACTLY.
  *
@@ -198,8 +265,16 @@ function loopPermutations(count: number): number[][] {
  * flown backwards covers the same parsecs. The anchor exchange stays at
  * position 0, it is where the loop opens and closes.
  *
- * Returns `null` when a stop cannot be resolved or a leg of every
- * candidate order is unroutable: an unroutable loop is no loop.
+ * Cheapest among the orders the CARGO allows, not among all of them:
+ * a base to base flow has to be picked up before it can be dropped off,
+ * so the producing stop must come before the consuming one on the same
+ * lap. Skipping that would order a smelter run as "deliver the AL, then
+ * collect the ALO" — a lap that delivers nothing.
+ *
+ * Returns `null` when a stop cannot be resolved, a leg of every
+ * candidate order is unroutable, or no order satisfies the precedence at
+ * all (two stops feeding each other cannot share one lap). An
+ * unflyable loop is no loop, and its cargo stays hub/spoke.
  *
  * @author raukk
  *
@@ -207,13 +282,15 @@ function loopPermutations(count: number): number[][] {
  * @param {RAUKK_STOP_REF[]} stops Stops to visit, in any order
  * @param {IRaukkRouteDistance} routes Route lookups
  * @param {Record<string, string>} cxSystems Exchange code to system id
- * @returns {(IRaukkOrderedLoop | null)} Cheapest loop and its parsecs
+ * @param {Set<string>} precedence `from>to` pairs, from is visited first
+ * @returns {(IRaukkOrderedLoop | null)} Cheapest flyable loop
  */
 export function raukkOrderChainStops(
 	cxCode: string,
 	stops: RAUKK_STOP_REF[],
 	routes: IRaukkRouteDistance = RAUKK_DEFAULT_CHAIN_ROUTES,
-	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE,
+	precedence: Set<string> = new Set()
 ): IRaukkOrderedLoop | null {
 	if (stops.length === 0) return null;
 
@@ -224,12 +301,12 @@ export function raukkOrderChainStops(
 
 	if (systemIds.some((systemId) => systemId === null)) return null;
 
-	/** Parsecs between two positions of `refs`, memoized per call */
-	const known: Map<string, number | null> = new Map();
+	/** Route between two positions of `refs`, memoized per call */
+	const known: Map<string, IRaukkRoute | null> = new Map();
 
-	function parsecsBetween(from: number, to: number): number | null {
+	function legBetween(from: number, to: number): IRaukkRoute | null {
 		const key: string = `${from}>${to}`;
-		const cached: number | null | undefined = known.get(key);
+		const cached: IRaukkRoute | null | undefined = known.get(key);
 
 		if (cached !== undefined) return cached;
 
@@ -237,41 +314,102 @@ export function raukkOrderChainStops(
 			systemIds[from] as string,
 			systemIds[to] as string
 		);
-		const parsecs: number | null = route === null ? null : route.parsecs;
 
-		known.set(key, parsecs);
+		known.set(key, route);
 
-		return parsecs;
+		return route;
 	}
 
-	let best: IRaukkOrderedLoop | null = null;
+	/** Constraints both of whose ends this very loop visits */
+	const binding: [string, string][] = [];
 
-	loopPermutations(stops.length).forEach((permutation) => {
-		// positions in `refs`: the exchange is 0, stop i is i + 1
-		const order: number[] = [0, ...permutation.map((index) => index + 1)];
+	precedence.forEach((pair) => {
+		const [from, to] = pair.split(">");
 
-		let parsecs: number = 0;
-
-		for (let position = 0; position < order.length; position++) {
-			const leg: number | null = parsecsBetween(
-				order[position],
-				order[(position + 1) % order.length]
-			);
-
-			if (leg === null) return;
-
-			parsecs += leg;
-		}
-
-		if (best === null || parsecs < best.parsecs) {
-			best = {
-				stops: order.map((index) => refs[index]),
-				parsecs,
-			};
-		}
+		if (refs.includes(from) && refs.includes(to)) binding.push([from, to]);
 	});
 
-	return best;
+	let best: IRaukkLoopCandidate | null = null;
+
+	loopPermutations(stops.length, binding.length === 0).forEach(
+		(permutation) => {
+			// positions in `refs`: the exchange is 0, stop i is i + 1
+			const order: number[] = [0, ...permutation.map((index) => index + 1)];
+
+			const visited: RAUKK_STOP_REF[] = order.map((index) => refs[index]);
+
+			// the lap has to load before it unloads
+			const flyable: boolean = binding.every(
+				([from, to]) => visited.indexOf(from) < visited.indexOf(to)
+			);
+
+			if (!flyable) return;
+
+			let parsecs: number = 0;
+			let jumps: number = 0;
+			let firstLeg: number = 0;
+
+			for (let position = 0; position < order.length; position++) {
+				const leg: IRaukkRoute | null = legBetween(
+					order[position],
+					order[(position + 1) % order.length]
+				);
+
+				if (leg === null) return;
+
+				if (position === 0) firstLeg = leg.parsecs;
+
+				parsecs += leg.parsecs;
+				jumps += leg.jumps;
+			}
+
+			const candidate: IRaukkLoopCandidate = {
+				stops: order.map((index) => refs[index]),
+				parsecs,
+				jumps,
+				firstLeg,
+			};
+
+			if (best === null || cheaperLoop(candidate, best)) best = candidate;
+		}
+	);
+
+	if (best === null) return null;
+
+	const chosen: IRaukkLoopCandidate = best;
+
+	return { stops: chosen.stops, parsecs: chosen.parsecs };
+}
+
+/**
+ * Order the CARGO imposes on a set of flows: `from>to` pairs whose
+ * producing stop has to be visited before the consuming one.
+ *
+ * Base to base flows only. A leg that starts or ends at the EXCHANGE
+ * constrains nothing: the exchange opens and closes every loop, so cargo
+ * bought there is aboard from the start and cargo sold there is dropped
+ * at the end whatever the stops in between do.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkChainFlow[]} flows Flows of one region and class
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @returns {Set<string>} `from>to` pairs, from is visited first
+ */
+export function raukkFlowPrecedence(
+	flows: IRaukkChainFlow[],
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE
+): Set<string> {
+	const result: Set<string> = new Set();
+
+	flows.forEach((flow) => {
+		if (flow.fromStop in cxSystems || flow.toStop in cxSystems) return;
+		if (flow.fromStop === flow.toStop) return;
+
+		result.add(`${flow.fromStop}>${flow.toStop}`);
+	});
+
+	return result;
 }
 
 /** Both endpoints of a flow that name a base rather than an exchange */
@@ -441,7 +579,8 @@ export function raukkClusterChainStops(
 	stops: RAUKK_STOP_REF[],
 	budgetParsecs: number,
 	routes: IRaukkRouteDistance = RAUKK_DEFAULT_CHAIN_ROUTES,
-	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE,
+	precedence: Set<string> = new Set()
 ): IRaukkOrderedLoop[] {
 	const remaining: RAUKK_STOP_REF[] = [...stops];
 	const clusters: IRaukkStopCluster[] = [];
@@ -453,7 +592,8 @@ export function raukkClusterChainStops(
 			cxCode,
 			[seed],
 			routes,
-			cxSystems
+			cxSystems,
+			precedence
 		);
 
 		// an unroutable base is no stop at all, it stays hub/spoke
@@ -471,7 +611,8 @@ export function raukkClusterChainStops(
 					cxCode,
 					[...members, candidate],
 					routes,
-					cxSystems
+					cxSystems,
+					precedence
 				);
 				if (grown === null) return;
 
@@ -500,7 +641,8 @@ export function raukkClusterChainStops(
 		clusters,
 		budgetParsecs,
 		routes,
-		cxSystems
+		cxSystems,
+		precedence
 	).map((cluster) => cluster.loop);
 }
 
@@ -528,7 +670,8 @@ function retryStrandedStops(
 	clusters: IRaukkStopCluster[],
 	budgetParsecs: number,
 	routes: IRaukkRouteDistance,
-	cxSystems: Record<string, string>
+	cxSystems: Record<string, string>,
+	precedence: Set<string>
 ): IRaukkStopCluster[] {
 	const placed: IRaukkStopCluster[] = clusters.filter(
 		(cluster) => cluster.members.length >= RAUKK_AUTO_CHAIN_MIN_STOPS
@@ -555,7 +698,8 @@ function retryStrandedStops(
 				cxCode,
 				[...cluster.members, ...single.members],
 				routes,
-				cxSystems
+				cxSystems,
+				precedence
 			);
 			if (grown === null) return;
 
@@ -684,7 +828,9 @@ export function raukkBuildAutoChains(
 				qualified,
 				raukkClassDetourBudget(input.chainConfig, bucket),
 				routes,
-				cxSystems
+				cxSystems,
+				// the cargo of this class decides which orders are flyable
+				raukkFlowPrecedence(flows, cxSystems)
 			);
 
 			let open: IRaukkChainFlow[] = flows;
