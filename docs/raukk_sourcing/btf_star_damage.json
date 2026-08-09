@@ -1,0 +1,835 @@
+{
+ "source": "In-game BLUEPRINT TEST FLIGHT panels, user screenshots 2026-08-09 (batch 11: the five-planet stellar-damage sheet of star-heat-damage.md, each pair flown both directions)",
+ "retrieved": "2026-08-09",
+ "description": "Ten BTF runs across five round trips. Two SCB 500t/500m3 blueprints: BP-MSQS-7525 flies every outbound leg, BP-XHBM-5641 every return. Distances in km, durations in seconds (legs over ~1h are rounded to the minute by the panel), damage in PERCENT, fuel in units. TO legs print no damage and are recorded null.",
+ "settings": {
+  "fuelUsage": "game default (handle near MIN)",
+  "reactorUsage": "65%",
+  "inventory": "0t",
+  "condition": "100%",
+  "ftlPreferences": "least jumps, gateways off"
+ },
+ "shipNote": "The two blueprints are NOT identical: normalised on the six repeated AW-006a legs, BP-MSQS-7525 runs 1.056x the meteoroid law and BP-XHBM-5641 0.949x, yet XHBM takes more stellar damage on four of five anchors. See star-heat-damage.md section 5.",
+ "flights": [
+  {
+   "id": "b11-01",
+   "blueprint": "BP-MSQS-7525",
+   "origin": "AW-006a",
+   "destination": "NL-534a",
+   "totals": {
+    "seconds": 51893,
+    "km": 189424263,
+    "parsecsShown": 15,
+    "damagePercent": 1.112,
+    "stlFuel": 155,
+    "ftlFuel": 69
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "AW-006a (orbit)",
+     "seconds": 355,
+     "km": 4925,
+     "damagePercent": null,
+     "stlFuel": 40,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "AW-006 (orbit)",
+     "seconds": 20280,
+     "km": 114368183,
+     "damagePercent": 0.24,
+     "stlFuel": 37,
+     "ftlFuel": 36
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "NL-881 (orbit)",
+     "seconds": 10620,
+     "km": null,
+     "damagePercent": 0.008,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "CHRG",
+     "to": "NL-881 (orbit)",
+     "seconds": 293,
+     "km": null,
+     "damagePercent": 0.017,
+     "stlFuel": null,
+     "ftlFuel": 33
+    },
+    {
+     "i": 4,
+     "type": "JMP",
+     "to": "NL-534 (orbit)",
+     "seconds": 9720,
+     "km": null,
+     "damagePercent": 0.007,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 5,
+     "type": "APP",
+     "to": "NL-534a (orbit)",
+     "seconds": 10260,
+     "km": 75048355,
+     "damagePercent": 0.783,
+     "stlFuel": 47,
+     "ftlFuel": null
+    },
+    {
+     "i": 6,
+     "type": "LND",
+     "to": "NL-534a",
+     "seconds": 268,
+     "km": 2800,
+     "damagePercent": 0.057,
+     "stlFuel": 31,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b11-02",
+   "blueprint": "BP-XHBM-5641",
+   "origin": "NL-534a",
+   "destination": "AW-006a",
+   "totals": {
+    "seconds": 43739,
+    "km": 141794257,
+    "parsecsShown": 15,
+    "damagePercent": 0.928,
+    "stlFuel": 159,
+    "ftlFuel": 69
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "NL-534a (orbit)",
+     "seconds": 398,
+     "km": 6196,
+     "damagePercent": null,
+     "stlFuel": 45,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "NL-534 (orbit)",
+     "seconds": 11880,
+     "km": 66944135,
+     "damagePercent": 0.711,
+     "stlFuel": 37,
+     "ftlFuel": 33
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "NL-881 (orbit)",
+     "seconds": 9720,
+     "km": null,
+     "damagePercent": 0.007,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "CHRG",
+     "to": "NL-881 (orbit)",
+     "seconds": 293,
+     "km": null,
+     "damagePercent": 0.017,
+     "stlFuel": null,
+     "ftlFuel": 36
+    },
+    {
+     "i": 4,
+     "type": "JMP",
+     "to": "AW-006 (orbit)",
+     "seconds": 10620,
+     "km": null,
+     "damagePercent": 0.008,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 5,
+     "type": "APP",
+     "to": "AW-006a (orbit)",
+     "seconds": 10440,
+     "km": 74841001,
+     "damagePercent": 0.141,
+     "stlFuel": 46,
+     "ftlFuel": null
+    },
+    {
+     "i": 6,
+     "type": "LND",
+     "to": "AW-006a",
+     "seconds": 274,
+     "km": 2925,
+     "damagePercent": 0.043,
+     "stlFuel": 31,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b11-03",
+   "blueprint": "BP-MSQS-7525",
+   "origin": "AW-006a",
+   "destination": "NL-534c",
+   "totals": {
+    "seconds": 52538,
+    "km": 185912924,
+    "parsecsShown": 15,
+    "damagePercent": 0.507,
+    "stlFuel": 147,
+    "ftlFuel": 69
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "AW-006a (orbit)",
+     "seconds": 355,
+     "km": 4925,
+     "damagePercent": null,
+     "stlFuel": 40,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "AW-006 (orbit)",
+     "seconds": 20280,
+     "km": 114507594,
+     "damagePercent": 0.24,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "NL-881 (orbit)",
+     "seconds": 10620,
+     "km": null,
+     "damagePercent": 0.008,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "CHRG",
+     "to": "NL-881 (orbit)",
+     "seconds": 293,
+     "km": null,
+     "damagePercent": 0.017,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 4,
+     "type": "JMP",
+     "to": "NL-534 (orbit)",
+     "seconds": 9720,
+     "km": null,
+     "damagePercent": 0.007,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 5,
+     "type": "APP",
+     "to": "NL-534c (orbit)",
+     "seconds": 10860,
+     "km": 71398120,
+     "damagePercent": 0.176,
+     "stlFuel": 42,
+     "ftlFuel": null
+    },
+    {
+     "i": 6,
+     "type": "LND",
+     "to": "NL-534c",
+     "seconds": 242,
+     "km": 2285,
+     "damagePercent": 0.059,
+     "stlFuel": 28,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b11-04",
+   "blueprint": "BP-XHBM-5641",
+   "origin": "NL-534c",
+   "destination": "AW-006a",
+   "totals": {
+    "seconds": 43707,
+    "km": 141762014,
+    "parsecsShown": 15,
+    "damagePercent": 0.399,
+    "stlFuel": 156,
+    "ftlFuel": 69
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "NL-534c (orbit)",
+     "seconds": 372,
+     "km": 5402,
+     "damagePercent": null,
+     "stlFuel": 42,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "NL-534 (orbit)",
+     "seconds": 11880,
+     "km": 66918466,
+     "damagePercent": 0.182,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "NL-881 (orbit)",
+     "seconds": 9720,
+     "km": null,
+     "damagePercent": 0.007,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "CHRG",
+     "to": "NL-881 (orbit)",
+     "seconds": 293,
+     "km": null,
+     "damagePercent": 0.017,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 4,
+     "type": "JMP",
+     "to": "AW-006 (orbit)",
+     "seconds": 10620,
+     "km": null,
+     "damagePercent": 0.008,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 5,
+     "type": "APP",
+     "to": "AW-006a (orbit)",
+     "seconds": 10440,
+     "km": 74835222,
+     "damagePercent": 0.141,
+     "stlFuel": 46,
+     "ftlFuel": null
+    },
+    {
+     "i": 6,
+     "type": "LND",
+     "to": "AW-006a",
+     "seconds": 274,
+     "km": 2925,
+     "damagePercent": 0.043,
+     "stlFuel": 31,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b11-05",
+   "blueprint": "BP-MSQS-7525",
+   "origin": "AW-006a",
+   "destination": "NL-534g",
+   "totals": {
+    "seconds": 55508,
+    "km": 179680639,
+    "parsecsShown": 15,
+    "damagePercent": 0.387,
+    "stlFuel": 223,
+    "ftlFuel": 69
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "AW-006a (orbit)",
+     "seconds": 355,
+     "km": 4925,
+     "damagePercent": null,
+     "stlFuel": 40,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "AW-006 (orbit)",
+     "seconds": 21480,
+     "km": 114578253,
+     "damagePercent": 0.24,
+     "stlFuel": 34,
+     "ftlFuel": 36
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "NL-881 (orbit)",
+     "seconds": 10620,
+     "km": null,
+     "damagePercent": 0.008,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "CHRG",
+     "to": "NL-881 (orbit)",
+     "seconds": 293,
+     "km": null,
+     "damagePercent": 0.017,
+     "stlFuel": null,
+     "ftlFuel": 33
+    },
+    {
+     "i": 4,
+     "type": "JMP",
+     "to": "NL-534 (orbit)",
+     "seconds": 9720,
+     "km": null,
+     "damagePercent": 0.007,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 5,
+     "type": "APP",
+     "to": "NL-534g (orbit)",
+     "seconds": 11880,
+     "km": 65057276,
+     "damagePercent": 0.079,
+     "stlFuel": 35,
+     "ftlFuel": null
+    },
+    {
+     "i": 6,
+     "type": "LND",
+     "to": "NL-534g",
+     "seconds": 1012,
+     "km": 40184,
+     "damagePercent": 0.036,
+     "stlFuel": 114,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b11-06",
+   "blueprint": "BP-XHBM-5641",
+   "origin": "NL-534g",
+   "destination": "AW-006a",
+   "totals": {
+    "seconds": 45355,
+    "km": 140772126,
+    "parsecsShown": 15,
+    "damagePercent": 0.313,
+    "stlFuel": 223,
+    "ftlFuel": 69
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "NL-534g (orbit)",
+     "seconds": 1008,
+     "km": 39823,
+     "damagePercent": null,
+     "stlFuel": 114,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "NL-534 (orbit)",
+     "seconds": 12600,
+     "km": 66911979,
+     "damagePercent": 0.098,
+     "stlFuel": 34,
+     "ftlFuel": 33
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "NL-881 (orbit)",
+     "seconds": 9720,
+     "km": null,
+     "damagePercent": 0.007,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "CHRG",
+     "to": "NL-881 (orbit)",
+     "seconds": 293,
+     "km": null,
+     "damagePercent": 0.017,
+     "stlFuel": null,
+     "ftlFuel": 36
+    },
+    {
+     "i": 4,
+     "type": "JMP",
+     "to": "AW-006 (orbit)",
+     "seconds": 10620,
+     "km": null,
+     "damagePercent": 0.008,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 5,
+     "type": "APP",
+     "to": "AW-006a (orbit)",
+     "seconds": 10740,
+     "km": 73817399,
+     "damagePercent": 0.139,
+     "stlFuel": 44,
+     "ftlFuel": null
+    },
+    {
+     "i": 6,
+     "type": "LND",
+     "to": "AW-006a",
+     "seconds": 274,
+     "km": 2925,
+     "damagePercent": 0.043,
+     "stlFuel": 31,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b11-07",
+   "blueprint": "BP-MSQS-7525",
+   "origin": "LS-300c",
+   "destination": "LS-231a",
+   "totals": {
+    "seconds": 37062,
+    "km": 132199937,
+    "parsecsShown": 11,
+    "damagePercent": 0.798,
+    "stlFuel": 159,
+    "ftlFuel": 53
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "Antares V - Griffonstone (orbit)",
+     "seconds": 318,
+     "km": 3960,
+     "damagePercent": null,
+     "stlFuel": 36,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "Antares V (orbit)",
+     "seconds": 12960,
+     "km": 72865345,
+     "damagePercent": 0.115,
+     "stlFuel": 37,
+     "ftlFuel": 53
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "Styx (orbit)",
+     "seconds": 15240,
+     "km": null,
+     "damagePercent": 0.011,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "APP",
+     "to": "Styx a (orbit)",
+     "seconds": 8100,
+     "km": 59326014,
+     "damagePercent": 0.645,
+     "stlFuel": 47,
+     "ftlFuel": null
+    },
+    {
+     "i": 4,
+     "type": "LND",
+     "to": "Styx a",
+     "seconds": 344,
+     "km": 4618,
+     "damagePercent": 0.027,
+     "stlFuel": 39,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b11-08",
+   "blueprint": "BP-XHBM-5641",
+   "origin": "LS-231a",
+   "destination": "LS-300c",
+   "totals": {
+    "seconds": 39601,
+    "km": 138556070,
+    "parsecsShown": 11,
+    "damagePercent": 0.849,
+    "stlFuel": 169,
+    "ftlFuel": 53
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "Styx a (orbit)",
+     "seconds": 410,
+     "km": 6582,
+     "damagePercent": null,
+     "stlFuel": 47,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "Styx (orbit)",
+     "seconds": 12840,
+     "km": 72445685,
+     "damagePercent": 0.742,
+     "stlFuel": 37,
+     "ftlFuel": 53
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "Antares V (orbit)",
+     "seconds": 15240,
+     "km": null,
+     "damagePercent": 0.011,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "APP",
+     "to": "Antares V - Griffonstone (orbit)",
+     "seconds": 10560,
+     "km": 66097738,
+     "damagePercent": 0.088,
+     "stlFuel": 40,
+     "ftlFuel": null
+    },
+    {
+     "i": 4,
+     "type": "LND",
+     "to": "Antares V - Griffonstone",
+     "seconds": 394,
+     "km": 6065,
+     "damagePercent": 0.008,
+     "stlFuel": 45,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b11-09",
+   "blueprint": "BP-MSQS-7525",
+   "origin": "LE-137a",
+   "destination": "YK-715a",
+   "totals": {
+    "seconds": 43142,
+    "km": 136572394,
+    "parsecsShown": 15,
+    "damagePercent": 0.703,
+    "stlFuel": 153,
+    "ftlFuel": 68
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "LE-137a (orbit)",
+     "seconds": 348,
+     "km": 4728,
+     "damagePercent": null,
+     "stlFuel": 40,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "LE-137 (orbit)",
+     "seconds": 14580,
+     "km": 82313288,
+     "damagePercent": 0.3,
+     "stlFuel": 37,
+     "ftlFuel": 17
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "YK-024 (orbit)",
+     "seconds": 5100,
+     "km": null,
+     "damagePercent": 0.004,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "CHRG",
+     "to": "YK-024 (orbit)",
+     "seconds": 293,
+     "km": null,
+     "damagePercent": 0.017,
+     "stlFuel": null,
+     "ftlFuel": 51
+    },
+    {
+     "i": 4,
+     "type": "JMP",
+     "to": "YK-715 (orbit)",
+     "seconds": 14820,
+     "km": null,
+     "damagePercent": 0.011,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 5,
+     "type": "APP",
+     "to": "YK-715a (orbit)",
+     "seconds": 7560,
+     "km": 54251613,
+     "damagePercent": 0.104,
+     "stlFuel": 46,
+     "ftlFuel": null
+    },
+    {
+     "i": 6,
+     "type": "LND",
+     "to": "YK-715a",
+     "seconds": 266,
+     "km": 2766,
+     "damagePercent": 0.266,
+     "stlFuel": 30,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b11-10",
+   "blueprint": "BP-XHBM-5641",
+   "origin": "YK-715a",
+   "destination": "LE-137a",
+   "totals": {
+    "seconds": 43142,
+    "km": 138485608,
+    "parsecsShown": 15,
+    "damagePercent": 0.702,
+    "stlFuel": 173,
+    "ftlFuel": 68
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "YK-715a (orbit)",
+     "seconds": 572,
+     "km": 12834,
+     "damagePercent": null,
+     "stlFuel": 65,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "YK-715 (orbit)",
+     "seconds": 10320,
+     "km": 56365039,
+     "damagePercent": 0.126,
+     "stlFuel": 35,
+     "ftlFuel": 51
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "YK-024 (orbit)",
+     "seconds": 14820,
+     "km": null,
+     "damagePercent": 0.011,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "CHRG",
+     "to": "YK-024 (orbit)",
+     "seconds": 293,
+     "km": null,
+     "damagePercent": 0.017,
+     "stlFuel": null,
+     "ftlFuel": 17
+    },
+    {
+     "i": 4,
+     "type": "JMP",
+     "to": "LE-137 (orbit)",
+     "seconds": 5100,
+     "km": null,
+     "damagePercent": 0.004,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 5,
+     "type": "APP",
+     "to": "LE-137a (orbit)",
+     "seconds": 11700,
+     "km": 82105441,
+     "damagePercent": 0.484,
+     "stlFuel": 45,
+     "ftlFuel": null
+    },
+    {
+     "i": 6,
+     "type": "LND",
+     "to": "LE-137a",
+     "seconds": 242,
+     "km": 2295,
+     "damagePercent": 0.06,
+     "stlFuel": 28,
+     "ftlFuel": null
+    }
+   ]
+  }
+ ]
+}
