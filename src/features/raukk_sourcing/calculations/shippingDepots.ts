@@ -11,6 +11,9 @@
 // Pure functions over plain numbers, like the rest of the calculation
 // layer: no store, no Vue, no price fetching.
 
+// Calculations
+import { raukkHasGate } from "@/features/raukk_sourcing/calculations/routeDistance";
+
 // Types & Interfaces
 import { RAUKK_STOP_REF } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 
@@ -68,6 +71,100 @@ export interface IRaukkDepotDailyCost {
  */
 export function raukkDepotStopKey(stopRef: RAUKK_STOP_REF): string {
 	return stopRef.trim().toUpperCase();
+}
+
+/**
+ * Whether a route CALLS at one of the marked depots.
+ *
+ * The second bar an STL-only hull has to clear before it is offered
+ * automatically (`raukkStlOnlyCandidates`): such a ship is based at a
+ * depot and cannot jump out of the gate network it sits in, so a route
+ * that never touches a depot is not a route it can be given.
+ *
+ * Case blind on both sides, exactly as {@link raukkDepotStopKey}
+ * defines: a stop typed `zv-307c` calls at the depot `ZV-307c`.
+ *
+ * @author raukk
+ *
+ * @param {RAUKK_STOP_REF[]} stops Stops of the lane or loop
+ * @param {RAUKK_STOP_REF[]} depots Marked depot planets
+ * @returns {boolean} Whether a depot is among the stops
+ */
+export function raukkStopsServeDepot(
+	stops: RAUKK_STOP_REF[],
+	depots: RAUKK_STOP_REF[]
+): boolean {
+	if (depots.length === 0) return false;
+
+	const marked: Set<string> = new Set(depots.map(raukkDepotStopKey));
+
+	return stops.some((stopRef) => marked.has(raukkDepotStopKey(stopRef)));
+}
+
+/** One planet the add row may offer as a depot */
+export interface IRaukkDepotCandidate {
+	planetNaturalId: RAUKK_STOP_REF;
+	/** Name of the plan sitting there, what the user recognizes */
+	planName: string;
+}
+
+/**
+ * A planet the account already runs a base on, for the candidate search.
+ */
+export interface IRaukkDepotPlanStop {
+	planetNaturalId: RAUKK_STOP_REF;
+	planName: string;
+}
+
+/**
+ * The planets worth SUGGESTING as a depot: the ones the account already
+ * has a base on that also carry a gate, minus the ones already marked.
+ *
+ * Both halves are the point. A depot on a planet with no gate anchors
+ * nothing an STL ship could reach, and the exchange already serves as
+ * the handover point everywhere else — so there is nothing a gateless
+ * depot would do. And a depot on a planet the account has no base on
+ * has no warehouse behind it to keep stocked.
+ *
+ * SUGGESTING, not permitting: the gate asset is a hand transcription
+ * (see {@link RAUKK_GATE_PLANET_IDS}) and a gate built after it was
+ * taken is simply absent, so the add row keeps a manual entry beside
+ * this list rather than making the transcription the last word.
+ *
+ * Duplicate plan stops — two plans on one planet — collapse to the first
+ * one seen: the depot is the planet, not the plan.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkDepotPlanStop[]} planStops Planets the account plans on
+ * @param {RAUKK_STOP_REF[]} marked Depots that already exist
+ * @returns {IRaukkDepotCandidate[]} Candidates, by plan name
+ */
+export function raukkDepotCandidates(
+	planStops: IRaukkDepotPlanStop[],
+	marked: RAUKK_STOP_REF[] = []
+): IRaukkDepotCandidate[] {
+	const taken: Set<string> = new Set(marked.map(raukkDepotStopKey));
+	const seen: Set<string> = new Set();
+
+	const candidates: IRaukkDepotCandidate[] = [];
+
+	planStops.forEach((stop) => {
+		const key: string = raukkDepotStopKey(stop.planetNaturalId);
+
+		if (taken.has(key) || seen.has(key)) return;
+		if (!raukkHasGate(stop.planetNaturalId)) return;
+
+		seen.add(key);
+		candidates.push({
+			planetNaturalId: stop.planetNaturalId,
+			planName: stop.planName,
+		});
+	});
+
+	return candidates.sort((left, right) =>
+		left.planName.localeCompare(right.planName)
+	);
 }
 
 /**

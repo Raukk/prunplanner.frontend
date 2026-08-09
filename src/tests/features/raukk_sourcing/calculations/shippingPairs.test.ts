@@ -188,6 +188,80 @@ describe("Raukk Sourcing: Shipping Pairs", () => {
 		expect(pairs[0].route.jumps).toBe(1);
 	});
 
+	describe("a base standing on a depot", () => {
+		it("owns no exchange lane at all", () => {
+			expect(
+				buildShippingPairs(
+					flows,
+					lookups({ depotOf: () => true }),
+					config
+				)
+			).toStrictEqual([]);
+		});
+
+		it("keeps its sourcing lanes, which really are flown", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				lookups({
+					depotOf: () => true,
+					originOf: (ticker: string) =>
+						ticker === "ORE"
+							? [{ planUuid: "source", share: 1 }]
+							: [],
+					planetOf: () => "AA-003b",
+					viaCxSourceOf: () => false,
+				}),
+				config
+			);
+
+			// the ORE lane from AA-003b survives, the market lane is gone
+			expect(pairs.map((pair) => pair.pairKey)).toStrictEqual([
+				raukkSourcingPairKey("consumer", "source"),
+			]);
+			expect(pairs[0].back.map((entry) => entry.ticker)).toStrictEqual([
+				"ORE",
+			]);
+		});
+
+		it("marks a sourcing lane either end of which is a depot", () => {
+			function sourcingPair(depot: string | null): IRaukkShippingPair {
+				return buildShippingPairs(
+					flows,
+					lookups({
+						depotOf: (planet: string) => planet === depot,
+						originOf: (ticker: string) =>
+							ticker === "ORE"
+								? [{ planUuid: "source", share: 1 }]
+								: [],
+						planetOf: () => "AA-003b",
+						viaCxSourceOf: () => false,
+					}),
+					config
+				)[0];
+			}
+
+			// the consumer end, the producer end, and neither
+			expect(sourcingPair("AA-002b").depotServed).toBe(true);
+			expect(sourcingPair("AA-003b").depotServed).toBe(true);
+			expect(sourcingPair(null).depotServed).toBe(false);
+		});
+
+		it("is only the plans OWN planet that counts", () => {
+			const pairs: IRaukkShippingPair[] = buildShippingPairs(
+				flows,
+				// a depot somewhere else changes nothing about this plan
+				lookups({
+					depotOf: (planet: string) => planet === "AA-003b",
+				}),
+				config
+			);
+
+			expect(pairs.map((pair) => pair.pairKey)).toStrictEqual([
+				raukkCxPairKey("consumer"),
+			]);
+		});
+	});
+
 	it("names the systems a lane connects, for the STL-only check", () => {
 		const pairs: IRaukkShippingPair[] = buildShippingPairs(
 			flows,

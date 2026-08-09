@@ -182,25 +182,40 @@ export function raukkGateLegCost(
 /**
  * The hulls an automatic pick may choose from.
  *
- * STL-only hulls are excluded unless the caller has established that the
- * whole lane or loop is gate or same-system servable. The rule is
- * deliberately coarse — a hull that could serve some legs of a loop but
- * not others is not offered at all — because the automatic pick is a
- * suggestion, and a suggestion that produces a validation error is worse
- * than no suggestion. A MANUAL assignment is never filtered: the user
- * gets the error instead, which is the point of the error.
+ * An STL-only hull has to clear TWO bars to be offered, and clears the
+ * second one far less often:
+ *
+ *  1. `gateServable` — the whole lane or loop is gate or same-system
+ *     servable. The rule is deliberately coarse — a hull that could
+ *     serve some legs of a loop but not others is not offered at all —
+ *     because the automatic pick is a suggestion, and a suggestion that
+ *     produces a validation error is worse than no suggestion.
+ *  2. `depotServed` — the lane or loop actually CALLS at a depot. An
+ *     STL ship is based at one: it cannot jump out of the gate network
+ *     it sits in, so a route that never touches its home is a route it
+ *     could only reach by being flown there once and stranded. Since
+ *     every leg of a gate-servable route is gate-connected, one depot
+ *     among the stops puts the whole route inside that depots reach.
+ *
+ * A MANUAL assignment passes neither bar and is never filtered: a
+ * deliberate STL run between two planets that share a gate is a real
+ * thing to want, it is simply not something to guess at. Where such a
+ * run is not flyable at all the user gets the validation error instead,
+ * which is the point of the error.
  *
  * @author raukk
  *
  * @param {IRaukkHullCandidate[]} candidates Hulls to choose from
  * @param {boolean} gateServable Whether every leg is gate servable
+ * @param {boolean} depotServed Whether a depot is among the stops
  * @returns {IRaukkHullCandidate[]} Hulls the pick may assign
  */
 export function raukkStlOnlyCandidates(
 	candidates: IRaukkHullCandidate[],
-	gateServable: boolean
+	gateServable: boolean,
+	depotServed: boolean
 ): IRaukkHullCandidate[] {
-	if (gateServable) return candidates;
+	if (gateServable && depotServed) return candidates;
 
 	return candidates.filter((candidate) => !candidate.profile.stlOnly);
 }

@@ -832,9 +832,12 @@ export const useRaukkSourcingStore = defineStore(
 		 *
 		 * A depot is a routing anchor: chains may be cut at it exactly as
 		 * they are cut at an exchange, so MARKING one computes every chain
-		 * with a different anchor list from here on and stales the lot. It
-		 * is NOT a market — nothing is priced, sourced or stored there —
-		 * so nothing outside the chains moves.
+		 * with a different anchor list from here on. It also decides
+		 * whether the base standing there owns an exchange lane at all —
+		 * a plan ON a depot hands its cargo over next door — so marking or
+		 * un-marking one stales the SNAPSHOTS as well, not the chains
+		 * alone. It is still NOT a market: nothing is priced, sourced or
+		 * stored there.
 		 *
 		 * Patching the rent of a depot the store already knows stales
 		 * NOTHING: the rent is no input of the chain math at all, it is
@@ -877,13 +880,14 @@ export const useRaukkSourcingStore = defineStore(
 			};
 
 			// the anchor list only changed if the planet is new to it
-			if (known === undefined) markAllChainsStale();
+			if (known === undefined) markAllStale();
 		}
 
 		/**
 		 * Un-marks one planet as a depot. Chains keep their stops — the
 		 * planet is still a place a ship may fly to — they only lose it as
-		 * a split anchor, which is why they go stale.
+		 * a split anchor. A base standing there gets its exchange lane
+		 * back, which is why the snapshots go stale too.
 		 * @author raukk
 		 *
 		 * @param {string} planetNaturalId Planet Natural Id
@@ -895,7 +899,7 @@ export const useRaukkSourcingStore = defineStore(
 
 			delete depots.value[key];
 
-			markAllChainsStale();
+			markAllStale();
 		}
 
 		/**
@@ -929,8 +933,7 @@ export const useRaukkSourcingStore = defineStore(
 		 * @param {string} shipTypeId Ship Type Id
 		 */
 		function deleteFleetShip(shipTypeId: string): void {
-			const wasOwned: boolean =
-				(fleet.value[shipTypeId]?.count ?? 0) > 0;
+			const wasOwned: boolean = (fleet.value[shipTypeId]?.count ?? 0) > 0;
 
 			delete fleet.value[shipTypeId];
 

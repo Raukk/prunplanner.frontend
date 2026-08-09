@@ -103,11 +103,29 @@ export interface IRaukkGateLink {
 	hcbCapable: boolean;
 }
 
+/**
+ * One transcribed gate whose counterpart is not (yet) known.
+ *
+ * Still a gate STANDING on a planet — it is simply not an edge, because
+ * the far side was never transcribed. `gate` carries the GTWI details
+ * where the panel was read, and is absent where only the gates existence
+ * was noted.
+ *
+ * @author raukk
+ */
+export interface IRaukkUnlinkedGate {
+	/** Planet natural id the gate stands on */
+	planet: string;
+	name: string;
+	gateName: string;
+	gate?: IRaukkGateSide;
+}
+
 /** Shape of `raukk_gates.json` */
 interface IRaukkGateAsset {
 	comment: string;
 	links: IRaukkGateLink[];
-	unlinked: unknown[];
+	unlinked: IRaukkUnlinkedGate[];
 }
 
 /**
@@ -121,6 +139,47 @@ interface IRaukkGateAsset {
  */
 export const RAUKK_GATE_LINKS: IRaukkGateLink[] = (gatesJson as IRaukkGateAsset)
 	.links;
+
+/**
+ * Gates whose far side is unknown, kept out of the graph but not out of
+ * the world: such a planet still HAS a gate, it just leads nowhere the
+ * routing can name.
+ *
+ * @author raukk
+ */
+export const RAUKK_UNLINKED_GATES: IRaukkUnlinkedGate[] = (
+	gatesJson as IRaukkGateAsset
+).unlinked;
+
+/**
+ * Every planet the transcription puts a gate on, upper-cased and
+ * deduplicated — both ends of every link plus the one-sided entries.
+ *
+ * A snapshot, not a truth: the asset is a hand transcription and a gate
+ * built after it was taken is missing from this set. Anything gating a
+ * user CHOICE on it therefore has to leave a way past it.
+ *
+ * @author raukk
+ */
+export const RAUKK_GATE_PLANET_IDS: Set<string> = new Set([
+	...RAUKK_GATE_LINKS.flatMap((link) => [
+		link.a.toUpperCase(),
+		link.b.toUpperCase(),
+	]),
+	...RAUKK_UNLINKED_GATES.map((entry) => entry.planet.toUpperCase()),
+]);
+
+/**
+ * Whether a planet carries a gate, as far as the transcription knows.
+ *
+ * @author raukk
+ *
+ * @param {string} planetNaturalId Planet Natural Id
+ * @returns {boolean} Whether a gate stands there
+ */
+export function raukkHasGate(planetNaturalId: string): boolean {
+	return RAUKK_GATE_PLANET_IDS.has(planetNaturalId.trim().toUpperCase());
+}
 
 /**
  * Traversal constants of a gate hop, calibrated from the BTF campaign.

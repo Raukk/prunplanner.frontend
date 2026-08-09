@@ -431,18 +431,21 @@ function legHull(
 	if (pair.hulls.manual !== undefined)
 		return { candidate: pair.hulls.manual, advisory: null };
 
-	// raukk: an STL-only hull is never picked for a lane it cannot fly,
-	// neither as an assignment nor as an advisory — advising a ship that
-	// would fail validation is worse than advising nothing
+	// raukk: an STL-only hull is never picked for a lane it cannot fly or
+	// is not based on, neither as an assignment nor as an advisory —
+	// advising a ship that would fail validation, or that would have to
+	// live away from its depot, is worse than advising nothing
+	const depotServed: boolean = pair.depotServed === true;
+
 	const owned: IRaukkHullPick | null = raukkPickHull(
-		raukkStlOnlyCandidates(pair.hulls.owned, gateServable),
+		raukkStlOnlyCandidates(pair.hulls.owned, gateServable, depotServed),
 		demand,
 		capDays
 	);
 	const candidate: IRaukkHullCandidate = owned?.candidate ?? fallback;
 
 	const ideal: IRaukkHullPick | null = raukkPickHull(
-		raukkStlOnlyCandidates(pair.hulls.all, gateServable),
+		raukkStlOnlyCandidates(pair.hulls.all, gateServable, depotServed),
 		demand,
 		capDays
 	);

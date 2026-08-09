@@ -198,7 +198,7 @@
 	},
 	"fleet": {
 		"title": "Fleet",
-		"info": "Ships you own, per type. A ship type is a cargo bay times an FTL reactor — the bay codes are in-game part designations and can't be renamed; the editable label is the blueprint design name. Shipping capacity is the percentage of a type's daily flight time the lanes and chains assigned to it claim: 100% is one hull flying around the clock, and a figure past it — shown in red — means more ships or a bigger hull, it never blocks anything. The table lists only the types you added here — work assigned to a hull you don't own shows up as an advisory instead — and a type you added but set to zero hulls shows no percentage at all. Counts are account-global and stay editable on a read-only plan.",
+		"info": "Ships you own, per type. A ship type is a cargo bay plus its drive: every bay is offered as a quick-charge FTL build and as the cheaper hull with no FTL drive at all, which can only leave its own system through a GATE. The standard reactor isn't offered — it flies and burns near enough the same as the quick-charge one — so calibrate a profile for it if you want one. The bay codes are in-game part designations and can't be renamed; the editable label is the blueprint design name. Shipping capacity is the percentage of a type's daily flight time the lanes and chains assigned to it claim: 100% is one hull flying around the clock, and a figure past it — shown in red — means more ships or a bigger hull, it never blocks anything. The table lists only the types you added here — work assigned to a hull you don't own shows up as an advisory instead — and a type you added but set to zero hulls shows no percentage at all. Counts are account-global and stay editable on a read-only plan.",
 		"bay": "Bay",
 		"hull": "Hull",
 		"hull_label": "{weight} t / {volume} m³ · {reactor}",
@@ -229,7 +229,8 @@
 		},
 		"reactors": {
 			"standard": "Standard Reactor",
-			"quick-charge": "Quick-Charge Reactor"
+			"quick-charge": "Quick-Charge Reactor",
+			"stl-only": "No FTL Drive"
 		},
 		"calibration": {
 			"title": "Ship Calibration",
@@ -418,7 +419,7 @@
 	},
 	"depots": {
 		"title": "Depots",
-		"info": "Planets you hand cargo over at. A depot anchors ROUTING and nothing else: a chain passing close to one may be cut there exactly as it is cut at an exchange, so a gate-side ship and an FTL hauler meet at the depot instead of both flying to the exchange. Each half of such a split can be flown by its own ship type — set them in the chain editor. A depot is not a market: nothing is priced, sourced or sold there, and keeping the warehouse stocked stays your problem. Depots are account-global and can be added for planets no plan of yours sits on.",
+		"info": "Planets you hand cargo over at. A depot anchors ROUTING and nothing else: a chain passing close to one may be cut there exactly as it is cut at an exchange, so a gate-side ship and an FTL hauler meet at the depot instead of both flying to the exchange. Each half of such a split can be flown by its own ship type — set them in the chain editor. A depot is not a market: nothing is priced, sourced or sold there, and keeping the warehouse stocked stays your problem. A plan sitting ON a depot planet hands its outputs over and draws its inputs at the warehouse next door, so neither direction pays exchange freight. Non-FTL ships are based at depots: one is auto-assigned only to loops that call at a depot and stay inside its gate network. The list suggests your own bases on gate planets — anything else can still be entered by hand. Depots are account-global.",
 		"planet": "Planet",
 		"weekly_cost": "Warehouse ȼ / Week",
 		"daily_cost": "ȼ / Day",
@@ -426,13 +427,21 @@
 		"unused": "Unused",
 		"unrouted": "Unknown Planet",
 		"unrouted_tooltip": "No system of the route index carries this id, so no chain can be cut here — check the spelling, e.g. ZV-307c.",
+		"nogate": "No Gate",
+		"nogate_tooltip": "No gate is known on this planet, so no non-FTL ship can be based here — such a hull can only leave its own system through a gate. The depot still anchors chain splits for FTL haulers. The gate list is a transcription of the map and may simply not know a gate you built.",
 		"remove": "Remove",
 		"add": "Add Depot",
 		"add_placeholder": "Planet id, e.g. ZV-307c",
+		"pick_placeholder": "Pick a base on a gate planet",
+		"candidate_label": "{plan} ({planet})",
+		"enter_instead": "Enter Id",
+		"pick_instead": "Pick a Base",
 		"hint": {
 			"empty": "Type a planet id to enable Add Depot.",
+			"unpicked": "Pick one of your bases on a gate planet, or enter an id by hand.",
 			"known": "That planet is already a depot.",
-			"unrouted": "No planet of that id is known — it would anchor nothing."
+			"unrouted": "No planet of that id is known — it would anchor nothing.",
+			"nogate": "No gate is known there — non-FTL ships can't be based at it."
 		},
 		"empty": "No depots yet. Mark a gate hub or a warehouse planet as one when two ships should meet there instead of flying to the exchange.",
 		"rollup": {

@@ -14,6 +14,7 @@ import {
 	RAUKK_CX_SYSTEM_ID_BY_CODE,
 } from "@/features/raukk_sourcing/calculations/shippingChains";
 import { raukkStlOnlyCandidates } from "@/features/raukk_sourcing/calculations/shippingStl";
+import { raukkStopsServeDepot } from "@/features/raukk_sourcing/calculations/shippingDepots";
 import {
 	raukkAutoChainDemand,
 	raukkAutoChainReason,
@@ -619,6 +620,17 @@ async function computeOneAutoChain(
 	 */
 	const gateServable: boolean = raukkChainGateServable(autoChain.stops);
 
+	/*
+	 * raukk: and only for a loop it is BASED on. An STL-only hull lives
+	 * at a depot — it cannot jump out of the gate network it sits in — so
+	 * a loop that never calls at one is a loop it could reach only by
+	 * being flown there and stranded.
+	 */
+	const depotServed: boolean = raukkStopsServeDepot(
+		autoChain.stops,
+		sourcingStore.depotStopRefs()
+	);
+
 	const owned: IRaukkHullPick | null =
 		manual !== undefined
 			? null
@@ -628,7 +640,8 @@ async function computeOneAutoChain(
 							sourcingStore.fleet,
 							candidateOf
 						),
-						gateServable
+						gateServable,
+						depotServed
 					),
 					demand,
 					autoChain.capDays
@@ -647,7 +660,8 @@ async function computeOneAutoChain(
 						sourcingStore
 							.listShipProfiles()
 							.map((profile) => candidateOf(profile.id)),
-						gateServable
+						gateServable,
+						depotServed
 					),
 					demand,
 					autoChain.capDays

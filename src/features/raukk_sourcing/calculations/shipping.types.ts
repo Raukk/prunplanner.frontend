@@ -242,6 +242,19 @@ export interface IRaukkShippingPair {
 	fromSystemId?: string;
 	toSystemId?: string;
 	routes?: IRaukkRouteDistance;
+	/**
+	 * True when one END of the lane is a marked depot.
+	 *
+	 * The home an STL-only hull is based at, and therefore the second
+	 * condition of offering one automatically — see
+	 * `raukkStlOnlyCandidates`. Resolved where the lane is BUILT, the
+	 * only place that knows the two PLANETS: everything downstream sees
+	 * systems, and a depot is a planet.
+	 *
+	 * Absent reads as no depot, which is what every lane predating them
+	 * was.
+	 */
+	depotServed?: boolean;
 	out: IRaukkShippedTicker[];
 	back: IRaukkShippedTicker[];
 	/**

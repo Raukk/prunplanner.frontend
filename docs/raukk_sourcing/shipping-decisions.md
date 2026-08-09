@@ -600,6 +600,61 @@ and read as a working button — nothing said the field had to be filled
    new to the anchor list (or un-marking one) stales now, the same
    line round 19 drew for the fleet count.
 
+## Round 21 (depots as homes: gate planets, free handover, STL basing)
+
+User decision 2026-08-09, four connected changes that turn a depot from
+a pure routing anchor into the place non-FTL ships live.
+
+1. **A depot is SUGGESTED from own bases on gate planets**: the add row
+   is a dropdown of the planets the account has a snapshot for that the
+   gate transcription puts a gate on (`raukkDepotCandidates`), minus
+   the ones already marked. Both halves are the user's rule — a depot
+   without a gate anchors nothing a non-FTL ship could reach, and the
+   exchange already serves as the handover point everywhere else, while
+   a depot on a planet with no base has no warehouse behind it.
+   SUGGESTED, not enforced: `raukk_gates.json` is a hand transcription
+   and a gate built since it was taken is simply absent, so an "Enter
+   Id" escape hatch stays beside the list and a gateless entry warns
+   ("No Gate" tag) exactly as an unplaceable one does. Round 20's
+   precedent, unchanged: the transcription is not the map.
+2. **A base ON a depot owns no exchange lane**: it hands its sells over
+   and draws its buys at the warehouse on its own planet, so both
+   directions cost nothing and `buildShippingPairs` does not build the
+   CX pair at all (`depotOf` lookup). Inputs as well as outputs, per
+   user decision — the warehouse is next door in both directions. The
+   directed FLOWS are deliberately untouched: a loop calling at the
+   depot may still claim the onward move to the exchange and price it,
+   which is what keeps the freight on the books instead of deleting it.
+   Sourcing lanes are untouched too — a counterpart plan sits on
+   another planet and its cargo really is flown here. Marking or
+   un-marking a depot therefore stales SNAPSHOTS as well as chains,
+   widening round 20 decision 5 (rent edits still stale nothing).
+3. **A non-FTL hull is auto-assigned only to depot-served routes**:
+   `raukkStlOnlyCandidates` now takes a second bar, `depotServed`, on
+   top of round 18's `gateServable`. Such a ship is BASED at a depot
+   and cannot jump out of the gate network it sits in, so a route that
+   never calls at one is a route it could reach only by being flown
+   there and stranded. Because every leg of a gate-servable route is
+   gate-connected, one depot among the stops puts the whole route
+   inside that depot's reach — no separate reachability search. Lanes
+   answer it from the two PLANETS at build time (`depotServed` on the
+   pair, resolved where the planets are still known); auto chains from
+   their stop list (`raukkStopsServeDepot`). MANUAL assignment passes
+   neither bar, unchanged and on purpose: a deliberate non-FTL run
+   between two gate-linked planets is a real thing to want, it is
+   simply not something to guess at.
+4. **One offered preset per hull, quick-charge, plus its STL sibling**:
+   both reactors fly and burn near enough the same, so the second row
+   per hull asked a question with no consequence — the add row offers
+   `RAUKK_OFFERED_FTL_REACTOR` alone and the default profile and
+   starter-fleet assumption follow it. The standard presets keep being
+   BUILT so every id ever written into a fleet, assignment or snapshot
+   still resolves; they are only no longer suggested. The STL build
+   gets a preset id of its own (`2000x2000-stl`) — as a flag on the
+   shared profile, ticking `stlOnly` on the LCB turned every LCB in
+   the account into an STL hull, so the two builds could never be owned
+   side by side. They are different ship types and now say so.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,
