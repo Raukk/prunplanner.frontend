@@ -14,6 +14,7 @@ import {
 	resolveSystemId,
 	routeBetween,
 	routePath,
+	straightLineParsecs,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import { RAUKK_CX_SYSTEM_IDS } from "@/features/raukk_sourcing/calculations/routeDistance";
 import {
@@ -97,6 +98,8 @@ export const RAUKK_DEFAULT_CHAIN_ROUTES: IRaukkRouteDistance = {
 	resolveSystemId,
 	path: routePath,
 	nearestNeighbor,
+	// raukk: the gap a gate would bridge, needed by the gate planning
+	straightLineParsecs,
 	// raukk: the gate aware metric, needed by the STL-only routing
 	fastestPath: fastestRoutePath,
 };

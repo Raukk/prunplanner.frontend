@@ -1,0 +1,185 @@
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { mount, VueWrapper } from "@vue/test-utils";
+import { createI18n } from "vue-i18n";
+import { createPinia, setActivePinia } from "pinia";
+
+// Stores
+import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+
+// Components
+import RaukkGateSection from "@/features/raukk_sourcing/components/RaukkGateSection.vue";
+
+// Calculations
+import { setRaukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations/routeDistance";
+
+// UI
+import { PButton, PCheckbox, PInput } from "@/ui";
+
+// Locales
+import common from "@/locales/en_US/common.json";
+import raukk_sourcing from "@/locales/en_US/raukk_sourcing.json";
+
+const i18n = createI18n({
+	legacy: false,
+	locale: "en_US",
+	messages: { en_US: { common, raukk_sourcing } },
+});
+
+/** Two planets the bundled systems JSON really carries, far apart */
+const HEPH: string = "ZV-307c";
+const MONTEM: string = "OT-580b";
+
+function render(): VueWrapper {
+	return mount(RaukkGateSection, { global: { plugins: [i18n] } });
+}
+
+/** The add button of the last row, told apart from the remove buttons */
+function addButton(wrapper: VueWrapper) {
+	return wrapper
+		.findAllComponents(PButton)
+		.find((button) => button.text() === "Add Gate")!;
+}
+
+/**
+ * Types both endpoints into the add form.
+ *
+ * The add row holds three inputs — name, A side, B side — in that order,
+ * and every row above it holds one, its name field.
+ *
+ * @author raukk
+ *
+ * @param {VueWrapper} wrapper Mounted Component
+ * @param {string} planetA Planet Natural Id of the a side
+ * @param {string} planetB Planet Natural Id of the b side
+ */
+async function typeLink(
+	wrapper: VueWrapper,
+	planetA: string,
+	planetB: string
+): Promise<void> {
+	const inputs = wrapper.findAllComponents(PInput);
+
+	inputs[inputs.length - 2].vm.$emit("update:value", planetA);
+	inputs[inputs.length - 1].vm.$emit("update:value", planetB);
+	await wrapper.vm.$nextTick();
+}
+
+describe("Raukk Sourcing: RaukkGateSection", () => {
+	let store: ReturnType<typeof useRaukkSourcingStore>;
+
+	beforeEach(() => {
+		setActivePinia(createPinia());
+		store = useRaukkSourcingStore();
+	});
+
+	afterEach(() => {
+		setRaukkPlannedGateLinks([]);
+	});
+
+	it("says both ends are needed while the button is off", () => {
+		const wrapper: VueWrapper = render();
+
+		expect(addButton(wrapper).props("disabled")).toBe(true);
+		expect(wrapper.text()).toContain("Type both planet ids");
+		expect(wrapper.text()).toContain("No planned gates yet");
+	});
+
+	it("adds a switched OFF gate once both ends are entered", async () => {
+		const wrapper: VueWrapper = render();
+
+		await typeLink(wrapper, ` ${HEPH} `, MONTEM);
+
+		expect(addButton(wrapper).props("disabled")).toBe(false);
+
+		await addButton(wrapper).trigger("click");
+
+		const gates = store.listPlannedGates();
+
+		expect(gates).toHaveLength(1);
+		expect(gates[0]).toMatchObject({
+			planetA: HEPH,
+			planetB: MONTEM,
+			enabled: false,
+			status: "proposed",
+		});
+		// nothing may be routed over it before the user says so
+		expect(wrapper.text()).not.toContain("are switched on");
+	});
+
+	it("warns about planets no system carries, without refusing them", async () => {
+		const wrapper: VueWrapper = render();
+		await typeLink(wrapper, "NOWHERE-9z", MONTEM);
+
+		expect(addButton(wrapper).props("disabled")).toBe(false);
+		expect(wrapper.text()).toContain("would route nothing");
+	});
+
+	it("refuses two planets of one system", async () => {
+		const wrapper: VueWrapper = render();
+		await typeLink(wrapper, "ZV-307c", "ZV-307d");
+
+		expect(wrapper.text()).toContain("bridges nothing");
+	});
+
+	it("states what a planned gate would save", () => {
+		store.setPlannedGate("g1", { planetA: MONTEM, planetB: "IA-158b" });
+
+		const text: string = render().text();
+
+		// NC1 straight to Amethyst, which no transcribed gate spans
+		expect(text).toContain("%)");
+		expect(text).not.toContain("Unroutable");
+	});
+
+	it("says a gate saves nothing when a real one already spans it", () => {
+		// the transcribed Antares corridor admits 6,000 m³, so a 3,000 m³
+		// planned link over the same pair adds exactly nothing
+		store.setPlannedGate("g1", { planetA: HEPH, planetB: "IA-158b" });
+
+		const wrapper: VueWrapper = render();
+
+		expect(wrapper.text()).not.toContain("%)");
+		expect(wrapper.text()).toContain("—");
+	});
+
+	it("tags a gate the route index cannot place and bars planning it", () => {
+		store.setPlannedGate("g1", { planetA: "NOWHERE-9z", planetB: MONTEM });
+
+		const wrapper: VueWrapper = render();
+
+		expect(wrapper.text()).toContain("Unroutable");
+		expect(wrapper.findComponent(PCheckbox).props("disabled")).toBe(true);
+	});
+
+	it("warns while gates are switched on, and routes over them", async () => {
+		store.setPlannedGate("g1", {
+			planetA: HEPH,
+			planetB: MONTEM,
+			enabled: true,
+		});
+
+		const wrapper: VueWrapper = render();
+
+		expect(wrapper.text()).toContain("are switched on");
+
+		await wrapper
+			.findComponent(PCheckbox)
+			.vm.$emit("update:checked", false);
+
+		expect(store.plannedGates["g1"].enabled).toBe(false);
+		expect(wrapper.text()).not.toContain("are switched on");
+	});
+
+	it("removes a gate", async () => {
+		store.setPlannedGate("g1", { planetA: HEPH, planetB: MONTEM });
+
+		const wrapper: VueWrapper = render();
+
+		await wrapper
+			.findAllComponents(PButton)
+			.find((button) => button.text() === "Remove")!
+			.trigger("click");
+
+		expect(store.plannedGates).toStrictEqual({});
+	});
+});

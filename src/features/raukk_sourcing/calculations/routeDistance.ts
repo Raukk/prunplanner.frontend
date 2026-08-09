@@ -101,6 +101,17 @@ export interface IRaukkGateLink {
 	/** Ship volume the link admits, m³: the narrower of both sides */
 	maxTraversalM3: number;
 	hcbCapable: boolean;
+	/**
+	 * Link that does NOT exist: a gate the user planned rather than one
+	 * the transcription found. Absent on every transcribed link.
+	 *
+	 * Planned links are ordinary edges of the graph, so a route may fly
+	 * them — that is the whole point of planning one — but every query
+	 * can bar them with `usePlannedGates: false`, and every hop routed
+	 * over one is flagged, so a number that only holds once the gate is
+	 * built is never quietly presented as today's.
+	 */
+	planned?: boolean;
 }
 
 /** Shape of `raukk_gates.json` */
@@ -173,6 +184,18 @@ export interface IRaukkRouteTimeOptions {
 	/** Whether gate links may be used at all */
 	useGates: boolean;
 	/**
+	 * Whether PLANNED gate links take part, the ones the user authored
+	 * in the gate planning tool.
+	 *
+	 * Defaults to on: a planned gate the user switched on is meant to be
+	 * routed over, that is what planning it means. `false` asks the very
+	 * same question of the network as it stands TODAY, which is what the
+	 * planning tool measures a planned gate against.
+	 *
+	 * Ignored while `useGates` is off, no gate of any kind flies then.
+	 */
+	usePlannedGates: boolean;
+	/**
 	 * Whether FTL edges are BARRED from the search, gate links only.
 	 *
 	 * The routing an STL-only hull needs: such a ship carries neither
@@ -200,6 +223,7 @@ export const RAUKK_DEFAULT_ROUTE_TIME: IRaukkRouteTimeOptions = {
 	gateMinutesPerParsec: RAUKK_GATE_TRAVERSAL.minutesPerParsec,
 	gateOverheadMinutes: RAUKK_GATE_TRAVERSAL.overheadMinutes,
 	useGates: true,
+	usePlannedGates: true,
 	gatesOnly: false,
 	shipVolumeM3: 0,
 };
@@ -264,6 +288,8 @@ export interface IRaukkRouteHop {
 	volumeCapM3?: number;
 	/** Gate hops: hull damage in percent of this traversal */
 	damagePercent?: number;
+	/** Gate hops: the gate is PLANNED, this hop cannot be flown today */
+	planned?: boolean;
 }
 
 /**
@@ -308,6 +334,15 @@ export interface IRaukkRouteDistance {
 	path?(systemIdA: string, systemIdB: string): IRaukkRoutePath | null;
 	/** Optional, added for the v2 same system legs */
 	nearestNeighbor?(systemId: string): IRaukkNearestNeighbor | null;
+	/**
+	 * Optional, added for gate planning: the STRAIGHT LINE between two
+	 * systems, which is no route at all — nothing has to connect them.
+	 *
+	 * A gate traversal is priced on exactly this distance rather than on
+	 * the FTL path `parsecDistance` measures: the gate does not follow
+	 * the network, it drops the ship across the gap.
+	 */
+	straightLineParsecs?(systemIdA: string, systemIdB: string): number | null;
 	/**
 	 * Optional, added for gate routing: the FASTEST path in minutes,
 	 * gate links included unless `useGates` is turned off.
@@ -701,6 +736,7 @@ export function createRouteDistance(
 			options.gateMinutesPerParsec,
 			options.gateOverheadMinutes,
 			options.useGates ? 1 : 0,
+			options.usePlannedGates ? 1 : 0,
 			options.gatesOnly ? 1 : 0,
 			options.shipVolumeM3,
 		].join("|");
@@ -733,8 +769,11 @@ export function createRouteDistance(
 
 		const usable: ISystemEdge[] = graph.gateAdjacent[index].filter(
 			(edge) =>
-				options.shipVolumeM3 <= 0 ||
-				edge.link!.maxTraversalM3 >= options.shipVolumeM3
+				// raukk: a gate that is not built yet only flies for a
+				// query that asked to plan over it
+				(options.usePlannedGates || edge.link!.planned !== true) &&
+				(options.shipVolumeM3 <= 0 ||
+					edge.link!.maxTraversalM3 >= options.shipVolumeM3)
 		);
 
 		// raukk: gates only never falls back to the FTL network — an
@@ -899,6 +938,10 @@ export function createRouteDistance(
 				hop.stlFuel = RAUKK_GATE_TRAVERSAL.stlFuel;
 				hop.volumeCapM3 = edge.link!.maxTraversalM3;
 				hop.damagePercent = RAUKK_GATE_TRAVERSAL.damagePercent;
+
+				// raukk: hypothetical hop, flagged so no reader mistakes
+				// it for something a ship can fly today
+				if (edge.link!.planned === true) hop.planned = true;
 			}
 
 			return hop;
@@ -932,6 +975,18 @@ export function createRouteDistance(
 		});
 
 		return best;
+	}
+
+	function straightLineParsecs(
+		systemIdA: string,
+		systemIdB: string
+	): number | null {
+		const a: number | undefined = graph.idToIndex.get(systemIdA);
+		const b: number | undefined = graph.idToIndex.get(systemIdB);
+
+		if (a === undefined || b === undefined) return null;
+
+		return euclidean(systems[a], systems[b]) / RAUKK_POSITION_UNITS_PER_PARSEC;
 	}
 
 	function parsecDistance(
@@ -996,6 +1051,7 @@ export function createRouteDistance(
 		resolveSystemId,
 		path,
 		nearestNeighbor,
+		straightLineParsecs,
 		fastestPath,
 	};
 }
@@ -1005,9 +1061,94 @@ export function createRouteDistance(
  */
 let defaultIndex: IRaukkRouteDistance | undefined = undefined;
 
+/**
+ * PLANNED gate links of the session, merged into the singletons graph.
+ *
+ * Empty until the gate planning tool registers something: the module
+ * knows nothing of the store, it is handed the links. Every entry is
+ * flagged `planned`, so a query may bar them all with
+ * `usePlannedGates: false` however they got here.
+ */
+let plannedGateLinks: IRaukkGateLink[] = [];
+
+/** Signature the registry compares against, to avoid needless rebuilds */
+let plannedSignature: string = "";
+
+/**
+ * Signature of a planned link set, everything the GRAPH reads from it.
+ *
+ * Names and gate ids are deliberately absent: renaming a planned gate
+ * moves no edge and must not drop the memoized shortest path trees.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkGateLink[]} links Planned links
+ * @returns {string} Signature
+ */
+function signatureOf(links: IRaukkGateLink[]): string {
+	return links
+		.map(
+			(link) =>
+				`${link.a}>${link.b}@${link.maxTraversalM3}/${link.aGate.fee}/${link.bGate.fee}`
+		)
+		.join("|");
+}
+
+/**
+ * Registers the planned gate links every module level lookup routes on.
+ *
+ * Replaces the whole set rather than adding to it — the caller owns the
+ * list, the module only holds it — and drops the memoized route index so
+ * the next lookup rebuilds the graph. A call that changes nothing about
+ * the EDGES keeps the index, since re-routing the universe because a
+ * planned gate was renamed would be pure waste.
+ *
+ * Nothing is recomputed here: the stored numbers of the sourcing store
+ * were computed on the old graph and are flagged stale by the store that
+ * owns them, exactly as any other routing change is.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkGateLink[]} links Planned links, `planned` forced on
+ */
+export function setRaukkPlannedGateLinks(links: IRaukkGateLink[]): void {
+	const wanted: IRaukkGateLink[] = links.map((link) => ({
+		...link,
+		planned: true,
+	}));
+	const signature: string = signatureOf(wanted);
+
+	if (signature === plannedSignature) {
+		// same edges: keep the trees, only the labels may have moved
+		plannedGateLinks = wanted;
+		return;
+	}
+
+	plannedGateLinks = wanted;
+	plannedSignature = signature;
+	defaultIndex = undefined;
+}
+
+/**
+ * Planned gate links the module level lookups currently route on.
+ *
+ * @author raukk
+ *
+ * @returns {IRaukkGateLink[]} Planned links
+ */
+export function raukkPlannedGateLinks(): IRaukkGateLink[] {
+	return plannedGateLinks;
+}
+
 function index(): IRaukkRouteDistance {
 	if (defaultIndex === undefined) {
-		defaultIndex = createRouteDistance(systemsJson as IRaukkSystemNode[]);
+		defaultIndex = createRouteDistance(
+			systemsJson as IRaukkSystemNode[],
+			RAUKK_CX_SYSTEM_IDS,
+			plannedGateLinks.length === 0
+				? RAUKK_GATE_LINKS
+				: RAUKK_GATE_LINKS.concat(plannedGateLinks)
+		);
 	}
 
 	return defaultIndex;
@@ -1100,6 +1241,26 @@ export function nearestNeighbor(
 	systemId: string
 ): IRaukkNearestNeighbor | null {
 	return index().nearestNeighbor!(systemId);
+}
+
+/**
+ * Straight line between two systems in parsecs, NOT a route.
+ *
+ * What a gate traversal is priced on: a gate ignores the FTL network, so
+ * the distance that matters is the gap it bridges, whether or not
+ * anything connects both ends. 0 within one system.
+ *
+ * @author raukk
+ *
+ * @param {string} systemIdA Source system id
+ * @param {string} systemIdB Target system id
+ * @returns {(number | null)} Parsecs, null if either system is unknown
+ */
+export function straightLineParsecs(
+	systemIdA: string,
+	systemIdB: string
+): number | null {
+	return index().straightLineParsecs!(systemIdA, systemIdB);
 }
 
 /**

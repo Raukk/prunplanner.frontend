@@ -600,6 +600,63 @@ and read as a working button — nothing said the field had to be filled
    new to the anchor list (or un-marking one) stales now, the same
    line round 19 drew for the fleet count.
 
+## Round 21 (gate planning tool)
+
+User request: plan gates that do NOT exist — one seen going up
+in-game, or one the player thinks would be worth building. Delivered
+as an account-global slice `plannedGates` (store key = gate id,
+persisted and exported like the depots), a section on the shipping
+page and a route-graph hook.
+
+Decisions taken while implementing:
+
+1. **A planned gate is symmetric**: one fee, one volume clearance,
+   both sides alike. Nobody planning a link knows which end will be
+   the narrower one, and the per-side asymmetry of the transcribed
+   asset is a transcription fact, not a planning input. Same reason
+   `jumps24h`, `up` and `est` are left blank. Currency is not
+   modelled at all (round 8: the four trade ~1:1).
+2. **Off by default, and the switch is the whole contract**: while a
+   gate is off it is a note and routes nothing; while it is on it is
+   an ordinary edge of the graph and every distance, lane and chain
+   in the account may be planned over it. The import defaults
+   `enabled` to false as well — restoring a backup must not silently
+   re-route an account over gates that do not exist.
+3. **Planned edges are FLAGGED, not hidden**: `IRaukkGateLink.planned`
+   and the matching `IRaukkRouteHop.planned`, plus a new time option
+   `usePlannedGates` (default on) that bars them per query. One graph,
+   one memoized tree per option set — no second index.
+4. **Value = the gate against today, per gate**: each row measures its
+   own traversal against the fastest route the network manages between
+   the same two systems with EVERY planned gate barred, the user's own
+   included. Otherwise a switched-on gate would report saving nothing,
+   and two planned gates over one pair would each hide the other.
+   Direct traversal is one hop, so `min(today, traversal)` is the
+   whole "with it" answer — no extra Dijkstra per row.
+5. **Both sides fly one hull**: today's route is asked for a ship as
+   big as the planned gate would pass (`shipVolumeM3 = maxM3`), so a
+   narrow existing gate that could not take that hull does not count
+   against the plan. Consequence worth knowing: a 3,000 m³ plan over a
+   pair the 6,000 m³ Antares corridor already serves correctly reports
+   saving nothing.
+6. **Staleness follows the graph, not the record**: switching, moving
+   an endpoint, or changing fee/clearance of an ENABLED gate stales
+   every chain, and every snapshot while shipping is on (routing feeds
+   lane freight). A label, a note, a status, or any edit of a
+   switched-off gate stales nothing — the line round 19 drew for the
+   fleet count and round 20 for the depot rent.
+7. **The routing layer is pushed, not pulled**: `setRaukkPlannedGateLinks`
+   holds the links and drops the memoized index; the store owns the
+   data and pushes on a `sync`, deep, immediate watcher, which also
+   covers persisted-state hydration. The registry compares an
+   edge-only signature, so renaming a gate does not re-route the
+   universe. The calculation layer still knows nothing of the store.
+
+Not done, offered: no cost lens on the fee (a gate's ȼ per traversal
+is in the graph and priced by the chain math when routed, but the
+planning table itself compares TIME only), and no "which of my lanes
+would use it" column.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,
