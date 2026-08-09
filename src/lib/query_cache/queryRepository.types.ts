@@ -12,6 +12,8 @@ import {
 	IPopulationReport,
 	IRecipe,
 } from "@/features/api/gameData.types";
+// raukk: direct FIO REST API access (planet fee data)
+import { IFIOPlanetFees } from "@/features/api/fioData.types";
 
 import {
 	ICXEmpireJunction,
@@ -164,6 +166,10 @@ export interface IQueryRepository {
 		IExploration[]
 	>;
 	GetFIOStorage: IQueryDefinition<undefined, IFIOStorage>;
+	GetFIOPlanetFees: IQueryDefinition<
+		{ planetNaturalId: string },
+		IFIOPlanetFees | null
+	>;
 	// GetFIOSites: IQueryDefinition<undefined, IFIOSites>;
 	GetPlanetLastPOPR: IQueryDefinition<
 		{ planetNaturalId: string },
