@@ -24,6 +24,7 @@ function row(
 		utilization:
 			count > 0 ? shipMinutesPerDay / (MINUTES_PER_DAY * count) : null,
 		keys: [],
+		staleKeys: [],
 	};
 }
 

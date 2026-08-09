@@ -14,6 +14,7 @@
 		raukkLoadChainPrices,
 		IRaukkChainComputeError,
 	} from "@/features/raukk_sourcing/useRaukkChainCompute";
+	import { useRaukkStaleSnapshotRecompute } from "@/features/raukk_sourcing/useRaukkStaleSnapshotRecompute";
 	import { useRaukkShippingOptions } from "@/features/raukk_sourcing/useRaukkShippingOptions";
 
 	// Components
@@ -209,6 +210,37 @@
 		}
 	}
 
+	/*
+	 * Stale snapshot recomputation
+	 */
+
+	const {
+		running: refSnapshotsRunning,
+		current: refSnapshotCurrent,
+		done: refSnapshotsDone,
+		total: refSnapshotsTotal,
+		errors: refSnapshotErrors,
+		recomputeStaleSnapshots,
+	} = useRaukkStaleSnapshotRecompute();
+
+	/**
+	 * Refreshes the stored snapshots the whole page reads, then re-costs
+	 * the chains from the flows that refresh produced.
+	 *
+	 * Both steps in this order because the second consumes the first: a
+	 * chain result is costed from the stored snapshot flows, so re-costing
+	 * chains against snapshots that are about to change would be thrown
+	 * away by the very next step.
+	 *
+	 * @author raukk
+	 */
+	async function recomputeSnapshots(): Promise<void> {
+		if (refSnapshotsRunning.value || refRecomputing.value) return;
+
+		await recomputeStaleSnapshots();
+		await recomputeChains();
+	}
+
 	/** Label of one failed chain, the automatic pass carries no id */
 	function chainErrorLabel(chainError: IRaukkChainComputeError): string {
 		return chainError.chainId !== ""
@@ -323,14 +355,57 @@
 					<PButton
 						type="primary"
 						:loading="refRecomputing"
-						:disabled="refRecomputing"
+						:disabled="refRecomputing || refSnapshotsRunning"
 						@click="recomputeChains">
 						{{ $t("raukk_sourcing.shipping_page.recompute") }}
 					</PButton>
 				</template>
 				{{ $t("raukk_sourcing.shipping_page.recompute_tooltip") }}
 			</PTooltip>
+
+			<PTooltip>
+				<template #trigger>
+					<PButton
+						type="primary"
+						:loading="refSnapshotsRunning"
+						:disabled="refRecomputing || refSnapshotsRunning"
+						@click="recomputeSnapshots">
+						{{
+							$t("raukk_sourcing.shipping_page.recompute_snapshots")
+						}}
+					</PButton>
+				</template>
+				{{
+					$t(
+						"raukk_sourcing.shipping_page.recompute_snapshots_tooltip"
+					)
+				}}
+			</PTooltip>
 		</template>
+	</div>
+
+	<div v-if="refSnapshotsRunning" class="pt-3 text-white/50">
+		{{
+			$t("raukk_sourcing.shipping_page.recompute_snapshots_progress", {
+				done: refSnapshotsDone,
+				total: refSnapshotsTotal,
+				name: refSnapshotCurrent ?? "",
+			})
+		}}
+	</div>
+
+	<div v-if="refSnapshotErrors.length > 0" class="pt-3 flex flex-col">
+		<span
+			v-for="snapshotError in refSnapshotErrors"
+			:key="`RAUKKSNAPSHOTERROR#${snapshotError.planUuid}`"
+			class="text-negative">
+			{{
+				$t("raukk_sourcing.shipping_page.snapshot_error", {
+					name: snapshotError.planName,
+					message: snapshotError.message,
+				})
+			}}
+		</span>
 	</div>
 
 	<div v-if="refChainErrors.length > 0" class="pt-3 flex flex-col">

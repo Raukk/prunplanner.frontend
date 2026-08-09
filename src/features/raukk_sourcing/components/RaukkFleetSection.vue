@@ -405,7 +405,22 @@
 					<span v-else>—</span>
 				</td>
 				<td class="text-right text-white/60">
-					{{ row.assignedCount }}
+					<div class="flex flex-row gap-x-1 justify-end child:my-auto">
+						<PTooltip v-if="row.staleCount > 0">
+							<template #trigger>
+								<PTag size="sm" type="warning">
+									{{ $t("raukk_sourcing.fleet.stale") }}
+								</PTag>
+							</template>
+							{{
+								$t("raukk_sourcing.fleet.stale_tooltip", {
+									stale: row.staleCount,
+									total: row.assignedCount,
+								})
+							}}
+						</PTooltip>
+						<span>{{ row.assignedCount }}</span>
+					</div>
 				</td>
 				<td>
 					<div class="flex flex-row gap-x-1 justify-end">

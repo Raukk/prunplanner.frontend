@@ -792,6 +792,41 @@ describe("Raukk Sourcing: Shipping", () => {
 				expect(leg.unservableReason).toBeNull();
 			});
 
+			it("falls back to the smallest OWNED hull, never the default", () => {
+				// every owned hull is STL only and no gate serves the
+				// lane: the pick has nothing to choose from
+				const [leg] = raukkLaneLegs(
+					{
+						...fleetPair(
+							[ticker("ORE", 5000, 1, 1)],
+							[stlHull("stl_heavy"), stlHull("stl_small")]
+						),
+						hulls: {
+							owned: [
+								{
+									...stlHull("stl_heavy"),
+									shipTypeId: "stl_heavy",
+								},
+								{
+									...hull("stl_small", 500, 500),
+									profile: {
+										...hull("stl_small", 500, 500).profile,
+										stlOnly: true,
+									},
+								},
+							],
+							all: [hull("small", 500, 500)],
+						},
+					},
+					caps
+				);
+
+				// the pair profile is the account default, and a hull the
+				// account may own none of must never draw a fleet row
+				expect(leg.shipTypeId).toBe("stl_small");
+				expect(leg.shipTypeId).not.toBe(profile.id);
+			});
+
 			it("is not advised for such a lane either", () => {
 				const [leg] = raukkLaneLegs(
 					{

@@ -12,6 +12,7 @@ import {
 import {
 	raukkHullLoads,
 	raukkPickHull,
+	raukkSmallestCandidate,
 } from "@/features/raukk_sourcing/calculations/shippingHull";
 import {
 	raukkGateOnlyPath,
@@ -411,6 +412,14 @@ function stlOnlyServes(pair: IRaukkShippingPair): boolean {
  * advisory. Without any fleet data at all the pairs own profile flies the
  * leg, which is the behaviour of every caller that knows no fleet.
  *
+ * A pick that finds NOTHING to choose from — every owned hull filtered
+ * out as STL only on a leg no gate serves — falls back to the smallest
+ * OWNED hull rather than to the pairs profile: the pair profile is the
+ * account default, and defaulting there assigns work to a hull the
+ * account may own none of, which then draws a fleet row with a capacity
+ * of zero. The leg still fails its own STL validation, but it fails on a
+ * ship that exists.
+ *
  * @author raukk
  *
  * @param {IRaukkShippingPair} pair Route pair the leg belongs to
@@ -444,7 +453,10 @@ function legHull(
 		demand,
 		capDays
 	);
-	const candidate: IRaukkHullCandidate = owned?.candidate ?? fallback;
+	const candidate: IRaukkHullCandidate =
+		owned?.candidate ??
+		raukkSmallestCandidate(pair.hulls.owned) ??
+		fallback;
 
 	const ideal: IRaukkHullPick | null = raukkPickHull(
 		raukkStlOnlyCandidates(pair.hulls.all, gateServable),
