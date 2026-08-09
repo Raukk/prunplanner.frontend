@@ -1,0 +1,55 @@
+{
+	"PlanetNaturalId": "ZV-759c",
+	"PlanetName": "Deimos",
+	"GoverningEntity": "1b81c07f3b494dd39b3c9f6b8ac1e5bf",
+	"CurrencyCode": "AIC",
+	"BaseLocalMarketFee": 50.0,
+	"LocalMarketFeeFactor": 3.0,
+	"WarehouseFee": 100.0,
+	"EstablishmentFee": 0.0,
+	"COGCProgramStatus": "ACTIVE",
+	"ProductionFees": [
+		{
+			"Category": "METALLURGY",
+			"WorkforceLevel": "PIONEER",
+			"FeeAmount": 50.0,
+			"FeeCurrency": "AIC"
+		},
+		{
+			"Category": "METALLURGY",
+			"WorkforceLevel": "SETTLER",
+			"FeeAmount": 80.0,
+			"FeeCurrency": "AIC"
+		},
+		{
+			"Category": "METALLURGY",
+			"WorkforceLevel": "TECHNICIAN",
+			"FeeAmount": 140.0,
+			"FeeCurrency": "AIC"
+		},
+		{
+			"Category": "METALLURGY",
+			"WorkforceLevel": "ENGINEER",
+			"FeeAmount": 800.0,
+			"FeeCurrency": "AIC"
+		},
+		{
+			"Category": "METALLURGY",
+			"WorkforceLevel": "SCIENTIST",
+			"FeeAmount": 1500.0,
+			"FeeCurrency": "AIC"
+		},
+		{
+			"Category": "AGRICULTURE",
+			"WorkforceLevel": "PIONEER",
+			"FeeAmount": 50.0,
+			"FeeCurrency": "AIC"
+		},
+		{
+			"Category": "METALLURGY",
+			"WorkforceLevel": "FUTURE_TIER",
+			"FeeAmount": 9999.0,
+			"FeeCurrency": "AIC"
+		}
+	]
+}

@@ -29,6 +29,14 @@ import {
 	getWeightOfAllStorages,
 } from "@/features/planning/calculations/infrastructureCalculations";
 
+// raukk: production fees, planet data direct from FIO
+import { useQuery } from "@/lib/query_cache/useQuery";
+import {
+	calculateProductionFeeBatch,
+	calculateProductionFeeDaily,
+} from "@/features/planning/calculations/productionFeeCalculations";
+import { IFIOPlanetFees } from "@/features/api/fioData.types";
+
 // Submodule composables
 import { usePlanCalculationHandlers } from "@/features/planning/usePlanCalculationHandlers";
 import { usePlanCalculationPreComputes } from "@/features/planning/usePlanCalculationPreComputes";
@@ -107,6 +115,22 @@ export async function usePlanCalculation(
 	);
 	const planetNaturalId: Ref<string> = toRef(plan.value.planet_natural_id);
 	const planetData: IPlanet = await getPlanet(plan.value.planet_natural_id);
+
+	// raukk: government-set production fees, fetched non-blocking from
+	// FIO — plan loading and calculation must not depend on FIO uptime,
+	// until resolved (or on failure) fees are unknown and cost 0
+	const planetFees: Ref<IFIOPlanetFees | null> = ref(null);
+	useQuery("GetFIOPlanetFees", {
+		planetNaturalId: plan.value.planet_natural_id,
+	})
+		.execute()
+		.then((fees) => {
+			if (fees) {
+				planetFees.value = fees;
+				refreshKey.value++;
+			}
+		})
+		.catch(() => {});
 	const buildings: ComputedRef<IPlanDataBuilding[]> = computed(
 		() => data.value.buildings
 	);
@@ -458,6 +482,16 @@ export async function usePlanCalculation(
 				"BUY"
 			);
 
+			// raukk: government production fee, daily at full utilization
+			const productionFeeDaily: number = calculateProductionFeeDaily(
+				buildingData,
+				planetFees.value,
+				totalEfficiency
+			);
+			// fees are charged per order, an idle building pays none
+			const productionFeeDailyCost: number =
+				activeRecipes.length > 0 ? productionFeeDaily : 0;
+
 			// get recipe options
 			const recipeOptions: IRecipeBuildingOption[] = await Promise.all(
 				buildingRecipes.map(async (br) => {
@@ -490,7 +524,8 @@ export async function usePlanCalculation(
 						dailyIncome * maxDailyRuns -
 						dailyCost * maxDailyRuns -
 						constructionCost * -1 * (1 / 180) -
-						-1 * workforceDailyCost;
+						-1 * workforceDailyCost -
+						-1 * productionFeeDaily;
 
 					// Recipe option ROI
 					const roi: number = (constructionCost * -1) / dailyRevenue;
@@ -543,6 +578,12 @@ export async function usePlanCalculation(
 				const degradationShare: number = degradation * runtimeShare;
 				const workforceCostTotal: number = workforceDailyCost * -1;
 				const workforceCost: number = workforceCostTotal * runtimeShare;
+				// raukk: fee per batch, charged on nominal recipe time
+				const productionFee: number = calculateProductionFeeBatch(
+					buildingData,
+					planetFees.value,
+					ar.recipe.time_ms
+				);
 
 				const inputCost: ICOGMMaterialCost[] = await Promise.all(
 					ar.recipe.inputs.map(async (inputMat) => {
@@ -582,7 +623,10 @@ export async function usePlanCalculation(
 				);
 
 				const totalCost: number =
-					degradationShare + workforceCost + inputTotal;
+					degradationShare +
+					workforceCost +
+					inputTotal +
+					productionFee;
 
 				const sumOutputs: number = ar.recipe.outputs.reduce(
 					(sum, current) => sum + current.material_amount,
@@ -609,6 +653,7 @@ export async function usePlanCalculation(
 					degradationShare,
 					workforceCost,
 					workforceCostTotal,
+					productionFee,
 					inputCost,
 					inputTotal,
 					outputCOGM,
@@ -631,6 +676,7 @@ export async function usePlanCalculation(
 				constructionCost: constructionCost,
 				workforceMaterials: workforceMaterials,
 				workforceDailyCost: workforceDailyCost,
+				productionFeeDailyCost: productionFeeDailyCost,
 				dailyRevenue: 0,
 				expertise: buildingData.expertise,
 			};
@@ -651,6 +697,7 @@ export async function usePlanCalculation(
 			building.dailyRevenue =
 				productionRevenue +
 				workforceDailyCost * building.amount +
+				productionFeeDailyCost * building.amount +
 				(1 / 180) * constructionCost;
 
 			buildings.push(building);
@@ -766,10 +813,22 @@ export async function usePlanCalculation(
 			) *
 			(1 / 180);
 
-		const profit: number =
-			materialRevenue - materialCost - dailyDegradationCost;
+		// raukk: government production fees, positive daily cost total
+		const dailyProductionFeeCost: number =
+			productionResult.buildings.reduce(
+				(sum, element) =>
+					sum + element.productionFeeDailyCost * -1 * element.amount,
+				0
+			);
 
-		const cost: number = materialCost + dailyDegradationCost;
+		const profit: number =
+			materialRevenue -
+			materialCost -
+			dailyDegradationCost -
+			dailyProductionFeeCost;
+
+		const cost: number =
+			materialCost + dailyDegradationCost + dailyProductionFeeCost;
 
 		// calculate overview
 		overviewData.value = await calculateOverview(
@@ -832,6 +891,13 @@ export async function usePlanCalculation(
 		const dailyDegradationCost: number =
 			totalProductionConstructionCost / 180;
 
+		// raukk: government production fees, negative like degradation
+		const dailyProductionFee: number = production.buildings.reduce(
+			(sum, current) =>
+				sum + current.productionFeeDailyCost * current.amount,
+			0
+		);
+
 		const constructionMaterials = await calculateConstructionMaterials(
 			infrastructure,
 			production.buildings
@@ -857,13 +923,17 @@ export async function usePlanCalculation(
 		);
 
 		const profit: number =
-			dailyProfit - -1 * dailyDegradationCost - -1 * dailyCost;
+			dailyProfit -
+			-1 * dailyDegradationCost -
+			-1 * dailyCost -
+			-1 * dailyProductionFee;
 
 		return {
 			dailyCost: dailyCost * -1,
 			dailyProfit: dailyProfit * 1,
 			totalConstructionCost,
 			dailyDegradationCost: dailyDegradationCost * -1,
+			dailyProductionFeeCost: dailyProductionFee * -1,
 			profit,
 			roi: totalConstructionCost / profit,
 		};
@@ -874,6 +944,7 @@ export async function usePlanCalculation(
 		dailyProfit: 0,
 		totalConstructionCost: 0,
 		dailyDegradationCost: 0,
+		dailyProductionFeeCost: 0,
 		profit: 0,
 		roi: 0,
 	});
