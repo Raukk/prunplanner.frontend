@@ -39,6 +39,9 @@ import {
 	callExplorationData,
 	callPlanetLastPOPR,
 } from "@/features/api/gameData.api";
+// raukk: direct FIO REST API access (planet fee data)
+import { callFIOPlanetFees } from "@/features/api/fioData.api";
+import { IFIOPlanetFees } from "@/features/api/fioData.types";
 import {
 	callClonePlan,
 	callCreatePlan,
@@ -811,6 +814,29 @@ export function useQueryRepository() {
 		// 	persist: true,
 		// 	expireTime: 60_000 * 15, // 15 minutes
 		// } as IQueryDefinition<void, IFIOSites>,
+		GetFIOPlanetFees: {
+			key: (params: { planetNaturalId: string }) => [
+				"gamedata",
+				"fio",
+				"planetfees",
+				params.planetNaturalId,
+			],
+			fetchFn: async (params: { planetNaturalId: string }) => {
+				// raukk: FIO is a third-party service, a failing call
+				// must not break plan loading — fees are then unknown
+				try {
+					return await callFIOPlanetFees(params.planetNaturalId);
+				} catch {
+					return null;
+				}
+			},
+			autoRefetch: false,
+			persist: true,
+			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
+		} as IQueryDefinition<
+			{ planetNaturalId: string },
+			IFIOPlanetFees | null
+		>,
 		GetPlanetLastPOPR: {
 			key: (params: { planetNaturalId: string }) => [
 				"gamedata",

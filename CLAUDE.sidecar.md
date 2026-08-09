@@ -86,6 +86,30 @@ anywhere in the repo. Not retroactive.
   auto-recompute the tree on save" still stands — edits only flag
   staleness; batch refresh happens on empire load or the manual chain
   button.
+- 2026-08-09: Direct FIO REST access added (user decision; the hosted
+  backend is out of our control, this fork cannot add fields to its
+  planet payload). `fioData.api.ts` talks straight to rest.fnar.net
+  (CORS `*`) on a dedicated axios instance — the global instance's
+  auth interceptor must never leak PRUNplanner tokens to FIO. Query
+  `GetFIOPlanetFees` caches per planet; its fetchFn returns null on
+  failure so plan calculation never depends on FIO uptime (fees then
+  cost 0). vitest.setup.ts mocks the FIO client with a global 404.
+- 2026-08-09: Production fee model (verified against in-game orders):
+  fee = Σ over tiers (building workers × per-worker daily rate) ×
+  nominal recipe time, charged at order start. Efficiency shortens
+  wall-clock but the fee stays on nominal time, so daily fee while
+  producing = rate sum × efficiency, independent of recipe mix; idle
+  buildings pay nothing. Fee rates are government-set per planet+
+  industry+tier (FIO ProductionFees). Verified on one single-tier
+  building only — multi-tier weighting is the natural reading of the
+  in-game tooltip but unconfirmed.
+- 2026-08-09: FIO planet payload fields noted for upcoming use (user
+  request — they tie into local market fees, warehouse costs, base
+  establishment): BaseLocalMarketFee, LocalMarketFeeFactor,
+  WarehouseFee, EstablishmentFee, GoverningEntity, CurrencyCode, COGC
+  program data. All but COGC are already parsed and cached on
+  `IFIOPlanetFees` (query `GetFIOPlanetFees`) — consumers only need to
+  read them; only production fees have UI today.
 - 2026-08-07: Staleness epsilon aligned (bug: in an A↔B supply loop
   "the other plan" stayed stale forever): the chain settling epsilon
   (1e-6) and setSnapshot's materially-changed epsilon (was 1e-9) are

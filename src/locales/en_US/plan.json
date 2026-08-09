@@ -134,6 +134,7 @@
 				"cost_total": "Cost Total",
 				"cost_total_unit": "ȼ Total",
 				"workforce": "Workforce",
+				"production_fee": "Production Fee",
 				"total_cost": "Total Cost",
 				"recipe_profit": "@:terms.recipes Profit",
 				"cost_split": "Cost Split"
@@ -201,6 +202,7 @@
 			"table": {
 				"daily_cost": "Daily Cost",
 				"degradation": "Degradation",
+				"production_fees": "Production Fees",
 				"plan_cost": "Plan Cost",
 				"daily_profit": "Daily Profit",
 				"roi": "ROI",
