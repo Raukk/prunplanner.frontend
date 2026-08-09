@@ -170,7 +170,7 @@
 			"own_per_trip_tooltip": "Trip-weighted mean over this lane's {legs} leg(s), which may fly different hulls: the lane costs {daily} ȼ/day in total at {trips} trips/day, ȼ/day being the sum of each leg's trips times that leg's ȼ/trip. Days per visit of each leg are in the Days / Visit column.",
 			"wear": "Repair In",
 			"wear_days": "{days} d",
-			"wear_tooltip": "Micrometeorite and jump wear of your own fleet on this lane: {damage} % hull damage per round trip, so a ship reaches the 80 % repair threshold after about {trips} trips. Wear costs {cost} ȼ per trip; a full repair bill is {bill}.",
+			"wear_tooltip": "Micrometeorite and jump wear of your own fleet on this lane: {damage} % hull damage per round trip, so a ship drops to the 80 % condition repair point after about {trips} trips. Wear costs {cost} ȼ per trip; a full repair bill is {bill}.",
 			"rate_per_trip": "LM ȼ/Trip",
 			"rate_placeholder": "not hired",
 			"own_per_unit": "Own ȼ/u",
@@ -209,10 +209,10 @@
 		"utilization": "Shipping Capacity",
 		"drydock": "Drydock",
 		"drydock_days": "≈ {days} d",
-		"drydock_tooltip": "One hull of this type takes {damage} % micrometeorite and jump damage per day over its assigned lanes and chains, so it reaches the 80 % repair threshold after the stated days. A full repair bill is {bill}.",
+		"drydock_tooltip": "One hull of this type takes {damage} % micrometeorite and jump damage per day over its assigned lanes and chains, so it drops to the 80 % condition repair point after the stated days. A full repair bill is {bill}.",
 		"drydock_cost": "Wear over all hulls of the type costs {daily} ȼ/day, already included in the lane and chain costs.",
 		"drydock_unknown": "At least one stored result of this type predates wear tracking, so the wear is unknown rather than zero. Recompute the plan snapshots and chains to fill it in.",
-		"assigned": "Assigned",
+		"assigned": "Routes",
 		"calibrate": "Calibrate",
 		"remove": "Remove",
 		"add": "Add Type",
@@ -220,8 +220,9 @@
 		"empty": "No ships in the fleet yet — add a type below, then assign lanes and chains to it.",
 		"spillover": {
 			"toggle": "Show spillover",
-			"info": "Overflow past 100% is notionally moved onto your types with spare capacity and shown as an amber segment on their bars: the work fits in the fleet overall, just on the wrong hulls. An over-booked type then draws a full bar and prints what's left after spilling — red only when the fleet as a whole is short. This is a reading, not a re-assignment, and it's approximate: minutes move 1:1 between types, but the same work costs different minutes on a different hull.",
-			"split": "own {own} % + spilled {spilled} %"
+			"info": "Overflow past 100% is notionally moved onto your types with spare capacity and shown as an amber segment on their bars, with the split broken out into the Own and Spilled In columns: the work fits in the fleet overall, just on the wrong hulls. An over-booked type then draws a full bar and prints what's left after spilling — red only when the fleet as a whole is short. Ship time moves in minutes, not in whole routes: a route's minutes are split across every type with spare capacity, in proportion to that spare. This is a reading, not a re-assignment, and it's approximate: minutes move 1:1 between types, but the same work costs different minutes on a different hull.",
+			"own": "Own",
+			"spilled": "Spilled In"
 		},
 		"advisories": {
 			"title": "Fleet Advice",

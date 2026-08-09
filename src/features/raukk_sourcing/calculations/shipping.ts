@@ -53,18 +53,23 @@ const MINUTES_PER_DAY: number = 24 * 60;
 /**
  * Damage share at which players repair their ships.
  *
+ * Players repair at 80% CONDITION, which is 20% accumulated damage:
+ * lower makes the ship slow, higher wastes materials on a bill whose
+ * fixed components are paid whatever the damage.
+ *
  * A trip costs the fraction of a full repair bill it burns of this
- * budget: half a percent of damage on a 80% repair cycle is 1/160th of
- * the bill.
+ * budget: half a percent of damage on a 20% damage repair cycle is
+ * 1/40th of the bill.
  *
  * @author raukk
  */
-export const RAUKK_REPAIR_AT_DAMAGE: number = 0.8;
+export const RAUKK_REPAIR_AT_DAMAGE: number = 0.2;
 
 /**
  * Repair bill of one full repair cycle, in units per ticker.
  *
- * Observed at ~80% damage: MFK and FLP are fixed components, LHP and SSC
+ * Observed at 80% condition — the {@link RAUKK_REPAIR_AT_DAMAGE} cycle
+ * this bill belongs to: MFK and FLP are fixed components, LHP and SSC
  * scale with damage and land at roughly eleven each. Deliberate v1
  * limitation: these tickers are priced through the snapshots resolver
  * but their quantities are NOT booked into draws or edges, so they take
