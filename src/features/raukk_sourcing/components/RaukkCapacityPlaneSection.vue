@@ -22,6 +22,12 @@
 		IRaukkMapLane,
 		RAUKK_MAP_BUCKET_COLORS,
 	} from "@/features/raukk_sourcing/calculations/shippingMapDisplay";
+	import {
+		RAUKK_VIZ_ACCENT,
+		RAUKK_VIZ_ALERT,
+		RAUKK_VIZ_INK,
+		RAUKK_VIZ_SURFACE,
+	} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
 
 	// UI
 	import { PButton, PButtonGroup, PInputNumber } from "@/ui";
@@ -71,6 +77,10 @@
 			RAUKK_CAPACITY_MAX_DAYS
 		);
 	}
+
+	/** Cargo classes, the legend's order — the same set the star map
+	 * filters on, so both views key their dot colors identically */
+	const BUCKETS: RAUKK_CARGO_BUCKET[] = ["production", "workforce", "repair"];
 
 	const hulls: IRaukkCapacityHull[] = raukkCapacityHulls();
 
@@ -384,7 +394,7 @@
 
 			<div
 				class="overflow-hidden rounded border border-white/10"
-				style="background: #050a0d">
+				:style="{ background: RAUKK_VIZ_SURFACE.plot }">
 				<svg
 					class="block w-full h-auto"
 					:viewBox="`0 0 ${WIDTH} ${HEIGHT}`">
@@ -397,7 +407,7 @@
 							:y1="TOP"
 							:x2="xOf(tick)"
 							:y2="TOP + innerHeight"
-							stroke="#1b2530"
+							:stroke="RAUKK_VIZ_SURFACE.rule"
 							stroke-width="1" />
 						<line
 							v-for="tick in volumeTicks"
@@ -406,7 +416,7 @@
 							:y1="yOf(tick)"
 							:x2="LEFT + innerWidth"
 							:y2="yOf(tick)"
-							stroke="#1b2530"
+							:stroke="RAUKK_VIZ_SURFACE.rule"
 							stroke-width="1" />
 					</g>
 
@@ -428,13 +438,13 @@
 							"
 							:fill="
 								hull.shipTypeId === refHullId
-									? 'rgba(57,135,229,0.14)'
+									? RAUKK_VIZ_ACCENT.wash
 									: 'none'
 							"
 							:stroke="
 								hull.shipTypeId === refHullId
-									? '#3987e5'
-									: '#243040'
+									? RAUKK_VIZ_ACCENT.solid
+									: RAUKK_VIZ_INK.dim
 							"
 							:stroke-width="
 								hull.shipTypeId === refHullId ? 2 : 1
@@ -452,7 +462,7 @@
 						:y1="yOf(0)"
 						:x2="xOf(diagonal)"
 						:y2="yOf(diagonal)"
-						stroke="#6b6a64"
+						:stroke="RAUKK_VIZ_INK.muted"
 						stroke-width="1"
 						stroke-dasharray="2 5" />
 
@@ -466,7 +476,11 @@
 							:r="pointRadius(point)"
 							:fill="pointColor(point.bucket)"
 							:fill-opacity="overflows(point) ? 0.95 : 0.6"
-							:stroke="overflows(point) ? '#ff5470' : '#050a0d'"
+							:stroke="
+								overflows(point)
+									? RAUKK_VIZ_ALERT.text
+									: RAUKK_VIZ_SURFACE.plot
+							"
 							stroke-width="2">
 							<title>{{ pointTooltip(point) }}</title>
 						</circle>
@@ -535,6 +549,20 @@
 
 			<div
 				class="flex flex-row flex-wrap gap-x-4 gap-y-1 text-xs text-white/50">
+				<!-- the dots are colored by cargo class; the star map
+				 keys that off its filter checkboxes, this view has none
+				 and would otherwise leave the colors unexplained -->
+				<span
+					v-for="bucket in BUCKETS"
+					:key="`RAUKKPLANEKEY#${bucket}`"
+					class="flex flex-row items-center gap-x-1.5">
+					<span
+						class="inline-block w-3 h-3 rounded-[2px]"
+						:style="{
+							background: RAUKK_MAP_BUCKET_COLORS[bucket],
+						}" />
+					{{ $t(`raukk_sourcing.buckets.${bucket}`) }}
+				</span>
 				<span>
 					{{ $t("raukk_sourcing.capacity_plane.legend_inside") }}
 				</span>
@@ -555,13 +583,13 @@
 <style scoped>
 	svg text.saxis {
 		font-size: 10.5px;
-		fill: #898781;
+		fill: var(--rviz-ink);
 	}
 
 	svg text.splane {
 		font-size: 11px;
-		fill: #898781;
-		stroke: #050a0d;
+		fill: var(--rviz-ink);
+		stroke: var(--rviz-plot);
 		stroke-width: 4px;
 		paint-order: stroke;
 		stroke-linejoin: round;
@@ -570,7 +598,7 @@
 
 	svg text.splanesel {
 		font-size: 13px;
-		fill: #3987e5;
+		fill: var(--rviz-accent);
 		font-weight: 700;
 	}
 </style>

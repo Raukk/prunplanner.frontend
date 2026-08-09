@@ -37,6 +37,10 @@
 		raukkOversubPairAggregate,
 		raukkOversubSquareSide,
 	} from "@/features/raukk_sourcing/calculations/oversubMatrix";
+	import {
+		RAUKK_VIZ_ALERT,
+		RAUKK_VIZ_INK_RGB,
+	} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
@@ -279,7 +283,8 @@
 			height: `${side.toFixed(1)}px`,
 		};
 
-		if (pair.external) style.background = "rgba(137, 135, 129, 0.35)";
+		if (pair.external)
+			style.background = `rgba(${RAUKK_VIZ_INK_RGB}, 0.35)`;
 		else if (pair.anyOver) style.background = "var(--roversub-over)";
 		else if (pair.worstUtilization !== null)
 			style.background = raukkOversubBlueRamp(
@@ -289,8 +294,8 @@
 			// no reading: never on the ramp — hatched gray square
 			style.background =
 				"repeating-linear-gradient(45deg, " +
-				"rgba(137, 135, 129, 0.55) 0 3px, transparent 3px 7px)";
-			style.border = "1px solid rgba(137, 135, 129, 0.6)";
+				`rgba(${RAUKK_VIZ_INK_RGB}, 0.55) 0 3px, transparent 3px 7px)`;
+			style.border = `1px solid rgba(${RAUKK_VIZ_INK_RGB}, 0.6)`;
 		}
 
 		return style;
@@ -372,8 +377,8 @@
 			// no ships: no denominator, no ramp — hatched square
 			style.background =
 				"repeating-linear-gradient(45deg, " +
-				"rgba(137, 135, 129, 0.55) 0 3px, transparent 3px 7px)";
-			style.border = "1px solid rgba(199, 0, 57, 0.6)";
+				`rgba(${RAUKK_VIZ_INK_RGB}, 0.55) 0 3px, transparent 3px 7px)`;
+			style.border = `1px solid rgba(${RAUKK_VIZ_ALERT.rgb}, 0.6)`;
 		} else if (row.over) style.background = "var(--roversub-over)";
 		else
 			style.background = raukkOversubBlueRamp(
@@ -1146,7 +1151,7 @@
 		color: rgba(255, 255, 255, 0.5);
 		font-weight: 600;
 		text-align: right;
-		background: #212529;
+		background: var(--rviz-chip);
 		vertical-align: bottom;
 		max-width: 92px;
 		overflow: hidden;
@@ -1169,7 +1174,7 @@
 	table.mx td.rowh {
 		position: sticky;
 		left: 0;
-		background: #212529;
+		background: var(--rviz-chip);
 		text-align: left;
 		z-index: 2;
 		border-right: 1px solid rgba(255, 255, 255, 0.09);
@@ -1192,7 +1197,7 @@
 	table.mx td.totc {
 		position: sticky;
 		right: 0;
-		background: #212529;
+		background: var(--rviz-chip);
 		z-index: 2;
 		border-left: 1px solid rgba(255, 255, 255, 0.09);
 		text-align: right;
@@ -1225,7 +1230,7 @@
 		vertical-align: middle;
 	}
 	.gsq .gtri {
-		color: #fff;
+		color: rgba(255, 255, 255, 0.92);
 		font-size: 8px;
 		line-height: 1;
 	}
@@ -1240,10 +1245,10 @@
 		vertical-align: middle;
 		background: repeating-linear-gradient(
 			45deg,
-			rgba(137, 135, 129, 0.55) 0 3px,
+			rgba(var(--rviz-ink-rgb), 0.55) 0 3px,
 			transparent 3px 7px
 		);
-		border: 1px solid rgba(137, 135, 129, 0.6);
+		border: 1px solid rgba(var(--rviz-ink-rgb), 0.6);
 		color: rgba(255, 255, 255, 0.7);
 		font-size: 12px;
 	}
