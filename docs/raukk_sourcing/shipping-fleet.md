@@ -91,6 +91,17 @@ Verified against user BTF runs (ZV-759c → ANT, 4 pc, both hulls):
   fleet advisory, never as an assignment or a row. A held type at
   count 0 keeps its row with a null (blank) utilization: no hull,
   no denominator.
+- Fleet counts and staleness (round 18): the count itself is only the
+  utilization denominator and stales nothing while it stays on one
+  side of zero (2→3, a design-name edit) — but the OWNED SET (types
+  with count > 0) is the candidate list of the automatic hull pick
+  (`raukkOwnedHullCandidates`), so a type entering or leaving
+  ownership (added with hulls, count crossing 0 in either direction,
+  owned type deleted) marks every stored snapshot and chain result
+  stale, like a profile change, while shipping is enabled.
+  Advisories are additionally ownership-filtered at READ time in
+  `useRaukkFleet`: advice suggesting a type the fleet now owns is
+  dropped immediately, without waiting for the recompute.
 - Per-plan shipping fraction remains (sum of the plan's own lanes)
   but the fleet page is the account-level truth.
 
