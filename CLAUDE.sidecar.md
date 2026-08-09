@@ -110,6 +110,23 @@ anywhere in the repo. Not retroactive.
   program data. All but COGC are already parsed and cached on
   `IFIOPlanetFees` (query `GetFIOPlanetFees`) — consumers only need to
   read them; only production fees have UI today.
+- 2026-08-09: Habitation auto-optimization is FORCED ON account wide
+  (user decision) and solves the AREA goal, never `"auto"` (which tries
+  cost-minimal first and only falls back to area when it does not fit).
+  `useHabOptimization` is the single chokepoint: the plan checkbox reads
+  through `resolveAutoOptimizeHabs`, so a stored override that is
+  missing, undefined or `false` still optimizes; writes still reach the
+  stored value so it survives the override. Escape hatch is the profile
+  preference `habOptimizePerPlan` (default false) which hands the
+  decision back to the per-plan checkboxes and restores the `"auto"`
+  goal. That preference is CLIENT SIDE ONLY — deliberately absent from
+  `UserPreferenceSchema`, since the hosted backend is out of this fork's
+  control (see 2026-08-09 FIO note); zod strips it from both the PATCH
+  payload and the GET response, so it persists through the user store's
+  local persistence and a preference fetch cannot clobber it. PlanView's
+  optimize watcher became `immediate: true` so a plan stored with the
+  checkbox off is brought in line on open rather than on the next
+  workforce change.
 - 2026-08-07: Staleness epsilon aligned (bug: in an A↔B supply loop
   "the other plan" stayed stale forever): the chain settling epsilon
   (1e-6) and setSnapshot's materially-changed epsilon (was 1e-9) are

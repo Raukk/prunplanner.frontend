@@ -8,6 +8,7 @@
 		ref,
 		Ref,
 		watch,
+		WritableComputedRef,
 	} from "vue";
 
 	import { useI18n } from "vue-i18n";
@@ -44,6 +45,9 @@
 	import { useRaukkAutoSnapshot } from "@/features/raukk_sourcing/useRaukkAutoSnapshot";
 	import { usePlan } from "@/features/planning_data/usePlan";
 	import { usePlanPreferences } from "@/features/preferences/usePlanPreferences";
+	import { useHabOptimization } from "@/features/preferences/useHabOptimization";
+	const { habOptimizeForced, habOptimizeGoal, resolveAutoOptimizeHabs } =
+		useHabOptimization();
 	const {
 		createNewPlan,
 		saveExistingPlan,
@@ -190,10 +194,26 @@
 	// When the plan hasn't been created, we'll use the local ref which is
 	// stored into planPrefs on plan creation in save()
 	const refLocalAutoOptimizeHabs: Ref<boolean> = ref(true);
-	const refAutoOptimizeHabs =
+	const refStoredAutoOptimizeHabs =
 		planPrefs.value === null
 			? refLocalAutoOptimizeHabs
 			: planPrefs.value.autoOptimizeHabs;
+
+	/*
+	 * Auto-optimization is forced on account wide unless the user handed
+	 * the decision back to the plans on the profile screen. The unsaved
+	 * plan resolves through the very same rule as a stored one, so a plan
+	 * whose preference cannot be read still optimizes. Writes always reach
+	 * the stored value, which is what plan creation persists.
+	 */
+	const refAutoOptimizeHabs: WritableComputedRef<boolean, boolean> = computed(
+		{
+			get: () => resolveAutoOptimizeHabs(refStoredAutoOptimizeHabs.value),
+			set: (v) => {
+				refStoredAutoOptimizeHabs.value = v;
+			},
+		}
+	);
 
 	/**
 	 * Handle initial empire uuid assignment
@@ -621,8 +641,16 @@
 			() => result.value.infrastructureCosts,
 		],
 		() => {
-			applyOptimizeHabs("auto", false);
-		}
+			applyOptimizeHabs(habOptimizeGoal.value, false);
+		},
+		/*
+		 * Immediate, so a plan whose stored preference had the optimization
+		 * switched off is brought in line the moment it is opened — the
+		 * forced state would otherwise only take hold on the next workforce
+		 * or cost change. Habitations already matching the solution are
+		 * skipped in `applyOptimizeHabs`, so an optimal plan stays unmodified.
+		 */
+		{ immediate: true }
 	);
 </script>
 
@@ -860,6 +888,8 @@
 									:disabled="disabled"
 									:infrastructure-data="result.infrastructure"
 									:auto-optimize-habs="refAutoOptimizeHabs"
+									:hab-optimize-forced="habOptimizeForced"
+									:hab-optimize-goal="habOptimizeGoal"
 									:planet-natural-id="
 										planetData.planet_natural_id
 									"
