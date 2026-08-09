@@ -944,17 +944,29 @@ describe("queryStore: oldestDataTimestamp", () => {
 			hasData: false,
 			timestamp: NOW - 100_000,
 		});
-		// hydrated without a known timestamp, must be ignored
-		seedEntry(["ttlQuery", "o4"], {
+		expect(store.oldestDataTimestamp).toBe(NOW - 9000);
+	});
+
+	it("reports nothing while any cached payload has an unknown age", () => {
+		seedEntry(["ttlQuery", "o5"], {
 			definitionName: "ttlQuery",
-			params: "o4",
-			data: { v: 4 },
+			params: "o5",
+			data: { v: 1 },
+			hasData: true,
+			timestamp: NOW - 5000,
+		});
+		// hydrated without persisted meta: age unknown, possibly ancient
+		seedEntry(["ttlQuery", "o6"], {
+			definitionName: "ttlQuery",
+			params: "o6",
+			data: { v: 2 },
 			hasData: true,
 			hydrated: true,
 			timestamp: 0,
 		});
 
-		expect(store.oldestDataTimestamp).toBe(NOW - 9000);
+		// claiming "5 seconds old" would be a lie
+		expect(store.oldestDataTimestamp).toBeNull();
 	});
 
 	it("tracks the timestamp written by a real fetch", async () => {
@@ -1199,5 +1211,48 @@ describe("queryStore: revalidation backoff clears on success", () => {
 
 		expect(store.cacheState[hash].data).toStrictEqual({ v: 2 });
 		expect(store.cacheState[hash].revalidateFailedAt).toBeUndefined();
+	});
+});
+
+describe("queryStore: eviction must not disable hydration", () => {
+	it("keeps hydration available after the stale GC drops an entry", async () => {
+		const key: JSONValue = ["ttlQuery", "gc"];
+		const hash: string = toCacheKey(key);
+
+		// far beyond CACHE_GC_MS, so the watcher evicts it
+		seedEntry(key, {
+			definitionName: "ttlQuery",
+			params: "gc",
+			data: { v: "old" },
+			hasData: true,
+			timestamp: NOW - CACHE_GC_MS - 1,
+			expireTime: 1000,
+		});
+
+		store.checkEntryStatusAndRefresh();
+		expect(store.cacheState[hash]).toBeUndefined();
+
+		// eviction is not a mutation, local storage stays trusted
+		mocks.hydrateTtl.mockResolvedValueOnce({ v: "local" });
+		const got = await exec("ttlQuery", "gc");
+
+		expect(got).toStrictEqual({ v: "local" });
+		expect(mocks.hydrateTtl).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps hydration available after an explicit keepHydration evict", async () => {
+		mocks.hydrateTtl.mockResolvedValue({ v: "local" });
+		mocks.fetchTtl.mockResolvedValue({ v: "server" });
+
+		await store.invalidateKey(["ttlQuery"], {
+			exact: false,
+			skipRefetch: true,
+			keepHydration: true,
+		});
+
+		const got = await exec("ttlQuery", "evicted");
+
+		expect(got).toStrictEqual({ v: "local" });
+		expect(mocks.hydrateTtl).toHaveBeenCalledTimes(1);
 	});
 });

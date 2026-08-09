@@ -156,19 +156,29 @@ export const useQueryStore = defineStore(
 		 */
 		const refreshGeneration: Ref<number> = ref(0);
 
+		/**
+		 * Incremented by `$reset`, i.e. on logout. A fetch that started
+		 * for the previous user seeds sibling entries from inside its
+		 * fetchFn, which the per key epoch cannot cover because those
+		 * keys were never in the cache to be bumped. Callers capture this
+		 * before fetching and hand it back so those writes can be
+		 * dropped.
+		 */
+		const sessionGeneration: Ref<number> = ref(0);
+
 		function deleteState(key: string) {
 			delete cacheState[key];
 			delete cacheMeta[key];
+			hydrationAttempted.delete(key);
 			bumpEpoch(key);
 
 			/*
-				Deliberately keeps the hydration attempt. A key is dropped
-				because a mutation made it stale, and mutations do not
-				write through to the local stores hydration reads from, so
-				re-hydrating here would rebuild exactly the pre-mutation
-				payload the invalidation was meant to discard. Hydration
-				stays a once per session bootstrap, invalidation always
-				goes to the network. `$reset` clears it for the next user.
+				Clearing the hydration attempt is safe because staleness is
+				tracked separately: a mutation records its key prefix in
+				`invalidatedPrefixes` and hydration refuses anything under
+				it. An eviction records nothing, so the entry may be
+				rebuilt from local storage — which is what keeps an offline
+				user's data reachable after the stale GC drops it.
 			*/
 		}
 
@@ -180,6 +190,7 @@ export const useQueryStore = defineStore(
 			Object.keys(cacheMeta).forEach((key) => delete cacheMeta[key]);
 			hydrationAttempted.clear();
 			invalidatedPrefixes.clear();
+			sessionGeneration.value += 1;
 			// note: invalidationEpoch is deliberately NOT cleared, the
 			// bumps above are what stop a request still in flight for the
 			// previous user from writing its result back
@@ -447,7 +458,19 @@ export const useQueryStore = defineStore(
 				expireTime: definition.expireTime,
 			});
 
-			const promise = (async () => {
+			/*
+				Held in an object rather than a plain binding so the body
+				can tell whether this run is still the one registered in
+				`inFlight`. A fetchFn that throws before its first await
+				runs the `finally` while the initializer is still on the
+				stack, where `run.promise` simply reads undefined instead
+				of hitting a temporal dead zone.
+			*/
+			const run: {
+				promise?: Promise<DataOfDefinition<IQueryRepository[K]>>;
+			} = {};
+
+			run.promise = (async () => {
 				try {
 					const result: DataOfDefinition<IQueryRepository[K]> =
 						await definition.fetchFn(
@@ -492,11 +515,19 @@ export const useQueryStore = defineStore(
 					// cached payload the user is currently looking at,
 					// nor may either case revive an invalidated entry
 					if (background || epochOf(keyHash) !== startEpoch) {
-						// a background failure records no error so the
-						// cached payload stays usable, so note the
-						// attempt instead or the entry stays expired and
-						// is retried on every tick and every read
-						if (cacheState[keyHash]) {
+						/*
+							A background failure records no error so the
+							cached payload stays usable, so note the
+							attempt instead or the entry stays expired and
+							is retried on every tick and every read. Only
+							while this run still owns the entry: a
+							superseded run must not back off the
+							replacement that took its place.
+						*/
+						if (
+							cacheState[keyHash] &&
+							epochOf(keyHash) === startEpoch
+						) {
 							updateState(keyHash, {
 								revalidateFailedAt: Date.now(),
 							});
@@ -512,9 +543,16 @@ export const useQueryStore = defineStore(
 
 					throw error;
 				} finally {
-					// only clear the flags we set, an entry dropped mid
-					// flight must stay dropped
-					if (cacheState[keyHash]) {
+					/*
+						Only tidy up what this run still owns. A run that
+						was superseded — by an invalidation, or by a
+						replacement fetch for the same key — must not
+						clear the flags of, or drop the in-flight entry
+						of, whatever took its place.
+					*/
+					const superseded = epochOf(keyHash) !== startEpoch;
+
+					if (!superseded && cacheState[keyHash]) {
 						updateState(keyHash, {
 							loading: background
 								? (cacheState[keyHash]?.loading ?? false)
@@ -522,14 +560,20 @@ export const useQueryStore = defineStore(
 							revalidating: false,
 						});
 					}
-					inFlight.delete(keyHash);
-					if (!shouldCache) deleteState(keyHash);
+
+					if (inFlight.get(keyHash) === run.promise) {
+						inFlight.delete(keyHash);
+					}
+
+					if (!shouldCache && !superseded) deleteState(keyHash);
 				}
 			})();
 
-			inFlight.set(keyHash, promise);
+			inFlight.set(keyHash, run.promise);
 
-			return promise as Promise<DataOfDefinition<IQueryRepository[K]>>;
+			return run.promise as Promise<
+				DataOfDefinition<IQueryRepository[K]>
+			>;
 		}
 
 		/**
@@ -714,16 +758,19 @@ export const useQueryStore = defineStore(
 		 * @template TParams Query Params Type
 		 * @template TData Query Data Type
 		 * @param {JSONValue} key Query Key
-		 * @param {{ exact?: boolean; forceRefetch?: boolean; skipRefetch?: boolean }} [options={
+		 * @param {{ exact?: boolean; forceRefetch?: boolean; skipRefetch?: boolean; keepHydration?: boolean }} [options={
 		 * 			exact: true,
 		 * 			forceRefetch: false,
 		 * 			skipRefetch: false,
-		 * 		}] Options, by default will check for exact matches and doesn't force refresh
+		 * 		}] Options, by default will check for exact matches and doesn't force refresh.
+		 * 		`keepHydration` marks the call as eviction rather than a
+		 * 		mutation, leaving local storage trusted for the key.
 		 * @returns {Promise<void>}
 		 */
 		async function invalidateKey<K extends keyof IQueryRepository, TParams>(
 			key: JSONValue,
 			options: {
+				keepHydration?: boolean;
 				exact?: boolean;
 				forceRefetch?: boolean;
 				skipRefetch?: boolean;
@@ -735,9 +782,13 @@ export const useQueryStore = defineStore(
 		): Promise<void> {
 			const keyHash: string = toCacheKey(key);
 
-			// everything under this key is now known to be behind the
-			// backend, whether or not it is currently cached
-			blockHydration(key);
+			/*
+				Everything under this key is now known to be behind the
+				backend, whether or not it is currently cached. Eviction
+				(stale GC, dropping FIO data on sign-out) is not a
+				mutation and must not disable hydration for the key.
+			*/
+			if (!options.keepHydration) blockHydration(key);
 
 			const toRefetch: {
 				definitionKey: K;
@@ -819,8 +870,18 @@ export const useQueryStore = defineStore(
 			key: JSONValue,
 			definitionName: K,
 			params: TParams,
-			data: TData
+			data: TData,
+			sessionGuard?: number
 		): Promise<void> {
+			// seeded by a fetch that belonged to a previous session, e.g.
+			// one still in flight when the user logged out
+			if (
+				sessionGuard !== undefined &&
+				sessionGuard !== sessionGeneration.value
+			) {
+				return;
+			}
+
 			const keyHash: string = toCacheKey(key);
 			// identify correct definition
 			const definition: IQueryRepository[K] =
@@ -887,15 +948,21 @@ export const useQueryStore = defineStore(
 		 * @type {ComputedRef<number | null>}
 		 */
 		const oldestDataTimestamp: ComputedRef<number | null> = computed(() => {
-			const timestamps = Object.values(cacheState)
-				.filter(
-					(s) =>
-						(s.hasData === true || s.data !== null) &&
-						s.timestamp > 0
-				)
-				.map((s) => s.timestamp);
+			const withData = Object.values(cacheState).filter(
+				(s) => s.hasData === true || s.data !== null
+			);
 
-			return timestamps.length > 0 ? Math.min(...timestamps) : null;
+			/*
+				An entry restored from local storage without a persisted
+				timestamp has an unknown, potentially very old age.
+				Reporting the minimum of the others would claim the data on
+				screen is fresher than it is, so say nothing instead.
+			*/
+			if (withData.some((s) => s.timestamp <= 0)) return null;
+
+			return withData.length > 0
+				? Math.min(...withData.map((s) => s.timestamp))
+				: null;
 		});
 
 		/**
@@ -1036,7 +1103,12 @@ export const useQueryStore = defineStore(
 					) {
 						// nothing usable to serve, or far beyond any
 						// reasonable staleness => drop it
-						invalidateKey(JSON.parse(key) as JSONValue);
+						// eviction, not a mutation: local storage is
+						// still a valid source for this key
+						invalidateKey(JSON.parse(key) as JSONValue, {
+							exact: true,
+							keepHydration: true,
+						});
 					}
 				}
 			}
@@ -1074,6 +1146,7 @@ export const useQueryStore = defineStore(
 			refreshAll,
 			refreshing,
 			refreshGeneration,
+			sessionGeneration,
 			registerRemountGuard,
 			isAnythingLoading,
 			isAnythingRevalidating,

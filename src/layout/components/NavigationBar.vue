@@ -67,7 +67,10 @@
 			if (newValue) {
 				useQuery("GetFIOStorage").execute();
 			} else {
+				// dropping FIO data because the user has no FIO account
+				// is eviction, not a mutation
 				queryStore.invalidateKey(["gamedata", "fio"], {
+					keepHydration: true,
 					exact: false,
 					skipRefetch: true,
 				});

@@ -281,3 +281,53 @@ anywhere in the repo. Not retroactive.
   consumers wanting the stale-but-usable payload should read
   `cacheState[toCacheKey(key)]` directly. Not a regression: stale
   entries used to be deleted outright, so peeking failed then too.
+- 2026-08-09: Multi-agent review of the offline cache (user request:
+  normal reviewers then adversarial). Outcome, beyond the four
+  regressions already logged: PLANS ARE NEVER SERVED FROM LOCAL
+  STORAGE. `GetPlan`, `GetAllPlans` and `GetEmpirePlans` lost their
+  `hydrateFn`. Reason (reviewer-confirmed, reproduced): a plan is an
+  editable document PUT back in full by `PatchPlan` with no etag or
+  version check, while the wrapper freezes its payload in an
+  `inertClone` at mount and the background revalidation lands only in
+  `planningStore`/`cacheState`. So a cold start could paint a stale
+  plan, let the user edit it, and silently overwrite a newer server
+  version — reachable with two tabs on one machine, since every tab
+  rewrites the whole persisted planning blob. `GetAllPlans` also
+  hydrated a permanent superset (`setPlans` merges, unlike the other
+  setters) and `GetEmpirePlans` joined a stale membership stub list,
+  poisoning empire rollups and sourcing snapshots (which store
+  `stale: false` and carry no plan fingerprint). Game data still
+  hydrates — that is where the multi-second loading screens were, and
+  it is read-only, so none of the above applies. Cost of the decision:
+  opening a plan costs one small request again.
+  Also from the review: `invalidateKey` now records its prefix in
+  `invalidatedPrefixes` and hydration refuses anything under it for the
+  session, because a mutation makes local storage stale for its whole
+  key space and not merely for keys that happen to be cached — the
+  first-read-after-mutation case. Eviction paths pass `keepHydration`
+  so ordinary expiry and the FIO sign-out drop do NOT disable
+  hydration. Accepted consequence: after the first save of a session,
+  empire/cx/shared hydration is off until reload.
+  Session generation (`sessionGeneration`, bumped by `$reset`) guards
+  both `addCacheState` and every `planningStore.set*` write-through, so
+  a response arriving after logout cannot repopulate the persisted
+  store for the next user to hydrate.
+  `oldestDataTimestamp` now returns null when any cached payload has an
+  unknown age instead of excluding it: excluding meant the sidebar
+  reported the age of some other, fresher entry — it lied precisely
+  when meta had been wiped (every deploy) and the screen was showing
+  arbitrarily old IndexedDB data.
+  NOT fixed, known and reported: nothing detects a REMOTE write, and
+  the three consumers that matter (wrapper `inertClone`, PlanView's
+  `refPlanData`, `calculatedPlans`) all snapshot at mount, so a landed
+  revalidation never reaches the screen. Recommended follow-ups in
+  order: `updated_at`/409 on `PatchPlan`; a "changed elsewhere" banner
+  when a revalidation differs; bump `usePlanCalculation`'s `refreshKey`
+  when exchange/planet revalidations land (a cold-start empire rollup
+  can otherwise sum plans priced from two different market snapshots,
+  and those totals are PATCHed back via `PatchEmpireState`);
+  fingerprint sourcing snapshots with the plan version. Also
+  pre-existing and now more reachable: a failed save still clears
+  `modified` (`usePlan.saveExistingPlan` swallows the error), and
+  logout does not reset `userStore.preferences` (a self-assign no-op),
+  `raukkSourcingStore` or `userAlertsStore`.

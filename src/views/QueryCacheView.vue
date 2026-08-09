@@ -148,7 +148,11 @@
 								async () => {
 									await queryStore.invalidateKey(
 										JSON.parse(entry.key),
-										{ skipRefetch: true }
+										{
+											exact: true,
+											skipRefetch: true,
+											keepHydration: true,
+										}
 									);
 								}
 							">

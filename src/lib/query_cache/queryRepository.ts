@@ -192,6 +192,21 @@ export function useQueryRepository() {
 	// raukk: sourcing store, snapshot staleness follows plan mutations
 	const raukkSourcingStore = useRaukkSourcingStore();
 
+	/**
+	 * True while the session a request started in is still the current
+	 * one. A response that arrives after logout must not write the
+	 * previous user's data into the persisted planning store, where the
+	 * next session would hydrate it straight back out.
+	 *
+	 * @author jplacht
+	 *
+	 * @param {number} session Session generation captured before fetching
+	 * @returns {boolean} Safe to write through
+	 */
+	function isCurrentSession(session: number): boolean {
+		return queryStore.sessionGeneration === session;
+	}
+
 	const repository: IQueryRepository = {
 		GetMaterials: {
 			key: () => ["gamedata", "materials"],
@@ -281,6 +296,8 @@ export function useQueryRepository() {
 				params.planetNaturalIds,
 			],
 			fetchFn: async (params: { planetNaturalIds: string[] }) => {
+				// dropped if the session ends while this is in flight
+				const session: number = queryStore.sessionGeneration;
 				try {
 					const data: IPlanet[] = await callDataMultiplePlanets(
 						params.planetNaturalIds
@@ -296,7 +313,8 @@ export function useQueryRepository() {
 							["gamedata", "planet", p.planet_natural_id],
 							"GetPlanet",
 							{ planetNaturalId: p.planet_natural_id },
-							p
+							p,
+							session
 						);
 					});
 
@@ -379,8 +397,10 @@ export function useQueryRepository() {
 		GetAllShared: {
 			key: () => ["planningdata", "shared", "list"],
 			fetchFn: async () => {
+				const session: number = queryStore.sessionGeneration;
 				const data = await callGetSharedList();
-				planningStore.setSharedList(data);
+				if (isCurrentSession(session))
+					planningStore.setSharedList(data);
 				return data;
 			},
 			hydrateFn: async () => {
@@ -543,8 +563,9 @@ export function useQueryRepository() {
 		GetAllEmpires: {
 			key: () => ["planningdata", "empire", "list"],
 			fetchFn: async () => {
+				const session: number = queryStore.sessionGeneration;
 				const data = await callGetEmpireList();
-				planningStore.setEmpires(data);
+				if (isCurrentSession(session)) planningStore.setEmpires(data);
 				return data;
 			},
 			hydrateFn: async () => {
@@ -562,10 +583,12 @@ export function useQueryRepository() {
 				params.empireUuid,
 			],
 			fetchFn: async (params: { empireUuid: string }) => {
+				// dropped if the session ends while this is in flight
+				const session: number = queryStore.sessionGeneration;
 				try {
 					const data = await callGetEmpirePlans(params.empireUuid);
 
-					planningStore.setPlans(data);
+					if (isCurrentSession(session)) planningStore.setPlans(data);
 
 					// manually set individual plans
 					data.forEach((p) =>
@@ -573,7 +596,8 @@ export function useQueryRepository() {
 							["planningdata", "plan", p.uuid],
 							"GetPlan",
 							{ planUuid: p.uuid! },
-							p
+							p,
+							session
 						)
 					);
 
@@ -581,20 +605,6 @@ export function useQueryRepository() {
 				} catch {
 					return [];
 				}
-			},
-			hydrateFn: async (params: { empireUuid: string }) => {
-				const empire = planningStore.empires[params.empireUuid];
-				if (!empire) return null;
-
-				const plans = empire.plans.map(
-					(p) => planningStore.plans[p.uuid]
-				);
-
-				// a plan of the empire was never stored individually =>
-				// the rebuilt list would be incomplete
-				if (plans.length === 0 || plans.some((p) => !p)) return null;
-
-				return plans;
 			},
 			autoRefetch: false,
 			persist: true,
@@ -680,8 +690,9 @@ export function useQueryRepository() {
 		GetAllCX: {
 			key: () => ["planningdata", "cx"],
 			fetchFn: async () => {
+				const session: number = queryStore.sessionGeneration;
 				const data = await callGetCXList();
-				planningStore.setCXs(data);
+				if (isCurrentSession(session)) planningStore.setCXs(data);
 				return data;
 			},
 			hydrateFn: async () => {
@@ -698,17 +709,10 @@ export function useQueryRepository() {
 				params.planUuid,
 			],
 			fetchFn: async (params: { planUuid: string }) => {
+				const session: number = queryStore.sessionGeneration;
 				const data = await callGetPlan(params.planUuid);
-				planningStore.setPlan(data);
+				if (isCurrentSession(session)) planningStore.setPlan(data);
 				return data;
-			},
-			hydrateFn: async (params: { planUuid: string }) => {
-				// getPlan throws when the plan was never stored
-				try {
-					return await planningStore.getPlan(params.planUuid);
-				} catch {
-					return null;
-				}
 			},
 			autoRefetch: false,
 			persist: true,
@@ -716,9 +720,11 @@ export function useQueryRepository() {
 		GetAllPlans: {
 			key: () => ["planningdata", "plan", "list"],
 			fetchFn: async () => {
+				// dropped if the session ends while this is in flight
+				const session: number = queryStore.sessionGeneration;
 				try {
 					const data = await callGetPlanlist();
-					planningStore.setPlans(data);
+					if (isCurrentSession(session)) planningStore.setPlans(data);
 
 					// manually set individual plans
 					data.forEach((p) =>
@@ -726,7 +732,8 @@ export function useQueryRepository() {
 							["planningdata", "plan", p.uuid],
 							"GetPlan",
 							{ planUuid: p.uuid! },
-							p
+							p,
+							session
 						)
 					);
 
@@ -734,14 +741,6 @@ export function useQueryRepository() {
 				} catch {
 					return [];
 				}
-			},
-			hydrateFn: async () => {
-				// note: the persisted record accumulates every plan ever
-				// loaded, so this can be a superset of the real list. It
-				// has no expireTime and is therefore always confirmed
-				// against the backend in the background.
-				const data = Object.values(planningStore.plans);
-				return data.length > 0 ? data : null;
 			},
 			autoRefetch: false,
 			persist: true,
@@ -886,8 +885,10 @@ export function useQueryRepository() {
 		GetFIOStorage: {
 			key: () => ["gamedata", "fio", "storage"],
 			fetchFn: async () => {
+				const session: number = queryStore.sessionGeneration;
 				return await callDataFIOStorage().then((data: IFIOStorage) => {
-					planningStore.setFIOStorageData(data);
+					if (isCurrentSession(session))
+						planningStore.setFIOStorageData(data);
 					return data;
 				});
 			},
