@@ -740,13 +740,41 @@ the rest of both reviews is triage, not yet actioned.
 
 Round 22's point 4 wording is corrected by this round.
 
-## Round 24 (proposed, NOT implemented): gates for FTL hulls
+## Round 24 (gates on FTL routes)
 
-Both reviews and the user landed on the same gap, stated here so it is
-not rediscovered: **an FTL hull's leg never consults the gate network**,
-so no gate — planned or transcribed — has ever made a freighter faster in
-this tool. Gates today move STL-only routing and the planning table's own
-numbers, nothing else. See `gate-ftl-routing.md` for the full brief.
+Closes the gap both reviews and the user landed on: an FTL hull's leg
+never consulted the gate network, so no gate — planned or transcribed —
+had ever made a freighter faster. Full brief and design in
+`gate-ftl-routing.md`; decisions worth repeating here:
+
+1. **No config flag** (user): *"If the gates are available, just assume
+   they are always on and that the cost of using them is still a benefit
+   as long as it's actually faster."* Gates are part of the network.
+2. **A gate is adopted only when it WINS.** The search is asked for the
+   fastest multi modal path at THIS hull's speed; its answer is taken
+   only if it contains a gate hop and beats the FTL route. Without the
+   gate-hop guard a leg could be re-routed onto a merely faster FTL path
+   — minutes-optimal is not parsec-optimal, many short jumps pay more
+   reactor charges than one long one — which would move numbers for
+   every user with no gate near them. With it, such a leg is not
+   re-routed at all and stays bit-identical.
+3. **Whole route, not per hop.** The path may jump, traverse a gate and
+   jump again; the Dijkstra already spans both edge sets.
+4. **Both modes pay their own bill**: FTL hops burn fuel per parsec and
+   charge the reactor per jump, gate hops pay a fee and the sublight fuel
+   of the traversal and take a flat damage instead of a per parsec one.
+   `effectiveParsecs` stays the WHOLE path — it weights the per flow
+   allocation by distance ridden — while only the FTL parsecs are ever
+   multiplied by a per parsec rate.
+5. **Hull volume is now modelled properly** (`shippingHullVolume.ts`).
+   A gate measures the SHIP, and the code had been passing the cargo
+   hold, which is some 600 m³ smaller — optimistic in exactly the
+   direction that routes a ship through a gate the game would refuse.
+   The delta model reproduces all six of the user's blueprints to the
+   unit. Its assumed modules are stated in the file; a user with unusual
+   tanks should set `hullVolumeM3` and be believed over the derivation.
+6. **Lanes and chains both**, so the same journey never gets two
+   answers.
 
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,

@@ -986,7 +986,9 @@ export function createRouteDistance(
 
 		if (a === undefined || b === undefined) return null;
 
-		return euclidean(systems[a], systems[b]) / RAUKK_POSITION_UNITS_PER_PARSEC;
+		return (
+			euclidean(systems[a], systems[b]) / RAUKK_POSITION_UNITS_PER_PARSEC
+		);
 	}
 
 	function parsecDistance(

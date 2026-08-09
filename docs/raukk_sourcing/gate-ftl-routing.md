@@ -1,7 +1,10 @@
 # Gates for FTL hulls — implementation brief
 
-Status: **proposed, not implemented.** Written as a handoff document: it
-should be enough to implement from without re-deriving anything.
+Status: **IMPLEMENTED**, 2026-08-09. Kept as the record of why it is
+shaped the way it is. Two things changed against the proposal below and
+both are noted inline: the config flag was dropped (user decision — if a
+gate is faster, fly it), and the hull-volume problem turned out to be
+solvable rather than blocked.
 
 ## The gap, precisely
 
@@ -139,7 +142,7 @@ const flight =
             effectiveJumps * profile.chargeMinutes;
 ```
 
-### 5. The hull-volume problem — READ BEFORE IMPLEMENTING
+### 5. The hull-volume problem — SOLVED, see `shippingHullVolume.ts`
 
 Gate clearance in the game is the **ship's** volume. The asset pins an
 HCB at 5,825 m³ and the transcribed 6,000 m³ links are `hcbCapable`
@@ -158,17 +161,28 @@ makes it bite**, because planned gates come in 1,500 / 3,000 / 4,500 /
 6,000 and every one of those is a threshold something can fall the wrong
 side of.
 
-The ship profiles carry no hull volume at all — only `cargoWeight` and
-`cargoVolume` (`shippingProfiles.ts`). Fixing this properly needs a hull
-volume per ship type, which is DATA WE DO NOT HAVE for anything but the
-HCB. Options, in order of preference:
+RESOLVED. Ship volume is a published delta model, not a mystery: a
+963 m³ reference fit plus a signed delta per module that differs from it.
+`shippingHullVolume.ts` implements it, and it reproduces all six of the
+user's own blueprints to the unit, FTL and STL variants alike.
 
-1. Source the hull volumes in-game (one number per hull type) and add
-   `hullVolumeM3` to the profile. Correct, and cheap for whoever plays.
-2. Until then, pass `cargoVolume` but document the optimism loudly, and
-   do not let the gate planning tool imply a fit it cannot guarantee.
+Two caveats live in that file and are worth repeating here:
 
-Do not invent a bay-to-hull ratio from the single HCB data point.
+- The profiles model a cargo hold and a reactor flag and nothing else, so
+  the STL engine and both fuel tanks are ASSUMED to be the commonest fit
+  (FSE, MSL, LFL). That assumption moves across gate tiers — a large
+  sublight tank instead of the medium one adds 284 m³ — so
+  `IRaukkShipHull.hullVolumeM3` exists and always wins over the
+  derivation. A user with unusual ships should set it.
+- The per-bay deltas are a TABLE, not the closed form `1.05 x capacity -
+  525`. Five of the seven bays carry a further half unit the closed form
+  misses, and half a unit is exactly what decides a `Math.floor` at a
+  clearance boundary.
+
+Sources: DryDock (drydock.cc, regression tested against 24 in-game
+blueprint screenshots and 561 real blueprint combinations), the PCT
+community wiki's absolute component volumes, which sum to the same 963
+reference independently, and the in-game handbook for the gateway side.
 
 ### 6. Same treatment for pairs
 
@@ -176,16 +190,18 @@ Do not invent a bay-to-hull ratio from the single HCB data point.
 formula and needs the identical change, or v1 lanes will disagree with
 v2 chains about the same journey. Do both or neither.
 
-### 7. Staleness and the config flag
+### 7. Staleness and the config flag — DROPPED
 
-Adopting a gate changes stored numbers for anyone near the real network,
-without them touching anything. Suggested: an account-level
-`shippingConfig.useGatesForFtl` flag, following the pattern of the
-existing `enabled` master switch — `setShippingConfig` already stales
-every snapshot and chain on a change, which is exactly right here.
-Default it ON only if the user says so; the safe default is OFF with a
-one-time prompt, since it moves numbers people have been reading for
-weeks.
+No flag. User decision, 2026-08-09: *"If the gates are available, just
+assume they are always on and that the cost of using them is still a
+benefit as long as it's actually faster."* Gates are part of the network,
+so the model simply uses them.
+
+This is safe precisely because of the §2 guard: a leg that gains nothing
+from a gate is not merely unchanged in value, it is not re-routed at all,
+so users with no gate near them see bit-identical numbers and nothing
+goes stale for them. The users whose numbers DO move are the ones for
+whom the old numbers were wrong.
 
 ### 8. Display
 

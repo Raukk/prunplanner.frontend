@@ -15,9 +15,11 @@
 // Types & Interfaces
 import {
 	IRaukkMultiModalPath,
+	IRaukkRoute,
 	IRaukkRouteDistance,
 	IRaukkRouteHop,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
+import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 import {
 	IRaukkHullCandidate,
 	IRaukkResolvedShipProfile,
@@ -203,4 +205,123 @@ export function raukkStlOnlyCandidates(
 	if (gateServable) return candidates;
 
 	return candidates.filter((candidate) => !candidate.profile.stlOnly);
+}
+
+/**
+ * What the gate comparison needs to know about the hull flying it.
+ *
+ * @author raukk
+ */
+export interface IRaukkGateComparisonShip {
+	/** SHIP volume in m³, gate links below it do not admit it */
+	shipVolumeM3: number;
+	/** Minutes per parsec of FTL flight, absent bars the comparison */
+	minutesPerParsec?: number;
+	/** Minutes the reactor takes to charge, per jump */
+	chargeMinutes?: number;
+}
+
+/**
+ * The gate route an FTL hull should fly a leg on, `null` when none.
+ *
+ * The whole question in one place: is there a path using at least one
+ * gate that gets THIS hull from A to B sooner than the FTL network
+ * alone? The multi modal search already answers it — one Dijkstra over
+ * both edge sets on the minutes metric, so it will happily jump three
+ * times, traverse a gate and jump twice more if that is the global
+ * optimum, and it holds every link's clearance against the hull.
+ *
+ * Two guards, and both are load bearing:
+ *
+ * - `gateHops > 0`. Without a gate in it the search's answer is merely
+ *   the FASTEST FTL path, which is not the SHORTEST one — many short
+ *   jumps pay more reactor charges than one long jump. Adopting it would
+ *   move the numbers of every user with no gate anywhere near them, for
+ *   no reason at all. A leg with nothing to gain is left exactly as it
+ *   was before gates could serve an FTL hull.
+ * - it has to actually WIN, not tie. A ship can always ignore a gate.
+ *
+ * The hull's own speed is passed in, so a quick-charge hull is compared
+ * on its own terms rather than a reference ship's. `edgeMinutes` times
+ * an FTL hop as `(parsecs / ftlParsecsPerHour) * 60 + ftlJumpMinutes`,
+ * which is identically the `minutesPerParsec` / `chargeMinutes` model
+ * the leg costing uses — the two agree by construction, not by luck.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {string} fromSystemId Source system id
+ * @param {string} toSystemId Target system id
+ * @param {IRaukkRoute} ftlRoute The FTL route it has to beat
+ * @param {IRaukkGateComparisonShip} ship Hull flying it
+ * @returns {(IRaukkMultiModalPath | null)} Faster gate path, or null
+ */
+export function raukkFasterGatePath(
+	routes: IRaukkRouteDistance,
+	fromSystemId: string,
+	toSystemId: string,
+	ftlRoute: IRaukkRoute,
+	ship: IRaukkGateComparisonShip
+): IRaukkMultiModalPath | null {
+	if (
+		ship.minutesPerParsec === undefined ||
+		ship.minutesPerParsec <= 0 ||
+		routes.fastestPath === undefined
+	)
+		return null;
+
+	const chargeMinutes: number = ship.chargeMinutes ?? 0;
+
+	const found: IRaukkMultiModalPath | null = routes.fastestPath(
+		fromSystemId,
+		toSystemId,
+		{
+			// the search states speed in parsecs per hour, a profile in
+			// minutes per parsec: reciprocals
+			ftlParsecsPerHour: 60 / ship.minutesPerParsec,
+			ftlJumpMinutes: chargeMinutes,
+			useGates: true,
+			gatesOnly: false,
+			shipVolumeM3: ship.shipVolumeM3,
+		}
+	);
+
+	if (found === null || found.gateHops === 0) return null;
+
+	const ftlOnlyMinutes: number =
+		ftlRoute.parsecs * ship.minutesPerParsec +
+		ftlRoute.jumps * chargeMinutes;
+
+	return found.minutes < ftlOnlyMinutes - RAUKK_EPSILON_EQUAL ? found : null;
+}
+
+/**
+ * Parsecs of the FTL hops of a path, gate hops excluded.
+ *
+ * The figure a per parsec rate — fuel, damage — may be multiplied by. A
+ * gate hop covers distance without flying it, so it burns no FTL fuel
+ * and takes no per parsec damage; it pays its own fee, sublight fuel and
+ * flat damage instead, which {@link raukkGateLegCost} reports.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkMultiModalPath} path Multi modal path
+ * @returns {number} Parsecs flown under FTL
+ */
+export function raukkFtlParsecsOf(path: IRaukkMultiModalPath): number {
+	return path.hops
+		.filter((hop: IRaukkRouteHop) => hop.kind === "ftl")
+		.reduce((sum: number, hop: IRaukkRouteHop) => sum + hop.parsecs, 0);
+}
+
+/**
+ * FTL jumps of a path, gate hops excluded.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkMultiModalPath} path Multi modal path
+ * @returns {number} Jumps flown under FTL
+ */
+export function raukkFtlJumpsOf(path: IRaukkMultiModalPath): number {
+	return path.hops.filter((hop: IRaukkRouteHop) => hop.kind === "ftl").length;
 }
