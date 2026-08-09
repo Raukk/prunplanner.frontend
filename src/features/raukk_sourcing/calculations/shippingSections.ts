@@ -8,6 +8,7 @@ export const RAUKK_SHIPPING_SECTIONS = [
 	"settings",
 	"defaults",
 	"fleet",
+	"transport",
 	"chains",
 	"depots",
 	"gates",

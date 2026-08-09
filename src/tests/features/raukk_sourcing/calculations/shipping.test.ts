@@ -377,6 +377,39 @@ describe("Raukk Sourcing: Shipping", () => {
 			expect(result.repairCostPerTrip).toBe(0);
 		});
 
+		it("states the own fleet cost and wear of a hired leg", () => {
+			// the account transport table compares hiring against what
+			// flying it would have cost, so the counterfactual has to
+			// survive being hired — unlike the charged figures above
+			const result: IRaukkPairShipping = calculatePairShipping(
+				pair([], [ticker("ORE", 500, 1, 0.5)]),
+				{ ...config, lmRates: { pair: 500 } },
+				REPAIR_BILL_COST,
+				caps
+			);
+
+			expect(result.legs[0].costPerTrip).toBe(500);
+			expect(result.legs[0].ownCostPerTrip).toBeCloseTo(
+				COST_PER_TRIP,
+				10
+			);
+			expect(result.legs[0].damagePerTrip).toBe(0);
+			expect(result.legs[0].ownDamagePerTrip).toBeGreaterThan(0);
+		});
+
+		it("states the units a leg moves, both directions summed", () => {
+			const result: IRaukkPairShipping = calculatePairShipping(
+				pair([ticker("FE", 250, 1, 1)], [ticker("ORE", 500, 1, 0.5)]),
+				config,
+				REPAIR_BILL_COST,
+				caps
+			);
+
+			expect(
+				result.legs.reduce((sum, leg) => sum + leg.unitsPerDay, 0)
+			).toBe(750);
+		});
+
 		it("keeps oversubscribed imports on more than one trip per day", () => {
 			// 3000 t on a 1000 t hull: three loads a day
 			const result: IRaukkPairShipping = calculatePairShipping(

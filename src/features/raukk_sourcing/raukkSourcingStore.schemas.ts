@@ -387,6 +387,10 @@ export const RaukkSnapshotLaneSchema = z.object({
 	hired: z.boolean(),
 	// absent on snapshots frozen before the wear rollup
 	damagePerTrip: z.number().optional(),
+	// absent on snapshots frozen before the account wide transport table
+	ownCostPerTrip: z.number().optional(),
+	ownDamagePerTrip: z.number().optional(),
+	unitsPerDay: z.number().optional(),
 });
 
 export const RaukkPlanConfigSchema = z.object({

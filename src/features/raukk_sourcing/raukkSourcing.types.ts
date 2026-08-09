@@ -271,6 +271,20 @@ export interface IRaukkSnapshotLane {
 	 * snapshots frozen before the wear rollup — the fleet page then
 	 * reports the types wear as unknown rather than as zero. */
 	damagePerTrip?: number;
+	/** ȼ per trip the OWN fleet would charge, stated even while the lane
+	 * is hired. Frozen with the lane because the account wide transport
+	 * table compares hiring against it and the plan's own repair bill
+	 * priced it — the account page has no plan to price one with.
+	 * Absent on snapshots frozen before the transport table existed; the
+	 * comparison then reports the own cost as unknown, never as zero. */
+	ownCostPerTrip?: number;
+	/** Hull damage per trip the OWN fleet would take, stated even while
+	 * hired. Absent for the same reason as {@link ownCostPerTrip}. */
+	ownDamagePerTrip?: number;
+	/** Units the leg moves per day, both directions summed. The
+	 * denominator of the lane wide ȼ per unit. Absent for the same
+	 * reason as {@link ownCostPerTrip}. */
+	unitsPerDay?: number;
 }
 
 /** ȼ per unit a chain charges one flow it claimed */

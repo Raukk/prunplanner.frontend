@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 // Calculations
 import {
-	buildLmComparison,
+	buildTransportRows,
 	raukkPairIdentity,
 } from "@/features/raukk_sourcing/calculations/shippingDisplay";
 import {
@@ -11,29 +11,12 @@ import {
 } from "@/features/raukk_sourcing/calculations/shippingPairs";
 
 // Types & Interfaces
+import { IRaukkShippingConfig } from "@/features/raukk_sourcing/calculations/shipping.types";
 import {
-	IRaukkCadenceCaps,
-	IRaukkResolvedShipProfile,
-	IRaukkShippingConfig,
-	IRaukkShippingPair,
-} from "@/features/raukk_sourcing/calculations/shipping.types";
-
-const profile: IRaukkResolvedShipProfile = {
-	id: "test",
-	name: "Test Hauler",
-	cargoWeight: 1000,
-	cargoVolume: 1000,
-	ftlReactor: "standard",
-	costPerParsec: 10,
-	stlBlockCost: 50,
-	minutesPerParsec: 30,
-	stlBlockMinutesEmpty: 60,
-	stlBlockMinutesLoaded: 120,
-	chargeMinutes: 1,
-	damagePerParsec: 0,
-	damagePerStlBlock: 0,
-	shipsAvailable: 1,
-};
+	IRaukkSnapshot,
+	IRaukkSnapshotLane,
+} from "@/features/raukk_sourcing/raukkSourcing.types";
+import { IRaukkTransportRow } from "@/features/raukk_sourcing/calculations/shippingDisplay";
 
 const config: IRaukkShippingConfig = {
 	enabled: true,
@@ -42,28 +25,39 @@ const config: IRaukkShippingConfig = {
 	sameSystemFlatCost: 0,
 };
 
-/** Account defaults; every fixture fills its hull well inside them */
-const caps: IRaukkCadenceCaps = {
-	production: 14,
-	workforce: 30,
-	repair: 90,
-};
+const PAIR_KEY: string = raukkSourcingPairKey("consumer", "source");
 
-/** One sourcing pair importing 500 t of cargo per day over 5 parsecs */
-function sourcingPair(): IRaukkShippingPair {
+/** One frozen leg, the fields the transport table reads */
+function lane(patch: Partial<IRaukkSnapshotLane> = {}): IRaukkSnapshotLane {
 	return {
-		pairKey: raukkSourcingPairKey("consumer", "source"),
-		profile,
-		route: { parsecs: 5, jumps: 1, sameSystem: false },
-		out: [],
-		back: [
-			{
-				ticker: "RAT",
-				unitsPerDay: 500,
-				weightPerUnit: 1,
-				volumePerUnit: 1,
-			},
-		],
+		pairKey: PAIR_KEY,
+		bucket: "production",
+		shipTypeId: "test",
+		visitDays: 2,
+		tripsPerDay: 0.5,
+		roundTripMinutes: 600,
+		hired: false,
+		damagePerTrip: 0.1,
+		ownCostPerTrip: 200,
+		ownDamagePerTrip: 0.1,
+		unitsPerDay: 500,
+		...patch,
+	};
+}
+
+/** One stored snapshot owning the given lanes */
+function snapshot(
+	lanes: IRaukkSnapshotLane[],
+	stale: boolean = false
+): IRaukkSnapshot {
+	return {
+		computedAt: "2026-01-01T00:00:00.000Z",
+		stale,
+		planName: "Consumer",
+		planetNaturalId: "ZV-759c",
+		outputs: {},
+		draws: {},
+		lanes,
 	};
 }
 
@@ -96,56 +90,49 @@ describe("raukk shipping display helpers", () => {
 		});
 	});
 
-	describe("buildLmComparison", () => {
+	describe("buildTransportRows", () => {
 		it("prices the own fleet per trip and per unit", () => {
-			const [row] = buildLmComparison([sourcingPair()], config, 0, caps);
+			const [row] = buildTransportRows(
+				{ consumer: snapshot([lane()]) },
+				config,
+				0
+			);
 
-			// 2 * 5 pc * 10 + 2 * 50 block cost
 			expect(row.ownCostPerTrip).toBe(200);
-			// 500 t on a 1000 t hull: half a trip a day
 			expect(row.tripsPerDay).toBe(0.5);
 			expect(row.unitsPerDay).toBe(500);
+			// 0.5 trips a day at 200 ȼ over 500 units
 			expect(row.ownCostPerUnit).toBeCloseTo(0.2, 10);
 			expect(row.lmRatePerTrip).toBeUndefined();
 			expect(row.hiredCostPerUnit).toBeUndefined();
 			expect(row.savingPerUnit).toBeUndefined();
-		});
-
-		it("charges the repair bill into the own cost per trip", () => {
-			const pair: IRaukkShippingPair = sourcingPair();
-			pair.profile = { ...profile, damagePerParsec: 0.01 };
-
-			// 2 * 5 * 0.01 = 10% damage on a 20% damage budget, bill 800
-			const [row] = buildLmComparison([pair], config, 800, caps);
-
-			expect(row.ownCostPerTrip).toBe(200 + 400);
+			expect(row.identity.planUuid).toBe("consumer");
+			expect(row.hired).toBe(false);
+			expect(row.stale).toBe(false);
 		});
 
 		it("states the own fleet wear of the lane", () => {
-			const pair: IRaukkShippingPair = sourcingPair();
-			pair.profile = { ...profile, damagePerParsec: 0.01 };
+			const [row] = buildTransportRows(
+				{ consumer: snapshot([lane()]) },
+				config,
+				800
+			);
 
-			// 2 * 5 * 0.01 = 10% damage per trip, half a trip a day
-			const [row] = buildLmComparison([pair], config, 800, caps);
-
-			expect(row.ownWear.damagePerTrip).toBeCloseTo(0.1, 10);
-			// 0.2 / 0.1 trips, at 0.5 trips a day twice that in days
-			expect(row.ownWear.tripsUntilRepair).toBeCloseTo(2, 10);
-			expect(row.ownWear.daysUntilRepair).toBeCloseTo(4, 10);
-			// the same 400 ȼ the cost per trip test charges
-			expect(row.ownWear.repairCostPerTrip).toBeCloseTo(400, 10);
+			expect(row.ownWear?.damagePerTrip).toBeCloseTo(0.1, 10);
+			// 0.2 damage budget over 0.1 a trip, at 0.5 trips a day
+			expect(row.ownWear?.tripsUntilRepair).toBeCloseTo(2, 10);
+			expect(row.ownWear?.daysUntilRepair).toBeCloseTo(4, 10);
+			expect(row.ownWear?.repairCostPerTrip).toBeCloseTo(400, 10);
 		});
 
 		it("compares a hired rate against the own fleet", () => {
-			const pairKey: string = raukkSourcingPairKey("consumer", "source");
-
-			const [row] = buildLmComparison(
-				[sourcingPair()],
-				{ ...config, lmRates: { [pairKey]: 100 } },
-				0,
-				caps
+			const [row] = buildTransportRows(
+				{ consumer: snapshot([lane({ hired: true })]) },
+				{ ...config, lmRates: { [PAIR_KEY]: 100 } },
+				0
 			);
 
+			expect(row.hired).toBe(true);
 			expect(row.lmRatePerTrip).toBe(100);
 			expect(row.hiredCostPerUnit).toBeCloseTo(0.1, 10);
 			// own 0.2 minus hired 0.1: hiring saves half
@@ -153,117 +140,171 @@ describe("raukk shipping display helpers", () => {
 		});
 
 		it("reports a negative saving when hiring is dearer", () => {
-			const pairKey: string = raukkSourcingPairKey("consumer", "source");
-
-			const [row] = buildLmComparison(
-				[sourcingPair()],
-				{ ...config, lmRates: { [pairKey]: 1000 } },
-				0,
-				caps
+			const [row] = buildTransportRows(
+				{ consumer: snapshot([lane()]) },
+				{ ...config, lmRates: { [PAIR_KEY]: 1000 } },
+				0
 			);
 
 			expect(row.savingPerUnit).toBeLessThan(0);
 		});
 
-		it("lists an empty lane with zero trips instead of dropping it", () => {
-			const pair: IRaukkShippingPair = sourcingPair();
-			pair.back = [];
+		it("still states the own cost of a hired lane", () => {
+			// the comparison is what hiring buys, so the counterfactual
+			// has to survive being hired
+			const [row] = buildTransportRows(
+				{ consumer: snapshot([lane({ hired: true, damagePerTrip: 0 })]) },
+				{ ...config, lmRates: { [PAIR_KEY]: 100 } },
+				800
+			);
 
-			const [row] = buildLmComparison([pair], config, 0, caps);
-
-			expect(row.tripsPerDay).toBe(0);
-			expect(row.unitsPerDay).toBe(0);
-			expect(row.ownCostPerUnit).toBe(0);
-			expect(row.legs).toStrictEqual([]);
+			expect(row.ownCostPerTrip).toBe(200);
+			expect(row.ownWear?.damagePerTrip).toBeCloseTo(0.1, 10);
 		});
 
-		it("states every cargo bucket riding the lane on its own cadence", () => {
-			const pair: IRaukkShippingPair = sourcingPair();
-			pair.back = [
+		it("trip weights the own cost over legs flying different hulls", () => {
+			const rows: IRaukkTransportRow[] = buildTransportRows(
 				{
-					ticker: "RAT",
-					bucket: "workforce",
-					unitsPerDay: 500,
-					weightPerUnit: 1,
-					volumePerUnit: 1,
+					consumer: snapshot([
+						lane({
+							bucket: "production",
+							tripsPerDay: 0.5,
+							ownCostPerTrip: 200,
+							unitsPerDay: 400,
+							roundTripMinutes: 600,
+						}),
+						lane({
+							bucket: "workforce",
+							shipTypeId: "big",
+							tripsPerDay: 1.5,
+							ownCostPerTrip: 400,
+							unitsPerDay: 600,
+							roundTripMinutes: 200,
+						}),
+					]),
 				},
-				{
-					ticker: "FEO",
-					bucket: "production",
-					unitsPerDay: 100,
-					weightPerUnit: 1,
-					volumePerUnit: 1,
-				},
-			];
+				config,
+				0
+			);
 
-			const [row] = buildLmComparison([pair], config, 0, caps);
-
-			expect(row.legs.map((leg) => leg.bucket)).toStrictEqual([
+			expect(rows).toHaveLength(1);
+			expect(rows[0].tripsPerDay).toBe(2);
+			expect(rows[0].unitsPerDay).toBe(1000);
+			// (0.5 * 200 + 1.5 * 400) / 2
+			expect(rows[0].ownCostPerTrip).toBeCloseTo(350, 10);
+			// (0.5 * 600 + 1.5 * 200) / 2
+			expect(rows[0].roundTripMinutes).toBeCloseTo(300, 10);
+			expect(rows[0].legs.map((leg) => leg.bucket)).toStrictEqual([
 				"production",
 				"workforce",
 			]);
-
-			// 100 t a day into a 1000 t hull fill in 10 days, inside the cap
-			expect(row.legs[0].visitDays).toBeCloseTo(10);
-			expect(row.legs[0].capDays).toBe(14);
-			expect(row.legs[0].tripsPerDay).toBeCloseTo(0.1);
-
-			// 500 t a day fill the same hull in two, far inside the 30 day cap
-			expect(row.legs[1].visitDays).toBeCloseTo(2);
-			expect(row.legs[1].capDays).toBe(30);
-
-			// the lane's trips are the legs summed, each on its own rhythm
-			expect(row.tripsPerDay).toBeCloseTo(0.6);
+			expect(rows[0].legs[1].shipTypeId).toBe("big");
 		});
 
-		it("holds a leg at its cap when the hold fills slower", () => {
-			const pair: IRaukkShippingPair = sourcingPair();
-			pair.back = [
+		it("reports a figure the snapshot never froze as unknown", () => {
+			// a zero would read as free freight and make hiring look
+			// like a pure loss
+			const [row] = buildTransportRows(
 				{
-					ticker: "FEO",
-					bucket: "production",
-					unitsPerDay: 20,
-					weightPerUnit: 1,
-					volumePerUnit: 1,
+					consumer: snapshot([
+						lane({
+							ownCostPerTrip: undefined,
+							ownDamagePerTrip: undefined,
+							unitsPerDay: undefined,
+						}),
+					]),
 				},
-			];
+				{ ...config, lmRates: { [PAIR_KEY]: 100 } },
+				0
+			);
 
-			const [row] = buildLmComparison([pair], config, 0, caps);
-
-			// 50 days to fill, but the cap flies it half empty every 14
-			expect(row.legs[0].visitDays).toBe(14);
-			expect(row.legs[0].tripsPerDay).toBeCloseTo(1 / 14);
+			expect(row.ownCostPerTrip).toBeUndefined();
+			expect(row.ownCostPerUnit).toBeUndefined();
+			expect(row.unitsPerDay).toBeUndefined();
+			expect(row.ownWear).toBeUndefined();
+			expect(row.hiredCostPerUnit).toBeUndefined();
+			expect(row.savingPerUnit).toBeUndefined();
+			// the rate itself was entered, not frozen, so it survives
+			expect(row.lmRatePerTrip).toBe(100);
 		});
 
-		it("sums both directions of the exchange pair", () => {
-			const pair: IRaukkShippingPair = {
-				pairKey: raukkCxPairKey("plan"),
-				profile,
-				route: { parsecs: 2, jumps: 1, sameSystem: false },
-				out: [
-					{
-						ticker: "PE",
-						unitsPerDay: 200,
-						weightPerUnit: 1,
-						volumePerUnit: 1,
-					},
-				],
-				back: [
-					{
-						ticker: "H2O",
-						unitsPerDay: 300,
-						weightPerUnit: 1,
-						volumePerUnit: 1,
-					},
-				],
-			};
+		it("holds a whole lane unknown when one leg predates the figure", () => {
+			const [row] = buildTransportRows(
+				{
+					consumer: snapshot([
+						lane({ ownCostPerTrip: 200 }),
+						lane({
+							bucket: "workforce",
+							ownCostPerTrip: undefined,
+						}),
+					]),
+				},
+				config,
+				0
+			);
 
-			const [row] = buildLmComparison([pair], config, 0, caps);
+			expect(row.ownCostPerTrip).toBeUndefined();
+		});
+
+		it("degrades a lane frozen before the cadence model", () => {
+			const [row] = buildTransportRows(
+				{
+					consumer: snapshot([
+						lane({ bucket: undefined, visitDays: undefined }),
+					]),
+				},
+				config,
+				0
+			);
+
+			expect(row.legs[0].bucket).toBeNull();
+			expect(row.legs[0].visitDays).toBeNull();
+		});
+
+		it("carries the staleness of the snapshot holding the lane", () => {
+			const [row] = buildTransportRows(
+				{ consumer: snapshot([lane()], true) },
+				config,
+				0
+			);
+
+			expect(row.stale).toBe(true);
+		});
+
+		it("reads the exchange lane of a plan", () => {
+			const [row] = buildTransportRows(
+				{
+					plan: snapshot([lane({ pairKey: raukkCxPairKey("plan") })]),
+				},
+				config,
+				0
+			);
 
 			expect(row.identity.kind).toBe("cx");
-			expect(row.unitsPerDay).toBe(500);
-			// the busier direction drives the trips: 300 t of 1000 t
-			expect(row.tripsPerDay).toBeCloseTo(0.3, 10);
+			expect(row.identity.planUuid).toBe("plan");
+		});
+
+		it("lists the lanes of every plan, ordered stably", () => {
+			const rows: IRaukkTransportRow[] = buildTransportRows(
+				{
+					b: snapshot([lane({ pairKey: "b>source" })]),
+					a: snapshot([lane({ pairKey: "a>source" })]),
+				},
+				config,
+				0
+			);
+
+			expect(rows.map((row) => row.pairKey)).toStrictEqual([
+				"a>source",
+				"b>source",
+			]);
+		});
+
+		it("reads a snapshot without any stored lanes as none", () => {
+			expect(
+				buildTransportRows({ consumer: snapshot([]) }, config, 0)
+			).toStrictEqual([]);
+			expect(buildTransportRows({}, config, 0)).toStrictEqual([]);
 		});
 	});
 });

@@ -22,6 +22,7 @@
 	import RaukkShippingSettingsSection from "@/features/raukk_sourcing/components/RaukkShippingSettingsSection.vue";
 	import RaukkShippingCalibrationSection from "@/features/raukk_sourcing/components/RaukkShippingCalibrationSection.vue";
 	import RaukkFleetSection from "@/features/raukk_sourcing/components/RaukkFleetSection.vue";
+	import RaukkTransportSection from "@/features/raukk_sourcing/components/RaukkTransportSection.vue";
 	import RaukkChainSection from "@/features/raukk_sourcing/components/RaukkChainSection.vue";
 	import RaukkDepotSection from "@/features/raukk_sourcing/components/RaukkDepotSection.vue";
 	import RaukkGateSection from "@/features/raukk_sourcing/components/RaukkGateSection.vue";
@@ -362,6 +363,11 @@
 		<RaukkFleetSection
 			v-else-if="refSection === 'fleet'"
 			:repair-bill-cost="repairBillCost" />
+
+		<RaukkTransportSection
+			v-else-if="refSection === 'transport'"
+			:repair-bill-cost="repairBillCost"
+			:ship-type-options="shipTypeOptions" />
 
 		<RaukkChainSection
 			v-else-if="refSection === 'chains'"

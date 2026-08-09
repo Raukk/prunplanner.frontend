@@ -482,7 +482,8 @@ LM rate and ship assignment are pair-keyed.
 
 ## Round 16 (base-scoped transport view, WO-2)
 
-1. **The per-plan transport view exists now** (base-transport.md),
+1. **The per-plan transport view exists now** (superseded — see
+   transport.md),
    settling the "open, NOT decided" item of round 15.2 — as a
    collapsible "Transport for this base" section on the Sourcing tool
    next to the Shipping section, NOT a new route. The account page
@@ -926,4 +927,4 @@ See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,
 shipping-cadence-plan.md for the cadence redesign phases, and
-base-transport.md for the base-scoped transport view.
+transport.md for the account-wide transport table.
