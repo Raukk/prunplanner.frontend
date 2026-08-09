@@ -1075,6 +1075,18 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 			expect(store.depots).toStrictEqual({});
 		});
 
+		it("stales nothing when only the rent of a known depot moves", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setDepot("ZV-307c");
+			store.setChainResult("c1", makeChainResult("c1", []));
+
+			// the rent is no input of the chain math, it is summed next to it
+			store.setDepot("zv-307c", { weeklyCostAic: 2850 });
+
+			expect(store.chainResults["c1"].stale).toBe(false);
+			expect(store.depots["ZV-307C"].weeklyCostAic).toBe(2850);
+		});
+
 		it("round trips through the export", () => {
 			store.setDepot("ZV-307c", { weeklyCostAic: 2850 });
 
