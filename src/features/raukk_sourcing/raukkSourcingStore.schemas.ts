@@ -139,6 +139,9 @@ export const RaukkShippingConfigSchema = z.object({
 	// "nearest" or a fixed exchange code; an unknown code degrades to the
 	// nearest exchange at read time rather than failing the import
 	cxAnchorMode: z.string().min(1).default(RAUKK_CX_ANCHOR_NEAREST),
+	// a plan belonging to no empire is not part of the operation; letting
+	// it price other plans again is opt in
+	allowUnassignedSources: z.boolean().default(false),
 	perEdgeProfile: z.record(z.string(), z.string()).optional(),
 	lmRates: z.record(z.string(), z.number()).optional(),
 });

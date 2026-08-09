@@ -815,17 +815,23 @@ async function computeOneChain(
 ): Promise<IRaukkComputedChain> {
 	const sourcingStore = useRaukkSourcingStore();
 
-	const memberPlanUuids: string[] = sourcingStore.chainMemberPlans(
-		chain.stops
-	);
+	/*
+	 * Scoped: a chain the user authored across an unassigned plan still
+	 * flies its loop, it just carries nothing for that plan — the same
+	 * rule the derived chains follow in `unclaimedAccountFlows`, and the
+	 * reason membership is read off the scoped snapshots here.
+	 */
+	const scoped: Record<string, IRaukkSnapshot> =
+		sourcingStore.scopedSnapshots();
+
+	const memberPlanUuids: string[] = sourcingStore
+		.chainMemberPlans(chain.stops)
+		.filter((planUuid) => scoped[planUuid] !== undefined);
 
 	/** Frozen flows of every member plan, never live numbers */
-	const flows: IRaukkChainFlow[] = memberPlanUuids.flatMap((planUuid) => {
-		const snapshot: IRaukkSnapshot | undefined =
-			sourcingStore.snapshots[planUuid];
-
-		return snapshot?.flows ?? [];
-	});
+	const flows: IRaukkChainFlow[] = memberPlanUuids.flatMap(
+		(planUuid) => scoped[planUuid]?.flows ?? []
+	);
 
 	const anchorPlanet: string | undefined = chainAnchorPlanet(
 		chain,

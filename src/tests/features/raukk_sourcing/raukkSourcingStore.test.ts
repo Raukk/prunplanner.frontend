@@ -48,6 +48,28 @@ function makeSnapshot(
 	};
 }
 
+/**
+ * Puts exactly one plan into one empire, which takes every other stored
+ * plan out of the accounts scope.
+ *
+ * @param {string} planUuid Plan Uuid
+ */
+function assignOnly(planUuid: string): void {
+	usePlanningStore().setEmpires([
+		{
+			uuid: "empire",
+			name: "My Empire",
+			plans: [
+				{
+					uuid: planUuid,
+					plan_name: planUuid,
+					planet_natural_id: "OT-580b",
+				},
+			],
+		} as unknown as IPlanEmpireElement,
+	]);
+}
+
 describe("Raukk Sourcing Store", () => {
 	let store: ReturnType<typeof useRaukkSourcingStore>;
 
@@ -398,6 +420,30 @@ describe("Raukk Sourcing Store", () => {
 
 			expect(store.producersOf("NOPE")).toStrictEqual([]);
 		});
+
+		it("hides a plan no empire holds any more", () => {
+			store.setSnapshot("assigned", makeSnapshot("Assigned", { ORE: 100 }));
+			store.setSnapshot("dropped", makeSnapshot("Dropped", { ORE: 30 }));
+			assignOnly("assigned");
+
+			expect(store.producersOf("ORE").map((p) => p.planUuid)).toStrictEqual(
+				["assigned"]
+			);
+		});
+
+		it("offers an unassigned plan again once the rule is switched off", () => {
+			store.setSnapshot("assigned", makeSnapshot("Assigned", { ORE: 100 }));
+			store.setSnapshot("dropped", makeSnapshot("Dropped", { ORE: 30 }));
+			assignOnly("assigned");
+			store.setShippingConfig({ allowUnassignedSources: true });
+
+			expect(
+				store
+					.producersOf("ORE")
+					.map((p) => p.planUuid)
+					.sort()
+			).toStrictEqual(["assigned", "dropped"]);
+		});
 	});
 
 	describe("subscription", () => {
@@ -450,6 +496,21 @@ describe("Raukk Sourcing Store", () => {
 			expect(store.subscription("a", "ORE").totalDrawnPerDay).toBe(5);
 
 			expect(store.subscription("nope", "ORE")).toStrictEqual({
+				totalDrawnPerDay: 0,
+				byPlan: [],
+				pctOfOutput: 0,
+			});
+		});
+
+		it("ignores the draws of a plan no empire holds any more", () => {
+			store.setSnapshot("assigned", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot(
+				"dropped",
+				makeSnapshot("Dropped", { MET: 10 }, { assigned: { ORE: 40 } })
+			);
+			assignOnly("assigned");
+
+			expect(store.subscription("assigned", "ORE")).toStrictEqual({
 				totalDrawnPerDay: 0,
 				byPlan: [],
 				pctOfOutput: 0,

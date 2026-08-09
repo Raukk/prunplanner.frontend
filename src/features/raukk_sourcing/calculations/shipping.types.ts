@@ -141,6 +141,23 @@ export interface IRaukkShippingConfig {
 	 * automatic chain may serve in a single loop.
 	 */
 	cxAnchorMode?: string;
+	/**
+	 * Whether a plan assigned to NO empire may still act as a source for
+	 * the plans that are. Off by default: a base the account does not
+	 * operate produces nothing it can hand over, so a configuration still
+	 * pointing at one degrades to the market default price and books no
+	 * draw — exactly the path a vanished snapshot takes.
+	 *
+	 * Switched on, the old behaviour returns for the PRICE only: an
+	 * unassigned plan is offered in the source dropdown and its cost per
+	 * unit is charged again. The account level steps — chains, the fleet
+	 * rollup, hub/spoke — ignore its lanes either way, they speak for the
+	 * bases the account really runs.
+	 *
+	 * Optional for the reason every shipping field is: a local storage
+	 * blob written before the rule existed has none.
+	 */
+	allowUnassignedSources?: boolean;
 	/** Key: edge key, value: profile id overriding the default */
 	perEdgeProfile?: Record<string, string>;
 	/** Key: pair key, value: hired ȼ per trip replacing own fleet cost */
