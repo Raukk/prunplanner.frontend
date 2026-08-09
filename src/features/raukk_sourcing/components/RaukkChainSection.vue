@@ -605,6 +605,23 @@
 						<PTag size="sm" type="secondary">
 							{{ $t("raukk_sourcing.auto_chains.tag") }}
 						</PTag>
+						<!-- raukk: what the builder saw, nobody authored it -->
+						<PTooltip v-if="row.autoReason">
+							<template #trigger>
+								<PTag size="sm" type="primary">
+									{{
+										$t(
+											`raukk_sourcing.auto_chains.reason.${row.autoReason}`
+										)
+									}}
+								</PTag>
+							</template>
+							{{
+								$t(
+									`raukk_sourcing.auto_chains.reason_tooltip.${row.autoReason}`
+								)
+							}}
+						</PTooltip>
 						<PTag v-if="row.stale" size="sm" type="error">
 							{{ $t("raukk_sourcing.chains.stale") }}
 						</PTag>

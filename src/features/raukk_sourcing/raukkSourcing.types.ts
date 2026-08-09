@@ -14,6 +14,7 @@ import {
 	RAUKK_CHAIN_ANCHOR_KIND,
 	RAUKK_STOP_REF,
 } from "@/features/raukk_sourcing/calculations/shippingChains.types";
+import { RAUKK_AUTO_CHAIN_REASON } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
 
 /**
  * The shipping shapes the store persists. They are defined next to the
@@ -299,6 +300,10 @@ export interface IRaukkChainResult {
 	 * chain pass, never authored and never stored as a chain. Absent on
 	 * every result written before the automatic chains existed. */
 	auto?: boolean;
+	/** Why the builder derived this loop, see `raukkAutoChainReason`.
+	 * Nobody authored an automatic chain, so the list has to say what the
+	 * builder saw. Only automatic chains carry one. */
+	autoReason?: RAUKK_AUTO_CHAIN_REASON;
 	/** Days per visit the loop was capped at, the tightest cap of its
 	 * member consuming plans. Only automatic chains carry one. */
 	capDays?: number;

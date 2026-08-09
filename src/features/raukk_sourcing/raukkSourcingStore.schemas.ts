@@ -309,6 +309,10 @@ export const RaukkChainResultSchema = z.object({
 	// derived chains: absent on every result written before phase 2 and
 	// on every user authored chain
 	auto: z.boolean().optional(),
+	// absent on every result written before the reason existed; an
+	// unknown value simply reads as "no reason stated" rather than
+	// failing the users whole import
+	autoReason: z.enum(["supply", "partial", "neighbours"]).optional(),
 	capDays: z.number().positive().optional(),
 	advisories: z.array(RaukkFleetAdvisorySchema).default([]),
 });

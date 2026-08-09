@@ -155,6 +155,21 @@ anywhere in the repo. Not retroactive.
   ZV-307c at AI1) now break to fewer jumps, then the shorter leg out of
   the exchange, then stop refs: that tie, not a solver bug, is what made
   the printed order look wonky.
+- 2026-08-09: Auto chains state WHY they exist (user request), stored on
+  the result as `autoReason` and shown as a tag: `supply` (a member base
+  feeds another — tested first, it holds whatever the fill),
+  `partial` (exchange-only cargo leaving the hull under
+  `RAUKK_AUTO_CHAIN_PARTIAL_FILL` = 0.5 per visit — the case where
+  sharing a lap pays, since the fleet is charged ship TIME), else
+  `neighbours`. Fill per visit = the BINDING leg's utilization, which is
+  already the hull share one trip carries. Capacity itself needed no fix:
+  flows ride every leg from pickup to dropoff, so simultaneous pickups
+  sum on the shared leg, and a peak above one hull raises trips/day
+  (`fillDays = 1/loads`, the cadence cap may only SHORTEN the interval) —
+  a ship is never overloaded. Regression tests in shippingChains.test.ts.
+  NOT done, offered: the order is still picked on parsecs alone, so among
+  equally short flyable orders it may pick one whose peak forces more
+  trips.
 - 2026-08-07: Staleness epsilon aligned (bug: in an A↔B supply loop
   "the other plan" stayed stale forever): the chain settling epsilon
   (1e-6) and setSnapshot's materially-changed epsilon (was 1e-9) are

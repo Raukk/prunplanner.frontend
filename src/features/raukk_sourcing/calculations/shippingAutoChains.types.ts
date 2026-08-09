@@ -45,6 +45,13 @@ export interface IRaukkAutoChainCandidate {
  * account level chain pass and is never written into the `chains` store
  * record. Its id is synthetic, see {@link raukkAutoChainId}.
  */
+/**
+ * Why the builder derived one loop, see `raukkAutoChainReason`.
+ *
+ * @author raukk
+ */
+export type RAUKK_AUTO_CHAIN_REASON = "supply" | "partial" | "neighbours";
+
 export interface IRaukkAutoChain {
 	chainId: string;
 	/** Cadence class the whole loop serves, chains are never split */

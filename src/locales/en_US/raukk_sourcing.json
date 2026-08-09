@@ -363,6 +363,16 @@
 		"title": "Automatic Chains",
 		"info": "Loops nobody authored: one per cargo class per exchange region, CX → base → … → CX, at most five stops in the cheapest order the cargo allows — a base is always visited before the base it feeds, so one lap really delivers. Stops that would only fit by doubling back cost more than their detour budget and stay with the exchange hub/spoke. They are rebuilt on every chain recomputation from the flows the authored chains left, so they cannot be edited — widen a detour budget, pin a ship type, or author a chain of your own instead.",
 		"tag": "Auto",
+		"reason": {
+			"supply": "supplier → consumer",
+			"partial": "half-empty runs",
+			"neighbours": "on the way"
+		},
+		"reason_tooltip": {
+			"supply": "One of these bases feeds another: the loop exists to carry that cargo, and its stop order is fixed by it — the producing base is always visited before the one consuming from it.",
+			"partial": "Every stop trades with the exchange only, and a visit still leaves the ship less than half full. Each base flying its own lane would pay a full round trip for a part load, so they share one lap — the fleet is charged ship time, not cargo.",
+			"neighbours": "The stops fill the ship on their own and sit on one another's way, so one loop through all of them is shorter than a separate lane each."
+		},
 		"cap_days": "Days / Visit Cap",
 		"cap_days_tooltip": "Longest gap between two visits this loop accepts, the tightest cadence of the bases it serves. A loop reaching the cap flies before its hold is full, and that partial trip pays a full trip.",
 		"empty": "No automatic chains. Bases carrying less than the stop share, sitting outside the detour budget or anchored at another exchange trade through the exchange instead.",

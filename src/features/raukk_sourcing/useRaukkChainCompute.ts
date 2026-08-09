@@ -16,6 +16,7 @@ import {
 import { raukkStlOnlyCandidates } from "@/features/raukk_sourcing/calculations/shippingStl";
 import {
 	raukkAutoChainDemand,
+	raukkAutoChainReason,
 	raukkBuildAutoChains,
 } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 import {
@@ -705,6 +706,13 @@ async function computeOneAutoChain(
 		memberPlanUuids: autoChain.memberPlanUuids,
 		config: { ...chainConfig },
 		auto: true,
+		// what the builder saw: nobody authored this loop. The binding leg
+		// is the fullest one, so its utilization IS the share of the hull
+		// a visit of this loop carries
+		autoReason: raukkAutoChainReason(
+			autoChain.flows,
+			shipping.legs[shipping.bindingLegIndex]?.utilization ?? 0
+		),
 		capDays: autoChain.capDays,
 		advisories,
 	};

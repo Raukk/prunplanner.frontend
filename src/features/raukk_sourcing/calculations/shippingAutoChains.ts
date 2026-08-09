@@ -39,6 +39,7 @@ import {
 	IRaukkAutoChainInput,
 	IRaukkHubSpokeRow,
 	IRaukkOrderedLoop,
+	RAUKK_AUTO_CHAIN_REASON,
 } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
 
 /**
@@ -71,6 +72,18 @@ export const RAUKK_AUTO_CHAIN_MIN_STOPS: number = 2;
  * @author raukk
  */
 export const RAUKK_AUTO_CHAIN_PREFIX: string = "auto:";
+
+/**
+ * Hull share below which a visit counts as a PARTIAL run: half.
+ *
+ * A loop whose visit fills less than half the ship is flying for the
+ * rhythm rather than for the cargo — which is exactly the case where
+ * sharing one lap between several bases pays, since the fleet is charged
+ * ship TIME and a half empty lap costs as much as a full one.
+ *
+ * @author raukk
+ */
+export const RAUKK_AUTO_CHAIN_PARTIAL_FILL: number = 0.5;
 
 /** The cadence classes, in the order the derived chains are reported */
 const CARGO_BUCKETS: RAUKK_CARGO_BUCKET[] = [
@@ -410,6 +423,49 @@ export function raukkFlowPrecedence(
 	});
 
 	return result;
+}
+
+/**
+ * Why a loop was derived at all, in one word for the chain list.
+ *
+ * Nobody authored these loops, so the table has to say what the builder
+ * saw. Three answers cover every derived chain, in the order they are
+ * tested — a loop that moves cargo between its own stops is a supply run
+ * whatever its fill:
+ *
+ *  - `supply`: a member base feeds another one, so the loop exists to
+ *    carry that cargo and its stop order is fixed by it;
+ *  - `partial`: everything rides to or from the exchange and the visit
+ *    still leaves the hull under half full — several thin runs share one
+ *    lap instead of each flying its own;
+ *  - `neighbours`: the stops fill the ship on their own and simply sit
+ *    on one another's way, so one loop is shorter than separate lanes.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkChainFlow[]} flows Flows the loop claimed
+ * @param {number} fillPerVisit Hull share one visit carries, 0..1
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @returns {RAUKK_AUTO_CHAIN_REASON} Reason the loop exists
+ */
+export function raukkAutoChainReason(
+	flows: IRaukkChainFlow[],
+	fillPerVisit: number,
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE
+): RAUKK_AUTO_CHAIN_REASON {
+	const feeds: boolean = flows.some(
+		(flow) =>
+			!(flow.fromStop in cxSystems) &&
+			!(flow.toStop in cxSystems) &&
+			flow.fromStop !== flow.toStop &&
+			flow.unitsPerDay > 0
+	);
+
+	if (feeds) return "supply";
+
+	return fillPerVisit < RAUKK_AUTO_CHAIN_PARTIAL_FILL
+		? "partial"
+		: "neighbours";
 }
 
 /** Both endpoints of a flow that name a base rather than an exchange */

@@ -16,6 +16,7 @@ import {
 	raukkBuildAutoChains,
 	raukkClassDetourBudget,
 	raukkClusterChainStops,
+	raukkAutoChainReason,
 	raukkFlowConcernsPlan,
 	raukkFlowPrecedence,
 	raukkHubSpokeRows,
@@ -181,6 +182,54 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 				"AA-001a>AA-002b",
 				"AA-002b>AA-003c",
 			]);
+		});
+	});
+
+	describe("raukkAutoChainReason", () => {
+		it("names a loop that feeds itself a supply run, however full", () => {
+			expect(
+				raukkAutoChainReason(
+					[
+						flow("ALO", "AA-001a", "AA-002b", 100),
+						flow("RAT", "CX1", "AA-001a", 10),
+					],
+					1,
+					cxSystems
+				)
+			).toBe("supply");
+		});
+
+		it("names a thin exchange only loop a partial run", () => {
+			expect(
+				raukkAutoChainReason(
+					[
+						flow("RAT", "CX1", "AA-001a", 10),
+						flow("FE", "AA-002b", "CX1", 10),
+					],
+					0.3,
+					cxSystems
+				)
+			).toBe("partial");
+		});
+
+		it("names a full exchange only loop bases on the way", () => {
+			expect(
+				raukkAutoChainReason(
+					[flow("FE", "AA-002b", "CX1", 900)],
+					0.9,
+					cxSystems
+				)
+			).toBe("neighbours");
+		});
+
+		it("ignores a base to base flow that moves nothing", () => {
+			expect(
+				raukkAutoChainReason(
+					[flow("ALO", "AA-001a", "AA-002b", 0)],
+					0.2,
+					cxSystems
+				)
+			).toBe("partial");
 		});
 	});
 
