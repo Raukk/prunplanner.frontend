@@ -15,6 +15,7 @@ import {
 	raukkGateCostAic,
 	raukkGateCostTickers,
 	raukkGateLinkBuildCost,
+	raukkGateLinkUpkeep,
 	raukkGateSpecs,
 	raukkGateUpgradeBudgetLeft,
 	raukkGateUpgradeCeiling,
@@ -579,6 +580,35 @@ describe("Raukk Sourcing: gate costs", () => {
 			expect(
 				raukkGateUpgradesFit(upgrades(5, 3, 3), "capacity")
 			).toStrictEqual(upgrades(0, 2, 3));
+		});
+	});
+
+	describe("upkeep", () => {
+		it("is flat across every transcribed configuration", () => {
+			// the panel's upkeep line never moved, on any of the 13 —
+			// upgrading a gate does not raise what it costs to keep
+			expect(RAUKK_GATE_UPKEEP).toStrictEqual({
+				ALR: 10,
+				WRH: 4,
+				SEA: 40,
+				POW: 4,
+				SP: 10,
+				SPT: 40,
+			});
+		});
+
+		it("is charged at both ends of a link, like the build bill", () => {
+			const link: IRaukkMaterialAmounts = raukkGateLinkUpkeep();
+
+			Object.entries(RAUKK_GATE_UPKEEP).forEach(([ticker, amount]) => {
+				expect(link[ticker]).toBe(amount * 2);
+			});
+		});
+
+		it("does not move with the upgrades", () => {
+			// nothing to assert against the cost functions: upkeep takes
+			// no upgrade argument at all, which IS the model
+			expect(raukkGateLinkUpkeep()).toStrictEqual(raukkGateLinkUpkeep());
 		});
 	});
 

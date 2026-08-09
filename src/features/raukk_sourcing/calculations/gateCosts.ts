@@ -83,15 +83,39 @@ export const RAUKK_GATE_BASE_COST: IRaukkMaterialAmounts = ASSET.base;
 export const RAUKK_GATE_BASE_SPECS: IRaukkGateSpecs = ASSET.baseSpecs;
 
 /**
- * Upkeep line of the GTWI panel, per gate.
+ * Upkeep line of the GTWI panel: per gate, per DAY.
  *
- * Constant across every transcribed upgrade level. The panel does not
- * state the billing PERIOD, so nothing prices it — it is carried for the
- * user to read, not for the model to charge.
+ * Flat across all 13 transcribed configurations — upgrading a gate does
+ * not raise what it costs to keep. The FLATNESS is observed; the daily
+ * period is not, the panel never states one. It is the user's reading
+ * (2026-08-09) and a sound one at this scale: a few dozen ships paying
+ * 4,000–6,000 ȼ of gate fees a day cover it several times over, which a
+ * weekly or monthly bill would make nonsensical.
+ *
+ * Worth stating because the two costs answer different questions: the
+ * build bill decides whether a gate is worth STARTING, the upkeep
+ * decides whether a quiet one is worth KEEPING.
  *
  * @author raukk
  */
 export const RAUKK_GATE_UPKEEP: IRaukkMaterialAmounts = ASSET.upkeep;
+
+/**
+ * Daily upkeep of a whole LINK: both gates, since both are yours.
+ *
+ * Independent of the upgrade levels, unlike the build bill.
+ *
+ * @author raukk
+ *
+ * @returns {IRaukkMaterialAmounts} Materials per day
+ */
+export function raukkGateLinkUpkeep(): IRaukkMaterialAmounts {
+	const total: IRaukkMaterialAmounts = {};
+
+	add(total, ASSET.upkeep, 2);
+
+	return total;
+}
 
 /**
  * Highest level each upgrade track admits.
