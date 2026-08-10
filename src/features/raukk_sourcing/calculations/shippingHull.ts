@@ -1,8 +1,7 @@
 // Automatic hull selection: which OWNED ship type flies one leg of a
-// lane. See docs/raukk_sourcing/shipping-cadence-plan.md, "Phase 1 —
-// cadence model on direct lanes", bullet "Auto hull selection per leg".
-// Pure functions over plain numbers: the candidates, their capacities and
-// the legs daily cargo arrive from the caller, no store and no Vue.
+// lane. Pure functions over plain numbers: the candidates, their
+// capacities and the legs daily cargo arrive from the caller, no store
+// and no Vue.
 
 // Calculations
 import { raukkCadenceOf } from "@/features/raukk_sourcing/calculations/shippingCadence";

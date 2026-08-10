@@ -548,10 +548,9 @@ describe("Raukk Sourcing: account level chain compute", () => {
 
 		/*
 		 * Review finding 1: a plan to plan flow is authored by the
-		 * CONSUMER alone (shipping-plan.md, "Ownership rule"). Folding it
-		 * into the SOURCE plans outbound as well raises the producers
-		 * break even price, which the consumer then pays a second time
-		 * through that very price.
+		 * CONSUMER alone. Folding it into the SOURCE plans outbound as
+		 * well raises the producers break even price, which the consumer
+		 * then pays a second time through that very price.
 		 */
 		it("bills a plan to plan flow to its consumer only", async () => {
 			// the extractor sells 100 of its 200 ORE, the smelter draws

@@ -295,7 +295,7 @@ export function useRaukkChainRecompute() {
 	 * A chains trips depend on EVERY member plans flows, so it can only
 	 * be costed once those plans have written their frozen flows — which
 	 * is exactly why this runs at the END of a pass and not inside any
-	 * single plans snapshot (shipping-chains-v2.md, "Architecture").
+	 * single plans snapshot.
 	 *
 	 * One round convergence lag, accepted and documented: the plans of a
 	 * pass priced their claimed flows from the PREVIOUS chain results,

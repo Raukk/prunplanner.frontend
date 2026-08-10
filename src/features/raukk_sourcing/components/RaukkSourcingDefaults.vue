@@ -9,7 +9,7 @@
 	const sourcingStore = useRaukkSourcingStore();
 
 	// UI
-	import { PButton, PSelect, PTooltip } from "@/ui";
+	import { PButton, PSelect } from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 	import { NModal } from "naive-ui";
 
@@ -128,26 +128,26 @@
 </script>
 
 <template>
-	<div class="flex flex-row flex-wrap gap-3 child:my-auto">
-		<template v-for="bucket in BUCKETS" :key="`RAUKKDEFAULT#${bucket}`">
-			<div class="font-bold">
+	<div class="flex flex-col gap-y-2 max-w-200">
+		<div
+			v-for="bucket in BUCKETS"
+			:key="`RAUKKDEFAULT#${bucket}`"
+			class="flex flex-row flex-wrap items-center gap-x-3 gap-y-1">
+			<div class="font-bold w-52 shrink-0">
 				{{ $t(`raukk_sourcing.inputs.groups.${bucket}`) }}
 			</div>
 			<PSelect
-				class="w-52!"
+				class="grow min-w-75"
 				:value="valueOf(bucket)"
 				:options="options"
 				@update:value="
 					(v) => change(bucket, String(v ?? NO_DEFAULT))
 				" />
-		</template>
+		</div>
 
-		<PTooltip>
-			<template #trigger>
-				<span class="text-white/40 hover:cursor-help">(i)</span>
-			</template>
+		<div class="text-white/40 text-sm">
 			{{ $t("raukk_sourcing.defaults.tooltip") }}
-		</PTooltip>
+		</div>
 	</div>
 
 	<n-modal

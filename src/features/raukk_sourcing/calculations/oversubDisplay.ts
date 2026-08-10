@@ -1,8 +1,7 @@
 // Display scaffolding shared by every oversubscription visualization
 // tab: the deterministic consumer color registry, the filter bar
 // predicate, the shared axis domain and the folded display segments.
-// See docs/raukk_sourcing/oversubscription-report.md, "Visualization
-// tabs". Pure functions, no store and no Vue.
+// Pure functions, no store and no Vue.
 
 // Calculations
 import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";

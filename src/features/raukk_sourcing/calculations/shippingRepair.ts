@@ -1,10 +1,7 @@
 // The ship repair bill, derived from what a hull is BUILT of.
-// Sourced from docs/raukk_sourcing/repair_and_damage.json — the PrUn
-// community repair calculator, whose formulas were read out of the sheet
-// itself — and recorded in docs/raukk_sourcing/shipping-calibration.md
-// §14. This replaces the four fixed quantities round 3 observed on one
-// 3000 t hull, which shipping-calibration.md §6 flagged as owing a BOM
-// derivation.
+// Sourced from the PrUn community repair calculator, whose formulas were
+// read out of the sheet itself. This replaces the four fixed quantities
+// round 3 observed on one 3000 t hull, which owed a BOM derivation.
 // Prices never appear here: quantities are all this module knows, and
 // the caller resolves each ticker through the app's normal price
 // resolver, which is fed from the API.
@@ -18,8 +15,8 @@ import { IRaukkShippingPriceResolver } from "@/features/raukk_sourcing/calculati
  *
  * TWENTY percent, which is the eighty percent CONDITION the in-game
  * repair screen and the community calculator both talk about — the two
- * readings of "repair at 80 %" are four times apart, and rounds 2 and 3
- * of shipping-decisions.md took the wrong one.
+ * readings of "repair at 80 %" are four times apart, and earlier rounds
+ * took the wrong one.
  *
  * The bill those rounds observed was right: `SSC 11` is exactly
  * `ceil(71 × 0.20 × 0.75)` for the 71 structural elements of the 3000 t
@@ -60,9 +57,8 @@ export const RAUKK_REPAIR_SHIELD_SHARE: number = 0.662;
  *
  * Fitting an advanced whipple array means 15 % fewer plates and
  * structural elements to replace, because the array took that damage
- * itself. Distinct from the damage modifiers of
- * shipping-calibration.md §2.3, which reduce damage TAKEN; this is what
- * the repair afterwards costs.
+ * itself. Distinct from the calibrated damage modifiers, which reduce
+ * damage TAKEN; this is what the repair afterwards costs.
  *
  * @author raukk
  */
@@ -136,8 +132,8 @@ export interface IRaukkShipRepairBom {
  * {@link RAUKK_DEFAULT_G_FACTOR} and the campaign's damage baseline.
  *
  * The plate count is the one number here nothing derives yet: a real BOM
- * would give it, and shipping-calibration.md §2.3 has the component
- * table that would let a ship designer compute it.
+ * would give it, and the calibrated component table would let a ship
+ * designer compute it.
  *
  * @author raukk
  */

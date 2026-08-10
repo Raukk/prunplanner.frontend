@@ -281,7 +281,7 @@ export const RaukkChainConfigSchema = z.object({
 	autoCxSplit: z.boolean().default(true),
 	sameSystemPricing: z.enum(["average", "worst"]).default("average"),
 	// automatic chains: a share of the shipment and two detour budgets,
-	// all three documented gut numbers of shipping-cadence-plan.md phase 2
+	// all three gut numbers
 	autoChainMinShare: z.number().min(0).max(1).default(0.05),
 	autoChainDetourInOutParsecs: z.number().nonnegative().default(2),
 	autoChainDetourLooseParsecs: z.number().nonnegative().default(6),

@@ -1,14 +1,13 @@
 // Route pair construction: turns one plans own flows into the route
-// pairs it OWNS. See docs/raukk_sourcing/shipping-plan.md, section
-// "Ownership rule" — every pair is computed inside the consuming plans
+// pairs it OWNS. Every pair is computed inside the consuming plans
 // snapshot, a sourcing pair therefore only ever carries cargo back.
 // Pure functions: routes, planet lookups and subscriptions arrive
 // through the callers lookups.
 //
-// Mutual A⇄B sourcing is resolved here as well, see
-// shipping-decisions.md round 7: only the heavier direction of such a
-// relationship keeps a direct lane, the lighter one routes via both
-// exchanges. {@link resolveMutualLanes} is the whole decision.
+// Mutual A⇄B sourcing is resolved here as well: only the heavier
+// direction of such a relationship keeps a direct lane, the lighter one
+// routes via both exchanges. {@link resolveMutualLanes} is the whole
+// decision.
 
 // Calculations
 import {
@@ -90,16 +89,16 @@ export interface IRaukkPairLookups {
 	hullsOf?(pairKey: string): IRaukkHullSelection | undefined;
 	/**
 	 * Units per day a CHAIN already claimed off one lane, and which the
-	 * pair therefore must not carry a second time (v2, see
-	 * shipping-chains-v2.md "Flow claiming"). `counterpart` is the source
-	 * plans planet on a sourcing lane and `undefined` on the plans own
-	 * exchange lane — the exchange has no plan uuid, and naming it by
-	 * code here would drag the chain models stop vocabulary into the v1
-	 * pair math. `sourcePlanUuid` names the PRODUCING plan of a sourcing
-	 * lane and is `undefined` on the market lane: two plans on one planet
-	 * share a counterpart but not their claims, and keying by the planet
-	 * alone would subtract one claim from both lanes. Absent lookup:
-	 * nothing is claimed, which is the state before any chain exists.
+	 * pair therefore must not carry a second time (v2 flow claiming).
+	 * `counterpart` is the source plans planet on a sourcing lane and
+	 * `undefined` on the plans own exchange lane — the exchange has no
+	 * plan uuid, and naming it by code here would drag the chain models
+	 * stop vocabulary into the v1 pair math. `sourcePlanUuid` names the
+	 * PRODUCING plan of a sourcing lane and is `undefined` on the market
+	 * lane: two plans on one planet share a counterpart but not their
+	 * claims, and keying by the planet alone would subtract one claim
+	 * from both lanes. Absent lookup: nothing is claimed, which is the
+	 * state before any chain exists.
 	 */
 	claimedUnitsOf?(
 		ticker: string,
@@ -238,8 +237,7 @@ export function raukkLaneCargo(
 }
 
 /**
- * Resolves a mutual A⇄B sourcing relationship (round 7 of
- * shipping-decisions.md).
+ * Resolves a mutual A⇄B sourcing relationship.
  *
  * A reverse flow never functions as a direct backhaul: outputs are
  * pulled forward, dumped at the exchange and dragged on later, which is

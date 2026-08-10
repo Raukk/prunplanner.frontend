@@ -1,9 +1,8 @@
 // Cargo bucket attribution: which CLASS of demand a shipped unit
-// serves. See docs/raukk_sourcing/shipping-cadence-plan.md, "Phase 0b —
-// per-ticker, per-bucket flow identity". The same two material I/O
-// lists `buildInputRows` flags its input table rows from, read here as
-// daily UNITS instead of booleans, because cadence caps are set per
-// bucket and every shipped unit therefore has to name exactly one.
+// serves. The same two material I/O lists `buildInputRows` flags its
+// input table rows from, read here as daily UNITS instead of booleans,
+// because cadence caps are set per bucket and every shipped unit
+// therefore has to name exactly one.
 //
 // Pure functions: the plan result arrives as plain data.
 

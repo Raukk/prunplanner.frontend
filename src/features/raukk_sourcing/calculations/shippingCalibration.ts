@@ -1,11 +1,9 @@
 // Calibration of a ship profile from two observed in-game flights.
-// See docs/raukk_sourcing/shipping-fleet.md, section "Calibration by
-// observed flight": users do not know abstract constants, the game shows
-// them real flights, so the flow asks for one EMPTY and one LOADED
-// flight between two known planets and solves the profile constants from
-// them. Pure module — no store, no Vue, no UI; the route graph and the
-// static system data arrive injectable, exactly as the chain math takes
-// them.
+// Users do not know abstract constants, the game shows them real
+// flights, so the flow asks for one EMPTY and one LOADED flight between
+// two known planets and solves the profile constants from them. Pure
+// module — no store, no Vue, no UI; the route graph and the static
+// system data arrive injectable, exactly as the chain math takes them.
 
 // Calculations
 import { RAUKK_DEFAULT_CHAIN_ROUTES } from "@/features/raukk_sourcing/calculations/shippingChains";
@@ -355,13 +353,12 @@ function residualOf(
  *
  * DAMAGE has the same shape as time: two terms, one block per flight,
  * so the block term has to be seeded and the jump term is what is left
- * over. The seed is the meteoroid law of the calibration campaign
- * (docs/raukk_sourcing/shipping-calibration.md §6) over its reference
- * leg — a real physical figure rather than the zero the solver used
- * while the block term was thought unidentifiable, which forced every
- * bit of sublight damage into the per parsec term and inflated it by
- * more than an order of magnitude. What remains is density normalized
- * exactly as the chain math applies it:
+ * over. The seed is the meteoroid law of the calibration campaign over
+ * its reference leg — a real physical figure rather than the zero the
+ * solver used while the block term was thought unidentifiable, which
+ * forced every bit of sublight damage into the per parsec term and
+ * inflated it by more than an order of magnitude. What remains is
+ * density normalized exactly as the chain math applies it:
  * `damagePerParsec = (damage − damagePerStlBlock)
  *                    / (parsecs × pathMeanDensity / densityRef)`,
  * floored at zero — a flight whose whole damage the block already

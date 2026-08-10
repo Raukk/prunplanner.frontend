@@ -1,9 +1,7 @@
 // Deterministic layout helpers of the beeswarm and waffle
-// oversubscription tabs, ported from the validated mockup
-// (docs/raukk_sourcing/oversub-mockup.html, PURE-LAYOUT block):
-// the beeswarm dodge scan, the waffle quantum picker and the
-// largest-remainder square allocation. Pure functions, no DOM, no
-// store and no Vue.
+// oversubscription tabs: the beeswarm dodge scan, the waffle quantum
+// picker and the largest-remainder square allocation. Pure functions,
+// no DOM, no store and no Vue.
 
 /** Attempts of the dodge scan before a point stays where it collides */
 const RAUKK_BEE_DODGE_ATTEMPTS: number = 400;

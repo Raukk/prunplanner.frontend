@@ -232,13 +232,19 @@
 	</div>
 	<div class="col-span-12">
 		<div v-if="localBuildingData.activeRecipes.length > 0">
+			<!--
+				Rows are addressed by their index in the plans data, not by
+				their position here: a recipe the game data cannot resolve
+				never becomes a row, and every row after it would otherwise
+				edit or delete a different recipe than the one clicked.
+			-->
 			<div
-				v-for="(recipe, index) in localBuildingData.activeRecipes"
-				:key="`RECIPE#${index}#${recipe.recipeId}`"
+				v-for="recipe in localBuildingData.activeRecipes"
+				:key="`RECIPE#${recipe.planIndex}#${recipe.recipeId}`"
 				class="grid grid-cols-12 px-3 py-2 border-l-2 border-transparent items-center even:bg-white/5 border-b border-b-white/10 last:border-b-0 items-center gap-3 xl:gap-0">
 				<PlanProductionRecipe
 					:disabled="disabled"
-					:recipe-index="index"
+					:recipe-index="recipe.planIndex"
 					:recipe-data="recipe"
 					:recipe-options="localBuildingData.recipeOptions"
 					:cx-uuid="cxUuid"

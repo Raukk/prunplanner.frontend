@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import { mount, VueWrapper } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
 
+// Naive UI
+import { NSelect } from "naive-ui";
+
 // Components
 import RaukkSourceCell from "@/features/raukk_sourcing/components/RaukkSourceCell.vue";
 
@@ -77,53 +80,107 @@ describe("RaukkSourceCell", () => {
 		);
 	});
 
-	it("stores the CX opt out when a defaulted row is unchecked", async () => {
-		const wrapper: VueWrapper = render(
-			{ mode: "plan", sourcePlanUuid: "AGG_AVG_MKT" },
-			true
-		);
+	/** Picks an entry of the merged dropdown by its value */
+	function pick(wrapper: VueWrapper, value: string): void {
+		wrapper.findComponent(NSelect).vm.$emit("update:value", value);
+	}
 
-		await wrapper.find("input[type='checkbox']").setValue(false);
+	it("sits on the default entry while the row stores nothing", () => {
+		const wrapper: VueWrapper = render(undefined);
 
-		expect(wrapper.emitted("update:source")?.[0]).toStrictEqual([
-			{ mode: "cx" },
-		]);
+		expect(wrapper.findComponent(NSelect).props("value")).toBe("DEFAULT");
 	});
 
-	it("clears the source of an undefaulted row instead", async () => {
+	it("shows the stored price mode of a market row", () => {
+		const wrapper: VueWrapper = render({
+			mode: "market",
+			priceMode: "AVG30D",
+		});
+
+		expect(wrapper.findComponent(NSelect).props("value")).toBe("AVG30D");
+	});
+
+	it("clears the source when the default entry is picked", () => {
 		const wrapper: VueWrapper = render({
 			mode: "plan",
 			sourcePlanUuid: "a",
 		});
 
-		await wrapper.find("input[type='checkbox']").setValue(false);
+		pick(wrapper, "DEFAULT");
 
 		expect(wrapper.emitted("update:source")?.[0]).toStrictEqual([
 			undefined,
 		]);
 	});
 
-	it("picks the first option when a row is checked", async () => {
+	it("stores the CX opt out when the pinned CX entry is picked", () => {
 		const wrapper: VueWrapper = render(undefined);
 
-		await wrapper.find("input[type='checkbox']").setValue(true);
+		pick(wrapper, "CX");
+
+		expect(wrapper.emitted("update:source")?.[0]).toStrictEqual([
+			{ mode: "cx" },
+		]);
+	});
+
+	it("stores an exchange price mode", () => {
+		const wrapper: VueWrapper = render(undefined);
+
+		pick(wrapper, "BID");
+
+		expect(wrapper.emitted("update:source")?.[0]).toStrictEqual([
+			{ mode: "market", priceMode: "BID" },
+		]);
+	});
+
+	it("stores a local buy with its starting ad price", () => {
+		const wrapper: VueWrapper = render(undefined);
+
+		pick(wrapper, "LOCAL");
+
+		expect(wrapper.emitted("update:source")?.[0]).toStrictEqual([
+			{ mode: "local", price: { basis: "BID", value: 0 } },
+		]);
+	});
+
+	it("marks a source whose producing plan is gone instead of throwing", () => {
+		const wrapper: VueWrapper = render({
+			mode: "plan",
+			sourcePlanUuid: "removed-base-uuid",
+		});
+
+		expect(wrapper.text()).toContain(
+			raukk_sourcing.source_option.unavailable
+		);
+	});
+
+	it("stores a plan source when a producer is picked", () => {
+		const wrapper: VueWrapper = render(undefined);
+
+		pick(wrapper, "a");
 
 		expect(wrapper.emitted("update:source")?.[0]).toStrictEqual([
 			{ mode: "plan", sourcePlanUuid: "a" },
 		]);
 	});
 
-	it("renders a stored source that is no longer an option", () => {
-		// naive-ui fabricates a payload-free option for a selected value
-		// with no match — the label hook must survive it, not crash the
-		// whole plan view
-		const wrapper: VueWrapper = render({
-			mode: "plan",
-			sourcePlanUuid: "deleted-plan-uuid",
-		});
+	it("offers the price modes below the plan sources", () => {
+		const values = render(undefined)
+			.findComponent(NSelect)
+			.props("options")
+			.map((option) => option.value);
 
-		expect(wrapper.text()).toContain(
-			raukk_sourcing.source_option.unavailable
-		);
+		expect(values).toStrictEqual([
+			"a",
+			"AGG_AVG_MKT",
+			"DEFAULT",
+			"CX",
+			"BID",
+			"ASK",
+			"MID",
+			"AVG7D",
+			"AVG30D",
+			"LOCAL",
+		]);
 	});
 });

@@ -7,6 +7,7 @@ import {
 	defaultSourceOf,
 	mergeSnapshotBuckets,
 	overriddenTickersOf,
+	RAUKK_BUILTIN_DEFAULT_SOURCE,
 	resolveEffectiveSources,
 } from "@/features/raukk_sourcing/raukkSourcingDefaults";
 
@@ -101,7 +102,15 @@ describe("Raukk Sourcing Defaults", () => {
 			expect(defaultSourceOf(["production", "repair"], defaults)).toBe(
 				TOP_UP
 			);
-			expect(defaultSourceOf(["production"], defaults)).toBeUndefined();
+		});
+
+		it("falls back to the built-in default with no bucket default", () => {
+			expect(defaultSourceOf(["production"], defaults)).toStrictEqual(
+				RAUKK_BUILTIN_DEFAULT_SOURCE
+			);
+			expect(defaultSourceOf(["workforce"], {})).toStrictEqual(
+				RAUKK_BUILTIN_DEFAULT_SOURCE
+			);
 		});
 
 		it("has none without buckets", () => {
@@ -126,7 +135,20 @@ describe("Raukk Sourcing Defaults", () => {
 					workforce: AVERAGE,
 					repair: TOP_UP,
 				})
-			).toStrictEqual({ RAT: AVERAGE, BSE: TOP_UP });
+				// production stores no default and takes the built-in one
+			).toStrictEqual({
+				RAT: AVERAGE,
+				BSE: TOP_UP,
+				ORE: RAUKK_BUILTIN_DEFAULT_SOURCE,
+			});
+		});
+
+		it("fills every bucket from the built-in default without any", () => {
+			expect(resolveEffectiveSources({}, buckets, {})).toStrictEqual({
+				RAT: RAUKK_BUILTIN_DEFAULT_SOURCE,
+				BSE: RAUKK_BUILTIN_DEFAULT_SOURCE,
+				ORE: RAUKK_BUILTIN_DEFAULT_SOURCE,
+			});
 		});
 
 		it("never overrides a stored per plan entry", () => {
@@ -141,13 +163,93 @@ describe("Raukk Sourcing Defaults", () => {
 					workforce: AVERAGE,
 					repair: TOP_UP,
 				})
-			).toStrictEqual(stored);
+			).toStrictEqual({
+				...stored,
+				ORE: RAUKK_BUILTIN_DEFAULT_SOURCE,
+			});
+		});
+
+		describe("dangling plan sources", () => {
+			const gone: Record<string, IRaukkTickerSource> = {
+				RAT: { mode: "plan", sourcePlanUuid: "removed-base" },
+			};
+
+			/** Only "living-base" still makes anything */
+			const isProducing = (
+				_ticker: string,
+				sourcePlanUuid: string
+			): boolean => sourcePlanUuid === "living-base";
+
+			it("heals an entry whose producer is gone onto the default", () => {
+				expect(
+					resolveEffectiveSources(
+						gone,
+						buckets,
+						{ workforce: AVERAGE },
+						isProducing
+					).RAT
+				).toBe(AVERAGE);
+			});
+
+			it("keeps an entry whose producer still makes it", () => {
+				const stored: Record<string, IRaukkTickerSource> = {
+					RAT: { mode: "plan", sourcePlanUuid: "living-base" },
+				};
+
+				expect(
+					resolveEffectiveSources(
+						stored,
+						buckets,
+						{ workforce: AVERAGE },
+						isProducing
+					).RAT
+				).toBe(stored.RAT);
+			});
+
+			it("never treats an aggregate as dangling", () => {
+				const stored: Record<string, IRaukkTickerSource> = {
+					RAT: TOP_UP,
+				};
+
+				expect(
+					resolveEffectiveSources(
+						stored,
+						buckets,
+						{ workforce: AVERAGE },
+						isProducing
+					).RAT
+				).toBe(TOP_UP);
+			});
+
+			it("leaves stored entries alone without the producer check", () => {
+				expect(
+					resolveEffectiveSources(gone, buckets, {
+						workforce: AVERAGE,
+					}).RAT
+				).toBe(gone.RAT);
+			});
+
+			it("counts a healed ticker as following the default", () => {
+				const followed: Set<string> = defaultedTickers(
+					gone,
+					buckets,
+					{ workforce: AVERAGE },
+					isProducing
+				);
+
+				expect(followed.has("RAT")).toBe(true);
+			});
 		});
 
 		it("keeps stored entries of tickers the plan no longer consumes", () => {
 			expect(
 				resolveEffectiveSources({ PWO: AVERAGE }, buckets, {})
-			).toStrictEqual({ PWO: AVERAGE });
+			).toStrictEqual({
+				PWO: AVERAGE,
+				RAT: RAUKK_BUILTIN_DEFAULT_SOURCE,
+				BSE: RAUKK_BUILTIN_DEFAULT_SOURCE,
+				ORE: RAUKK_BUILTIN_DEFAULT_SOURCE,
+			});
 		});
 	});
 
@@ -159,7 +261,8 @@ describe("Raukk Sourcing Defaults", () => {
 				{ workforce: AVERAGE, repair: TOP_UP }
 			);
 
-			expect(Array.from(followed)).toStrictEqual(["RAT"]);
+			// BSE opted out and stores its own; ORE follows the built-in
+			expect(Array.from(followed)).toStrictEqual(["RAT", "ORE"]);
 		});
 	});
 

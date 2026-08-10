@@ -688,11 +688,10 @@ export const useRaukkSourcingStore = defineStore(
 		 *
 		 * Two authoring rules are enforced here rather than in the editor,
 		 * because the store is what everything else reads: a loop needs at
-		 * least two stops, and two chains may share AT MOST ONE
-		 * stop (shipping-chains-v2.md, "Flow claiming") — sharing two
-		 * would let both claim the same flows, which is what replaces
-		 * precedence logic between overlapping chains. Both violations
-		 * throw and leave the store untouched.
+		 * least two stops, and two chains may share AT MOST ONE stop —
+		 * sharing two would let both claim the same flows, which is what
+		 * replaces precedence logic between overlapping chains. Both
+		 * violations throw and leave the store untouched.
 		 * @author raukk
 		 *
 		 * @param {IRaukkChain} chain Chain

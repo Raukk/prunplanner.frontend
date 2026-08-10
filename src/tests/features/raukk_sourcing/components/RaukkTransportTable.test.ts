@@ -43,7 +43,7 @@ function row(patch: Partial<IRaukkTransportRow> = {}): IRaukkTransportRow {
 		ownCostPerUnit: 0.2,
 		lmRatePerTrip: undefined,
 		hiredCostPerUnit: undefined,
-		savingPerUnit: undefined,
+		differencePerUnit: undefined,
 		ownWear: {
 			damagePerTrip: 0.1,
 			tripsUntilRepair: 2,
@@ -55,15 +55,20 @@ function row(patch: Partial<IRaukkTransportRow> = {}): IRaukkTransportRow {
 	};
 }
 
-function render(rows: IRaukkTransportRow[]): VueWrapper {
+function render(
+	rows: IRaukkTransportRow[],
+	props: Record<string, unknown> = {}
+): VueWrapper {
 	return mount(RaukkTransportTable, {
 		props: {
 			rows,
 			planNames: { consumer: "Consumer Base", source: "Source Base" },
+			planPlanets: { consumer: "OT-580b", source: "ZV-307c" },
 			shipTypeOptions: [
 				{ label: "BAY1 · Test Hauler", value: "test" },
 				{ label: "BAY2 · Big Hauler", value: "big" },
 			],
+			...props,
 		},
 		global: {
 			plugins: [i18n],
@@ -71,6 +76,10 @@ function render(rows: IRaukkTransportRow[]): VueWrapper {
 				PSelect: true,
 				PInputNumber: true,
 				RaukkVisitCadence: true,
+				RouterLink: {
+					props: ["to"],
+					template: '<a :href="to"><slot /></a>',
+				},
 			},
 		},
 	});
@@ -101,6 +110,23 @@ describe("RaukkTransportTable", () => {
 		]);
 
 		expect(wrapper.text()).toContain(raukk_sourcing.transport.cx_lane);
+	});
+
+	it("links both ends of a lane to their plan", () => {
+		const links: string[] = render([row()])
+			.findAll("tbody tr a")
+			.map((link) => link.attributes("href") ?? "");
+
+		expect(links).toContain("/plan/OT-580b/consumer");
+		expect(links).toContain("/plan/ZV-307c/source");
+	});
+
+	it("leaves a lane end unlinked while its planet is unknown", () => {
+		// half a /plan/ path leads nowhere, so the name stays plain text
+		const wrapper: VueWrapper = render([row()], { planPlanets: {} });
+
+		expect(wrapper.findAll("tbody tr a")).toHaveLength(0);
+		expect(wrapper.text()).toContain("Consumer Base");
 	});
 
 	it("falls back to the uuid of a plan no snapshot named", () => {
@@ -151,26 +177,74 @@ describe("RaukkTransportTable", () => {
 		expect(wrapper.text()).toContain(raukk_sourcing.transport.hired);
 	});
 
-	it("colours a saving green and a loss red", () => {
-		expect(
-			render([row({ savingPerUnit: 0.1 })]).html()
-		).toContain("text-positive");
-		expect(
-			render([row({ savingPerUnit: -0.1 })]).html()
-		).toContain("text-negative");
+	it("signs the difference in both directions", () => {
+		// the sign IS the statement: what hiring costs on top of the own
+		// fleet, or what it costs less
+		expect(render([row({ differencePerUnit: 23.29 })]).text()).toContain(
+			"+23.29"
+		);
+		expect(render([row({ differencePerUnit: -23.29 })]).text()).toContain(
+			"-23.29"
+		);
 	});
 
-	it("leaves an unknown saving uncoloured", () => {
-		const html: string = render([row({ savingPerUnit: undefined })]).html();
+	it("prints a difference under a hundredth as a bare zero", () => {
+		// +0.00 claims a direction the two decimals cannot show
+		const text: string = render([
+			row({ differencePerUnit: 0.001 }),
+		]).text();
 
-		expect(html).not.toContain("text-positive");
-		expect(html).not.toContain("text-negative");
+		expect(text).toContain("0.00");
+		expect(text).not.toContain("+0.00");
+	});
+
+	it("colours neither direction of the difference", () => {
+		// neither sign is good or bad news on its own: the hull the own
+		// ȼ presume is bought is in neither column
+		[0.1, -0.1, undefined].forEach((difference) => {
+			const html: string = render([
+				row({ differencePerUnit: difference }),
+			]).html();
+
+			expect(html).not.toContain("text-positive");
+			expect(html).not.toContain("text-negative");
+		});
+	});
+
+	it("states an unknown difference as an em-dash", () => {
+		const wrapper: VueWrapper = render([
+			row({ differencePerUnit: undefined }),
+		]);
+
+		expect(wrapper.text()).toContain("—");
 	});
 
 	it("names the hull the lane was actually costed with", () => {
 		// the picker beside it is empty on an auto lane, so this is the
 		// only place the automatic pick becomes visible
 		const wrapper: VueWrapper = render([row()]);
+
+		expect(wrapper.text()).toContain("BAY1 · Test Hauler");
+	});
+
+	it("drops the flown line where it repeats the picker", () => {
+		// the assignment is the label the picker already shows, and two
+		// identical hull names stacked in one cell read as noise
+		const wrapper: VueWrapper = render([row()], {
+			assignments: { "consumer>source": "test" },
+		});
+
+		expect(wrapper.text()).not.toContain(
+			raukk_sourcing.transport.flown.replace(" {hulls}", "")
+		);
+	});
+
+	it("keeps the flown line where the lane flies another hull", () => {
+		// a stale lane was costed with the hull of its LAST compute, not
+		// with the one just assigned
+		const wrapper: VueWrapper = render([row({ stale: true })], {
+			assignments: { "consumer>source": "big" },
+		});
 
 		expect(wrapper.text()).toContain("BAY1 · Test Hauler");
 	});

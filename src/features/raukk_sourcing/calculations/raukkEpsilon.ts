@@ -1,8 +1,6 @@
 // Comparison tolerances of the raukk sourcing tool.
-// See docs/raukk_sourcing/shipping-cadence-plan.md, "Phase 0a —
-// absolute tolerances": everything Raukk-side displays at two decimals,
-// so a difference the user cannot even read must never flip a verdict
-// or cascade staleness.
+// Everything Raukk-side displays at two decimals, so a difference the
+// user cannot even read must never flip a verdict or cascade staleness.
 //
 // EQUALITY and SETTLE comparisons are HYBRID — an absolute floor plus a
 // relative term, see {@link raukkEqualWithin}. One sided VERDICT

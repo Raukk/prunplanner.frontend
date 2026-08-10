@@ -59,8 +59,7 @@ function legProfile(
  * COSTS, never how much fuel it takes.
  *
  * Chain carried flows are deliberately absent: a chain is flown for the
- * whole account and has no owning plan to source its fuel from, see
- * docs/raukk_sourcing/shipping-cadence-plan.md.
+ * whole account and has no owning plan to source its fuel from.
  *
  * @author raukk
  *

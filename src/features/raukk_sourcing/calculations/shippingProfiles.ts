@@ -1,7 +1,6 @@
 // Ship hull presets and their calibration defaults.
 // Everything here is a pre-fill for the calibration table: the values
-// come from the reference flights recorded in
-// docs/raukk_sourcing/shipping-decisions.md, no physics is derived
+// come from the recorded reference flights, no physics is derived
 // beyond what those logs state.
 
 // Calculations
@@ -117,8 +116,7 @@ export const RAUKK_FUEL_TICKERS: { ftl: string; stl: string } = {
  * The round 5 logs could not separate them — every recorded run flew
  * exactly one block per leg — and so attributed the whole observed
  * damage to the distance term and started the block term at zero. The
- * calibration campaign measures the two independently
- * (docs/raukk_sourcing/shipping-calibration.md §6, §11.4) and they turn
+ * calibration campaign measures the two independently and they turn
  * out to be nothing alike: a jump costs a flat 0.0011 % per parsec
  * whatever the reactor does, while the sublight block carries the
  * meteoroid law over both its transit legs and dominates every FTL trip.

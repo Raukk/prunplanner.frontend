@@ -18,9 +18,18 @@ const WORKFORCE_BUILDING_FIELD_MAP: Record<
 };
 
 /**
- * Sums a buildings production fee rate per 24h of nominal runtime:
- * worker count x per-worker daily fee rate of the buildings industry,
- * over all workforce tiers. Fees are set per planet by its government.
+ * A buildings production fee rate per 24h of nominal runtime. The rate
+ * is charged per BUILDING, not per employee: a building staffed by one
+ * workforce tier pays that tiers daily rate flat, and a building mixing
+ * tiers pays their workforce-weighted average — more employees of a tier
+ * only shift the mix, they never multiply the bill. Fees are set per
+ * planet by its government, per industry and tier.
+ *
+ * Confirmed by the APEX handbook, "Local Rules" → Production Fees: "the
+ * weighted sum of all workforces that are required by the given
+ * building", worked as (10 x 15 + 25 x 12) / (10 + 25) = 12.9, then
+ * multiplied by the production duration ratio.
+ * @see https://handbook.apex.prosperousuniverse.com/wiki/local-rules/index.html
  * @author raukk
  *
  * @export
@@ -37,34 +46,46 @@ export function calculateProductionFeeRate(
 	const feeTable = fees.production_fees[building.expertise];
 	if (!feeTable) return 0;
 
-	return Object.entries(WORKFORCE_BUILDING_FIELD_MAP).reduce(
-		(sum, [workforce, field]) =>
-			sum +
-			building[field] * (feeTable[workforce as WORKFORCE_TYPE] ?? 0),
-		0
+	const { weighted, workers } = Object.entries(
+		WORKFORCE_BUILDING_FIELD_MAP
+	).reduce(
+		(acc, [workforce, field]) => ({
+			weighted:
+				acc.weighted +
+				building[field] * (feeTable[workforce as WORKFORCE_TYPE] ?? 0),
+			workers: acc.workers + building[field],
+		}),
+		{ weighted: 0, workers: 0 }
 	);
+
+	return workers > 0 ? weighted / workers : 0;
 }
 
 /**
- * Calculates the production fee of a single order batch. The game
- * charges fees on the recipes nominal worker-time when an order is
- * started: efficiency shortens the wall-clock duration but scales the
- * fee right back up, so the batch fee uses the unmodified recipe time.
+ * Calculates the production fee of a single order batch. The fee is
+ * charged on the orders REAL duration, so efficiency shortens the batch
+ * and shrinks its fee by the same factor: the recipe time is divided by
+ * the buildings total efficiency before the daily rate is applied.
  * @author raukk
  *
  * @export
  * @param {IBuilding} building Building Data
  * @param {IFIOPlanetFees | null} fees Planet Fee Data, null if unknown
  * @param {number} recipeTimeMs Unmodified recipe time in ms
+ * @param {number} efficiency Total Building Efficiency
  * @returns {number} Fee per batch, 0 if unknown
  */
 export function calculateProductionFeeBatch(
 	building: IBuilding,
 	fees: IFIOPlanetFees | null,
-	recipeTimeMs: number
+	recipeTimeMs: number,
+	efficiency: number
 ): number {
+	if (efficiency <= 0) return 0;
+
 	return (
-		calculateProductionFeeRate(building, fees) * (recipeTimeMs / TOTALMSDAY)
+		calculateProductionFeeRate(building, fees) *
+		(recipeTimeMs / efficiency / TOTALMSDAY)
 	);
 }
 
@@ -96,22 +117,20 @@ export function calculateProductionFeePerUnit(
 
 /**
  * Calculates the daily production fee of one continuously producing
- * building. Higher efficiency runs more batches per day, each charged
- * on nominal time, so the daily fee scales with efficiency and is
- * independent of the recipe mix.
+ * building. Each batch is charged on its real duration, so a day of
+ * production always costs exactly one day of the buildings fee rate:
+ * independent of both efficiency and the recipe mix.
  * @author raukk
  *
  * @export
  * @param {IBuilding} building Building Data
  * @param {IFIOPlanetFees | null} fees Planet Fee Data, null if unknown
- * @param {number} efficiency Total Building Efficiency
  * @returns {number} Daily fee as negative cost, 0 if unknown
  */
 export function calculateProductionFeeDaily(
 	building: IBuilding,
-	fees: IFIOPlanetFees | null,
-	efficiency: number
+	fees: IFIOPlanetFees | null
 ): number {
 	const feeRate: number = calculateProductionFeeRate(building, fees);
-	return feeRate === 0 ? 0 : -1 * feeRate * efficiency;
+	return feeRate === 0 ? 0 : -1 * feeRate;
 }

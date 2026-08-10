@@ -26,6 +26,13 @@ Test: the reader can act on the reply without a second pass, and cannot find a s
 
 - `pnpm test` (Vitest), `pnpm tsc` (vue-tsc typecheck), `pnpm lint`, `pnpm dev`
 
+## Driving a browser against the live backend
+
+- Credentials in env `PRUN_TEST_USER` / `PRUN_TEST_PASS`. Never print them.
+- Container Chromium cannot reach HTTPS through the egress proxy — every CONNECT resets. Run a local Node CORS forwarder on port 8788 to `api.prunplanner.org` via `https-proxy-agent` on `process.env.HTTPS_PROXY`, reflecting `access-control-request-headers` in preflight and stripping origin/referer; point `VITE_API_BASE_URL` at it.
+- Playwright: `playwright-core` plus `executablePath: /opt/pw-browsers/chromium-<ver>/chrome-linux/chrome`. Do not install browsers.
+- naive-ui checkboxes hide the native input — force-click `.n-checkbox`, not `check()`.
+
 ## Architecture
 
 - Feature folders: `src/features/<name>/{components,use*.ts,*.types.ts}`. Views in `src/views/`, routes in `src/router/index.ts`.

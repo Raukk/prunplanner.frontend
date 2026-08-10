@@ -262,12 +262,12 @@ function mergedPerUnit(costs: IRaukkChainFlowCost[]): Record<string, number> {
 /**
  * Computes and stores the result of every chain.
  *
- * The load bearing rule of the whole v2 model (shipping-chains-v2.md,
- * "Architecture"): a chains trips depend on EVERY member plans flows, so
- * it is never computed live inside one plans snapshot. It is an account
- * level step over the STORED snapshots frozen flows — the same treatment
- * the base fraction and the subscription percentages get — run after the
- * member snapshots inside the recompute chain pass.
+ * The load bearing rule of the whole v2 model: a chains trips depend on
+ * EVERY member plans flows, so it is never computed live inside one
+ * plans snapshot. It is an account level step over the STORED snapshots
+ * frozen flows — the same treatment the base fraction and the
+ * subscription percentages get — run after the member snapshots inside
+ * the recompute chain pass.
  *
  * Convergence, accepted and documented rather than fought: the flows a
  * chain reads were frozen by the snapshots of the PREVIOUS pass, and

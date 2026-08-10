@@ -276,10 +276,15 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				shipping: 0,
 			});
 			expect(snapshot.outputs.ALO.costPerUnit).toBe(100);
-			// no embedded shipping config, no shipping fraction
+			// no embedded shipping config, no shipping fraction. The
+			// bucketed input records the built-in default it resolved
+			// to; nothing produces ORE here, so it still priced at the
+			// market and the cost above is unchanged by it
 			expect(snapshot.config).toStrictEqual({
 				repairDay: 90,
-				sources: {},
+				sources: {
+					ORE: { mode: "plan", sourcePlanUuid: "AGG_AVG_MKT" },
+				},
 			});
 			expect(Object.keys(snapshot)).toStrictEqual([
 				"computedAt",
