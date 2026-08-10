@@ -275,6 +275,60 @@ export function raukkCapacityFits(
 }
 
 /**
+ * The lane that decides which bay the whole account needs.
+ *
+ * "Smallest bay fitting all: HCB" is a verdict about ONE lane, and
+ * without naming it the reader cannot act on it — the useful answer is
+ * which run to shorten the cadence of or split. That lane is the one
+ * whose own smallest fitting bay is the largest; a lane fitting no bay
+ * at all outranks every lane that fits one, and ties go to the larger
+ * share of the biggest bay so the ranking is total.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkCapacityPoint[]} points Lanes placed at the cadence
+ * @param {IRaukkCapacityHull[]} hulls Cargo bays, smallest hold first
+ * @returns {(IRaukkCapacityPoint | null)} Driving lane, null with none
+ */
+export function raukkCapacityDrivingPoint(
+	points: IRaukkCapacityPoint[],
+	hulls: IRaukkCapacityHull[]
+): IRaukkCapacityPoint | null {
+	if (points.length === 0 || hulls.length === 0) return null;
+
+	const largest: IRaukkCapacityHull = hulls[hulls.length - 1];
+
+	/** Index of the smallest fitting bay, hulls.length when none fits */
+	function demand(point: IRaukkCapacityPoint): number {
+		const fit: IRaukkCapacityHull | null = raukkCapacitySmallestFit(
+			hulls,
+			point.weightPerTrip,
+			point.volumePerTrip
+		);
+
+		if (fit === null) return hulls.length;
+
+		return hulls.findIndex((hull) => hull.shipTypeId === fit.shipTypeId);
+	}
+
+	return [...points].sort((left, right) => {
+		const byDemand: number = demand(right) - demand(left);
+		if (byDemand !== 0) return byDemand;
+
+		const byShare: number =
+			raukkCapacityShare(
+				largest,
+				right.weightPerTrip,
+				right.volumePerTrip
+			) -
+			raukkCapacityShare(largest, left.weightPerTrip, left.volumePerTrip);
+		if (byShare !== 0) return byShare;
+
+		return left.key.localeCompare(right.key);
+	})[0];
+}
+
+/**
  * Longest cadence every lane still fits one trip of a bay at, in whole
  * days, or 0 when even a single day overflows it.
  *

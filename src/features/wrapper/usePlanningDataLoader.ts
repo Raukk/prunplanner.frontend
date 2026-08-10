@@ -1,4 +1,4 @@
-import { computed, reactive, ref, Ref, watch, watchEffect } from "vue";
+import { computed, watch } from "vue";
 
 import { useI18n } from "vue-i18n";
 
@@ -8,9 +8,7 @@ import { useQueryStore } from "@/lib/query_cache/queryStore";
 // Composables
 import { usePlan } from "@/features/planning_data/usePlan";
 import { useCXData } from "@/features/cx/useCXData";
-
-// Util
-import { inertClone } from "@/util/data";
+import { useDataLoaderSteps } from "@/features/wrapper/useDataLoaderSteps";
 
 // Types & Interfaces
 import {
@@ -18,7 +16,6 @@ import {
 	PlanningDataLoaderProps,
 	PlanningStepConfigsType,
 } from "@/features/wrapper/planningDataLoader.types";
-import { StepState } from "@/features/wrapper/dataLoader.types";
 import {
 	ICX,
 	IPlan,
@@ -51,46 +48,8 @@ export function usePlanningDataLoader(
 	}
 	const { findEmpireCXUuid } = useCXData();
 	const queryStore = useQueryStore();
-	const done: Ref<boolean> = ref(false);
 
 	const { createBlankDefinition } = usePlan();
-
-	// reset on change
-	watch(
-		() => [
-			props.empireUuid,
-			props.planUuid,
-			props.planetNaturalId,
-			props.sharedPlanUuid,
-		],
-		(
-			[newEmpire, newPlan, _newPlanet, _newShared],
-			[oldEmpire, oldPlan, _oldPlanet, _oldShared]
-		) => {
-			done.value = false;
-
-			// per step reset
-			if (newEmpire !== oldEmpire) {
-				const stepEmpirePlans = steps.find(
-					(s) => s.cfg.key === "empirePlans"
-				);
-				if (stepEmpirePlans) {
-					stepEmpirePlans.triggered = false;
-					stepEmpirePlans.data = null;
-					done.value = false;
-				}
-			}
-
-			if (newPlan !== oldPlan) {
-				const stepPlan = steps.find((s) => s.cfg.key === "plan");
-				if (stepPlan) {
-					stepPlan.triggered = false;
-					stepPlan.data = null;
-					done.value = false;
-				}
-			}
-		}
-	);
 
 	const stepConfigs: PlanningStepConfigsType = [
 		{
@@ -145,7 +104,9 @@ export function usePlanningDataLoader(
 		},
 		{
 			key: "planet",
-			name: t("wrapper.planning_data.planet_data"),
+			name: t("wrapper.planning_data.planet_data", {
+				name: props.planetNaturalId ?? "",
+			}),
 			// If sharedPlanId, wait for sharedPlan; else if planetId, no depends; else never
 			dependsOn: props.sharedPlanUuid ? "sharedPlan" : undefined,
 			enabled: () => !!(props.sharedPlanUuid || props.planetNaturalId),
@@ -158,10 +119,8 @@ export function usePlanningDataLoader(
 					this dereferencing undefined.
 				*/
 				const id = props.sharedPlanUuid
-					? (
-							steps.find((s) => s.cfg.key === "sharedPlan")
-								?.data as IPlanShare
-						).plan_details.planet_natural_id
+					? stepData<IPlanShare>("sharedPlan").plan_details
+							.planet_natural_id
 					: props.planetNaturalId!;
 				return queryStore.execute("GetPlanet", {
 					planetNaturalId: id,
@@ -207,105 +166,56 @@ export function usePlanningDataLoader(
 		},
 	];
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const steps = reactive<StepState<any>[]>(
-		stepConfigs.map((cfg) => ({
-			cfg,
-			data: null,
-			loading: false,
-			error: null,
-			triggered: false,
-		}))
-	);
-
-	// Orchestrator
-	watchEffect(() => {
-		steps.forEach((s) => {
-			if (!s.triggered && s.cfg.enabled()) {
-				const dep = s.cfg.dependsOn
-					? steps.find((p) => p.cfg.key === s.cfg.dependsOn)
-					: null;
-				if (!dep || dep.data != null) {
-					s.triggered = true;
-					s.loading = true;
-					s.error = null;
-					s.cfg
-						.load()
-						.then((d) => {
-							const shallowData = inertClone(d);
-							s.data = shallowData;
-							s.cfg.onSuccess(shallowData);
-						})
-						.catch((e) => {
-							s.error =
-								e instanceof Error ? e : new Error(String(e));
-						})
-						.finally(() => {
-							s.loading = false;
-						});
-				}
-			}
-		});
-	});
-
-	const loadingSteps = computed(() =>
-		steps
-			.filter((s) => s.cfg.enabled())
-			.map((s) => ({
-				name: s.cfg.name,
-				loading: s.loading,
-				error: s.error,
-			}))
-	);
-
-	const hasError = computed(() =>
-		loadingSteps.value.some((l) => l.error != null)
-	);
-
-	const allLoaded = computed(() =>
-		steps
-			.filter((s) => s.cfg.enabled())
-			.every((s) => !s.loading && s.error == null && s.data != null)
-	);
-
-	watch(
+	const {
+		done,
 		allLoaded,
-		(ok) => {
-			if (ok) {
-				emits("complete");
-				done.value = true;
-			}
-		},
-		{ immediate: true }
+		hasError,
+		canRetry,
+		loadingSteps,
+		resetStep,
+		retryFailed,
+		stepData,
+	} = useDataLoaderSteps(stepConfigs, () => emits("complete"));
+
+	// reset on change
+	watch(
+		() => [
+			props.empireUuid,
+			props.planUuid,
+			props.planetNaturalId,
+			props.sharedPlanUuid,
+		],
+		(
+			[newEmpire, newPlan, _newPlanet, _newShared],
+			[oldEmpire, oldPlan, _oldPlanet, _oldShared]
+		) => {
+			done.value = false;
+
+			// per step reset
+			if (newEmpire !== oldEmpire) resetStep("empirePlans");
+			if (newPlan !== oldPlan) resetStep("plan");
+		}
 	);
 
 	const results = computed(() => {
 		const data = {
-			sharedPlan: steps.find((s) => s.cfg.key === "sharedPlan")
-				?.data as IPlanShare,
-			empireList: steps.find((s) => s.cfg.key === "empireList")
-				?.data as IPlanEmpireElement[],
-			planetData: steps.find((s) => s.cfg.key === "planet")
-				?.data as IPlanet,
-			planData: steps.find((s) => s.cfg.key === "plan")?.data as IPlan,
-			planList: steps.find((s) => s.cfg.key === "planList")
-				?.data as IPlan[],
-			sharedData: steps.find((s) => s.cfg.key === "sharedList")
-				?.data as IShared[],
-			empirePlansData: steps.find((s) => s.cfg.key === "empirePlans")
-				?.data as IPlan[],
+			sharedPlan: stepData<IPlanShare>("sharedPlan"),
+			empireList: stepData<IPlanEmpireElement[]>("empireList"),
+			planetData: stepData<IPlanet>("planet"),
+			planData: stepData<IPlan>("plan"),
+			planList: stepData<IPlan[]>("planList"),
+			sharedData: stepData<IShared[]>("sharedList"),
+			empirePlansData: stepData<IPlan[]>("empirePlans"),
 			empirePlanetList: computed(() => {
 				/*
 					empire planet list can either come from loading empire plans
 					directly or by just loading a list of empire which would
 					potentially require to fetch all planets
 				*/
-				const empirePlans = steps.find(
-					(s) => s.cfg.key === "empirePlans"
-				)?.data as undefined | IPlan[];
-
-				const empireList = steps.find((s) => s.cfg.key === "empireList")
-					?.data as undefined | IPlanEmpireElement[];
+				const empirePlans =
+					stepData<IPlan[] | undefined>("empirePlans");
+				const empireList =
+					stepData<IPlanEmpireElement[] | undefined>("empireList");
 
 				if (empirePlans) {
 					return [
@@ -357,7 +267,9 @@ export function usePlanningDataLoader(
 		done,
 		allLoaded,
 		hasError,
+		canRetry,
 		loadingSteps,
+		retryFailed,
 		results: results,
 	};
 }

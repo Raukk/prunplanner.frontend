@@ -7,6 +7,7 @@
 export const RAUKK_SHIPPING_SECTIONS = [
 	"settings",
 	"defaults",
+	"sourcing",
 	"fleet",
 	"transport",
 	"chains",
@@ -27,6 +28,10 @@ export const RAUKK_SHIPPING_DEFAULT_SECTION: RaukkShippingSection = "fleet";
  * defaults only price inputs, they fly nothing, so closing them off
  * along with shipping would hide account-wide configuration for no
  * reason.
+ *
+ * The SOURCING section is not among them, deliberately: what it prices —
+ * ship fuel and the ship repair bill — is charged by the shipping model
+ * alone, so with shipping off every number on it is zero.
  */
 const RAUKK_SHIPPING_ALWAYS: RaukkShippingSection[] = ["settings", "defaults"];
 

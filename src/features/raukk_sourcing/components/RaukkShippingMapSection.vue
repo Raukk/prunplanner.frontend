@@ -17,6 +17,7 @@
 		IRaukkMapLabelPlacement,
 		IRaukkMapLabelRequest,
 		IRaukkMapLane,
+		IRaukkMapSpacing,
 		IRaukkMapStop,
 		IRaukkMapSystemSource,
 		RAUKK_MAP_BUCKET_COLORS,
@@ -25,6 +26,7 @@
 		raukkMapGates,
 		raukkMapLabelPlacement,
 		raukkMapLaneMetric,
+		raukkMapSpacedPlacement,
 		raukkMapStopSystem,
 		raukkMapStops,
 	} from "@/features/raukk_sourcing/calculations/shippingMapDisplay";
@@ -48,6 +50,13 @@
 		RAUKK_VIZ_INK,
 		RAUKK_VIZ_SURFACE,
 	} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
+
+	// Composables
+	import {
+		raukkTooltipFromText,
+		useRaukkOversubTooltip,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	const tooltip = useRaukkOversubTooltip();
 
 	// UI
 	import { PButton, PButtonGroup, PCheckbox } from "@/ui";
@@ -175,8 +184,43 @@
 		)
 	);
 
+	/** Half-side of the square a gate-only planet is drawn as */
+	const GATE_NODE_RADIUS: number = 4;
+
+	/**
+	 * How much room each mark needs. A diamond of half-side `r` reaches
+	 * `r√2` at its corners, so an exchange asks for the larger figure —
+	 * spacing against the drawn shape, not against a nominal radius.
+	 */
+	const markRadii: ComputedRef<Record<string, number>> = computed(() => {
+		const radii: Record<string, number> = {};
+
+		stops.value.forEach((stop) => {
+			radii[stop.stopRef] =
+				stop.role === "cx"
+					? nodeRadius(stop) * Math.SQRT2
+					: nodeRadius(stop);
+		});
+
+		gateOnlyPlanets.value.forEach((planet) => {
+			radii[`gate:${planet}`] = GATE_NODE_RADIUS * Math.SQRT2;
+		});
+
+		return radii;
+	});
+
+	/**
+	 * The projection with every mark given room — the raw placement
+	 * fans and scales without knowing how big anything is drawn, which
+	 * piles a busy region into one blob. See `raukkMapSpacedPlacement`
+	 * for what the pass is allowed to move and by how much.
+	 */
+	const spaced: ComputedRef<IRaukkMapSpacing> = computed(() =>
+		raukkMapSpacedPlacement(placement.value, markRadii.value)
+	);
+
 	function pointOf(key: string): IRaukkStarPoint | undefined {
-		return placement.value.positionByKey[key];
+		return spaced.value.positionByKey[key];
 	}
 
 	/*
@@ -202,8 +246,13 @@
 		geometry: IRaukkStarEdgeGeometry;
 		arrow: IRaukkStarArrow;
 		width: number;
+		/** Stroke of the invisible hover target over the curve */
+		hitWidth: number;
 		color: string;
 	}
+
+	/** Narrowest hover target a lane gets, whatever it is drawn at */
+	const LANE_HIT_WIDTH: number = 10;
 
 	const drawnLanes: ComputedRef<IDrawnLane[]> = computed(() =>
 		visibleLanes.value
@@ -220,14 +269,17 @@
 					22
 				);
 
+				const width: number = raukkStarEdgeWidth(
+					raukkMapLaneMetric(lane, refMetric.value),
+					maxMetric.value
+				);
+
 				return {
 					lane,
 					geometry,
 					arrow: raukkStarArrowAt(from, geometry.control, to, 12),
-					width: raukkStarEdgeWidth(
-						raukkMapLaneMetric(lane, refMetric.value),
-						maxMetric.value
-					),
+					width,
+					hitWidth: Math.max(width, LANE_HIT_WIDTH),
 					color: RAUKK_MAP_BUCKET_COLORS[lane.bucket],
 				};
 			})
@@ -314,6 +366,77 @@
 	}
 
 	/*
+	 * Hover readings
+	 *
+	 * The section's one tooltip host rather than an SVG `<title>`: a
+	 * title cannot be styled, waits a second before appearing, and — the
+	 * reason it was wrong here — belongs to whichever element it is
+	 * nested in, so one per marker inside a shared `<g>` renders as one
+	 * tooltip for the entire group.
+	 */
+
+	function showTooltip(event: PointerEvent, text: string): void {
+		tooltip.show(
+			raukkTooltipFromText(text),
+			event.currentTarget as Element
+		);
+	}
+
+	function laneTooltip(event: PointerEvent, lane: IRaukkMapLane): void {
+		showTooltip(
+			event,
+			t("raukk_sourcing.shipping_map.lane_tooltip", {
+				from: stopLabel(lane.fromStop),
+				to: stopLabel(lane.toStop),
+				metric: metricReading(lane),
+				weight: formatNumber(lane.weightPerDay, 1),
+				volume: formatNumber(lane.volumePerDay, 1),
+				units: formatNumber(lane.unitsPerDay, 1),
+				tickers: lane.tickers.slice(0, 6).join(", "),
+			})
+		);
+	}
+
+	function stopTooltip(event: PointerEvent, stop: IRaukkMapStop): void {
+		showTooltip(
+			event,
+			t("raukk_sourcing.shipping_map.stop_tooltip", {
+				name: stopLabel(stop.stopRef),
+				stop: stop.stopRef,
+				inbound: formatNumber(stop.inboundPerDay, 1),
+				outbound: formatNumber(stop.outboundPerDay, 1),
+				lanes: stop.laneCount,
+			})
+		);
+	}
+
+	function gateTooltip(event: PointerEvent, gate: IRaukkMapGate): void {
+		showTooltip(
+			event,
+			t("raukk_sourcing.shipping_map.gate_tooltip", {
+				a: gate.aName,
+				b: gate.bName,
+				max: formatNumber(gate.maxTraversalM3, 0),
+				fee: formatNumber(gate.feeTotal, 0),
+				hcb: gate.hcbCapable
+					? t("raukk_sourcing.shipping_map.gate_hcb_yes")
+					: t("raukk_sourcing.shipping_map.gate_hcb_no"),
+			})
+		);
+	}
+
+	function gateNodeTooltip(event: PointerEvent, planet: string): void {
+		showTooltip(
+			event,
+			t("raukk_sourcing.shipping_map.gate_node_tooltip", { planet })
+		);
+	}
+
+	function hideTooltip(): void {
+		tooltip.hide();
+	}
+
+	/*
 	 * Pan and zoom, plain viewBox math — the same handlers the
 	 * oversubscription Star Map uses
 	 */
@@ -346,6 +469,8 @@
 			view: view.value,
 		};
 		refPanning.value = true;
+		// the host anchors to a viewport rect that a pan invalidates
+		hideTooltip();
 	}
 
 	function onPointerMove(event: PointerEvent): void {
@@ -466,7 +591,7 @@
 				@dblclick="resetView">
 				<!-- faint system rings behind everything -->
 				<circle
-					v-for="ring in placement.systems"
+					v-for="ring in spaced.systems"
 					:key="`RAUKKMAPRING#${ring.name}`"
 					:cx="ring.x"
 					:cy="ring.y"
@@ -477,88 +602,62 @@
 
 				<!-- gate links, underneath the freight they inform -->
 				<g v-if="refShowGates">
-					<line
+					<g
 						v-for="drawn in drawnGates"
 						:key="`RAUKKMAPGATE#${drawn.gate.key}`"
-						:x1="drawn.from.x"
-						:y1="drawn.from.y"
-						:x2="drawn.to.x"
-						:y2="drawn.to.y"
-						:stroke="drawn.color"
-						stroke-width="1.6"
-						stroke-dasharray="1.5 5"
-						stroke-linecap="round">
-						<title>
-							{{
-								$t("raukk_sourcing.shipping_map.gate_tooltip", {
-									a: drawn.gate.aName,
-									b: drawn.gate.bName,
-									max: formatNumber(
-										drawn.gate.maxTraversalM3,
-										0
-									),
-									fee: formatNumber(drawn.gate.feeTotal, 0),
-									hcb: drawn.gate.hcbCapable
-										? $t(
-												"raukk_sourcing.shipping_map.gate_hcb_yes"
-											)
-										: $t(
-												"raukk_sourcing.shipping_map.gate_hcb_no"
-											),
-								})
-							}}
-						</title>
-					</line>
+						class="gate"
+						@pointerenter="gateTooltip($event, drawn.gate)"
+						@pointerleave="hideTooltip">
+						<!-- a dashed hairline is a few pixels of hit area, so
+						 an invisible fat stroke carries the hover -->
+						<line
+							:x1="drawn.from.x"
+							:y1="drawn.from.y"
+							:x2="drawn.to.x"
+							:y2="drawn.to.y"
+							stroke="transparent"
+							stroke-width="9" />
+						<line
+							:x1="drawn.from.x"
+							:y1="drawn.from.y"
+							:x2="drawn.to.x"
+							:y2="drawn.to.y"
+							:stroke="drawn.color"
+							stroke-width="1.6"
+							stroke-dasharray="1.5 5"
+							stroke-linecap="round"
+							pointer-events="none" />
+					</g>
 				</g>
 
 				<!-- cargo lanes -->
 				<g>
-					<template
+					<g
 						v-for="drawn in drawnLanes"
-						:key="`RAUKKMAPLANE#${drawn.lane.key}`">
+						:key="`RAUKKMAPLANE#${drawn.lane.key}`"
+						class="lane"
+						@pointerenter="laneTooltip($event, drawn.lane)"
+						@pointerleave="hideTooltip">
+						<path
+							:d="drawn.geometry.d"
+							fill="none"
+							stroke="transparent"
+							:stroke-width="drawn.hitWidth" />
 						<path
 							:d="drawn.geometry.d"
 							fill="none"
 							:stroke="drawn.color"
 							:stroke-width="drawn.width"
 							stroke-linecap="round"
-							stroke-opacity="0.85">
-							<title>
-								{{
-									$t(
-										"raukk_sourcing.shipping_map.lane_tooltip",
-										{
-											from: stopLabel(
-												drawn.lane.fromStop
-											),
-											to: stopLabel(drawn.lane.toStop),
-											metric: metricReading(drawn.lane),
-											weight: formatNumber(
-												drawn.lane.weightPerDay,
-												1
-											),
-											volume: formatNumber(
-												drawn.lane.volumePerDay,
-												1
-											),
-											units: formatNumber(
-												drawn.lane.unitsPerDay,
-												1
-											),
-											tickers: drawn.lane.tickers
-												.slice(0, 6)
-												.join(", "),
-										}
-									)
-								}}
-							</title>
-						</path>
+							stroke-opacity="0.85"
+							pointer-events="none" />
 						<path
 							d="M0,0 L-7,3.4 L-7,-3.4 Z"
 							:fill="drawn.color"
 							fill-opacity="0.9"
+							pointer-events="none"
 							:transform="`translate(${drawn.arrow.x},${drawn.arrow.y}) rotate(${drawn.arrow.angleDeg})`" />
-					</template>
+					</g>
 				</g>
 
 				<!-- gate-only planets: not a stop, drawn so the link lands -->
@@ -577,16 +676,9 @@
 							height="8"
 							:fill="RAUKK_VIZ_SURFACE.plot"
 							:stroke="RAUKK_MAP_GATE_COLORS.limited"
-							stroke-width="1.6">
-							<title>
-								{{
-									$t(
-										"raukk_sourcing.shipping_map.gate_node_tooltip",
-										{ planet }
-									)
-								}}
-							</title>
-						</rect>
+							stroke-width="1.6"
+							@pointerenter="gateNodeTooltip($event, planet)"
+							@pointerleave="hideTooltip" />
 					</template>
 				</g>
 
@@ -595,7 +687,11 @@
 					<template
 						v-for="stop in stops"
 						:key="`RAUKKMAPSTOP#${stop.stopRef}`">
-						<template v-if="pointOf(stop.stopRef)">
+						<g
+							v-if="pointOf(stop.stopRef)"
+							class="stop"
+							@pointerenter="stopTooltip($event, stop)"
+							@pointerleave="hideTooltip">
 							<rect
 								v-if="stop.role === 'cx'"
 								:x="pointOf(stop.stopRef)!.x - nodeRadius(stop)"
@@ -627,28 +723,7 @@
 								:fill="RAUKK_VIZ_SURFACE.plot"
 								:stroke="RAUKK_VIZ_INK.bright"
 								stroke-width="2" />
-
-							<title>
-								{{
-									$t(
-										"raukk_sourcing.shipping_map.stop_tooltip",
-										{
-											name: stopLabel(stop.stopRef),
-											stop: stop.stopRef,
-											inbound: formatNumber(
-												stop.inboundPerDay,
-												1
-											),
-											outbound: formatNumber(
-												stop.outboundPerDay,
-												1
-											),
-											lanes: stop.laneCount,
-										}
-									)
-								}}
-							</title>
-						</template>
+						</g>
 					</template>
 				</g>
 

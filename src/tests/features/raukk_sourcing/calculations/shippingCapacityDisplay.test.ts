@@ -7,6 +7,7 @@ import {
 	IRaukkCapacityPoint,
 	RAUKK_CAPACITY_MAX_DAYS,
 	raukkCapacityBinding,
+	raukkCapacityDrivingPoint,
 	raukkCapacityFits,
 	raukkCapacityHulls,
 	raukkCapacityMaxCadenceDays,
@@ -245,5 +246,102 @@ describe("raukkCapacityMaxCadenceDays", () => {
 		expect(
 			raukkCapacityMaxCadenceDays([lane({ weightPerDay: 5000 })], MCB)
 		).toBe(0);
+	});
+});
+
+describe("raukkCapacityDrivingPoint", () => {
+	/** One placed lane, everything but the overrides defaulted */
+	function point(
+		patch: Partial<IRaukkCapacityPoint> = {}
+	): IRaukkCapacityPoint {
+		return {
+			key: "a",
+			fromStop: "NC1",
+			toStop: "OT-580b",
+			bucket: "production",
+			weightPerTrip: 100,
+			volumePerTrip: 100,
+			binding: "weight",
+			tickers: ["RAT"],
+			...patch,
+		};
+	}
+
+	// smallest hold first, the order the plane hands them over in
+	const HULLS: IRaukkCapacityHull[] = [MCB, VCB, WCB];
+
+	it("names the lane needing the biggest bay", () => {
+		const driving = raukkCapacityDrivingPoint(
+			[
+				point({ key: "small", weightPerTrip: 10, volumePerTrip: 10 }),
+				point({
+					key: "wide",
+					weightPerTrip: 2500,
+					volumePerTrip: 100,
+				}),
+			],
+			HULLS
+		);
+
+		expect(driving!.key).toBe("wide");
+	});
+
+	it("ranks a lane fitting no bay above every lane that fits one", () => {
+		const driving = raukkCapacityDrivingPoint(
+			[
+				point({
+					key: "biggest-fitting",
+					weightPerTrip: 2900,
+					volumePerTrip: 900,
+				}),
+				point({
+					key: "fits-nothing",
+					weightPerTrip: 9000,
+					volumePerTrip: 9000,
+				}),
+			],
+			HULLS
+		);
+
+		expect(driving!.key).toBe("fits-nothing");
+	});
+
+	it("breaks a tie on the share of the largest bay", () => {
+		const driving = raukkCapacityDrivingPoint(
+			[
+				point({
+					key: "lighter",
+					weightPerTrip: 400,
+					volumePerTrip: 400,
+				}),
+				point({
+					key: "heavier",
+					weightPerTrip: 900,
+					volumePerTrip: 900,
+				}),
+			],
+			HULLS
+		);
+
+		expect(driving!.key).toBe("heavier");
+	});
+
+	it("is null without lanes or without bays", () => {
+		expect(raukkCapacityDrivingPoint([], HULLS)).toBeNull();
+		expect(raukkCapacityDrivingPoint([point()], [])).toBeNull();
+	});
+
+	it("leaves the caller's array alone", () => {
+		const points: IRaukkCapacityPoint[] = [
+			point({ key: "small", weightPerTrip: 10, volumePerTrip: 10 }),
+			point({ key: "wide", weightPerTrip: 2500, volumePerTrip: 100 }),
+		];
+
+		raukkCapacityDrivingPoint(points, HULLS);
+
+		expect(points.map((entry) => entry.key)).toStrictEqual([
+			"small",
+			"wide",
+		]);
 	});
 });

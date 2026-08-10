@@ -261,28 +261,44 @@ export const useUserStore = defineStore(
 		}
 
 		/**
-		 * Performs a token refresh
+		 * Refresh currently in flight. A view loads several queries at
+		 * once, so an expired access token produces a burst of 401s that
+		 * would otherwise each fire their own refresh — and one of those
+		 * failing calls `logout`, wiping the local data the rest of the
+		 * burst just succeeded in loading.
+		 */
+		let refreshInFlight: Promise<boolean> | null = null;
+
+		/**
+		 * Performs a token refresh, sharing one call between concurrent
+		 * callers
 		 * @author jplacht
 		 *
 		 * @async
 		 * @returns {Promise<boolean>}
 		 */
 		async function performTokenRefresh(): Promise<boolean> {
-			if (refreshToken.value) {
+			if (!refreshToken.value) return false;
+
+			if (refreshInFlight) return refreshInFlight;
+
+			refreshInFlight = (async () => {
 				try {
 					const tokenData: IUserRefreshTokenResponse =
-						await callRefreshToken(refreshToken.value);
+						await callRefreshToken(refreshToken.value!);
 
-					setToken(tokenData.access, refreshToken.value);
+					setToken(tokenData.access, refreshToken.value!);
 
 					return true;
 				} catch (error) {
 					console.error(error);
 					return false;
+				} finally {
+					refreshInFlight = null;
 				}
-			} else {
-				return false;
-			}
+			})();
+
+			return refreshInFlight;
 		}
 
 		/**

@@ -199,6 +199,15 @@ export function raukkGateLegCost(
  *     every leg of a gate-servable route is gate-connected, one depot
  *     among the stops puts the whole route inside that depots reach.
  *
+ * Where it clears both, it does not merely COMPETE with the FTL hulls,
+ * it takes the route: an STL-only hull can fly nothing but its gate
+ * network and its own system, so the little work it is able to do is
+ * work it must be given FIRST — an FTL hull holding a gate lane can be
+ * moved to any other lane in the account, an STL hull denied one cannot.
+ * The FTL hulls are therefore dropped from the choice entirely as soon
+ * as one STL-only hull survives the two bars, and {@link raukkPickHull}
+ * then picks the best STL hull for the cargo exactly as it always picks.
+ *
  * A MANUAL assignment passes neither bar and is never filtered: a
  * deliberate STL run between two planets that share a gate is a real
  * thing to want, it is simply not something to guess at. Where such a
@@ -217,9 +226,14 @@ export function raukkStlOnlyCandidates(
 	gateServable: boolean,
 	depotServed: boolean
 ): IRaukkHullCandidate[] {
-	if (gateServable && depotServed) return candidates;
+	if (!gateServable || !depotServed)
+		return candidates.filter((candidate) => !candidate.profile.stlOnly);
 
-	return candidates.filter((candidate) => !candidate.profile.stlOnly);
+	const stlOnly: IRaukkHullCandidate[] = candidates.filter(
+		(candidate) => candidate.profile.stlOnly
+	);
+
+	return stlOnly.length > 0 ? stlOnly : candidates;
 }
 
 /**

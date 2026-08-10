@@ -1,8 +1,14 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<!-- PRUNplanner is a dark UI and has no light theme. Saying so is
+		 not cosmetic: a browser that is not told a page handles dark mode
+		 applies its own automatic darkening, which re-maps the near black
+		 fills of the charts to white and leaves the saturated series
+		 colours alone — the visualisations render inside out. -->
+		<meta name="color-scheme" content="dark" />
 		<title>PRUNplanner</title>
 		<meta
 			name="description"

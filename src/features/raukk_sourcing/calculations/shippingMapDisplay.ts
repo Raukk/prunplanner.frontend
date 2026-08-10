@@ -17,7 +17,11 @@ import { raukkStarSystemNaturalId } from "@/features/raukk_sourcing/calculations
 // Types & Interfaces
 import { IRaukkChainFlow } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
-import { IRaukkStarSystemSource } from "@/features/raukk_sourcing/calculations/oversubStarMap";
+import {
+	IRaukkStarPlacement,
+	IRaukkStarPoint,
+	IRaukkStarSystemSource,
+} from "@/features/raukk_sourcing/calculations/oversubStarMap";
 
 /**
  * What an edge's thickness encodes.
@@ -330,6 +334,276 @@ export function raukkMapStopSystem(
 
 	const natural: string = raukkStarSystemNaturalId(stopRef);
 	return natural === "" ? null : natural;
+}
+
+/*
+ * De-crowding
+ *
+ * `raukkStarPlacement` projects the real coordinates with one uniform
+ * scale, which is what makes the map honest and also what makes it
+ * unreadable in a busy corner: a single distant system sets the scale
+ * and everything else lands in a pile. It also fans co-located entities
+ * at a FIXED radius, which is smaller than a busy stop's own node — so
+ * two stops in one system overlap by construction.
+ *
+ * The pass below fixes both, in the display layer where the drawn sizes
+ * are known, and only ever by a bounded nudge — see
+ * {@link RAUKK_MAP_MAX_SHIFT}.
+ */
+
+/** Clear space kept between two drawn marks, viewport units */
+const SPACING_GAP: number = 7;
+
+/** Clear space a system ring keeps outside its outermost node */
+const RING_CLEARANCE: number = 10;
+
+/** Radius assumed for a mark the caller stated no size for */
+const DEFAULT_MARK_RADIUS: number = 5;
+
+/**
+ * Furthest a system may be nudged from its true projected position,
+ * viewport units. The map claims to be drawn on the real coordinates
+ * and a cap is what keeps that claim true: a system moves far enough to
+ * stop overlapping its neighbour and no further, so a reader comparing
+ * two regions is never shown a distance that is not there.
+ *
+ * @author raukk
+ */
+export const RAUKK_MAP_MAX_SHIFT: number = 85;
+
+/** Fraction of an overlap resolved per relaxation step */
+const RELAX_DAMPING: number = 0.5;
+
+/** Relaxation steps, enough to settle the dense corners */
+const RELAX_STEPS: number = 90;
+
+/** One system ring after the de-crowding pass */
+export interface IRaukkMapSpacedSystem {
+	name: string;
+	x: number;
+	y: number;
+	radius: number;
+	entityKeys: string[];
+}
+
+/** Placement with every drawn mark given room */
+export interface IRaukkMapSpacing {
+	positionByKey: Record<string, IRaukkStarPoint>;
+	systems: IRaukkMapSpacedSystem[];
+}
+
+/** A system while it is being spaced */
+interface IWorkingSystem {
+	name: string;
+	entityKeys: string[];
+	/** Offsets of the members from the system centre */
+	offsets: IRaukkStarPoint[];
+	/** Radius of the disc the whole system occupies */
+	discRadius: number;
+	/** Ring radius drawn for this system, 0 when it draws none */
+	ringRadius: number;
+	/** True projected centre, the cap measures from here */
+	originX: number;
+	originY: number;
+	x: number;
+	y: number;
+	/** Whether the caller draws a ring for this group */
+	drawn: boolean;
+}
+
+/**
+ * Fan radius that fits `radii` marks around one point without any two
+ * neighbours touching: the chord between adjacent members of a regular
+ * n-gon is `2 R sin(π/n)`, so the tightest ring is the largest adjacent
+ * pair's needed chord divided by that factor.
+ *
+ * @author raukk
+ *
+ * @param {number[]} radii Member radii, in the order they are fanned
+ * @param {number} gap Clear space kept between two members
+ * @returns {number} Fan radius, 0 for a lone member
+ */
+export function raukkMapFanRadius(radii: number[], gap: number): number {
+	const count: number = radii.length;
+	if (count < 2) return 0;
+
+	const chordFactor: number = 2 * Math.sin(Math.PI / count);
+	let needed: number = 0;
+
+	radii.forEach((radius, index) => {
+		const pair: number = radius + radii[(index + 1) % count] + gap;
+		needed = Math.max(needed, pair / chordFactor);
+	});
+
+	return Math.max(needed, Math.max(...radii) + gap);
+}
+
+/**
+ * Gives every drawn mark of the map room to be read.
+ *
+ * Two passes over the projection, both of them bounded:
+ *
+ * 1. Stops sharing a system are re-fanned at a radius derived from the
+ *    sizes they are actually drawn at, so a busy pair never overlaps —
+ *    the placement's fixed fan cannot know how big a node ended up.
+ * 2. System discs that still overlap after that are pushed apart, each
+ *    by half the overlap per step and never further than
+ *    {@link RAUKK_MAP_MAX_SHIFT} from where the real coordinates put
+ *    them.
+ *
+ * Deterministic: systems are processed in the placement's own order and
+ * two systems projected onto the exact same point separate along an
+ * angle derived from their index, never at random.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkStarPlacement} placement Projected placement
+ * @param {Record<string, number>} radiusByKey Drawn radius per entity
+ * @param {number} maxShift Cap on how far a system may be nudged
+ * @returns {IRaukkMapSpacing} Positions and rings with room to read
+ */
+export function raukkMapSpacedPlacement(
+	placement: IRaukkStarPlacement,
+	radiusByKey: Record<string, number>,
+	maxShift: number = RAUKK_MAP_MAX_SHIFT
+): IRaukkMapSpacing {
+	function radiusOf(key: string): number {
+		return radiusByKey[key] ?? DEFAULT_MARK_RADIUS;
+	}
+
+	function workingSystem(
+		name: string,
+		entityKeys: string[],
+		x: number,
+		y: number,
+		drawn: boolean
+	): IWorkingSystem {
+		const radii: number[] = entityKeys.map(radiusOf);
+		const fan: number = raukkMapFanRadius(radii, SPACING_GAP);
+		const widest: number = radii.length === 0 ? 0 : Math.max(...radii);
+
+		const offsets: IRaukkStarPoint[] = entityKeys.map((_, index) => {
+			if (entityKeys.length === 1) return { x: 0, y: 0 };
+
+			const angle: number =
+				-Math.PI / 2 + (index * 2 * Math.PI) / entityKeys.length;
+
+			return { x: fan * Math.cos(angle), y: fan * Math.sin(angle) };
+		});
+
+		const ringRadius: number = fan + widest + RING_CLEARANCE;
+
+		return {
+			name,
+			entityKeys,
+			offsets,
+			discRadius: ringRadius + SPACING_GAP,
+			ringRadius,
+			originX: x,
+			originY: y,
+			x,
+			y,
+			drawn,
+		};
+	}
+
+	const working: IWorkingSystem[] = placement.systems.map((ring) =>
+		workingSystem(ring.name, ring.entityKeys, ring.x, ring.y, true)
+	);
+
+	// the unmapped cluster is a group like any other: it takes part in
+	// the relaxation so it cannot end up under a real system, but the
+	// map draws no ring for it
+	if (placement.unmappedAnchor !== null && placement.unmappedKeys.length > 0)
+		working.push(
+			workingSystem(
+				"",
+				placement.unmappedKeys,
+				placement.unmappedAnchor.x,
+				placement.unmappedAnchor.y,
+				false
+			)
+		);
+
+	for (let step = 0; step < RELAX_STEPS; step++) {
+		let overlapping: boolean = false;
+
+		for (let left = 0; left < working.length; left++)
+			for (let right = left + 1; right < working.length; right++) {
+				const first: IWorkingSystem = working[left];
+				const second: IWorkingSystem = working[right];
+
+				const wanted: number = first.discRadius + second.discRadius;
+
+				let deltaX: number = second.x - first.x;
+				let deltaY: number = second.y - first.y;
+				let distance: number = Math.sqrt(
+					deltaX * deltaX + deltaY * deltaY
+				);
+
+				// exactly co-incident: separate along an angle of the pair's
+				// own indices, so the result never depends on iteration luck
+				if (distance < 1e-6) {
+					const angle: number =
+						((left * 7 + right * 13) % 360) * (Math.PI / 180);
+					deltaX = Math.cos(angle);
+					deltaY = Math.sin(angle);
+					distance = 1;
+				}
+
+				if (distance >= wanted) continue;
+
+				overlapping = true;
+
+				const push: number = ((wanted - distance) / 2) * RELAX_DAMPING;
+				const unitX: number = deltaX / distance;
+				const unitY: number = deltaY / distance;
+
+				first.x -= unitX * push;
+				first.y -= unitY * push;
+				second.x += unitX * push;
+				second.y += unitY * push;
+			}
+
+		// the cap is applied every step rather than once at the end, so a
+		// system pinned by it still pushes its neighbours outward
+		working.forEach((system) => {
+			const shiftX: number = system.x - system.originX;
+			const shiftY: number = system.y - system.originY;
+			const shift: number = Math.sqrt(shiftX * shiftX + shiftY * shiftY);
+
+			if (shift <= maxShift) return;
+
+			system.x = system.originX + (shiftX / shift) * maxShift;
+			system.y = system.originY + (shiftY / shift) * maxShift;
+		});
+
+		if (!overlapping) break;
+	}
+
+	const positionByKey: Record<string, IRaukkStarPoint> = {};
+
+	working.forEach((system) =>
+		system.entityKeys.forEach((key, index) => {
+			positionByKey[key] = {
+				x: system.x + system.offsets[index].x,
+				y: system.y + system.offsets[index].y,
+			};
+		})
+	);
+
+	return {
+		positionByKey,
+		systems: working
+			.filter((system) => system.drawn)
+			.map((system) => ({
+				name: system.name,
+				x: system.x,
+				y: system.y,
+				radius: system.ringRadius,
+				entityKeys: system.entityKeys,
+			})),
+	};
 }
 
 /** One label asking to be placed next to its node */

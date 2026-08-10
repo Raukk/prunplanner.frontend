@@ -147,24 +147,12 @@
 		return row.source?.mode === "local" ? row.source.price : undefined;
 	}
 
-	/**
-	 * Rows the input total is summed over.
-	 *
-	 * Ship fuel is EXCLUDED: its ȼ is already inside the shipping daily
-	 * cost — the resolved ship profile prices every parsec and every
-	 * sublight block with it — so summing the fuel rows on top would
-	 * charge the plans fuel twice. The rows exist to source and to read.
-	 */
-	const costedRows: ComputedRef<IRaukkInputRow[]> = computed(() =>
-		props.rows.filter((row) => !row.buckets.shipFuel)
-	);
-
 	const totalCostPerDay: ComputedRef<number> = computed(() =>
-		costedRows.value.reduce((sum, row) => sum + row.costPerDay, 0)
+		props.rows.reduce((sum, row) => sum + row.costPerDay, 0)
 	);
 
 	const totalShippingPerDay: ComputedRef<number> = computed(() =>
-		costedRows.value.reduce(
+		props.rows.reduce(
 			(sum, row) => sum + row.shippedUnitsPerDay * row.shippingPerUnit,
 			0
 		)
@@ -177,30 +165,24 @@
 
 	/** One display group of input rows */
 	interface IRaukkInputRowGroup {
-		key: "workforce" | "repair" | "production" | "shipFuel";
+		key: "workforce" | "repair" | "production";
 		rows: IRaukkInputRow[];
 	}
 
 	/**
 	 * Rows grouped for display: workforce consumables, then repair
-	 * materials, then production inputs, and last the ship fuel the plans
-	 * lanes burn. A ticker belonging to several buckets — rare, e.g. a
-	 * prefab that is also a recipe input — repeats in every matching
-	 * group; both rows show the tickers total daily need and share one
-	 * source configuration. Within a group the incoming sort order stays.
+	 * materials, then production inputs. A ticker belonging to several
+	 * buckets — rare, e.g. a prefab that is also a recipe input — repeats
+	 * in every matching group; both rows show the tickers total daily
+	 * need and share one source configuration. Within a group the
+	 * incoming sort order stays.
 	 */
 	const rowGroups: ComputedRef<IRaukkInputRowGroup[]> = computed(() => {
 		const workforce: IRaukkInputRowGroup = { key: "workforce", rows: [] };
 		const repair: IRaukkInputRowGroup = { key: "repair", rows: [] };
 		const production: IRaukkInputRowGroup = { key: "production", rows: [] };
-		const shipFuel: IRaukkInputRowGroup = { key: "shipFuel", rows: [] };
 
 		props.rows.forEach((row) => {
-			if (row.buckets.shipFuel) {
-				shipFuel.rows.push(row);
-				return;
-			}
-
 			if (row.buckets.workforce) workforce.rows.push(row);
 			if (row.buckets.repair) repair.rows.push(row);
 
@@ -212,7 +194,7 @@
 				production.rows.push(row);
 		});
 
-		return [workforce, repair, production, shipFuel].filter(
+		return [workforce, repair, production].filter(
 			(group) => group.rows.length > 0
 		);
 	});
@@ -285,12 +267,6 @@
 								size="sm"
 								type="warning">
 								{{ $t("raukk_sourcing.buckets.repair") }}
-							</PTag>
-							<PTag
-								v-if="row.buckets.shipFuel"
-								size="sm"
-								type="success">
-								{{ $t("raukk_sourcing.buckets.shipFuel") }}
 							</PTag>
 						</div>
 					</td>
@@ -371,6 +347,15 @@
 			<tr v-if="shippingEnabled">
 				<td :colspan="labelColumns">
 					{{ $t("raukk_sourcing.inputs.shipping_cost") }}
+					<!-- freight and the fuel burnt flying it are a FLEET
+					 cost: one fleet serves every base, so it is priced and
+					 sourced once on the shipping page instead of base by
+					 base -->
+					<RouterLink
+						to="/shipping?section=sourcing"
+						class="pl-1 font-normal text-white/50 hover:underline">
+						{{ $t("raukk_sourcing.inputs.shipping_cost_link") }}
+					</RouterLink>
 				</td>
 				<td class="text-right">
 					{{ formatNumber(totalShippingPerDay) }}

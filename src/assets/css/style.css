@@ -10,6 +10,13 @@
 	--app-bg: #030707;
 }
 
+/* The app is dark only — see the `color-scheme` meta of index.html for
+   why this is stated rather than left to the browser. Repeated here so
+   the declaration survives a host that serves its own document shell. */
+:root {
+	color-scheme: dark;
+}
+
 body {
 	font-size: 14px;
 	background-color: var(--app-bg);

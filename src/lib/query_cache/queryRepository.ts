@@ -8,6 +8,9 @@ import config from "@/lib/config";
 
 import { trackEvent } from "@/lib/analytics/useAnalytics";
 
+// util
+import { inertClone } from "@/util/data";
+
 // stores
 import { useQueryStore } from "@/lib/query_cache/queryStore";
 import { usePlanningStore } from "@/stores/planningStore";
@@ -570,7 +573,11 @@ export function useQueryRepository() {
 				return data;
 			},
 			hydrateFn: async () => {
-				const data = Object.values(planningStore.empires);
+				// inertClone: the record holds reactive proxies, a cached
+				// payload must be detached from the store
+				const data = Object.values(planningStore.empires).map((e) =>
+					inertClone(e)
+				);
 				return data.length > 0 ? data : null;
 			},
 			autoRefetch: false,
@@ -586,33 +593,33 @@ export function useQueryRepository() {
 			fetchFn: async (params: { empireUuid: string }) => {
 				// dropped if the session ends while this is in flight
 				const session: number = queryStore.sessionGeneration;
-				try {
-					const data = await callGetEmpirePlans(params.empireUuid);
 
-					if (isCurrentSession(session)) planningStore.setPlans(data);
+				// see GetAllPlans: a failure must not masquerade as an
+				// empire with no plans
+				const data = await callGetEmpirePlans(params.empireUuid);
 
-					// manually set individual plans
-					data.forEach((p) =>
-						queryStore.addCacheState(
-							["planningdata", "plan", p.uuid],
-							"GetPlan",
-							{ planUuid: p.uuid! },
-							p,
-							session
-						)
-					);
+				if (isCurrentSession(session)) planningStore.setPlans(data);
 
-					return data;
-				} catch {
-					return [];
-				}
+				// manually set individual plans
+				data.forEach((p) =>
+					queryStore.addCacheState(
+						["planningdata", "plan", p.uuid],
+						"GetPlan",
+						{ planUuid: p.uuid! },
+						p,
+						session
+					)
+				);
+
+				return data;
 			},
 			hydrateFn: async (params: { empireUuid: string }) => {
 				const empire = planningStore.empires[params.empireUuid];
 				if (!empire) return null;
 
-				const plans = empire.plans.map(
-					(p) => planningStore.plans[p.uuid]
+				// see GetAllEmpires
+				const plans = empire.plans.map((p) =>
+					inertClone(planningStore.plans[p.uuid])
 				);
 
 				// a plan of the empire was never stored individually =>
@@ -760,32 +767,38 @@ export function useQueryRepository() {
 			fetchFn: async () => {
 				// dropped if the session ends while this is in flight
 				const session: number = queryStore.sessionGeneration;
-				try {
-					const data = await callGetPlanlist();
-					// authoritative list: drop plans it does not contain,
-					// otherwise the record accumulates every plan ever
-					// loaded and hydration rebuilds a superset
-					if (isCurrentSession(session))
-						planningStore.setPlans(data, true);
 
-					// manually set individual plans
-					data.forEach((p) =>
-						queryStore.addCacheState(
-							["planningdata", "plan", p.uuid],
-							"GetPlan",
-							{ planUuid: p.uuid! },
-							p,
-							session
-						)
-					);
+				/*
+					Deliberately not caught: swallowing the failure into an
+					empty list told every caller the user owns no plans,
+					which renders as an empty planning screen instead of an
+					error, and cached that emptiness as a success.
+				*/
+				const data = await callGetPlanlist();
 
-					return data;
-				} catch {
-					return [];
-				}
+				// authoritative list: drop plans it does not contain,
+				// otherwise the record accumulates every plan ever
+				// loaded and hydration rebuilds a superset
+				if (isCurrentSession(session)) planningStore.setPlans(data, true);
+
+				// manually set individual plans
+				data.forEach((p) =>
+					queryStore.addCacheState(
+						["planningdata", "plan", p.uuid],
+						"GetPlan",
+						{ planUuid: p.uuid! },
+						p,
+						session
+					)
+				);
+
+				return data;
 			},
 			hydrateFn: async () => {
-				const data = Object.values(planningStore.plans);
+				// see GetAllEmpires
+				const data = Object.values(planningStore.plans).map((p) =>
+					inertClone(p)
+				);
 				return data.length > 0 ? data : null;
 			},
 			autoRefetch: false,

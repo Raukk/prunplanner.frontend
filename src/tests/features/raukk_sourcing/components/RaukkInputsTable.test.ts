@@ -29,26 +29,22 @@ function row(
 			production: false,
 			workforce: false,
 			repair: false,
-			shipFuel: false,
 			...buckets,
 		},
 		unitsPerDay,
 		source: undefined,
 		fromDefault: false,
 		price,
-		shippedUnitsPerDay: buckets.shipFuel ? 0 : unitsPerDay,
-		shippingPerUnit: buckets.shipFuel ? 0 : 1,
-		effectivePrice: buckets.shipFuel ? price : price + 1,
-		costPerDay: buckets.shipFuel
-			? unitsPerDay * price
-			: unitsPerDay * (price + 1),
+		shippedUnitsPerDay: unitsPerDay,
+		shippingPerUnit: 1,
+		effectivePrice: price + 1,
+		costPerDay: unitsPerDay * (price + 1),
 		fromPlanUuid: undefined,
 	};
 }
 
-/** The two rows every case shares: one production input, one fuel burn */
+/** The row every case shares: one production input */
 const ORE: IRaukkInputRow = row("ORE", 10, 100, { production: true });
-const FF: IRaukkInputRow = row("FF", 80, 60, { shipFuel: true });
 
 function render(rows: IRaukkInputRow[]): VueWrapper {
 	return mount(RaukkInputsTable, {
@@ -64,6 +60,10 @@ function render(rows: IRaukkInputRow[]): VueWrapper {
 				MaterialTile: true,
 				RaukkSourceCell: true,
 				PSelect: true,
+				RouterLink: {
+					props: ["to"],
+					template: '<a :href="to"><slot /></a>',
+				},
 			},
 		},
 	});
@@ -79,40 +79,51 @@ function footerValue(wrapper: VueWrapper, label: string): string {
 }
 
 describe("RaukkInputsTable", () => {
-	const GROUP: string = raukk_sourcing.inputs.groups.shipFuel;
-
-	it("shows the ship fuel group once a fuel is burnt", () => {
-		const wrapper: VueWrapper = render([ORE, FF]);
-
-		expect(wrapper.text()).toContain(GROUP);
-		expect(wrapper.text()).toContain(raukk_sourcing.buckets.shipFuel);
-	});
-
-	it("hides the group while nothing burns, e.g. shipping off", () => {
+	it("totals the rows, freight included", () => {
 		const wrapper: VueWrapper = render([ORE]);
 
-		expect(wrapper.text()).not.toContain(GROUP);
-	});
-
-	it("leaves the fuel out of the input and shipping totals", () => {
-		const withFuel: VueWrapper = render([ORE, FF]);
-		const withoutFuel: VueWrapper = render([ORE]);
-
-		// 10 units at 100 ȼ plus 10 × 1 ȼ freight, the fuel adds nothing
-		expect(footerValue(withFuel, raukk_sourcing.inputs.total_cost)).toBe(
-			footerValue(withoutFuel, raukk_sourcing.inputs.total_cost)
-		);
-		expect(footerValue(withFuel, raukk_sourcing.inputs.shipping_cost)).toBe(
-			footerValue(withoutFuel, raukk_sourcing.inputs.shipping_cost)
-		);
-		expect(footerValue(withFuel, raukk_sourcing.inputs.total_cost)).toBe(
+		// 10 units at 100 ȼ plus 10 × 1 ȼ freight
+		expect(footerValue(wrapper, raukk_sourcing.inputs.total_cost)).toBe(
 			"1,010.00"
 		);
+		expect(footerValue(wrapper, raukk_sourcing.inputs.shipping_cost)).toBe(
+			"10.00"
+		);
 	});
 
-	it("still shows the fuel line cost, informational", () => {
-		const wrapper: VueWrapper = render([ORE, FF]);
+	it("points the shipping total at the account wide shipping page", () => {
+		const wrapper: VueWrapper = render([ORE]);
+		const link = wrapper.find("tfoot a");
 
-		expect(wrapper.text()).toContain("4,800.00");
+		expect(wrapper.text()).toContain(
+			raukk_sourcing.inputs.shipping_cost_link
+		);
+		expect(link.attributes("href")).toBe("/shipping?section=sourcing");
+	});
+
+	it("keeps the shipping note out while shipping is off", () => {
+		const wrapper: VueWrapper = mount(RaukkInputsTable, {
+			props: {
+				rows: [ORE],
+				sourceOptions: () => [],
+				repairCostPerDay: 0,
+			},
+			global: {
+				plugins: [i18n],
+				stubs: {
+					MaterialTile: true,
+					RaukkSourceCell: true,
+					PSelect: true,
+					RouterLink: {
+						props: ["to"],
+						template: '<a :href="to"><slot /></a>',
+					},
+				},
+			},
+		});
+
+		expect(wrapper.text()).not.toContain(
+			raukk_sourcing.inputs.shipping_cost_link
+		);
 	});
 });

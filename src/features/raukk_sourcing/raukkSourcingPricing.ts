@@ -333,6 +333,10 @@ export function splitAggregateDraws(
  * take part in neither cycle guard nor base fraction — fuel does, its
  * daily burn is real tonnage off a producers output.
  *
+ * `resolve` is the ACCOUNT WIDE ship resolver since the ship sourcing
+ * exists, not the consuming plans one: which producer the fuel comes from
+ * is a fleet question, so the draw it books has to follow that answer.
+ *
  * Keys may be aggregate sentinels, {@link splitAggregateDraws} resolves
  * them alongside the material ones. The input is never mutated.
  *
@@ -803,12 +807,10 @@ export function inputDemandPerDay(
  * and pay freight like anything else. Without a shipping map every row is
  * priced exactly as before.
  *
- * `fuelUnitsPerDay` adds the SHIP FUEL rows, the daily burn of the plans
- * own lanes. They are sourcable like any other ticker — a refinery plan
- * prices the fuel its fleet burns — but their ȼ is INFORMATIONAL: the
- * shipping model already charges that fuel through the resolved profile,
- * so the input total has to leave them out. They carry no freight of
- * their own either, fuel is hauled to the exchange by the player.
+ * Ship fuel is NOT a row here. The fleet burns it, not the base: the
+ * shipping model already charges it through the resolved ship profile,
+ * and it is sourced account wide on the shipping page (see
+ * `calculations/shipSourcing.ts`) because one fleet serves every base.
  *
  * With `getDefaultPrice` given, rows sort by their daily cost at that
  * price — the CX preference price — instead of the effective one, so
@@ -825,7 +827,6 @@ export function inputDemandPerDay(
  * @param {IRaukkPriceResolver} resolve Price Resolver
  * @param {Record<string, number>} shippingPerUnitIn Inbound freight ȼ/u
  * @param {(ticker: string) => number} [getDefaultPrice] Stable sort price
- * @param {IRaukkMaterialUnits} fuelUnitsPerDay Ship fuel burnt per day
  * @param {Set<string>} defaulted Tickers following an account default
  * @returns {IRaukkInputRow[]} Priced input rows
  */
@@ -836,7 +837,6 @@ export function buildInputRows(
 	resolve: IRaukkPriceResolver,
 	shippingPerUnitIn: Record<string, number> = {},
 	getDefaultPrice?: (ticker: string) => number,
-	fuelUnitsPerDay: IRaukkMaterialUnits = {},
 	defaulted: Set<string> = new Set()
 ): IRaukkInputRow[] {
 	const units: IRaukkMaterialUnits = {};
@@ -849,7 +849,6 @@ export function buildInputRows(
 			production: false,
 			workforce: false,
 			repair: false,
-			shipFuel: false,
 		};
 		buckets[ticker] = current;
 		return current;
@@ -889,42 +888,7 @@ export function buildInputRows(
 			: row.costPerDay;
 	}
 
-	/*
-	 * Ship fuel rows stand APART from the material ones, deliberately as
-	 * their own row objects rather than another bucket flag on a shared
-	 * one: a fuel that is also a recipe input must keep its production
-	 * need and its burn separate, and only the burn is the row whose
-	 * cost the shipping model already charges.
-	 */
-	const fuelRows: IRaukkInputRow[] = Object.entries(fuelUnitsPerDay)
-		.filter(([, unitsPerDay]) => unitsPerDay > 0)
-		.map(([ticker, unitsPerDay]) => {
-			const resolved: IRaukkResolvedPrice = resolve(ticker);
-
-			return {
-				ticker,
-				buckets: {
-					production: false,
-					workforce: false,
-					repair: false,
-					shipFuel: true,
-				},
-				unitsPerDay,
-				source: sources[ticker],
-				fromDefault: defaulted.has(ticker),
-				price: resolved.price,
-				// fuel is hauled to the exchange by the player, it rides
-				// no route pair and pays no freight of its own
-				shippedUnitsPerDay: 0,
-				shippingPerUnit: 0,
-				effectivePrice: resolved.price,
-				costPerDay: unitsPerDay * resolved.price,
-				fromPlanUuid: resolved.fromPlanUuid,
-			};
-		})
-		.sort((a, b) => sortCost(b) - sortCost(a));
-
-	const materialRows: IRaukkInputRow[] = Object.entries(units)
+	return Object.entries(units)
 		.map(([ticker, unitsPerDay]) => {
 			const resolved: IRaukkResolvedPrice = resolve(ticker);
 
@@ -948,8 +912,6 @@ export function buildInputRows(
 			};
 		})
 		.sort((a, b) => sortCost(b) - sortCost(a));
-
-	return [...materialRows, ...fuelRows];
 }
 
 /**

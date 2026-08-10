@@ -73,15 +73,39 @@ describe("productionFeeCalculations", () => {
 	});
 
 	describe("calculateProductionFeeBatch", () => {
-		it("charges the rate on nominal recipe time", () => {
+		it("charges the rate on the batches real runtime", () => {
 			// 12h nominal: 4100 * 0.5 = 2050
 			expect(
 				calculateProductionFeeBatch(
 					fakeBuilding,
 					fakeFees,
-					12 * 60 * 60 * 1000
+					12 * 60 * 60 * 1000,
+					1
 				)
 			).toBe(2050);
+		});
+
+		it("shrinks the fee with building efficiency", () => {
+			// 12h nominal at 150%: 8h real, 4100 * (1/3)
+			expect(
+				calculateProductionFeeBatch(
+					fakeBuilding,
+					fakeFees,
+					12 * 60 * 60 * 1000,
+					1.5
+				)
+			).toBeCloseTo(4100 / 3, 8);
+		});
+
+		it("returns 0 on non-positive efficiency", () => {
+			expect(
+				calculateProductionFeeBatch(
+					fakeBuilding,
+					fakeFees,
+					12 * 60 * 60 * 1000,
+					0
+				)
+			).toBe(0);
 		});
 	});
 
@@ -102,16 +126,35 @@ describe("productionFeeCalculations", () => {
 	});
 
 	describe("calculateProductionFeeDaily", () => {
-		it("scales with efficiency, negative cost", () => {
-			expect(
-				calculateProductionFeeDaily(fakeBuilding, fakeFees, 1.5)
-			).toBe(-6150);
+		it("is one day of the fee rate as negative cost", () => {
+			expect(calculateProductionFeeDaily(fakeBuilding, fakeFees)).toBe(
+				-4100
+			);
 		});
 
 		it("is 0 on unknown fees", () => {
-			expect(calculateProductionFeeDaily(fakeBuilding, null, 1.5)).toBe(
-				0
-			);
+			expect(calculateProductionFeeDaily(fakeBuilding, null)).toBe(0);
+		});
+
+		it("matches a full day of batch fees at any efficiency", () => {
+			const recipeTimeMs: number = 6 * 60 * 60 * 1000;
+			const dayMs: number = 24 * 60 * 60 * 1000;
+
+			[1, 1.5, 2.75].forEach((efficiency) => {
+				const batch: number = calculateProductionFeeBatch(
+					fakeBuilding,
+					fakeFees,
+					recipeTimeMs,
+					efficiency
+				);
+				const batchesPerDay: number =
+					dayMs / (recipeTimeMs / efficiency);
+
+				expect(batch * batchesPerDay).toBeCloseTo(
+					-1 * calculateProductionFeeDaily(fakeBuilding, fakeFees),
+					8
+				);
+			});
 		});
 	});
 });
