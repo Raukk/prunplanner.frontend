@@ -397,7 +397,7 @@
 	},
 	"auto_chains": {
 		"title": "Automatic Chains",
-		"info": "Loops nobody authored: one per cargo class per exchange region, CX → base → … → CX, at most five stops in the cheapest order the cargo allows — a base is always visited before the base it feeds, so one lap really delivers. Stops that would only fit by doubling back cost more than their detour budget and stay with the exchange hub/spoke. They are rebuilt on every chain recomputation from the flows the authored chains left, so they cannot be edited — widen a detour budget, pin a ship type, or author a chain of your own instead.",
+		"info": "Loops nobody authored, one per cargo class: CX → base → … → CX over the bases of one exchange region, at most five stops in the cheapest order the cargo allows — a base is always visited before the base it feeds, so one lap really delivers. A loop whose cargo is never bought or sold drops the exchange and runs base to base, which is also how two bases trading across region lines are served at all. Stops that would only fit by doubling back cost more than their detour budget and stay with the exchange hub/spoke. They are rebuilt on every chain recomputation from the flows the authored chains left, so they cannot be edited — widen a detour budget, pin a ship type, or author a chain of your own instead.",
 		"tag": "Auto",
 		"reason": {
 			"supply": "supplier → consumer",
@@ -418,6 +418,11 @@
 			"detour_in_out": "In/Out Detour (pc)",
 			"detour_loose": "Workforce & Repair Detour (pc)",
 			"detour_tooltip": "Parsecs a stop may add to the round trip. The in/out class flies every two weeks and pays every parsec often, the 30 and 90 day classes can afford a short extra jump."
+		},
+		"class_note": {
+			"production": "Inputs and outputs: the fortnightly runs that carry the tonnage and size the fleet.",
+			"workforce": "Consumables: a rare, thin run on the workforce cadence.",
+			"repair": "Repair materials: the rarest run of all, on the repair day of its bases."
 		}
 	},
 	"hub_spoke": {
