@@ -307,6 +307,83 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Configs and snapshots a RECOMPUTE SWEEP may touch, the one
+		 * shared definition of its scope.
+		 *
+		 * Mirrors the pricing scope: `producersOf` and `subscription`
+		 * price through {@link sourcingScopedSnapshots}, so the graph a
+		 * sweep is planned on reads exactly the same set — a plan pricing
+		 * cannot see must not be swept, or the sweep would recompute
+		 * numbers nothing reads and order itself around edges that do not
+		 * exist.
+		 *
+		 * Configs are the stored ones of plans either holding an in scope
+		 * snapshot or assigned to an empire. The second half is what
+		 * carries a plan that never computed: it contributes no snapshot
+		 * and therefore no draws, but its configured sources are real
+		 * edges and place it in the ordering.
+		 *
+		 * `extraPlanUuid` unions one plans stored snapshot and config in
+		 * from the FULL store even when it is out of scope: the recompute
+		 * button of an unassigned plan must still recompute that plan and
+		 * everything upstream of it.
+		 *
+		 * Division of labor with {@link cascadeStale}, which stays
+		 * unscoped on purpose: staleness FLAGS must reach an unassigned
+		 * plan — it may well source from assigned ones — only the sweep
+		 * WORK is scoped.
+		 * @author raukk
+		 *
+		 * @param {string | undefined} extraPlanUuid Plan to union in
+		 * @returns {{
+		 *  configs: Record<string, IRaukkPlanConfig>;
+		 *  snapshots: Record<string, IRaukkSnapshot>;
+		 * }} Sweep inputs, plain records
+		 */
+		function recomputeGraphInputs(extraPlanUuid?: string): {
+			configs: Record<string, IRaukkPlanConfig>;
+			snapshots: Record<string, IRaukkSnapshot>;
+		} {
+			const scopedSnaps: Record<string, IRaukkSnapshot> = {
+				...sourcingScopedSnapshots(),
+			};
+
+			const extraSnapshot: IRaukkSnapshot | undefined =
+				extraPlanUuid !== undefined
+					? snapshots.value[extraPlanUuid]
+					: undefined;
+
+			if (extraPlanUuid !== undefined && extraSnapshot !== undefined)
+				scopedSnaps[extraPlanUuid] = extraSnapshot;
+
+			const assigned: Set<string> = raukkEmpirePlanUuids(
+				usePlanningStore().empires
+			);
+
+			const scopedConfigs: Record<string, IRaukkPlanConfig> = {};
+
+			Object.entries(configs.value).forEach(([planUuid, config]) => {
+				if (
+					scopedSnaps[planUuid] === undefined &&
+					!assigned.has(planUuid)
+				)
+					return;
+
+				scopedConfigs[planUuid] = config;
+			});
+
+			const extraConfig: IRaukkPlanConfig | undefined =
+				extraPlanUuid !== undefined
+					? configs.value[extraPlanUuid]
+					: undefined;
+
+			if (extraPlanUuid !== undefined && extraConfig !== undefined)
+				scopedConfigs[extraPlanUuid] = extraConfig;
+
+			return { configs: scopedConfigs, snapshots: scopedSnaps };
+		}
+
+		/**
 		 * Gets a ship profile by id: the users override when one exists,
 		 * the shipped preset otherwise. An unknown id degrades to the
 		 * configured default profile and, should even that be gone, to
@@ -511,6 +588,12 @@ export const useRaukkSourcingStore = defineStore(
 		/**
 		 * Marks all snapshots transitively depending on the given plan
 		 * as stale, the plan itself stays untouched.
+		 *
+		 * UNSCOPED on purpose, unlike {@link recomputeGraphInputs}: an
+		 * unassigned plan may source FROM assigned ones, so a flag has to
+		 * reach it — it is the plan the user opens next, and it must not
+		 * open showing numbers priced from a source that moved. Only the
+		 * sweep WORK scopes, the flags never do.
 		 * @author raukk
 		 *
 		 * @param {string} planUuid Plan Uuid
@@ -2102,6 +2185,7 @@ export const useRaukkSourcingStore = defineStore(
 			getSnapshot,
 			scopedSnapshots,
 			sourcingScopedSnapshots,
+			recomputeGraphInputs,
 			getShipProfile,
 			listShipProfiles,
 			producersOf,

@@ -48,6 +48,30 @@ export function expandAggregateSource(
 }
 
 /**
+ * Whether a stored snapshot shows the plan really consuming what the
+ * FLEET consumes: fuel burnt by its own lanes, or hull wear its own
+ * lanes take.
+ *
+ * Both fields are only written while shipping is enabled, so a snapshot
+ * frozen with shipping off answers false — nothing of it was priced with
+ * a ship. A lane flown HIRED is no burn either: the rate paid for it
+ * covers the hulls fuel and its repairs, neither reaches the accounts
+ * ship sourcing.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkSnapshot} snapshot Snapshot
+ * @returns {boolean} Plan burns fuel or wears hulls of the own fleet
+ */
+function burnsFleetSupplies(snapshot: IRaukkSnapshot): boolean {
+	if (Object.keys(snapshot.fuelUnitsPerDay ?? {}).length > 0) return true;
+
+	return (snapshot.lanes ?? []).some(
+		(lane) => !lane.hired && (lane.damagePerTrip ?? 0) > 0
+	);
+}
+
+/**
  * Derives the sourcing dependency graph from configs and snapshots.
  *
  * Plan P depends on plan S when either
@@ -70,12 +94,21 @@ export function expandAggregateSource(
  * sources, fuel and repair materials of the whole fleet. They live
  * outside any plan config, so nothing else would ever draw an edge for
  * them: a plan mode ship source would silently stay invisible to
- * staleness cascades and recompute scopes. Because the fleet is billed
- * account wide, every plans numbers depend on those producers — the
- * edge therefore goes from EVERY snapshot holding plan to each named
- * producer, aggregates expanded as everywhere else. Self edges drop out
- * on their own, a producer paying for its own share of the fleet needs
- * no edge to itself.
+ * staleness cascades and recompute scopes.
+ *
+ * The edge goes from the BURNERS only — a plan whose stored snapshot
+ * shows real fleet consumption, see {@link burnsFleetSupplies} —
+ * aggregates expanded as everywhere else. Steady state coverage needs no
+ * more than that: once a plan really consumes fuel or repair materials
+ * from a producer, the booked DRAWS of its snapshot carry the edge on
+ * their own, and this configuration level pass is only what puts the
+ * burners on the graph before their draws exist. A snapshot computed
+ * with shipping off carries neither field and therefore contributes no
+ * edge, which is correct rather than a gap: nothing of it was priced
+ * with a ship. The bootstrap case — shipping freshly switched on, no
+ * snapshot refreshed yet — is covered elsewhere, `setShippingConfig`
+ * stales the whole store. Self edges drop out on their own, a producer
+ * paying for its own share of the fleet needs no edge to itself.
  *
  * @author raukk
  *
@@ -129,13 +162,15 @@ export function buildDependencyGraph(
 	});
 
 	// edges from the account wide ship sourcing, see above
+	const burners: string[] = Object.entries(snapshots)
+		.filter(([, snapshot]) => burnsFleetSupplies(snapshot))
+		.map(([planUuid]) => planUuid);
+
 	Object.entries(shipSources ?? {}).forEach(([ticker, source]) => {
 		if (source.mode !== "plan") return;
 
 		producers(ticker, source.sourcePlanUuid).forEach((producerUuid) =>
-			Object.keys(snapshots).forEach((planUuid) =>
-				addEdge(planUuid, producerUuid)
-			)
+			burners.forEach((planUuid) => addEdge(planUuid, producerUuid))
 		);
 	});
 
@@ -284,6 +319,91 @@ export function orderUpstreamFirst(
 		.forEach((current) => visit(current));
 
 	return order;
+}
+
+/**
+ * Orders a fixed set of plans upstream first, grouped into the supply
+ * loops they belong to — {@link orderUpstreamFirst} with the block
+ * structure {@link buildRecomputeOrder} reports, so a caller sweeping a
+ * pending set can settle each loop as a unit instead of recomputing its
+ * members once each and leaving the values unsettled.
+ *
+ * The scope is the given set, with ONE deliberate extension: a supply
+ * loop — a strongly connected component of two or more plans — that
+ * contains any given plan is expanded to ALL of its members. A partial
+ * system is not the system: settling half a loop while the other half
+ * keeps its old numbers is exactly the state the loop exists to leave.
+ * Nothing else is pulled in, a plan outside the set that is no loop mate
+ * of a given plan is never touched.
+ *
+ * Emission follows {@link buildRecomputeOrder}: only plans passing
+ * `hasSnapshot` are emitted, everything else in scope — including a
+ * given plan without a snapshot — is still traversed so it never breaks
+ * the ordering of the plans around it, and a block left empty by the
+ * filter drops out. Singleton blocks therefore exist only for given
+ * plans holding a snapshot; a loop block may be emitted with fewer
+ * members than the loop has.
+ *
+ * On an acyclic set the result flattens to the plans
+ * {@link orderUpstreamFirst} emits, in the same upstream first order.
+ * The two agree down to the byte whenever the graphs adjacency lists are
+ * uuid sorted; where they are not, the two may break a tie between
+ * mutually independent plans differently — both orders are valid, no
+ * plan ever precedes one it draws from.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkDependencyGraph} graph Dependency Graph
+ * @param {string[]} planUuids Plans to order
+ * @param {(planUuid: string) => boolean} hasSnapshot Snapshot Predicate
+ * @returns {string[][]} Blocks of the given plans, upstream first
+ */
+export function orderUpstreamFirstBlocks(
+	graph: IRaukkDependencyGraph,
+	planUuids: string[],
+	hasSnapshot: (planUuid: string) => boolean
+): string[][] {
+	const given: Set<string> = new Set(planUuids);
+	const scope: Set<string> = new Set(given);
+
+	// loop mates of a given plan join the scope, see above. Condensing
+	// the WHOLE graph is what finds them: a loop reaching outside the
+	// given set is no loop at all within it
+	condenseScope(graph, graphNodes(graph, given)).forEach((component) => {
+		if (component.length < 2) return;
+		if (!component.some((member) => given.has(member))) return;
+
+		component.forEach((member) => scope.add(member));
+	});
+
+	return condenseScope(graph, scope)
+		.map((block) => block.filter((member) => hasSnapshot(member)))
+		.filter((block) => block.length > 0);
+}
+
+/**
+ * Every plan the graph mentions, as a node or as a dependency, plus the
+ * given extras — plans without a single edge are part of no adjacency
+ * list of their own.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkDependencyGraph} graph Dependency Graph
+ * @param {Set<string>} extra Additional plan uuids
+ * @returns {Set<string>} All Plan Uuids
+ */
+function graphNodes(
+	graph: IRaukkDependencyGraph,
+	extra: Set<string>
+): Set<string> {
+	const nodes: Set<string> = new Set(extra);
+
+	Object.entries(graph).forEach(([planUuid, sources]) => {
+		nodes.add(planUuid);
+		sources.forEach((sourceUuid) => nodes.add(sourceUuid));
+	});
+
+	return nodes;
 }
 
 /**
