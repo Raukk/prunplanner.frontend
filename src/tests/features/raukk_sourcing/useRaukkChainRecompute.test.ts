@@ -303,10 +303,11 @@ describe("useRaukkChainRecompute", () => {
 		await recomputeChain("d");
 
 		// one full pass plus one settling pass finding no change; the
-		// mocked pipeline never writes, so the second pass settles
+		// mocked pipeline never writes, so the second pass settles.
+		// d and e share one loop block, within it the order is uuid sort
 		expect(
 			mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
-		).toStrictEqual(["e", "d", "e", "d"]);
+		).toStrictEqual(["d", "e", "d", "e"]);
 		expect(total.value).toBe(4);
 		expect(done.value).toBe(4);
 		expect(errors.value).toStrictEqual([]);

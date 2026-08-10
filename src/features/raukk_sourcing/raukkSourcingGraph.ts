@@ -6,6 +6,7 @@
 import {
 	IRaukkPlanConfig,
 	IRaukkSnapshot,
+	IRaukkTickerSource,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 
 /** Adjacency list, key: plan uuid, value: plan uuids it depends on */
@@ -18,6 +19,11 @@ export interface IRaukkRecomputePlanning {
 	/** Scope contains a cross plan supply loop; recomputing it once is
 	 * not enough, the values only settle over repeated passes */
 	cyclic: boolean;
+	/** The same plans as {@link IRaukkRecomputePlanning.order}, grouped
+	 * into strongly connected components, upstream first. A singleton
+	 * block is an acyclic plan and computes in one pass, a block of two
+	 * or more plans is a supply loop that has to settle as a unit. */
+	blocks: string[][];
 }
 
 /**
@@ -58,15 +64,29 @@ export function expandAggregateSource(
  * default stales the whole store anyway, and from the first snapshot on
  * the draws carry the edge.
  *
+ * The optional `shipSources` are the effective ACCOUNT WIDE ship
+ * sources, fuel and repair materials of the whole fleet. They live
+ * outside any plan config, so nothing else would ever draw an edge for
+ * them: a plan mode ship source would silently stay invisible to
+ * staleness cascades and recompute scopes. Because the fleet is billed
+ * account wide, every plans numbers depend on those producers — the
+ * edge therefore goes from EVERY snapshot holding plan to each named
+ * producer, aggregates expanded as everywhere else. Self edges drop out
+ * on their own, a producer paying for its own share of the fleet needs
+ * no edge to itself.
+ *
  * @author raukk
  *
  * @param {Record<string, IRaukkPlanConfig>} configs Configs by uuid
  * @param {Record<string, IRaukkSnapshot>} snapshots Snapshots by uuid
+ * @param {Record<string, IRaukkTickerSource> | undefined} shipSources
+ * Effective account wide ship sources by ticker
  * @returns {IRaukkDependencyGraph} Dependency Graph
  */
 export function buildDependencyGraph(
 	configs: Record<string, IRaukkPlanConfig>,
-	snapshots: Record<string, IRaukkSnapshot>
+	snapshots: Record<string, IRaukkSnapshot>,
+	shipSources?: Record<string, IRaukkTickerSource>
 ): IRaukkDependencyGraph {
 	const graph: IRaukkDependencyGraph = {};
 
@@ -87,23 +107,34 @@ export function buildDependencyGraph(
 		);
 	});
 
+	/** Producers a plan mode source names, aggregates expanded */
+	const producers = (ticker: string, sourcePlanUuid: string): string[] =>
+		sourcePlanUuid === "AGG_AVG" ||
+		sourcePlanUuid === "AGG_MAX" ||
+		sourcePlanUuid === "AGG_AVG_MKT"
+			? expandAggregateSource(snapshots, ticker)
+			: [sourcePlanUuid];
+
 	// edges from configured sources
 	Object.entries(configs).forEach(([planUuid, config]) => {
 		Object.entries(config.sources).forEach(([ticker, source]) => {
 			if (source.mode !== "plan") return;
 
-			if (
-				source.sourcePlanUuid === "AGG_AVG" ||
-				source.sourcePlanUuid === "AGG_MAX" ||
-				source.sourcePlanUuid === "AGG_AVG_MKT"
-			) {
-				expandAggregateSource(snapshots, ticker).forEach(
-					(producerUuid) => addEdge(planUuid, producerUuid)
-				);
-			} else {
-				addEdge(planUuid, source.sourcePlanUuid);
-			}
+			producers(ticker, source.sourcePlanUuid).forEach((producerUuid) =>
+				addEdge(planUuid, producerUuid)
+			);
 		});
+	});
+
+	// edges from the account wide ship sourcing, see above
+	Object.entries(shipSources ?? {}).forEach(([ticker, source]) => {
+		if (source.mode !== "plan") return;
+
+		producers(ticker, source.sourcePlanUuid).forEach((producerUuid) =>
+			Object.keys(snapshots).forEach((planUuid) =>
+				addEdge(planUuid, producerUuid)
+			)
+		);
 	});
 
 	return graph;
@@ -264,9 +295,13 @@ export function orderUpstreamFirst(
  *
  * Supply loops are allowed: snapshots price from frozen source values,
  * a loop therefore never recurses, its numbers just settle over
- * repeated passes. Back edges are dropped from the ordering — the loop
- * is broken at an arbitrary point — and reported through `cyclic` so
- * the caller knows a single pass leaves the loop's values unsettled.
+ * repeated passes. A loop is reported twice over: `blocks` states it
+ * explicitly — its members share one block — and `cyclic` stays as the
+ * single flag telling a caller that one pass leaves values unsettled.
+ * Within a block the members order is arbitrary (uuid sort), a loop has
+ * no upstream end to start at.
+ *
+ * `order` is `blocks.flat()`: the same plans, loop membership dropped.
  *
  * @author raukk
  *
@@ -286,34 +321,134 @@ export function buildRecomputeOrder(
 		...collectDependents(graph, planUuid),
 	]);
 
-	const order: string[] = [];
-	const visited: Set<string> = new Set();
+	const components: string[][] = condenseScope(graph, scope);
+	const cyclic: boolean = components.some((block) => block.length > 1);
+
+	const blocks: string[][] = components
+		.map((block) => block.filter((member) => hasSnapshot(member)))
+		.filter((block) => block.length > 0);
+
+	return { order: blocks.flat(), cyclic, blocks };
+}
+
+/**
+ * Condenses a scope into its strongly connected components, upstream
+ * first: a component is emitted only after every component it draws
+ * from. Iterative Tarjan, the recursion of the textbook version would
+ * be bounded by the plan count anyway but an explicit stack costs
+ * nothing here.
+ *
+ * A component of one plan is an acyclic plan, a component of two or
+ * more is a cross plan supply loop. A plan can never form a loop on its
+ * own: {@link buildDependencyGraph} drops self edges, so a self loop
+ * never reaches this function and a singleton block always means
+ * acyclic.
+ *
+ * Deterministic down to the byte: components and their members come out
+ * in uuid sort order wherever the graph leaves a choice, so neither the
+ * key insertion order of the graph nor the one of the scope can move a
+ * plan.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkDependencyGraph} graph Dependency Graph
+ * @param {Set<string>} scope Plans to condense
+ * @returns {string[][]} Components, upstream first, members uuid sorted
+ */
+function condenseScope(
+	graph: IRaukkDependencyGraph,
+	scope: Set<string>
+): string[][] {
+	interface IFrame {
+		planUuid: string;
+		sources: string[];
+		next: number;
+	}
+
+	const index: Map<string, number> = new Map();
+	const lowlink: Map<string, number> = new Map();
 	const onStack: Set<string> = new Set();
-	let cyclic: boolean = false;
+	const stack: string[] = [];
+	const components: string[][] = [];
+	let counter: number = 0;
 
-	function visit(current: string): void {
-		// onStack: back edge, the scope loops
-		if (onStack.has(current)) {
-			cyclic = true;
-			return;
-		}
-		if (visited.has(current)) return;
+	/** In scope sources of a plan, uuid sorted for determinism */
+	const sourcesOf = (current: string): string[] =>
+		(graph[current] ?? [])
+			.filter((sourceUuid) => scope.has(sourceUuid))
+			.sort();
 
+	function push(current: string, frames: IFrame[]): void {
+		index.set(current, counter);
+		lowlink.set(current, counter);
+		counter++;
+		stack.push(current);
 		onStack.add(current);
-
-		(graph[current] ?? []).forEach((sourceUuid) => {
-			if (scope.has(sourceUuid)) visit(sourceUuid);
+		frames.push({
+			planUuid: current,
+			sources: sourcesOf(current),
+			next: 0,
 		});
-
-		onStack.delete(current);
-		visited.add(current);
-
-		if (hasSnapshot(current)) order.push(current);
 	}
 
 	Array.from(scope)
 		.sort()
-		.forEach((current) => visit(current));
+		.forEach((root) => {
+			if (index.has(root)) return;
 
-	return { order, cyclic };
+			const frames: IFrame[] = [];
+			push(root, frames);
+
+			while (frames.length > 0) {
+				const frame: IFrame = frames[frames.length - 1];
+
+				if (frame.next < frame.sources.length) {
+					const sourceUuid: string = frame.sources[frame.next++];
+
+					if (!index.has(sourceUuid)) {
+						push(sourceUuid, frames);
+					} else if (onStack.has(sourceUuid)) {
+						lowlink.set(
+							frame.planUuid,
+							Math.min(
+								lowlink.get(frame.planUuid) as number,
+								index.get(sourceUuid) as number
+							)
+						);
+					}
+
+					continue;
+				}
+
+				frames.pop();
+
+				const parent: IFrame | undefined = frames[frames.length - 1];
+				if (parent !== undefined)
+					lowlink.set(
+						parent.planUuid,
+						Math.min(
+							lowlink.get(parent.planUuid) as number,
+							lowlink.get(frame.planUuid) as number
+						)
+					);
+
+				// root of a component: everything above it on the stack
+				// is one strongly connected component
+				if (lowlink.get(frame.planUuid) !== index.get(frame.planUuid))
+					continue;
+
+				const component: string[] = [];
+				let member: string;
+
+				do {
+					member = stack.pop() as string;
+					onStack.delete(member);
+					component.push(member);
+				} while (member !== frame.planUuid);
+
+				components.push(component.sort());
+			}
+		});
+
+	return components;
 }

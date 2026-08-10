@@ -23,7 +23,10 @@ import {
 	overriddenTickersOf,
 } from "@/features/raukk_sourcing/raukkSourcingDefaults";
 // raukk: what the FLEET consumes is sourced account wide, not per base
-import { raukkEmptyShipSourcing } from "@/features/raukk_sourcing/calculations/shipSourcing";
+import {
+	raukkEffectiveShipSources,
+	raukkEmptyShipSourcing,
+} from "@/features/raukk_sourcing/calculations/shipSourcing";
 
 // Schemas
 import {
@@ -470,7 +473,11 @@ export const useRaukkSourcingStore = defineStore(
 		 */
 		function cascadeStale(planUuid: string): void {
 			collectDependents(
-				buildDependencyGraph(configs.value, snapshots.value),
+				buildDependencyGraph(
+					configs.value,
+					snapshots.value,
+					raukkEffectiveShipSources(shipSourcing.value)
+				),
 				planUuid
 			).forEach((dependentUuid) => {
 				const dependent: IRaukkSnapshot | undefined =
@@ -1726,7 +1733,11 @@ export const useRaukkSourcingStore = defineStore(
 		 */
 		function deletePlanData(planUuid: string): void {
 			const dependents: string[] = collectDependents(
-				buildDependencyGraph(configs.value, snapshots.value),
+				buildDependencyGraph(
+					configs.value,
+					snapshots.value,
+					raukkEffectiveShipSources(shipSourcing.value)
+				),
 				planUuid
 			);
 

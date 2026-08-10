@@ -20,6 +20,9 @@ import {
 	IRaukkRecomputePlanning,
 } from "@/features/raukk_sourcing/raukkSourcingGraph";
 
+// raukk: what the FLEET consumes is sourced account wide, not per base
+import { raukkEffectiveShipSources } from "@/features/raukk_sourcing/calculations/shipSourcing";
+
 // Pricing
 import { outputsSettled } from "@/features/raukk_sourcing/raukkSourcingPricing";
 
@@ -195,7 +198,8 @@ export function useRaukkChainRecompute() {
 		const planning: IRaukkRecomputePlanning = buildRecomputeOrder(
 			buildDependencyGraph(
 				sourcingStore.configs,
-				sourcingStore.snapshots
+				sourcingStore.snapshots,
+				raukkEffectiveShipSources(sourcingStore.shipSourcing)
 			),
 			planUuid,
 			(uuid: string) => sourcingStore.snapshots[uuid] !== undefined
