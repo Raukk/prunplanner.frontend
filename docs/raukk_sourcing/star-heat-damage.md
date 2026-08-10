@@ -101,7 +101,7 @@ The two blueprints flown here separate cleanly by damage type. Against the six r
 
 — an 11% split consistent with a hull-plate difference. Yet XHBM takes MORE stellar damage than MSQS on four of the five anchors. The two terms shield separately, exactly as the component table of `repair_and_damage.json` says (BPT/APT for heat, BRP/ARP/SRP for radiation, BWH/AWH for meteoroid).
 
-Path geometry looked like the open item at first — fitted C by anchor ran 3.0e-6 at NL-534a, 8.0e-6 at LS-231a and up to 4e-5 at LE-137a, climbing exactly as the leg grew long against the anchor's orbit radius. Section 7.1 resolves it: the angle is not free, it is set by the planet's orbital position, and it is BOUNDED. Reading the term as a range rather than a point puts 23 of 25 flights inside, the other two within 2.6%.
+Path geometry looked like the open item at first — fitted C by anchor ran 3.0e-6 at NL-534a, 8.0e-6 at LS-231a and up to 4e-5 at LE-137a, climbing exactly as the leg grew long against the anchor's orbit radius. Section 7.1 resolves it: the angle is not free, it is set by the planet's orbital position, and it is BOUNDED. Reading the term as a range rather than a point puts 31 of 33 flights inside, the other two within 3.0%. It does NOT resolve the per-anchor spread of the point estimate, which section 7.3 measures and section 9.2 explains.
 
 The ship/leg-type confound raised here is RESOLVED by the reflight — see section 8.4. Batch 11 flew each blueprint in one direction only, so the two could not be separated from that data alone; batch 9 flew both leg types on the same ships and the reflight flew them on different ones, and the split comes out the same either way. It is the leg type, not the hull.
 
@@ -117,7 +117,7 @@ Their 'KI-439' tab logs ~70 real (not BTF) flights between two planets of one sy
 
 ## 7. The simulator
 
-`src/features/raukk_sourcing/calculations/shippingDamage.ts` prices a trip leg by leg. Five terms, all fitted against the 25 transcribed flights of `btf_star_damage.json` and `btf_flights.json`:
+`src/features/raukk_sourcing/calculations/shippingDamage.ts` prices a trip leg by leg. Five terms, fitted against the 25 transcribed flights of `btf_flights.json` and `btf_star_damage.json` and since replayed against all 33, the reflight of `btf_ant_reflight.json` included:
 
 | term | law | source |
 |---|---|---|
@@ -146,23 +146,48 @@ These are real bounds on what the lane can ever produce, not a tolerance wrapped
 
 ### 7.2 Accuracy, measured
 
-Replaying all 25 flights, with 10% allowed on the meteoroid law and 15% on the landing term (their own fitted errors):
+Replaying all 33 flights, with 10% allowed on the meteoroid law and 15% on the landing term (their own fitted errors):
 
 | | result |
 |---|---|
-| inside the true bounds | **29 of 33** |
-| worst escape | 2.6% |
-| band width, median | 2.2x |
-| band width, range | 1.4x to 8.4x |
-| point estimate (orbital mean) | median 12%, 19 of 25 within 20% |
+| inside the true bounds | **31 of 33** |
+| worst escape | 3.0% |
+| band width, median | 2.0x |
+| band width, range | 1.0x to 8.4x |
+| point estimate (orbital mean) | median 11%, 25 of 33 within 20% |
+| point estimate, pooled over all 33 | **+1.7%** |
 
-So nothing escapes the bounds by more than 5%, and most trips sit in a 1.4x-2.9x band. The two widest (5.8x and 8.4x) are the lanes whose legs run LONGER than the anchor's orbit radius — those are the only ones where the closest-approach floor does any work, and they are exactly the lanes worth flagging on their worst case.
+`shippingDamage.test.ts` asserts the containment rate and the pooled bias, so neither can drift unnoticed.
+
+So nothing escapes the bounds by more than 5%, and most trips sit inside a 2x band. The widest are the lanes whose legs run LONGER than the anchor's orbit radius — those are the only ones where the closest-approach floor does any work, and they are exactly the lanes worth flagging on their worst case.
+
+An earlier revision put containment at 29 of 33 with a 2.2x median band. That was a measurement artifact, not a model change: the upper bound was taken as the largest value over 1,200 evenly spaced directions, but the maximum sits exactly ON the floor where the integrand is steepest, and no evenly spaced grid lands there. It understated the bound by 16% wherever the floor binds. `raukkStellarMinimumCosine` now bisects to that boundary directly, which is both exact and cheaper.
 
 Where an individual trip falls inside its band is unknowable from static data, but it is not noise: it is the planet's position on the day, so it averages to `expected` over a run of trips. Price a route on `expected` and check `high` before committing a base to it.
 
-### 7.3 On calibrating an anchor
+### 7.3 What "accurate" means here, and what it does not
+
+The point estimate is an orbital MEAN. Pooled across all 33 flights it runs +1.7%, which is what a fleet-wide damage budget needs. Per anchor it does not hold, and refitting cannot make it:
+
+| variant | pooled bias | anchors within +-5% | worst anchor |
+|---|---|---|---|
+| shipped, `C = 3.25e-6` | +4.5% | 9 of 19 | YK-715a +47.3% |
+| refit `C = 2.956e-6` | 0.0% | 9 of 19 | +41.7% |
+| separate DEP and APP coefficients | 0.0% | 9 of 19 | +42% |
+
+(66 DEP/APP legs, the only ones carrying a stellar term. Anchor bias is the pooled residual of that anchor's legs.)
+
+Every global constant moves the pooled figure and leaves the spread alone, which is the signature of a residual that is not a scaling error. It is the per-system orbital plane orientation of section 9.2 plus the phase on the day, and neither is a scalar.
+
+The data also cannot settle whether repeated flights on ONE lane converge to `expected`. ANT carries 21 legs, but they come from two capture batches roughly 6-7 hours apart against a 1.63-day period — two phase samples, not 21 — and it still sits +16% after a refit. "The residual averages away" and "the model is wrong on this lane" fit the evidence equally well.
+
+Practical reading: trust `expected` for a fleet, not for a lane. For a lane that matters, calibrate it (section 7.4).
+
+### 7.4 On calibrating an anchor
 
 `raukkCalibrateStellar` back-solves an anchor's coefficient from one observed leg. It pins that lane AT THAT MOMENT — the planet keeps orbiting, so the same lane flown months later presents a different angle and a different apparent coefficient. Average several observations spread across an orbital period and the result converges on `expected`; a single one does not.
+
+This is the only route to per-lane accuracy that does not require solving section 9.2. Cost is one BTF panel per capture, about five captures spread across the anchor's orbital period — section 8.2 gives those: a week for ANT at 1.63 days, three months for NL-534a at 17.8. Worth doing for a lane a base depends on, not worth doing universally.
 
 ## 8. Capture dates, and what the orbit does between them
 

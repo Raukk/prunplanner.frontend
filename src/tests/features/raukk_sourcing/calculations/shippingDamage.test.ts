@@ -14,7 +14,9 @@ import {
 	raukkPlanetSeparationAu,
 	raukkStellarClosestApproach,
 	raukkStellarGeometry,
+	raukkStellarMinimumCosine,
 	raukkStellarPathIntegral,
+	RAUKK_DAMAGE_CLOSEST_FRACTION,
 	raukkCalibrateStellar,
 	raukkStellarSystem,
 	raukkSynodicPeriodDays,
@@ -105,6 +107,30 @@ describe("shippingDamage — static lookups", () => {
 		expect(raukkOrbitAu("NL-534a")!).toBeCloseTo(1.9823, 3);
 		expect(raukkOrbitAu("NL-534g")!).toBeCloseTo(85.329, 2);
 		expect(raukkOrbitAu("ZZ-999a")).toBeNull();
+	});
+
+	it("reads an orbit whatever casing the id arrives in", () => {
+		// the asset is keyed NL-534a; an upper cased id used to miss and
+		// silently zero the stellar term instead of failing
+		expect(raukkOrbitAu("NL-534A")!).toBeCloseTo(1.9823, 3);
+		expect(raukkOrbitAu("nl-534a")!).toBeCloseTo(1.9823, 3);
+		expect(raukkPlanetPosition("KI-439B", 1.7e12)).not.toBeNull();
+	});
+
+	it("keeps the stellar term alive under an upper cased anchor", () => {
+		const lower = raukkLegDamage({
+			type: "APP",
+			anchorPlanetNaturalId: "NL-534a",
+			km: 70_000_000,
+		});
+		const upper = raukkLegDamage({
+			type: "APP",
+			anchorPlanetNaturalId: "NL-534A",
+			km: 70_000_000,
+		});
+
+		expect(upper.stellar.expected).toBeGreaterThan(0);
+		expect(upper.stellar.expected).toBeCloseTo(lower.stellar.expected, 10);
 	});
 
 	it("recovers Sunlight as luminosity over the squared orbit", () => {
@@ -384,23 +410,58 @@ describe("shippingDamage — stellar geometry", () => {
 	});
 
 	it("bounds are the true extremes over direction, not percentiles", () => {
-		const a = 1;
-		const d = 0.5;
-		const band = raukkStellarGeometry(a, d);
+		// including the lanes whose legs overshoot the orbit radius, where
+		// the closest approach floor binds and the integrand is steepest:
+		// a uniform grid never lands on that boundary, so a sampled
+		// maximum understated the bound by 16%
+		for (const [a, d] of [
+			[1, 0.5],
+			[1, 0.4],
+			[2, 5],
+			[0.225, 0.447],
+		] as [number, number][]) {
+			const band = raukkStellarGeometry(a, d);
 
-		// sample the whole legal direction range: nothing may escape
-		for (let i = 0; i <= 500; i++) {
-			const cosine: number = -1 + (2 * i) / 500;
+			// sample the whole legal direction range: nothing may escape
+			for (let i = 0; i <= 5000; i++) {
+				const cosine: number = -1 + (2 * i) / 5000;
 
-			if (raukkStellarClosestApproach(a, d, cosine) < 0.05 * a) continue;
+				if (raukkStellarClosestApproach(a, d, cosine) < 0.05 * a)
+					continue;
 
-			const value: number = raukkStellarPathIntegral(a, d, cosine);
+				const value: number = raukkStellarPathIntegral(a, d, cosine);
 
-			if (!Number.isFinite(value)) continue;
+				if (!Number.isFinite(value)) continue;
 
-			expect(value).toBeGreaterThanOrEqual(band.low * (1 - 1e-9));
-			expect(value).toBeLessThanOrEqual(band.high * (1 + 1e-9));
+				expect(value).toBeGreaterThanOrEqual(band.low * (1 - 1e-9));
+				expect(value).toBeLessThanOrEqual(band.high * (1 + 1e-9));
+			}
 		}
+	});
+
+	it("puts the worst allowed direction exactly on the floor", () => {
+		// the leg overshoots its orbit radius, so the floor binds
+		const a = 0.225;
+		const d = 0.447;
+		const cosine: number = raukkStellarMinimumCosine(a, d);
+
+		expect(raukkStellarClosestApproach(a, d, cosine)).toBeCloseTo(
+			RAUKK_DAMAGE_CLOSEST_FRACTION * a,
+			9
+		);
+		expect(raukkStellarGeometry(a, d).high).toBeCloseTo(
+			raukkStellarPathIntegral(a, d, cosine),
+			9
+		);
+	});
+
+	it("lets a leg that stops short of the floor turn all the way in", () => {
+		// nothing binds, so the worst case is straight in and exact
+		expect(raukkStellarMinimumCosine(1, 0.4)).toBe(-1);
+		expect(raukkStellarGeometry(1, 0.4).high).toBeCloseTo(
+			1 / (1 - 0.4) - 1 / 1,
+			9
+		);
 	});
 
 	it("puts the minimum exactly at a radially outbound leg", () => {
@@ -589,7 +650,7 @@ describe("shippingDamage — the anchor drives the stellar term", () => {
 	});
 });
 
-describe("shippingDamage — replay of the 25 transcribed flights", () => {
+describe("shippingDamage — replay of the 33 transcribed flights", () => {
 	const results = ALL_FLIGHTS.map((flight) => {
 		const predicted: IRaukkDamageBreakdown = raukkTripDamage(
 			toLegs(flight)
@@ -712,6 +773,69 @@ describe("shippingDamage — replay of the 25 transcribed flights", () => {
 		expect(
 			errorWith({ stellarCoefficients: { ANT: median } })
 		).toBeLessThan(errorWith(undefined));
+	});
+
+	it("holds the containment rate star-heat-damage.md section 7.2 claims", () => {
+		// the doc's headline accuracy number, asserted so it cannot drift
+		// silently. Allowances are the two terms' own fitted errors: 10%
+		// on the meteoroid law, 15% on the landing term.
+		let inside: number = 0;
+		let worstEscape: number = 0;
+
+		for (const r of results) {
+			const slack: number =
+				0.1 * r.predicted.meteoroid + 0.15 * r.predicted.landing;
+			const low: number = r.predicted.total.low - slack;
+			const high: number = r.predicted.total.high + slack;
+
+			if (r.observed >= low && r.observed <= high) {
+				inside++;
+				continue;
+			}
+
+			worstEscape = Math.max(
+				worstEscape,
+				r.observed < low ? low / r.observed - 1 : r.observed / high - 1
+			);
+		}
+
+		expect(inside).toBeGreaterThanOrEqual(31);
+		expect(worstEscape).toBeLessThan(0.05);
+	});
+
+	it("prices the fleet as a whole to within 5%", () => {
+		// the point estimate is an ORBITAL MEAN, so it is only meant to
+		// hold in aggregate; per anchor it runs -32% to +47% and no global
+		// coefficient moves that (star-heat-damage.md section 7.4)
+		const pooledObserved: number = results.reduce(
+			(sum, r) => sum + r.observed,
+			0
+		);
+		const pooledPredicted: number = results.reduce(
+			(sum, r) => sum + r.predicted.total.expected,
+			0
+		);
+
+		expect(Math.abs(pooledPredicted / pooledObserved - 1)).toBeLessThan(
+			0.05
+		);
+	});
+
+	it("hands out its own band object per leg, never a shared one", () => {
+		const jump = raukkLegDamage({
+			type: "JMP",
+			anchorPlanetNaturalId: "NL-534a",
+			parsecs: 8,
+		});
+
+		jump.stellar.high = 999;
+
+		expect(
+			raukkLegDamage({
+				type: "CHRG",
+				anchorPlanetNaturalId: "NL-534a",
+			}).stellar.high
+		).toBe(0);
 	});
 
 	it("never predicts a negative or non-finite total", () => {
