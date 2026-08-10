@@ -27,7 +27,7 @@ import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
  * @author raukk
  *
  * @param {Ref<number>} repairBillCost ȼ of a full repair bill
- * @returns Transport rows and the plan names labeling their lanes
+ * @returns Transport rows, and the names and planets of their lane ends
  */
 export function useRaukkTransport(repairBillCost: Ref<number>) {
 	const sourcingStore = useRaukkSourcingStore();
@@ -39,6 +39,25 @@ export function useRaukkTransport(repairBillCost: Ref<number>) {
 				([uuid, snapshot]: [string, IRaukkSnapshot]) => [
 					uuid,
 					snapshot.planName,
+				]
+			)
+		)
+	);
+
+	/**
+	 * Planet natural id per plan uuid: the other half of a `/plan/...`
+	 * link, so a lane end can be opened rather than only read.
+	 *
+	 * Read from EVERY snapshot rather than the scoped ones, exactly as
+	 * the names are — a row that names a plan must be able to link it,
+	 * and the scoping already decided which rows exist.
+	 */
+	const planPlanets: ComputedRef<Record<string, string>> = computed(() =>
+		Object.fromEntries(
+			Object.entries(sourcingStore.snapshots).map(
+				([uuid, snapshot]: [string, IRaukkSnapshot]) => [
+					uuid,
+					snapshot.planetNaturalId,
 				]
 			)
 		)
@@ -74,5 +93,5 @@ export function useRaukkTransport(repairBillCost: Ref<number>) {
 		);
 	});
 
-	return { rows, planNames };
+	return { rows, planNames, planPlanets };
 }
