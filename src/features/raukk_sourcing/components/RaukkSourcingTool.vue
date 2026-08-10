@@ -12,12 +12,13 @@
 	import { useRaukkSnapshot } from "@/features/raukk_sourcing/useRaukkSnapshot";
 	import { useRaukkChainRecompute } from "@/features/raukk_sourcing/useRaukkChainRecompute";
 	import { useRaukkShippingOptions } from "@/features/raukk_sourcing/useRaukkShippingOptions";
+	import { useRaukkLease } from "@/features/raukk_sourcing/useRaukkLease";
 
 	// Components
 	import RaukkInputsTable from "@/features/raukk_sourcing/components/RaukkInputsTable.vue";
 	import RaukkOutputsTable from "@/features/raukk_sourcing/components/RaukkOutputsTable.vue";
 	import RaukkSourcingDefaultsNote from "@/features/raukk_sourcing/components/RaukkSourcingDefaultsNote.vue";
-import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSection.vue";
+	import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSection.vue";
 
 	// Calculations
 	import {
@@ -106,6 +107,24 @@ import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSe
 	/** Configuration is read only without a stored plan uuid as well */
 	const readOnly: ComputedRef<boolean> = computed(
 		() => props.disabled || props.planUuid === undefined
+	);
+
+	/*
+	 * Lease delegation reaches into the settings tab: a lease flies
+	 * nothing of its own, so its cadence overrides govern nothing and the
+	 * inputs say so instead of quietly doing nothing. On the host the same
+	 * caps decide the whole site, leases included.
+	 */
+	const {
+		host: leaseHost,
+		leases,
+		isLease,
+		isHost,
+	} = useRaukkLease(toRef(props, "planUuid"));
+
+	/** Cadence is the host's to set, so a lease never edits its own */
+	const cadenceReadOnly: ComputedRef<boolean> = computed(
+		() => readOnly.value || isLease.value
 	);
 
 	/**
@@ -425,11 +444,14 @@ import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSe
 									: 'text-white/60'
 							">
 							{{
-								$t("raukk_sourcing.snapshot.shipping_fraction", {
-									value: shipTimeLabel(
-										snapshot.shippingFraction
-									),
-								})
+								$t(
+									"raukk_sourcing.snapshot.shipping_fraction",
+									{
+										value: shipTimeLabel(
+											snapshot.shippingFraction
+										),
+									}
+								)
 							}}
 						</span>
 					</RouterLink>
@@ -554,6 +576,25 @@ import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSe
 	</template>
 
 	<template v-else-if="refActiveTab === 'settings'">
+		<!-- the cadence below is the site's, not this base's: a lease
+		delegates it to the host, a host spends it on the leases too -->
+		<div v-if="isLease" class="pb-3 text-white/50">
+			{{
+				$t("raukk_sourcing.lease.delegated_note", {
+					host:
+						leaseHost?.planName ??
+						$t("raukk_sourcing.lease.unknown_plan"),
+				})
+			}}
+		</div>
+		<div v-else-if="isHost" class="pb-3 text-white/50">
+			{{
+				$t("raukk_sourcing.lease.host_note", {
+					count: leases.length,
+				})
+			}}
+		</div>
+
 		<div
 			class="border rounded-[3px] border-white/20 p-3 flex flex-row flex-wrap gap-3 child:my-auto">
 			<div class="font-bold">
@@ -579,7 +620,7 @@ import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSe
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
-				:disabled="readOnly"
+				:disabled="cadenceReadOnly"
 				:placeholder="String(caps.production)"
 				:value="config.cadence?.production ?? null"
 				@update:value="(v) => changeCadence('production', v ?? null)" />
@@ -595,7 +636,7 @@ import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSe
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
-				:disabled="readOnly"
+				:disabled="cadenceReadOnly"
 				:placeholder="String(caps.workforce)"
 				:value="config.cadence?.workforce ?? null"
 				@update:value="(v) => changeCadence('workforce', v ?? null)" />
@@ -611,7 +652,7 @@ import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSe
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
-				:disabled="readOnly"
+				:disabled="cadenceReadOnly"
 				:placeholder="String(caps.repair)"
 				:value="config.cadence?.repair ?? null"
 				@update:value="(v) => changeCadence('repair', v ?? null)" />
@@ -635,7 +676,9 @@ import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSe
 				:value="planAnchor"
 				:options="anchorOptions"
 				:placeholder="anchorModeLabel"
-				@update:value="(v) => changePlanAnchor((v as string) ?? null)" />
+				@update:value="
+					(v) => changePlanAnchor((v as string) ?? null)
+				" />
 
 			<RouterLink to="/shipping" class="pl-3">
 				<PButton type="secondary">
@@ -666,7 +709,9 @@ import RaukkLeaseSection from "@/features/raukk_sourcing/components/RaukkLeaseSe
 				v-model:value="refImportPayload"
 				type="textarea"
 				:rows="4"
-				:placeholder="$t('raukk_sourcing.controls.import_placeholder')" />
+				:placeholder="
+					$t('raukk_sourcing.controls.import_placeholder')
+				" />
 			<div class="flex flex-row gap-3">
 				<PButton
 					type="primary"

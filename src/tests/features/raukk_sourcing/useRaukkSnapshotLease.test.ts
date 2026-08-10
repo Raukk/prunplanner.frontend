@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
+import { ref } from "vue";
 
 // prices come from the exchange layer, which is mocked here: this
 // exercises the snapshot pipeline, not the price loading
@@ -18,6 +19,7 @@ vi.mock("@/database/services/useExchangeData", () => ({
 
 // Composables
 import { computePlanSnapshot } from "@/features/raukk_sourcing/useRaukkSnapshot";
+import { useRaukkTransport } from "@/features/raukk_sourcing/useRaukkTransport";
 
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
@@ -577,6 +579,67 @@ describe("Raukk Sourcing: Lease link and shipping delegation", () => {
 			expect(store.configs.a.leaseHostPlanUuid).toBeUndefined();
 			expect(store.snapshots.a.leaseCargo).toBeUndefined();
 			expect(store.leasesOf("a")).toStrictEqual([]);
+		});
+	});
+
+	/*
+	 * The lease link was written before depots, planned gates and the
+	 * account wide fleet sourcing landed. A delegated lease is the one
+	 * plan in the account that holds no lanes at all, so every rollup
+	 * that walks lanes meets it as an edge case — these pin that it
+	 * stays an empty contributor rather than a broken one.
+	 */
+	describe("against the rounds that landed after it", () => {
+		beforeEach(async () => {
+			await computeBoth();
+			store.setLeaseHost("lease", "host");
+		});
+
+		it("burns no fuel of its own, the host flies the site", async () => {
+			store.setShipTickerSource("FF", {
+				mode: "plan",
+				sourcePlanUuid: "refinery",
+			});
+
+			const { snapshot: leased } =
+				await computePlanSnapshot(leaseContext());
+			const { snapshot: host } = await computePlanSnapshot(hostContext());
+
+			expect(leased.fuelUnitsPerDay ?? {}).toStrictEqual({});
+			expect((host.fuelUnitsPerDay ?? {}).FF).toBeGreaterThan(0);
+		});
+
+		it("still delegates when a depot hands the site over", async () => {
+			// a depot on the own planet is a free handover: the plan flies
+			// nothing out of it, lease or no lease
+			const lone = await computePlanSnapshot(hostContext());
+			expect(tripsOf(lone.snapshot)).toBeGreaterThan(0);
+
+			store.setDepot(SITE_PLANET, { weeklyCostAic: 700 });
+
+			const { snapshot: leased } =
+				await computePlanSnapshot(leaseContext());
+			const { snapshot: host } = await computePlanSnapshot(hostContext());
+
+			// the delegation still happens under the depot: the lease
+			// freezes its cargo rather than quietly shipping again
+			expect(leased.lanes ?? []).toStrictEqual([]);
+			expect(leased.leaseCargo).toBeDefined();
+			// and the host hands the whole site over, the leases included
+			expect(tripsOf(host)).toBe(0);
+			expect(host.leaseCargo).toBeUndefined();
+		});
+
+		it("contributes no lane to the account transport view", async () => {
+			await computePlanSnapshot(leaseContext());
+			await computePlanSnapshot(hostContext());
+
+			const { rows } = useRaukkTransport(ref(0));
+
+			expect(
+				rows.value.some((row) => row.identity.planUuid === "lease")
+			).toBe(false);
+			expect(rows.value.length).toBeGreaterThan(0);
 		});
 	});
 });
