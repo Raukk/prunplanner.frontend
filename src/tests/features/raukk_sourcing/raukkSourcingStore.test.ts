@@ -298,6 +298,51 @@ describe("Raukk Sourcing Store", () => {
 			expect(store.sourcingDefaults.repair).toBeUndefined();
 		});
 
+		it("stores a ship group default and stales the whole store", () => {
+			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot("b", makeSnapshot("B", { FF: 10 }));
+
+			store.setShipSourcingDefault("fuel", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+
+			expect(store.shipSourcing.defaults.fuel).toStrictEqual({
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+			// the fleet flies for every base, so every base was costed
+			// with the old fuel price
+			expect(store.snapshots.a.stale).toBe(true);
+			expect(store.snapshots.b.stale).toBe(true);
+		});
+
+		it("stores and clears a ship ticker entry", () => {
+			store.setShipTickerSource("LHP", {
+				mode: "market",
+				priceMode: "BID",
+			});
+
+			expect(store.shipSourcing.sources.LHP).toStrictEqual({
+				mode: "market",
+				priceMode: "BID",
+			});
+
+			store.setShipTickerSource("LHP", undefined);
+
+			expect(store.shipSourcing.sources.LHP).toBeUndefined();
+		});
+
+		it("clears a ship group default again", () => {
+			store.setShipSourcingDefault("shipRepair", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_MAX",
+			});
+			store.setShipSourcingDefault("shipRepair", undefined);
+
+			expect(store.shipSourcing.defaults.shipRepair).toBeUndefined();
+		});
+
 		it("lists the per plan entries a default would replace", () => {
 			store.setSnapshot("a", classified("A"));
 			store.setSnapshot("b", classified("B"));
@@ -521,17 +566,23 @@ describe("Raukk Sourcing Store", () => {
 		});
 
 		it("hides a plan no empire holds any more", () => {
-			store.setSnapshot("assigned", makeSnapshot("Assigned", { ORE: 100 }));
+			store.setSnapshot(
+				"assigned",
+				makeSnapshot("Assigned", { ORE: 100 })
+			);
 			store.setSnapshot("dropped", makeSnapshot("Dropped", { ORE: 30 }));
 			assignOnly("assigned");
 
-			expect(store.producersOf("ORE").map((p) => p.planUuid)).toStrictEqual(
-				["assigned"]
-			);
+			expect(
+				store.producersOf("ORE").map((p) => p.planUuid)
+			).toStrictEqual(["assigned"]);
 		});
 
 		it("offers an unassigned plan again once the rule is switched off", () => {
-			store.setSnapshot("assigned", makeSnapshot("Assigned", { ORE: 100 }));
+			store.setSnapshot(
+				"assigned",
+				makeSnapshot("Assigned", { ORE: 100 })
+			);
 			store.setSnapshot("dropped", makeSnapshot("Dropped", { ORE: 30 }));
 			assignOnly("assigned");
 			store.setShippingConfig({ allowUnassignedSources: true });
@@ -755,6 +806,47 @@ describe("Raukk Sourcing Store", () => {
 			});
 			expect(store.snapshots.a.inputBuckets).toStrictEqual({
 				RAT: ["workforce"],
+			});
+		});
+
+		it("round trips the account wide ship sourcing", () => {
+			store.setShipSourcingDefault("fuel", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+			store.setShipTickerSource("SSC", {
+				mode: "market",
+				priceMode: "ASK",
+			});
+
+			const exported: string = store.exportJSON();
+
+			store.$reset();
+			expect(store.shipSourcing).toStrictEqual({
+				defaults: {},
+				sources: {},
+			});
+
+			store.importJSON(exported);
+
+			expect(store.shipSourcing).toStrictEqual({
+				defaults: { fuel: { mode: "plan", sourcePlanUuid: "AGG_AVG" } },
+				sources: { SSC: { mode: "market", priceMode: "ASK" } },
+			});
+		});
+
+		it("imports a payload predating the ship sourcing", () => {
+			store.importJSON(
+				JSON.stringify({
+					version: 1,
+					configs: { a: { repairDay: 90, sources: {} } },
+					snapshots: {},
+				})
+			);
+
+			expect(store.shipSourcing).toStrictEqual({
+				defaults: {},
+				sources: {},
 			});
 		});
 

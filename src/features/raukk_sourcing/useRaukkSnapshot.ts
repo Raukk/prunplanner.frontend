@@ -58,6 +58,13 @@ import {
 	resolveEffectiveSources,
 } from "@/features/raukk_sourcing/raukkSourcingDefaults";
 import { raukkFuelUnitsPerDay } from "@/features/raukk_sourcing/calculations/shippingFuel";
+// raukk: fuel and the ship repair bill are sourced account wide, never
+// per base — one fleet serves every plan
+import {
+	raukkEffectiveShipSources,
+	raukkShipDefaultedTickers,
+} from "@/features/raukk_sourcing/calculations/shipSourcing";
+import { createRaukkShipPriceResolver } from "@/features/raukk_sourcing/useRaukkShipSourcing";
 import { raukkStorageFilledDays } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 import {
 	getVolumeOfAllStorages,
@@ -244,6 +251,16 @@ interface IRaukkShippingInput {
 	planetNaturalId: string;
 	planResult: IPlanResult;
 	resolver: IRaukkPriceResolver;
+	/**
+	 * Prices of what the FLEET consumes: the two fuels and the ship repair
+	 * bill, resolved through the ACCOUNT WIDE ship sourcing rather than
+	 * through this plans entries. A hull refuels and repairs at the
+	 * exchange or the depot it is at — never at the base whose cargo it
+	 * happens to be carrying — so the consuming plan is the wrong axis to
+	 * price either on, and every plan would otherwise have to configure
+	 * the same two fuels again.
+	 */
+	shipResolver: IRaukkPriceResolver;
 	getProducers: (ticker: string) => IRaukkProducerOption[];
 	shippingConfig: IRaukkShippingConfig;
 	/** Per ticker sourcing configuration, the LM buy flags read it */
@@ -633,7 +650,7 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 					input.shippingConfig
 				)
 			),
-			(ticker: string) => input.resolver(ticker).price
+			(ticker: string) => input.shipResolver(ticker).price
 		);
 
 	const hubSpoke: IRaukkHubSpokeRouting = planHubSpokeRouting(input);
@@ -644,7 +661,7 @@ function planLookups(input: IRaukkShippingInput): IRaukkPairLookups {
 			shipTypeId,
 			profile: raukkResolveShipProfile(
 				sourcingStore.getShipProfile(shipTypeId),
-				(ticker: string) => input.resolver(ticker).price
+				(ticker: string) => input.shipResolver(ticker).price
 			),
 		};
 	}
@@ -862,7 +879,8 @@ function computePlanShipping(input: IRaukkShippingInput): IRaukkPlanShipping {
 	const result: IRaukkShippingResult = calculateShipping(
 		pairs,
 		input.shippingConfig,
-		(ticker: string) => input.resolver(ticker).price,
+		// the only price this needs is the ship repair bill, a fleet cost
+		(ticker: string) => input.shipResolver(ticker).price,
 		input.caps
 	);
 
@@ -1089,11 +1107,24 @@ export async function computePlanSnapshot(
 				othersDrawnPerDay(sourcingStore, context.planUuid, ticker),
 		});
 
+		/*
+		 * What the FLEET consumes is priced account wide, see
+		 * {@link IRaukkShippingInput.shipResolver}. The exchange price of
+		 * this plan is the fallback, so a user who configures nothing keeps
+		 * exactly the prices the pipeline charged before.
+		 */
+		const shipResolver: IRaukkPriceResolver = createRaukkShipPriceResolver({
+			getDefaultPrice: (ticker: string) =>
+				prices.defaultPrices[ticker] ?? 0,
+			getExchange: (ticker: string) => prices.exchangePrices[ticker],
+		});
+
 		const shippingInput: IRaukkShippingInput = {
 			planUuid: context.planUuid,
 			planetNaturalId: context.planetNaturalId,
 			planResult: context.planResult,
 			resolver,
+			shipResolver,
 			getProducers,
 			shippingConfig,
 			sources: config.sources,
@@ -1128,7 +1159,9 @@ export async function computePlanSnapshot(
 		});
 
 		const draws: Record<string, IRaukkMaterialUnits> = splitAggregateDraws(
-			withFuelDraws(result.draws, fuelUnitsPerDay, resolver),
+			// account wide: which producer the fuel comes from is a fleet
+			// question, so the draw follows the ship resolvers answer
+			withFuelDraws(result.draws, fuelUnitsPerDay, shipResolver),
 			getProducers
 		);
 
@@ -1139,7 +1172,16 @@ export async function computePlanSnapshot(
 			config.sources,
 			resolver,
 			shipping.inbound,
-			(ticker: string) => prices.defaultPrices[ticker] ?? 0
+			(ticker: string) => prices.defaultPrices[ticker] ?? 0,
+			{},
+			new Set(),
+			{
+				sources: raukkEffectiveShipSources(sourcingStore.shipSourcing),
+				resolve: shipResolver,
+				defaulted: raukkShipDefaultedTickers(
+					sourcingStore.shipSourcing
+				),
+			}
 		).forEach((row) => {
 			// freight included: what the plan really pays per unit is
 			// what the read only notes have to show. Identical to the
@@ -1195,6 +1237,9 @@ export async function computePlanSnapshot(
 				? {
 						flows: buildPlanFlows(shippingInput),
 						lanes: buildPlanLanes(shipping),
+						// the account wide ship sourcing states the fleets
+						// fuel demand off the frozen snapshots
+						fuelUnitsPerDay: inertClone(fuelUnitsPerDay),
 						advisories: shipping.advisories,
 						shippingFraction: shipping.shippingFraction,
 						// guarded: a minimal plan result of another caller
@@ -1408,11 +1453,21 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		)
 	);
 
+	/** Live mirror of the frozen ship pricing, see `computePlanSnapshot` */
+	const shipResolver: ComputedRef<IRaukkPriceResolver> = computed(() =>
+		createRaukkShipPriceResolver({
+			getDefaultPrice: (ticker: string) =>
+				defaultPrices.value[ticker] ?? 0,
+			getExchange: (ticker: string) => exchangePrices.value[ticker],
+		})
+	);
+
 	const shippingInput: ComputedRef<IRaukkShippingInput> = computed(() => ({
 		planUuid: context.planUuid.value ?? "",
 		planetNaturalId: context.planetNaturalId.value ?? "",
 		planResult: context.planResult.value,
 		resolver: resolver.value,
+		shipResolver: shipResolver.value,
 		getProducers,
 		shippingConfig: shippingConfig.value,
 		sources: effectiveSources.value,
@@ -1458,10 +1513,10 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		buildPlanShippingPairs(shippingInput.value)
 	);
 
-	/** ȼ of one full ship repair bill at the plans configured sources */
+	/** ȼ of one full ship repair bill at the ACCOUNT WIDE ship sourcing */
 	const repairBillCost: ComputedRef<number> = computed(() =>
 		calculateRepairBillCost(
-			(ticker: string) => resolver.value(ticker).price
+			(ticker: string) => shipResolver.value(ticker).price
 		)
 	);
 
@@ -1487,7 +1542,16 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 			shipping.value.inbound,
 			(ticker: string) => defaultPrices.value[ticker] ?? 0,
 			fuelUnitsPerDay.value,
-			followsDefault.value
+			followsDefault.value,
+			// the fuel rows read the account wide ship sourcing, they are
+			// not this bases to configure
+			{
+				sources: raukkEffectiveShipSources(sourcingStore.shipSourcing),
+				resolve: shipResolver.value,
+				defaulted: raukkShipDefaultedTickers(
+					sourcingStore.shipSourcing
+				),
+			}
 		)
 	);
 

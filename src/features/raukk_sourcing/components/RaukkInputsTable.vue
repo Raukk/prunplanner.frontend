@@ -259,6 +259,15 @@
 						:colspan="labelColumns + 1"
 						class="font-bold text-white/60">
 						{{ $t(`raukk_sourcing.inputs.groups.${group.key}`) }}
+						<!-- fuel is a FLEET cost: one fleet serves every base,
+						 so it is sourced once on the shipping page instead of
+						 base by base -->
+						<RouterLink
+							v-if="group.key === 'shipFuel'"
+							to="/shipping?section=sourcing"
+							class="pl-1 font-normal text-white/50 hover:underline">
+							{{ $t("raukk_sourcing.inputs.ship_fuel_link") }}
+						</RouterLink>
 					</td>
 				</tr>
 				<tr
@@ -304,7 +313,9 @@
 								:value="priceModeValue(row)"
 								:options="priceModeOptions"
 								:disabled="
-									disabled || row.source?.mode === 'plan'
+									disabled ||
+									row.buckets.shipFuel ||
+									row.source?.mode === 'plan'
 								"
 								@update:value="
 									(v) =>
@@ -314,6 +325,7 @@
 										)
 								" />
 							<RaukkLocalPriceInput
+								v-if="!row.buckets.shipFuel"
 								:price="localPrice(row)"
 								:exchange="exchangePrices[row.ticker]"
 								:exchange-code="exchangeCode"
@@ -334,7 +346,7 @@
 							:options="
 								sourceOptions(row.ticker, row.unitsPerDay)
 							"
-							:disabled="disabled"
+							:disabled="disabled || row.buckets.shipFuel"
 							@update:source="
 								(source) =>
 									emit('update:source', row.ticker, source)

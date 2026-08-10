@@ -27,6 +27,7 @@ import {
 } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 import { IRaukkProducerOption } from "@/features/raukk_sourcing/raukkSourcingStore.types";
 import {
+	IRaukkFuelRowSourcing,
 	IRaukkInputBuckets,
 	IRaukkInputRow,
 	IRaukkInputRowSource,
@@ -332,6 +333,10 @@ export function splitAggregateDraws(
  * REPAIR bill deliberately books no draw — its quantities are tiny and
  * take part in neither cycle guard nor base fraction — fuel does, its
  * daily burn is real tonnage off a producers output.
+ *
+ * `resolve` is the ACCOUNT WIDE ship resolver since the ship sourcing
+ * exists, not the consuming plans one: which producer the fuel comes from
+ * is a fleet question, so the draw it books has to follow that answer.
  *
  * Keys may be aggregate sentinels, {@link splitAggregateDraws} resolves
  * them alongside the material ones. The input is never mutated.
@@ -804,11 +809,16 @@ export function inputDemandPerDay(
  * priced exactly as before.
  *
  * `fuelUnitsPerDay` adds the SHIP FUEL rows, the daily burn of the plans
- * own lanes. They are sourcable like any other ticker — a refinery plan
- * prices the fuel its fleet burns — but their ȼ is INFORMATIONAL: the
- * shipping model already charges that fuel through the resolved profile,
- * so the input total has to leave them out. They carry no freight of
- * their own either, fuel is hauled to the exchange by the player.
+ * own lanes. Their ȼ is INFORMATIONAL: the shipping model already charges
+ * that fuel through the resolved profile, so the input total has to leave
+ * them out. They carry no freight of their own either — refuelling
+ * happens at the exchange or the depot, so no fuel is ever shipped.
+ *
+ * `fuel` is where those rows take their SOURCE from, and it is not this
+ * plans configuration: fuel is sourced account wide (see
+ * `calculations/shipSourcing.ts`), because one fleet serves every base.
+ * Absent, the rows fall back to the plans own sources and resolver, which
+ * is what every caller predating the account wide ship sourcing did.
  *
  * With `getDefaultPrice` given, rows sort by their daily cost at that
  * price — the CX preference price — instead of the effective one, so
@@ -827,6 +837,7 @@ export function inputDemandPerDay(
  * @param {(ticker: string) => number} [getDefaultPrice] Stable sort price
  * @param {IRaukkMaterialUnits} fuelUnitsPerDay Ship fuel burnt per day
  * @param {Set<string>} defaulted Tickers following an account default
+ * @param {IRaukkFuelRowSourcing} [fuel] Account wide fuel sourcing
  * @returns {IRaukkInputRow[]} Priced input rows
  */
 export function buildInputRows(
@@ -837,8 +848,14 @@ export function buildInputRows(
 	shippingPerUnitIn: Record<string, number> = {},
 	getDefaultPrice?: (ticker: string) => number,
 	fuelUnitsPerDay: IRaukkMaterialUnits = {},
-	defaulted: Set<string> = new Set()
+	defaulted: Set<string> = new Set(),
+	fuel?: IRaukkFuelRowSourcing
 ): IRaukkInputRow[] {
+	const fuelSources: Record<string, IRaukkTickerSource> =
+		fuel?.sources ?? sources;
+	const resolveFuel: IRaukkPriceResolver = fuel?.resolve ?? resolve;
+	const fuelDefaulted: Set<string> = fuel?.defaulted ?? defaulted;
+
 	const units: IRaukkMaterialUnits = {};
 	/** Units riding a route pair, the material I/O ones only */
 	const shippedUnits: IRaukkMaterialUnits = {};
@@ -899,7 +916,7 @@ export function buildInputRows(
 	const fuelRows: IRaukkInputRow[] = Object.entries(fuelUnitsPerDay)
 		.filter(([, unitsPerDay]) => unitsPerDay > 0)
 		.map(([ticker, unitsPerDay]) => {
-			const resolved: IRaukkResolvedPrice = resolve(ticker);
+			const resolved: IRaukkResolvedPrice = resolveFuel(ticker);
 
 			return {
 				ticker,
@@ -910,8 +927,8 @@ export function buildInputRows(
 					shipFuel: true,
 				},
 				unitsPerDay,
-				source: sources[ticker],
-				fromDefault: defaulted.has(ticker),
+				source: fuelSources[ticker],
+				fromDefault: fuelDefaulted.has(ticker),
 				price: resolved.price,
 				// fuel is hauled to the exchange by the player, it rides
 				// no route pair and pays no freight of its own

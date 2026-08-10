@@ -91,6 +91,51 @@ export type RAUKK_SOURCE_AGGREGATE = "AGG_AVG" | "AGG_MAX" | "AGG_AVG_MKT";
 export type RAUKK_SOURCE_BUCKET = "workforce" | "repair" | "production";
 
 /**
+ * Groups the account wide SHIP sourcing is set for.
+ *
+ * What the FLEET consumes rather than what a base does: `fuel` is the two
+ * ship fuels, `shipRepair` every ticker a ship repair bill can contain.
+ * Deliberately apart from {@link RAUKK_SOURCE_BUCKET}: those three are
+ * per base buckets a plan overrides ticker by ticker, these two have no
+ * base axis at all — one fleet serves every plan, and a hull refuels and
+ * repairs at the exchange or the depot it happens to be at.
+ *
+ * @author raukk
+ */
+export type RAUKK_SHIP_SOURCE_GROUP = "fuel" | "shipRepair";
+
+/**
+ * Source of one ship ticker.
+ *
+ * Everything {@link IRaukkTickerSource} offers EXCEPT the local market:
+ * an LM ad is priced on one planet, and the account wide setting has no
+ * planet to buy on.
+ *
+ * @author raukk
+ */
+export type IRaukkShipTickerSource = Exclude<
+	IRaukkTickerSource,
+	{ mode: "local" }
+>;
+
+/**
+ * Account wide sourcing of everything the fleet consumes.
+ *
+ * `defaults` carries the group wide setting — the one dropdown per group
+ * that answers "where does my fuel come from" once — and `sources` the
+ * per ticker override for the cases where one ticker of a group differs.
+ * Absent from both: the exchange price of whoever prices the ticker, the
+ * behaviour every build before this had.
+ *
+ * @author raukk
+ */
+export interface IRaukkShipSourcing {
+	defaults: Partial<Record<RAUKK_SHIP_SOURCE_GROUP, IRaukkShipTickerSource>>;
+	/** Key: material ticker. Wins over the group default. */
+	sources: Record<string, IRaukkShipTickerSource>;
+}
+
+/**
  * Account wide default source per input bucket.
  *
  * A ticker of a bucket WITHOUT its own entry in `IRaukkPlanConfig.sources`
@@ -231,6 +276,12 @@ export interface IRaukkSnapshot {
 	 * fraction and the subscription data already follow. Only written
 	 * while shipping is enabled. */
 	flows?: IRaukkChainFlow[];
+	/** Ship fuel the plans own lanes burn per day, keyed by ticker. Frozen
+	 * so the account wide ship sourcing can state the fleets fuel demand
+	 * without recomputing every plan — the very reason the lanes and the
+	 * flows are frozen. Only written while shipping is enabled, absent on
+	 * snapshots frozen before the ship sourcing existed. */
+	fuelUnitsPerDay?: Record<string, number>;
 	/** Per lane summary of the plans own pairs, the fleet pages input.
 	 * Ship time is an account level question — one fleet serves every
 	 * plan — so the rollup needs the trips and round trip times of every

@@ -39,6 +39,7 @@ const i18n = createI18n({
 const STUBS: Record<string, unknown> = {
 	RaukkShippingSettingsSection: { template: '<div id="s-settings" />' },
 	RaukkSourcingDefaultsSection: { template: '<div id="s-defaults" />' },
+	RaukkShipSourcingSection: { template: '<div id="s-sourcing" />' },
 	RaukkFleetSection: { template: '<div id="s-fleet" />' },
 	RaukkTransportSection: { template: '<div id="s-transport" />' },
 	RaukkChainSection: { template: '<div id="s-chains" />' },
@@ -125,6 +126,7 @@ describe("RaukkShippingPage section tabs", () => {
 		expect(tabLabels(wrapper)).toStrictEqual([
 			"Settings",
 			"Defaults",
+			"Sourcing",
 			"Fleet",
 			"Transport",
 			"Chains",
