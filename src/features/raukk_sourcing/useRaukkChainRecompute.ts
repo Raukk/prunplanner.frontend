@@ -7,11 +7,21 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 // Composables
 import { useCXData } from "@/features/cx/useCXData";
 import { usePlanCalculation } from "@/features/planning/usePlanCalculation";
-import { computePlanSnapshot } from "@/features/raukk_sourcing/useRaukkSnapshot";
+import {
+	computePlanSnapshot,
+	preparePlanSnapshot,
+} from "@/features/raukk_sourcing/useRaukkSnapshot";
 import {
 	computeChainResults,
 	IRaukkChainComputeError,
 } from "@/features/raukk_sourcing/useRaukkChainCompute";
+
+// Loop solve
+import {
+	buildBlockUnknowns,
+	IRaukkBlockUnknown,
+	solveLoopBlock,
+} from "@/features/raukk_sourcing/raukkChainBlockSolve";
 
 // Graph
 import {
@@ -20,13 +30,23 @@ import {
 	IRaukkRecomputePlanning,
 } from "@/features/raukk_sourcing/raukkSourcingGraph";
 
+// raukk: what the FLEET consumes is sourced account wide, not per base
+import { raukkEffectiveShipSources } from "@/features/raukk_sourcing/calculations/shipSourcing";
+
 // Pricing
 import { outputsSettled } from "@/features/raukk_sourcing/raukkSourcingPricing";
 
 // Types & Interfaces
 import { IPlan, IPlanEmpireElement } from "@/stores/planningStore.types";
 import { IPlanResult } from "@/features/planning/usePlanCalculation.types";
-import { IRaukkOutputCost } from "@/features/raukk_sourcing/raukkSourcing.types";
+import {
+	IRaukkPlanSnapshotContext,
+	IRaukkPreparedSnapshot,
+} from "@/features/raukk_sourcing/useRaukkSnapshot";
+import {
+	IRaukkOutputCost,
+	IRaukkSnapshot,
+} from "@/features/raukk_sourcing/raukkSourcing.types";
 
 /** One plan of a chain run that could not be recomputed */
 export interface IRaukkChainError {
@@ -36,25 +56,26 @@ export interface IRaukkChainError {
 }
 
 /**
- * Recomputes and stores the snapshot of a single plan in its own
- * empire and CX context.
+ * Builds the snapshot context of one plan: its own empire, its own CX
+ * and its calculated plan result.
  *
  * Plan and planet data come from the query cache, the CX is resolved
- * from the plans first empire exactly like PlanView does. After the
- * plan calculation the shared snapshot pipeline stores the frozen
- * values, so every caller — chain recompute, empire wide upkeep —
- * produces snapshots identical to a manual per plan computation.
+ * from the plans first empire exactly like PlanView does. This is the
+ * expensive half of a recomputation — `usePlanCalculation` runs the whole
+ * base simulation — and it is shared by both paths through a chain run,
+ * the single plan one below and the loop block one, so the two cannot
+ * drift apart.
  *
  * @author raukk
  *
  * @param {string} planUuid Plan Uuid
  * @param {IPlanEmpireElement[]} empireList Available Empires
- * @returns {Promise<void>}
+ * @returns {Promise<IRaukkPlanSnapshotContext>} Plan Context
  */
-export async function recomputePlanSnapshot(
+export async function buildPlanSnapshotContext(
 	planUuid: string,
 	empireList: IPlanEmpireElement[]
-): Promise<void> {
+): Promise<IRaukkPlanSnapshotContext> {
 	const queryStore = useQueryStore();
 	const { findEmpireCXUuid } = useCXData();
 
@@ -78,13 +99,36 @@ export async function recomputePlanSnapshot(
 
 	const planResult: IPlanResult = await calculate();
 
-	await computePlanSnapshot({
+	return {
 		planUuid,
 		planName: plan.plan_name ?? "",
 		planetNaturalId: plan.planet_natural_id,
 		cxUuid,
 		planResult,
-	});
+	};
+}
+
+/**
+ * Recomputes and stores the snapshot of a single plan in its own
+ * empire and CX context.
+ *
+ * After the plan calculation the shared snapshot pipeline stores the
+ * frozen values, so every caller — chain recompute, empire wide upkeep —
+ * produces snapshots identical to a manual per plan computation.
+ *
+ * @author raukk
+ *
+ * @param {string} planUuid Plan Uuid
+ * @param {IPlanEmpireElement[]} empireList Available Empires
+ * @returns {Promise<void>}
+ */
+export async function recomputePlanSnapshot(
+	planUuid: string,
+	empireList: IPlanEmpireElement[]
+): Promise<void> {
+	await computePlanSnapshot(
+		await buildPlanSnapshotContext(planUuid, empireList)
+	);
 }
 
 /**
@@ -176,13 +220,24 @@ export function useRaukkChainRecompute() {
 	/**
 	 * Recomputes the sourcing chain the given plan is part of.
 	 *
-	 * A chain whose scope contains a supply loop is recomputed in
-	 * multiple passes: every pass consumes the frozen values of the
-	 * previous one, the loops numbers shrink towards their fixed point
-	 * each time. Passes stop once every output cost settled within the
-	 * tolerance of {@link outputsSettled} or
-	 * {@link RAUKK_CHAIN_MAX_PASSES} is reached. Acyclic chains keep
-	 * their single upstream first pass.
+	 * The scope is walked as SCC BLOCKS, upstream first
+	 * ({@link buildRecomputeOrder}). A singleton block is an acyclic plan
+	 * and computes once. A block of two or more plans is a cross plan
+	 * supply loop, and its price fixed point is SOLVED rather than
+	 * iterated: the members pipelines are prepared once, computed once at
+	 * the current prices, then probed at trial prices through an override
+	 * that writes nothing until the affine map of the loop is recovered
+	 * and inverted — see {@link solveLoopBlock}.
+	 *
+	 * The settling passes remain, with a narrower job. What the block
+	 * solve deliberately holds fixed is the CHAIN freight: a plan prices
+	 * its claimed flows from the STORED chain results, and those are only
+	 * rewritten after a whole pass. So the passes converge the chain
+	 * freight, and they are the fallback for a block whose solve did not
+	 * apply. Passes stop once every output cost settled within the
+	 * tolerance of {@link outputsSettled} or {@link RAUKK_CHAIN_MAX_PASSES}
+	 * is reached; with the loops solved a cyclic scope normally settles on
+	 * pass 2. Acyclic chains keep their single upstream first pass.
 	 *
 	 * @author raukk
 	 *
@@ -195,7 +250,8 @@ export function useRaukkChainRecompute() {
 		const planning: IRaukkRecomputePlanning = buildRecomputeOrder(
 			buildDependencyGraph(
 				sourcingStore.configs,
-				sourcingStore.snapshots
+				sourcingStore.snapshots,
+				raukkEffectiveShipSources(sourcingStore.shipSourcing)
 			),
 			planUuid,
 			(uuid: string) => sourcingStore.snapshots[uuid] !== undefined
@@ -209,34 +265,162 @@ export function useRaukkChainRecompute() {
 		errors.value = [];
 
 		/**
-		 * One recompute pass over the whole ordered scope.
+		 * Prepared pipelines of the loop block members, kept for the whole
+		 * run: the plan data does not change between the passes of one
+		 * run, and `usePlanCalculation` is by far the expensive part.
+		 */
+		const prepared: Record<string, IRaukkPreparedSnapshot> = {};
+
+		/** Name a plan is reported under while it is being worked on */
+		const planNameOf = (uuid: string): string =>
+			sourcingStore.snapshots[uuid]?.planName ?? uuid;
+
+		/** Records a failed plan, the run continues with the next one */
+		function recordError(uuid: string, error: unknown): void {
+			errors.value.push({
+				planUuid: uuid,
+				planName: planNameOf(uuid),
+				message:
+					error instanceof Error ? error.message : "unknown error",
+			});
+		}
+
+		/** Yields back to vue so the progress display can update */
+		const yieldToVue = (): Promise<unknown> =>
+			new Promise((resolve) => setTimeout(resolve, 0));
+
+		/**
+		 * One acyclic plan: the whole pipeline in one shot, exactly as
+		 * every plan of a chain run was recomputed before the block solve.
+		 */
+		async function runSingleton(
+			uuid: string,
+			empireList: IPlanEmpireElement[]
+		): Promise<void> {
+			current.value = planNameOf(uuid);
+
+			try {
+				await recomputePlanSnapshot(uuid, empireList);
+			} catch (error) {
+				recordError(uuid, error);
+			}
+
+			done.value++;
+
+			await yieldToVue();
+		}
+
+		/**
+		 * One supply loop, settled as a UNIT.
+		 *
+		 * A provisional computation per member first: it refreshes the
+		 * units, the draws and every discrete decision at the current
+		 * prices, and it is what the run keeps should the solve not apply.
+		 * The unknowns are then read off those fresh snapshots and solved
+		 * in closed form; the solution is stored only after it verified.
+		 *
+		 * A member that fails to prepare or to compute disqualifies its
+		 * block from the solve — a partial system is not the system — and
+		 * the block falls back to the settling passes like any other
+		 * unsolved one.
+		 */
+		async function runLoopBlock(
+			members: string[],
+			empireList: IPlanEmpireElement[]
+		): Promise<void> {
+			const failed: Set<string> = new Set();
+
+			for (const uuid of members) {
+				if (prepared[uuid] !== undefined) continue;
+
+				current.value = planNameOf(uuid);
+
+				try {
+					prepared[uuid] = await preparePlanSnapshot(
+						await buildPlanSnapshotContext(uuid, empireList)
+					);
+				} catch (error) {
+					recordError(uuid, error);
+					failed.add(uuid);
+				}
+			}
+
+			const provisional: Record<string, IRaukkSnapshot> = {};
+
+			for (const uuid of members) {
+				current.value = planNameOf(uuid);
+
+				if (!failed.has(uuid))
+					try {
+						const snapshot: IRaukkSnapshot =
+							prepared[uuid].computeOnce();
+
+						prepared[uuid].store(snapshot);
+						provisional[uuid] = snapshot;
+					} catch (error) {
+						recordError(uuid, error);
+						failed.add(uuid);
+					}
+
+				done.value++;
+
+				await yieldToVue();
+			}
+
+			if (failed.size > 0) return;
+
+			const unknowns: IRaukkBlockUnknown[] = buildBlockUnknowns(
+				members,
+				provisional,
+				raukkEffectiveShipSources(sourcingStore.shipSourcing)
+			);
+
+			let solved: Record<string, IRaukkSnapshot> | null;
+
+			try {
+				solved = solveLoopBlock({
+					members,
+					prepared,
+					provisional,
+					unknowns,
+				});
+			} catch {
+				// a probe that threw is no worse than one that produced no
+				// finite number: the block stays unsolved and settles
+				solved = null;
+			}
+
+			if (solved === null) return;
+
+			const finals: Record<string, IRaukkSnapshot> = solved;
+
+			// the final computation per member is work the progress has to
+			// account for, the probes in between are not
+			total.value += members.length;
+
+			members.forEach((uuid) => {
+				current.value = planNameOf(uuid);
+
+				prepared[uuid].store(finals[uuid]);
+				done.value++;
+			});
+
+			await yieldToVue();
+		}
+
+		/**
+		 * One recompute pass over the whole ordered scope, block by block.
 		 */
 		async function runPass(
 			empireList: IPlanEmpireElement[]
 		): Promise<void> {
-			for (const uuid of order) {
-				const planName: string =
-					sourcingStore.snapshots[uuid]?.planName ?? uuid;
-
-				current.value = planName;
-
-				try {
-					await recomputePlanSnapshot(uuid, empireList);
-				} catch (error) {
-					errors.value.push({
-						planUuid: uuid,
-						planName,
-						message:
-							error instanceof Error
-								? error.message
-								: "unknown error",
-					});
+			for (const block of planning.blocks) {
+				if (block.length === 1) {
+					await runSingleton(block[0], empireList);
+					continue;
 				}
 
-				done.value++;
-
-				// yield back to vue and update the progress display
-				await new Promise((resolve) => setTimeout(resolve, 0));
+				await runLoopBlock(block, empireList);
 			}
 		}
 
@@ -247,7 +431,18 @@ export function useRaukkChainRecompute() {
 			let chainErrors: IRaukkChainComputeError[] =
 				await recomputeShippingChains();
 
-			// loop settling passes, see the function doc
+			/*
+			 * Settling passes, and what is left for them to settle: the
+			 * block solve already nailed the PRICE fixed point of every
+			 * loop it applied to, so what a further pass moves is the chain
+			 * FREIGHT — the plans of a pass priced their claimed flows from
+			 * the PREVIOUS rounds chain results, the documented one round
+			 * lag this solve deliberately holds fixed — plus whatever an
+			 * unsolved block shifts by iterating. A solved block is rerun
+			 * all the same: the chain results changed underneath it. In the
+			 * normal case the outputs therefore reproduce themselves on
+			 * pass 2 and the settled check below exits right there.
+			 */
 			for (
 				let pass = 2;
 				planning.cyclic && pass <= RAUKK_CHAIN_MAX_PASSES;

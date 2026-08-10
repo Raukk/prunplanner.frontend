@@ -60,6 +60,7 @@ Implemented behaviour lives in `src/features/raukk_sourcing/calculations/{shippi
 | --- | --- | --- |
 | 4 | outputs table keeps its separate shipping breakdown column | it already existed and aids trust |
 | 9 | `shippingConfig.enabled` defaults ON (USER) | imports do NOT mark snapshots stale, so a pre-shipping payload comes up charging freight while its stored snapshots keep freight-free numbers until something else stales them |
+| — | 2026-08-10 (USER): the ship repair bill BOOKS DRAWS against the producing plans of a plan's own lanes, exactly as ship fuel does — `calculations/shippingRepairDraws.ts`, booked through `withFleetDraws` | reverses the earlier "priced but never booked" limitation, whose rationale ("quantities are tiny, part of neither cycle guard nor base fraction") is retired: a draw is the edge the cross-plan loop solve needs, so a lane repaired out of a plan inside a supply loop belongs in that loop. Chain-carried wear still books nothing — no plan owns a chain — and stays account-level demand of the ship sourcing |
 
 ## Not built
 

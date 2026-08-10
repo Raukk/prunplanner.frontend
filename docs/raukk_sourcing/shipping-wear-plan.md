@@ -22,7 +22,7 @@ No constant, no code note — grep of `src/` for `CHRG`, `anomal`, `damageModifi
 
 ## Unbuilt
 
-Booking repair-ticker QUANTITIES into draws/edges, so kits ride cargo and enter the cycle guard: gated on reviewing the cycle guard first. The limitation is stated at `shipping.ts:86`; the precondition is not.
+Repair kits riding CARGO: the bill's quantities are drawn from the producing plan since 2026-08-10 (`calculations/shippingRepairDraws.ts`), but the units themselves fly on no lane and pay no freight, because a hull is repaired where it docks rather than out of a base store. Nothing states the freight exemption but the pair-building JSDoc at `useRaukkSnapshot.ts:328`.
 
 ## Display convention
 

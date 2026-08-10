@@ -14,7 +14,7 @@ New raukk code carries `@author raukk`; upstream touches stay minimal and are ma
 
 | constraint | reason |
 | --- | --- |
-| Ship repair tickers are priced, never booked into draws or edges | keeps repair out of the cycle guard and the base fraction |
+| Ship repair tickers ride no cargo lane and pay no freight | a hull is repaired where it docks, not out of a base store; their quantities ARE drawn from the producing plan since 2026-08-10 |
 | LM rates are manual per-lane entries | the game's transport ads are never fetched |
 | No backend persistence | localStorage only; the backend is a separate repo |
 
