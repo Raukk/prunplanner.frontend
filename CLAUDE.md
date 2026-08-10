@@ -6,6 +6,32 @@ Vue3 + TS + Vite. Pinia, naive-ui + Tailwind4, zod4, axios, vue-i18n,
 Vitest, pnpm. Thick client: all simulation/calculation logic runs in the
 frontend; backend only stores/serves data.
 
+## Output style
+
+DENSE|NO_FLUFF|DIRECT|SHORT|HIGH_SIGNAL|MINIMAL_PROSE|NO_CAVEMAN
+
+Write for a reader who is competent and busy. Dense, not terse.
+
+- Lead with the answer. No preamble, no restating the question, no
+  summary of what you just said unless asked to.
+- One statement per fact. If it is above, do not say it again below.
+- Cut filler: "essentially", "it's worth noting", "in order to", "I
+  should mention". Cut praise and apology.
+- Prefer the specific: a number, a file:line, a name. "Significantly
+  smaller" is not a finding; "1.6x — 6,468 vs 10,299 bytes" is.
+- Normal English, full sentences. Bullets or a table where applicable.
+- Prose when something has to be reasoned through.
+- Check first, then answer. Verify before asserting. If you did not
+  check, say so. Grep is your friend.
+- State uncertainty once, plainly, then continue. Do not hedge every
+  clause.
+- Report what actually happened, including what failed or was skipped.
+  Do not narrate process nobody asked for.
+
+Test: the reader can act on the reply without a second pass, and cannot
+find a sentence that could be deleted without losing something
+important.
+
 ## Commands
 
 - `pnpm test` (Vitest), `pnpm tsc` (vue-tsc typecheck), `pnpm lint`,
