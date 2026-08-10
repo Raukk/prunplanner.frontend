@@ -9,10 +9,7 @@ import {
 	IRaukkTickerSource,
 	RAUKK_SOURCE_AGGREGATE,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
-import {
-	IRaukkExchangePrices,
-	IRaukkPriceResolver,
-} from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
+import { IRaukkExchangePrices } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 import {
 	IRaukkProducerOption,
 	IRaukkSubscription,
@@ -23,10 +20,6 @@ export interface IRaukkInputBuckets {
 	production: boolean;
 	workforce: boolean;
 	repair: boolean;
-	/** Ship fuel of the plans own lanes. Sourcable like any other
-	 * ticker, but INFORMATIONAL as a row: its cost is already inside the
-	 * shipping daily cost, so it never joins the input total */
-	shipFuel: boolean;
 }
 
 /** One row of the tools input table */
@@ -94,22 +87,6 @@ export interface IRaukkSourceOption {
 	/** Share of this plans need the producers cover, only on the market
 	 * top up aggregate — the rest of its price is the market price */
 	coverage?: number;
-}
-
-/**
- * Where the SHIP FUEL rows of the input table take their source from.
- *
- * Not the consuming plans configuration: fuel is sourced account wide,
- * because one fleet serves every base (see
- * `calculations/shipSourcing.ts`). The rows still render on the plan, so
- * the account wide answer has to reach them.
- */
-export interface IRaukkFuelRowSourcing {
-	/** Effective account wide sources, keyed by fuel ticker */
-	sources: Record<string, IRaukkTickerSource>;
-	resolve: IRaukkPriceResolver;
-	/** Fuels following their group default rather than an own entry */
-	defaulted: Set<string>;
 }
 
 /** Everything the price resolver needs, free of store and Pinia access */

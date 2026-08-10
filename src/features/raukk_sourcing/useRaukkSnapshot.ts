@@ -60,10 +60,6 @@ import {
 import { raukkFuelUnitsPerDay } from "@/features/raukk_sourcing/calculations/shippingFuel";
 // raukk: fuel and the ship repair bill are sourced account wide, never
 // per base — one fleet serves every plan
-import {
-	raukkEffectiveShipSources,
-	raukkShipDefaultedTickers,
-} from "@/features/raukk_sourcing/calculations/shipSourcing";
 import { createRaukkShipPriceResolver } from "@/features/raukk_sourcing/useRaukkShipSourcing";
 import { raukkStorageFilledDays } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 import {
@@ -1172,16 +1168,7 @@ export async function computePlanSnapshot(
 			config.sources,
 			resolver,
 			shipping.inbound,
-			(ticker: string) => prices.defaultPrices[ticker] ?? 0,
-			{},
-			new Set(),
-			{
-				sources: raukkEffectiveShipSources(sourcingStore.shipSourcing),
-				resolve: shipResolver,
-				defaulted: raukkShipDefaultedTickers(
-					sourcingStore.shipSourcing
-				),
-			}
+			(ticker: string) => prices.defaultPrices[ticker] ?? 0
 		).forEach((row) => {
 			// freight included: what the plan really pays per unit is
 			// what the read only notes have to show. Identical to the
@@ -1487,11 +1474,6 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 		() => planShipping.value.shipping
 	);
 
-	/** Ship fuel the plans own lanes burn per day, empty while disabled */
-	const fuelUnitsPerDay: ComputedRef<IRaukkMaterialUnits> = computed(
-		() => planShipping.value.fuelUnitsPerDay
-	);
-
 	/**
 	 * Repair capital cost, freight INCLUDED: repair materials are cargo
 	 * since the cadence model, so what a repair costs is the material
@@ -1541,17 +1523,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 			resolver.value,
 			shipping.value.inbound,
 			(ticker: string) => defaultPrices.value[ticker] ?? 0,
-			fuelUnitsPerDay.value,
-			followsDefault.value,
-			// the fuel rows read the account wide ship sourcing, they are
-			// not this bases to configure
-			{
-				sources: raukkEffectiveShipSources(sourcingStore.shipSourcing),
-				resolve: shipResolver.value,
-				defaulted: raukkShipDefaultedTickers(
-					sourcingStore.shipSourcing
-				),
-			}
+			followsDefault.value
 		)
 	);
 

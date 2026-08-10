@@ -19,7 +19,7 @@ User framing: *"add a category for sourcing that pulls the fuel sources into tha
 
 ## Consequences for the per base input table
 
-The ship fuel rows stay — they are still the clearest place to see what a base's own lanes burn — but their price mode select and their source cell are read only, and the group header links to `/shipping?section=sourcing`. A per base FF entry written before this feature is simply no longer read by the shipping model; it stays in the config and still prices FF if the base consumes it as a production input, which is a different number with the same ticker.
+The ship fuel rows are GONE (2026-08-10, user decision: *"why is it still here if it's not usable? why not just point out that shipping costs are on the Shipping section?"*). They were read only in every cell, their ȼ was excluded from the input total because the shipping cost already carries it, and nothing on them could be acted on from the plan. What replaces them is one line: the `…of which Shipping / Day` footer row now says the fuel is inside that figure and links to `/shipping?section=sourcing`. `buildInputRows` lost its `fuelUnitsPerDay` and `fuel` parameters and `IRaukkInputBuckets` lost `shipFuel`, so the input table is again the three per base buckets and nothing else. A per base FF entry written before this feature is simply no longer read by the shipping model; it stays in the config and still prices FF if the base consumes it as a production input, which is a different number with the same ticker.
 
 ## Files
 
