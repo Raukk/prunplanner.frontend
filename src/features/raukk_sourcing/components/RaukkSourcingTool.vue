@@ -122,6 +122,17 @@
 	);
 
 	/**
+	 * Cadence is the SITE's, so a lease never edits its own: it plans no
+	 * shipping, and the host's caps decide when the site is flown. The
+	 * fields stay readable — the stored override applies again the moment
+	 * the link is cleared — but an edit here would change nothing, and a
+	 * control that silently discards input is worse than a disabled one.
+	 */
+	const cadenceReadOnly: ComputedRef<boolean> = computed(
+		() => readOnly.value || isLease.value
+	);
+
+	/**
 	 * One panel of the tool. Only the active one mounts, so the tables a
 	 * user is not looking at cost nothing — the same contract the
 	 * oversubscription report's tab registry follows.
@@ -610,7 +621,7 @@
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
-				:disabled="readOnly"
+				:disabled="cadenceReadOnly"
 				:placeholder="String(caps.production)"
 				:value="config.cadence?.production ?? null"
 				@update:value="(v) => changeCadence('production', v ?? null)" />
@@ -626,7 +637,7 @@
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
-				:disabled="readOnly"
+				:disabled="cadenceReadOnly"
 				:placeholder="String(caps.workforce)"
 				:value="config.cadence?.workforce ?? null"
 				@update:value="(v) => changeCadence('workforce', v ?? null)" />
@@ -642,7 +653,7 @@
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
-				:disabled="readOnly"
+				:disabled="cadenceReadOnly"
 				:placeholder="String(caps.repair)"
 				:value="config.cadence?.repair ?? null"
 				@update:value="(v) => changeCadence('repair', v ?? null)" />
