@@ -169,6 +169,78 @@ describe("Raukk Sourcing Defaults", () => {
 			});
 		});
 
+		describe("dangling plan sources", () => {
+			const gone: Record<string, IRaukkTickerSource> = {
+				RAT: { mode: "plan", sourcePlanUuid: "removed-base" },
+			};
+
+			/** Only "living-base" still makes anything */
+			const isProducing = (
+				_ticker: string,
+				sourcePlanUuid: string
+			): boolean => sourcePlanUuid === "living-base";
+
+			it("heals an entry whose producer is gone onto the default", () => {
+				expect(
+					resolveEffectiveSources(
+						gone,
+						buckets,
+						{ workforce: AVERAGE },
+						isProducing
+					).RAT
+				).toBe(AVERAGE);
+			});
+
+			it("keeps an entry whose producer still makes it", () => {
+				const stored: Record<string, IRaukkTickerSource> = {
+					RAT: { mode: "plan", sourcePlanUuid: "living-base" },
+				};
+
+				expect(
+					resolveEffectiveSources(
+						stored,
+						buckets,
+						{ workforce: AVERAGE },
+						isProducing
+					).RAT
+				).toBe(stored.RAT);
+			});
+
+			it("never treats an aggregate as dangling", () => {
+				const stored: Record<string, IRaukkTickerSource> = {
+					RAT: TOP_UP,
+				};
+
+				expect(
+					resolveEffectiveSources(
+						stored,
+						buckets,
+						{ workforce: AVERAGE },
+						isProducing
+					).RAT
+				).toBe(TOP_UP);
+			});
+
+			it("leaves stored entries alone without the producer check", () => {
+				expect(
+					resolveEffectiveSources(gone, buckets, {
+						workforce: AVERAGE,
+					}).RAT
+				).toBe(gone.RAT);
+			});
+
+			it("counts a healed ticker as following the default", () => {
+				const followed: Set<string> = defaultedTickers(
+					gone,
+					buckets,
+					{ workforce: AVERAGE },
+					isProducing
+				);
+
+				expect(followed.has("RAT")).toBe(true);
+			});
+		});
+
 		it("keeps stored entries of tickers the plan no longer consumes", () => {
 			expect(
 				resolveEffectiveSources({ PWO: AVERAGE }, buckets, {})

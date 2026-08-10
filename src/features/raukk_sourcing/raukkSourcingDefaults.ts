@@ -2,6 +2,9 @@
 // No store, Pinia or Vue access: every function takes plain data so the
 // logic stays unit testable in isolation.
 
+// Functions
+import { isAggregateSource } from "@/features/raukk_sourcing/raukkSourcingPricing";
+
 // Types & Interfaces
 import {
 	IRaukkSnapshot,
@@ -142,6 +145,35 @@ export function defaultSourceOf(
 }
 
 /**
+ * A stored entry pointing at a base that no longer makes the ticker.
+ *
+ * Removing a base, or dropping a recipe from one, leaves every consumer
+ * that drew from it pointing at nothing. Such an entry cannot be honoured
+ * — there is no producer to take the units off — so it is treated as no
+ * entry at all and the bucket default takes the row back over. Aggregates
+ * are never dangling: they name the whole pool, which is allowed to be
+ * empty.
+ *
+ * @author raukk
+ *
+ * @param {string} ticker Material Ticker
+ * @param {IRaukkTickerSource} source Stored source
+ * @param {Function} isProducing Ticker is made by that plan
+ * @returns {boolean} Entry points at a gone producer
+ */
+function isDanglingSource(
+	ticker: string,
+	source: IRaukkTickerSource,
+	isProducing?: (ticker: string, sourcePlanUuid: string) => boolean
+): boolean {
+	if (isProducing === undefined) return false;
+	if (source.mode !== "plan") return false;
+	if (isAggregateSource(source.sourcePlanUuid)) return false;
+
+	return !isProducing(ticker, source.sourcePlanUuid);
+}
+
+/**
  * Merges the account wide bucket defaults into a plans stored sources.
  *
  * The result is what the plan is really priced with: every stored entry
@@ -151,22 +183,34 @@ export function defaultSourceOf(
  * Tickers this plan does not consume are left alone, a stored entry of a
  * ticker that vanished from the plan stays stored.
  *
+ * The one stored entry that does NOT survive is a plan source whose
+ * producer is gone, see {@link isDanglingSource}: it heals back onto the
+ * default rather than sitting on the row as an unpickable dead end. The
+ * stored config is left alone — the heal is what the plan is priced and
+ * displayed with, and the entry is overwritten the next time the row is
+ * set or the snapshot is frozen.
+ *
  * @author raukk
  *
  * @param {Record<string, IRaukkTickerSource>} sources Stored per plan
  * @param {Record<string, RAUKK_SOURCE_BUCKET[]>} buckets Buckets per ticker
  * @param {IRaukkSourcingDefaults} defaults Account wide defaults
+ * @param {Function} isProducing Ticker is made by that plan
  * @returns {Record<string, IRaukkTickerSource>} Effective sources
  */
 export function resolveEffectiveSources(
 	sources: Record<string, IRaukkTickerSource>,
 	buckets: Record<string, RAUKK_SOURCE_BUCKET[]>,
-	defaults: IRaukkSourcingDefaults
+	defaults: IRaukkSourcingDefaults,
+	isProducing?: (ticker: string, sourcePlanUuid: string) => boolean
 ): Record<string, IRaukkTickerSource> {
 	const effective: Record<string, IRaukkTickerSource> = { ...sources };
 
 	Object.entries(buckets).forEach(([ticker, tickerBuckets]) => {
-		if (effective[ticker] !== undefined) return;
+		const own: IRaukkTickerSource | undefined = effective[ticker];
+
+		if (own !== undefined && !isDanglingSource(ticker, own, isProducing))
+			return;
 
 		const fallback: IRaukkTickerSource | undefined = defaultSourceOf(
 			tickerBuckets,
@@ -188,17 +232,23 @@ export function resolveEffectiveSources(
  * @param {Record<string, IRaukkTickerSource>} sources Stored per plan
  * @param {Record<string, RAUKK_SOURCE_BUCKET[]>} buckets Buckets per ticker
  * @param {IRaukkSourcingDefaults} defaults Account wide defaults
+ * @param {Function} isProducing Ticker is made by that plan
  * @returns {Set<string>} Tickers following a default
  */
 export function defaultedTickers(
 	sources: Record<string, IRaukkTickerSource>,
 	buckets: Record<string, RAUKK_SOURCE_BUCKET[]>,
-	defaults: IRaukkSourcingDefaults
+	defaults: IRaukkSourcingDefaults,
+	isProducing?: (ticker: string, sourcePlanUuid: string) => boolean
 ): Set<string> {
 	const followed: Set<string> = new Set();
 
 	Object.entries(buckets).forEach(([ticker, tickerBuckets]) => {
-		if (sources[ticker] !== undefined) return;
+		const own: IRaukkTickerSource | undefined = sources[ticker];
+
+		// a healed entry follows the default as much as an absent one
+		if (own !== undefined && !isDanglingSource(ticker, own, isProducing))
+			return;
 		if (defaultSourceOf(tickerBuckets, defaults) === undefined) return;
 
 		followed.add(ticker);
