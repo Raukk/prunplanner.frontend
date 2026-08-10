@@ -324,18 +324,28 @@ export function splitAggregateDraws(
 }
 
 /**
- * Adds the ship fuel draws to a plans raw draws.
+ * Adds what the plans own lanes consume to its raw draws.
  *
- * A fuel sourced from a producing plan is drawn from it exactly like a
- * recipe input: the refinery ships the units, and a change to its price
- * has to cascade staleness onto everything burning that fuel. The ship
- * REPAIR bill deliberately books no draw — its quantities are tiny and
- * take part in neither cycle guard nor base fraction — fuel does, its
- * daily burn is real tonnage off a producers output.
+ * Both fleet materials, fuel AND the ship repair bill: a ticker sourced
+ * from a producing plan is drawn from it exactly like a recipe input —
+ * the producer ships the units, and a change to its price has to cascade
+ * staleness onto everything burning them. A draw is also the only edge
+ * the cross plan loop solve can see: a lane fuelled or repaired out of a
+ * plan inside a supply loop belongs in that loop, and without the draw
+ * neither the cycle guard nor the base fraction would know about it.
+ *
+ * The repair bill previously booked NO draw, on the grounds that its
+ * quantities were tiny; that is retired, both halves of what a trip
+ * consumes are booked the same way now.
+ *
+ * Own lanes only, in both cases: a chain is flown for the whole account
+ * and has no owning plan, so its burn stays demand of the account wide
+ * ship sourcing and is edged there.
  *
  * `resolve` is the ACCOUNT WIDE ship resolver since the ship sourcing
- * exists, not the consuming plans one: which producer the fuel comes from
- * is a fleet question, so the draw it books has to follow that answer.
+ * exists, not the consuming plans one: which producer the fuel or the
+ * plate comes from is a fleet question, so the draw it books has to
+ * follow that answer.
  *
  * Keys may be aggregate sentinels, {@link splitAggregateDraws} resolves
  * them alongside the material ones. The input is never mutated.
@@ -343,13 +353,14 @@ export function splitAggregateDraws(
  * @author raukk
  *
  * @param {Record<string, IRaukkMaterialUnits>} draws Raw draws
- * @param {IRaukkMaterialUnits} fuelUnitsPerDay Fuel burnt per day
+ * @param {IRaukkMaterialUnits} fleetUnitsPerDay Fuel and repair units the
+ * plans own lanes consume per day, one merged map
  * @param {IRaukkPriceResolver} resolve Price Resolver
- * @returns {Record<string, IRaukkMaterialUnits>} Draws including fuel
+ * @returns {Record<string, IRaukkMaterialUnits>} Draws including the fleet
  */
-export function withFuelDraws(
+export function withFleetDraws(
 	draws: Record<string, IRaukkMaterialUnits>,
-	fuelUnitsPerDay: IRaukkMaterialUnits,
+	fleetUnitsPerDay: IRaukkMaterialUnits,
 	resolve: IRaukkPriceResolver
 ): Record<string, IRaukkMaterialUnits> {
 	const result: Record<string, IRaukkMaterialUnits> = {};
@@ -358,7 +369,7 @@ export function withFuelDraws(
 		result[planUuid] = { ...tickers };
 	});
 
-	Object.entries(fuelUnitsPerDay).forEach(([ticker, unitsPerDay]) => {
+	Object.entries(fleetUnitsPerDay).forEach(([ticker, unitsPerDay]) => {
 		if (!(unitsPerDay > 0)) return;
 
 		const resolved: IRaukkResolvedPrice = resolve(ticker);

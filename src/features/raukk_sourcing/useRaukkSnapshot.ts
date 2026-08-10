@@ -54,7 +54,7 @@ import {
 	outputsSettled,
 	resolveCxExchangeCode,
 	splitAggregateDraws,
-	withFuelDraws,
+	withFleetDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
 import {
 	classifyInputBuckets,
@@ -62,6 +62,7 @@ import {
 	resolveEffectiveSources,
 } from "@/features/raukk_sourcing/raukkSourcingDefaults";
 import { raukkFuelUnitsPerDay } from "@/features/raukk_sourcing/calculations/shippingFuel";
+import { raukkRepairUnitsPerDay } from "@/features/raukk_sourcing/calculations/shippingRepairDraws";
 // raukk: fuel and the ship repair bill are sourced account wide, never
 // per base — one fleet serves every plan
 import { createRaukkShipPriceResolver } from "@/features/raukk_sourcing/useRaukkShipSourcing";
@@ -324,9 +325,10 @@ interface IRaukkShippingInput {
  * cadence model they are cargo all the same, minted from the plans own
  * repair demand into the `repair` bucket and flown on the repair cadence
  * — a base repaired every 90 days has its repair materials delivered
- * every 90 days. The ship repair bill tickers stay out: they are priced
- * through the resolver without booking a draw, the quantities are tiny
- * and take part in neither cycle guard nor base fraction.
+ * every 90 days. The ship repair bill tickers stay out of the CARGO: a
+ * hull is repaired where it docks, not out of a base store, so its bill
+ * rides no lane and pays no freight. Its units are drawn from the
+ * producing plan all the same, see {@link withFleetDraws}.
  *
  * @author raukk
  *
@@ -881,6 +883,11 @@ interface IRaukkPlanShipping {
 	shipping: IRaukkShippingResult;
 	/** Ship fuel the plans own lanes burn per day, keyed by ticker */
 	fuelUnitsPerDay: IRaukkMaterialUnits;
+	/**
+	 * Repair bill materials those same lanes consume per day, keyed by
+	 * ticker. Disjoint from the fuel tickers by construction.
+	 */
+	repairBillUnitsPerDay: IRaukkMaterialUnits;
 }
 
 /**
@@ -894,15 +901,17 @@ interface IRaukkPlanShipping {
  * rounds. The shipping FRACTION stays the plans own lanes only; a chain
  * is flown for the whole empire and is accounted on the fleet page.
  *
- * The FUEL those pairs burn is reported alongside, in units: it is the
- * pairs — never a chain, which no plan owns — that a plan sources fuel
- * for. Its ȼ is already inside the pair cost through the resolved ship
- * profile, the units exist so the burn can be sourced and drawn.
+ * What those pairs CONSUME is reported alongside, in units: the fuel
+ * they burn and the repair bills their wear buys. It is the pairs —
+ * never a chain, which no plan owns — that a plan sources both for. The
+ * ȼ of either is already inside the pair cost, through the resolved ship
+ * profile and the priced repair bill; the units exist so the burn can be
+ * sourced and drawn.
  *
  * @author raukk
  *
  * @param {IRaukkShippingInput} input Plan flows, resolver and config
- * @returns {IRaukkPlanShipping} Per pair shipping and fuel burn
+ * @returns {IRaukkPlanShipping} Per pair shipping, fuel and repair burn
  */
 function computePlanShipping(input: IRaukkShippingInput): IRaukkPlanShipping {
 	const pairs: IRaukkShippingPair[] = buildPlanShippingPairs(input);
@@ -919,9 +928,13 @@ function computePlanShipping(input: IRaukkShippingInput): IRaukkPlanShipping {
 		pairs,
 		result
 	);
+	// the plans OWN lanes, exactly as the fuel: the claimed flows below
+	// fly on a chain, whose wear belongs to the account not to this plan
+	const repairBillUnitsPerDay: IRaukkMaterialUnits =
+		raukkRepairUnitsPerDay(result);
 
 	if (!input.shippingConfig.enabled)
-		return { shipping: result, fuelUnitsPerDay };
+		return { shipping: result, fuelUnitsPerDay, repairBillUnitsPerDay };
 
 	return {
 		shipping: mergeClaimedShipping(
@@ -932,6 +945,7 @@ function computePlanShipping(input: IRaukkShippingInput): IRaukkPlanShipping {
 			input.planUuid
 		),
 		fuelUnitsPerDay,
+		repairBillUnitsPerDay,
 	};
 }
 
@@ -1326,6 +1340,10 @@ export async function preparePlanSnapshot(
 			getDefaultPrice: (ticker: string) =>
 				prices.defaultPrices[ticker] ?? 0,
 			getExchange: (ticker: string) => prices.exchangePrices[ticker],
+			// the WRAPPED producers, so a probes trial price reaches the
+			// fuel and the repair bill as well: a lane sourced from a plan
+			// inside a supply loop has to move with that loops prices
+			getProducers: producersOf,
 		});
 
 		const shippingInput: IRaukkShippingInput = {
@@ -1348,7 +1366,7 @@ export async function preparePlanSnapshot(
 			cxAnchor: config.cxAnchor,
 		};
 
-		const { shipping, fuelUnitsPerDay } =
+		const { shipping, fuelUnitsPerDay, repairBillUnitsPerDay } =
 			computePlanShipping(shippingInput);
 
 		const repairCost: IRaukkRepairCost = calculateRepairCostPerDay(
@@ -1367,10 +1385,21 @@ export async function preparePlanSnapshot(
 			shippingPerUnitOut: shipping.outbound,
 		});
 
+		/*
+		 * Both fleet materials in one map: the fuel tickers and the repair
+		 * bills are disjoint sets, so a plain merge cannot collide, and one
+		 * booking pass keeps the two on exactly the same rule.
+		 */
+		const fleetUnitsPerDay: IRaukkMaterialUnits = {
+			...fuelUnitsPerDay,
+			...repairBillUnitsPerDay,
+		};
+
 		const draws: Record<string, IRaukkMaterialUnits> = splitAggregateDraws(
-			// account wide: which producer the fuel comes from is a fleet
-			// question, so the draw follows the ship resolvers answer
-			withFuelDraws(result.draws, fuelUnitsPerDay, shipResolver),
+			// account wide: which producer the fuel and the repair plates
+			// come from is a fleet question, so the draw follows the ship
+			// resolvers answer
+			withFleetDraws(result.draws, fleetUnitsPerDay, shipResolver),
 			producersOf
 		);
 

@@ -48,6 +48,15 @@ export interface IRaukkShipPriceLookups {
 	/** Raw exchange data, backs the explicit price modes. Without it a
 	 * configured market mode resolves to 0, as everywhere else. */
 	getExchange?: (ticker: string) => IRaukkExchangePrices | undefined;
+	/**
+	 * Producers of a ticker, the stores own list by default.
+	 *
+	 * The seam the snapshot probes substitute: a loop solve prices a plan
+	 * at TRIAL producer prices, and a lane fuelled or repaired out of a
+	 * plan inside that loop has to move with them. Every account level
+	 * caller leaves it out and reads the store.
+	 */
+	getProducers?: (ticker: string) => IRaukkProducerOption[];
 }
 
 /** Raw prices of everything the fleet consumes, no source applied */
@@ -149,9 +158,9 @@ export function raukkShipDemandPerDay(): IRaukkMaterialUnits {
  * whole behaviour of an unconfigured account, so nothing changes for a
  * user who never opens the Sourcing tab.
  *
- * Fuel drawn from a producing plan books a draw against it exactly as it
- * did per base; the ship repair bill still books none, see
- * {@link withFuelDraws}.
+ * Fuel and the ship repair bill drawn from a producing plan both book a
+ * draw against it, exactly as fuel did per base, see
+ * {@link withFleetDraws}.
  *
  * @author raukk
  *
@@ -166,26 +175,34 @@ export function createRaukkShipPriceResolver(
 	const sources: Record<string, IRaukkTickerSource> =
 		raukkEffectiveShipSources(sourcingStore.shipSourcing);
 
+	const getProducers = (ticker: string): IRaukkProducerOption[] =>
+		lookups.getProducers?.(ticker) ?? sourcingStore.producersOf(ticker);
+
 	/*
 	 * The market top up aggregate blends against a DEMAND, and the demand
-	 * for fuel is the fleets, not any one bases: coverage is computed once
-	 * for the whole account. "Others" is therefore everything drawn from
-	 * the producer pool that is NOT that fleet demand — the fleets own
-	 * draws are already stored on the consuming plans snapshots and would
-	 * otherwise be counted twice.
+	 * for fuel and repair materials is the fleets, not any one bases:
+	 * coverage is computed once for the whole account. "Others" is
+	 * therefore everything drawn from the producer pool that is NOT that
+	 * fleet demand — what the fleet burns on the plans OWN lanes, fuel and
+	 * repair bill alike, is already stored as a draw on those plans
+	 * snapshots and would otherwise be counted twice.
+	 *
+	 * The subtraction stays a `max(0, …)` because the two sets are not
+	 * equal: the demand also contains the CHAIN burn, which no plan owns
+	 * and which therefore books no draw anywhere. Subtracting it from the
+	 * stored draws can only UNDERSTATE "others" — never double count it —
+	 * and the clamp keeps that at zero rather than negative.
 	 */
 	const demand: IRaukkMaterialUnits = raukkShipDemandPerDay();
 
 	function othersDrawn(ticker: string): number {
-		const drawn: number = sourcingStore
-			.producersOf(ticker)
-			.reduce(
-				(sum, producer) =>
-					sum +
-					sourcingStore.subscription(producer.planUuid, ticker)
-						.totalDrawnPerDay,
-				0
-			);
+		const drawn: number = getProducers(ticker).reduce(
+			(sum, producer) =>
+				sum +
+				sourcingStore.subscription(producer.planUuid, ticker)
+					.totalDrawnPerDay,
+			0
+		);
 
 		return Math.max(0, drawn - (demand[ticker] ?? 0));
 	}
@@ -194,7 +211,7 @@ export function createRaukkShipPriceResolver(
 		sources,
 		getExchange: (ticker: string) => lookups.getExchange?.(ticker),
 		getDefaultPrice: lookups.getDefaultPrice,
-		getProducers: (ticker: string) => sourcingStore.producersOf(ticker),
+		getProducers,
 		getDemand: (ticker: string) => demand[ticker] ?? 0,
 		getOthersDrawn: othersDrawn,
 	});

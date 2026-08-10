@@ -16,7 +16,7 @@ import {
 	resolveCxExchangeCode,
 	snapshotMateriallyChanged,
 	splitAggregateDraws,
-	withFuelDraws,
+	withFleetDraws,
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
 import { RAUKK_EPSILON_SETTLE } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
 
@@ -778,16 +778,18 @@ describe("Raukk Sourcing Pricing", () => {
 		});
 	});
 
-	describe("withFuelDraws", () => {
+	describe("withFleetDraws", () => {
 		const resolve = (ticker: string) =>
 			ticker === "FF"
 				? { price: 60, fromPlanUuid: "refinery" }
 				: ticker === "SF"
 					? { price: 5, fromPlanUuid: "AGG_AVG" }
-					: { price: 1 };
+					: ticker === "LHP"
+						? { price: 90, fromPlanUuid: "shipyard" }
+						: { price: 1 };
 
 		it("books a plan sourced fuel onto its producer", () => {
-			expect(withFuelDraws({}, { FF: 80 }, resolve)).toStrictEqual({
+			expect(withFleetDraws({}, { FF: 80 }, resolve)).toStrictEqual({
 				refinery: { FF: 80 },
 			});
 		});
@@ -795,22 +797,31 @@ describe("Raukk Sourcing Pricing", () => {
 		it("adds onto the existing draws without mutating them", () => {
 			const draws = { refinery: { ORE: 5 } };
 
-			expect(withFuelDraws(draws, { FF: 80 }, resolve)).toStrictEqual({
+			expect(withFleetDraws(draws, { FF: 80 }, resolve)).toStrictEqual({
 				refinery: { ORE: 5, FF: 80 },
 			});
 			expect(draws).toStrictEqual({ refinery: { ORE: 5 } });
 		});
 
 		it("keeps aggregate keys for the aggregate splitter", () => {
-			expect(withFuelDraws({}, { SF: 12 }, resolve)).toStrictEqual({
+			expect(withFleetDraws({}, { SF: 12 }, resolve)).toStrictEqual({
 				AGG_AVG: { SF: 12 },
 			});
 		});
 
 		it("books nothing for a market priced or unburnt fuel", () => {
 			expect(
-				withFuelDraws({}, { MFK: 10, FF: 0 }, resolve)
+				withFleetDraws({}, { MFK: 10, FF: 0 }, resolve)
 			).toStrictEqual({});
+		});
+
+		it("books a plan sourced repair ticker exactly like fuel", () => {
+			expect(
+				withFleetDraws({}, { FF: 80, LHP: 2.5 }, resolve)
+			).toStrictEqual({
+				refinery: { FF: 80 },
+				shipyard: { LHP: 2.5 },
+			});
 		});
 	});
 

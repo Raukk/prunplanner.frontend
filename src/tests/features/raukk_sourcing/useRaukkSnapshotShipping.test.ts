@@ -17,7 +17,10 @@ vi.mock("@/database/services/useExchangeData", () => ({
 }));
 
 // Composables
-import { computePlanSnapshot } from "@/features/raukk_sourcing/useRaukkSnapshot";
+import {
+	computePlanSnapshot,
+	preparePlanSnapshot,
+} from "@/features/raukk_sourcing/useRaukkSnapshot";
 
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
@@ -33,6 +36,8 @@ import {
 	resolveSystemId,
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import { RAUKK_DEFAULT_SHIP_PROFILE_ID } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import { RAUKK_REPAIR_BILL } from "@/features/raukk_sourcing/calculations/shipping";
+import { RAUKK_REPAIR_AT_DAMAGE } from "@/features/raukk_sourcing/calculations/shippingRepair";
 import { raukkDefaultChainConfig } from "@/features/raukk_sourcing/calculations/shippingChains";
 
 // Types & Interfaces
@@ -1406,6 +1411,162 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			expect(snapshot.draws).toStrictEqual({});
 		});
 	});
+	describe("ship repair bill", () => {
+		/** A shipyard one jump away, selling hull plate above the market */
+		function withShipyard(): void {
+			store.setSnapshot("shipyard", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Shipyard",
+				planetNaturalId: SOURCE_PLANET,
+				outputs: {
+					LHP: {
+						ticker: "LHP",
+						unitsPerDay: 1000,
+						costPerUnit: 400,
+						breakdown: {
+							workforce: 0,
+							repair: 0,
+							inputs: 400,
+							shipping: 0,
+						},
+					},
+				},
+				draws: {},
+			});
+		}
+
+		/** Repairs of a day: 0.1 trips at 2 × CX_TO_CONSUMER parsecs */
+		const REPAIRS_PER_DAY: number =
+			(0.1 * 2 * CX_TO_CONSUMER * 0.001) / RAUKK_REPAIR_AT_DAMAGE;
+
+		beforeEach(() => {
+			// the only wear is the distance, so the damage of a trip is
+			// exactly its parsecs
+			store.setShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
+				...flatProfile,
+				damagePerParsec: 0.001,
+				damagePerStlBlock: 0,
+			});
+			store.setShippingConfig({ enabled: true });
+			withShipyard();
+		});
+
+		it("draws the repair bill from the producing plan", async () => {
+			store.setShipTickerSource("LHP", {
+				mode: "plan",
+				sourcePlanUuid: "shipyard",
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(snapshot.draws.shipyard?.LHP).toBeCloseTo(
+				REPAIRS_PER_DAY * RAUKK_REPAIR_BILL.LHP,
+				10
+			);
+			// SSC stays on the market and books no draw
+			expect(snapshot.draws.shipyard?.SSC).toBeUndefined();
+		});
+
+		it("books no draw while the bill is bought at the market", async () => {
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(snapshot.draws.shipyard).toBeUndefined();
+
+			store.setShipTickerSource("LHP", { mode: "cx" });
+
+			const { snapshot: cx } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(cx.draws.shipyard).toBeUndefined();
+		});
+
+		it("books nothing of a hired lane, the operator repairs", async () => {
+			store.setShipTickerSource("LHP", {
+				mode: "plan",
+				sourcePlanUuid: "shipyard",
+			});
+			const { snapshot: own } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(own.draws.shipyard?.LHP).toBeGreaterThan(0);
+
+			// every lane the plan owns hired away, at any rate
+			store.setShippingConfig({
+				enabled: true,
+				lmRates: Object.fromEntries(
+					(own.lanes ?? []).map((lane) => [lane.pairKey, 1000])
+				),
+			});
+
+			const { snapshot: hired } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(hired.draws.shipyard).toBeUndefined();
+		});
+
+		it("books the whole bill, every ticker of it", async () => {
+			store.setShipSourcingDefault("shipRepair", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG_MKT",
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			// only LHP has a producer, the pool aggregate books what it
+			// covers onto the one plan producing it
+			expect(snapshot.draws.shipyard?.LHP).toBeCloseTo(
+				REPAIRS_PER_DAY * RAUKK_REPAIR_BILL.LHP,
+				10
+			);
+		});
+
+		it("prices the bill at a probes trial producer price", async () => {
+			store.setShipTickerSource("LHP", {
+				mode: "plan",
+				sourcePlanUuid: "shipyard",
+			});
+
+			const prepared = await preparePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			const stored: IRaukkSnapshot = prepared.computeOnce();
+			// the ship resolver reads the WRAPPED producers, so a trial
+			// price of the shipyard reaches the repair bill of every trip
+			const probed: IRaukkSnapshot = prepared.computeOnce({
+				shipyard: { LHP: 4000 },
+			});
+
+			expect(probed.outputs.ALO.breakdown.shipping).toBeGreaterThan(
+				stored.outputs.ALO.breakdown.shipping
+			);
+		});
+
+		it("books no repair draw while shipping is disabled", async () => {
+			store.setShippingConfig({ enabled: false });
+			store.setShipTickerSource("LHP", {
+				mode: "plan",
+				sourcePlanUuid: "shipyard",
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(snapshot.draws).toStrictEqual({});
+		});
+	});
+
 	describe("account wide bucket defaults", () => {
 		beforeEach(() => {
 			store.setShippingConfig({ enabled: false });

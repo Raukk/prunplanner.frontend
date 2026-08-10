@@ -83,10 +83,15 @@ const MINUTES_PER_DAY: number = 24 * 60;
  * states 71 structural elements, and MFK and FLP are fixed components
  * paid whatever the damage.
  *
- * Deliberate v1 limitation, unchanged: these tickers are priced through
- * the snapshots resolver but their quantities are NOT booked into draws
- * or edges, so they take part in neither the cycle guard nor the base
- * fraction.
+ * The bill every lane is repaired against: per leg profiles carry no BOM
+ * of their own, so the ȼ this constant is priced at and the units a plan
+ * draws for it come from the very same numbers, see
+ * `calculations/shippingRepairDraws.ts`.
+ *
+ * Its quantities ARE booked, both as draws against the producing plan of
+ * a plans own lanes and as account level demand of the ship sourcing, so
+ * they take part in the base fraction and in the loop solve exactly like
+ * fuel does.
  *
  * @author raukk
  */
