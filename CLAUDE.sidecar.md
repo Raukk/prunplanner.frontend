@@ -333,3 +333,11 @@ anywhere in the repo. Not retroactive.
   buttons) is fleet-oriented, so none of them needed retargeting.
   Calibration stopped being a show/hide button in the config bar;
   `shipping.show_calibration` / `hide_calibration` deleted.
+- 2026-08-10: Hull damage model solved and shipped
+  (`shippingDamage.ts`, `docs/raukk_sourcing/star-heat-damage.md`).
+  Added one bullet to CLAUDE.md's existing "Optional deeper reading"
+  section per user request that the work be findable without
+  re-deriving it; no new section. shipping-calibration.md section 6's
+  ANTARES I ANOMALY and LND items were stale and now point at the new
+  document — that file stays the calibration authority, the new one
+  owns the damage model.

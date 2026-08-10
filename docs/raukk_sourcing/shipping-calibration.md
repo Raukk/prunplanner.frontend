@@ -220,23 +220,24 @@ per-type multipliers on the terms below when profiles carry them.
   — fits 7 of 8 systems flown (Hortus 0.028 -> Romulan 2.93;
   density source: `raukk_meteoroid.json`, from
   rest.fnar.net/systemstars/star/*) and both KI-840 DEP legs.
-- FTL jumps: ~0.0011% per parsec, reactor-independent (0.007/6pc,
-  0.012/11, 0.015/14, 0.009/9 across every reactor setting).
+- FTL jumps: EXACTLY 0.001% per parsec, reactor-independent — 22 legs
+  across both campaigns with zero variance (`star-heat-damage.md`
+  section 7). Supersedes the ~0.0011% read off the first four points.
 - CHRG events: reactor-scaled, ~0% at MIN -> 0.010% each at 100% on
   the HCB (roughly linear). CAVEAT: batch-3 small hulls showed
   0.019-0.022% per CHRG at 39-48% — ship-size dependence unresolved;
   magnitude small either way.
-- LND: varies by planet (0.001% - 0.184% observed) — planetary
-  property (atmosphere/launch-landing damage type), unresolved;
+- LND: SOLVED, see `star-heat-damage.md` section 7. Atmospheric term
+  `0.01192 x sqrt(km) x P^1.15 / (P^1.15 + 38^1.15)` on FIO
+  `Pressure`, median 4% across fifteen landings on thirteen planets.
   TO always 0.
-- ANTARES I ANOMALY: legs at/near ANT run far above the density law
-  (TRA 0.00082 %/Mkm with one ship; APP legs 0.0078 %/Mkm — ~24x
-  prediction), worst on legs ending near the star (ANT orbits at
-  33.6M km). Working hypothesis: near-star heat damage term (test
-  ships had no thermal protection; user confirms heat damage +
-  thermal protection components exist, and that per-type damage
-  telemetry is NOT available to pull). Not modeled; flag
-  Antares-anchored lanes and price them from observed BTFs.
+- ANTARES I ANOMALY: SOLVED, see `star-heat-damage.md`. It is a
+  stellar (heat + radiation) term, `C x L x integral(ds/r^2)` along
+  the leg, with `L = Sunlight x orbitAU^2` free from FIO and
+  `C = 3.25e-6` unshielded. ANT ran hot because Antares I is an F star
+  and the station orbits it at 0.22 AU. Implemented in
+  `shippingDamage.ts`; the flag-and-price-from-BTFs workaround is
+  retired.
 - Ship repair bill should derive from the ship's BOM (STL-only BOM
   carries no FTL parts; LHP/SSC-heavy), replacing the fixed
   LHP/SSC/MFK/FLP constants of shipping.ts for non-3000t hulls.
@@ -497,14 +498,11 @@ Ordered by how much of the model each unblocks:
    different length and no jump: ZV-759b -> ZV-759a, -> ZV-759c, and
    the longest pair available. One density (0.32333), so time-vs-km and
    damage-vs-km both come out clean.
-3. ANTARES TERM. Same ship and slider, Antares Station -> ZV-307a
-   (a = 67,292 Mm), -> ZV-307b (106,786), -> ZV-307c (173,992), and
-   ZV-307c -> station for the reverse. Station sits at 33,603 Mm; if
-   %/Mkm falls with mean distance from the star the term is heat and
-   the four points fit its exponent.
-4. LND PER PLANET. The LND row (km, time, damage) for the same ship on
-   ZV-307a/b/c and ZV-759b. Tests sqrt(2d/a) and starts the per-planet
-   damage table in one go.
+3. ANTARES TERM. DONE — batch 11 flew the five-planet sheet instead
+   and solved it outright; see `star-heat-damage.md`.
+4. LND PER PLANET. DONE — same document, section 7. What remains is
+   the reshoot of section 8.3: the same lanes at a known later time,
+   to test whether the term tracks the anchor's orbital position.
 5. JUMP OVERHEAD. Same ship and reactor, one 1-2 pc jump and one 10+ pc
    jump. Section 3's 4pc-vs-14pc points come from different reactor
    settings, so per-jump overhead and per-parsec time are still
