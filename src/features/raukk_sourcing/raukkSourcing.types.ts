@@ -183,6 +183,14 @@ export interface IRaukkSnapshot {
 	/** ISO timestamp of computation */
 	computedAt: string;
 	stale: boolean;
+	/**
+	 * Fingerprint of the plan this was computed from. `computedAt` only
+	 * says when the numbers were produced, not which version of the plan
+	 * they describe — a plan edited on another machine arrives through a
+	 * background revalidation that no local `markStale` ever sees.
+	 * Absent on snapshots written before this existed.
+	 */
+	planFingerprint?: string;
 	planName: string;
 	planetNaturalId: string;
 	/** Key: output material ticker */

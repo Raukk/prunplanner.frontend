@@ -425,6 +425,9 @@ export const RaukkOutputCostSchema = z.object({
 export const RaukkSnapshotSchema = z.object({
 	computedAt: z.string(),
 	stale: z.boolean(),
+	// raukk: plan version the numbers describe, absent on snapshots
+	// written before remote plan changes were detectable
+	planFingerprint: z.string().optional(),
 	planName: z.string(),
 	planetNaturalId: z.string(),
 	outputs: z.record(z.string(), RaukkOutputCostSchema),

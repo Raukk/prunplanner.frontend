@@ -14,6 +14,7 @@ import { usePlanningStore } from "@/stores/planningStore";
 import { useUserStore } from "@/stores/userStore";
 // raukk: sourcing snapshots follow plan saves and deletions
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+import { planContentFingerprint } from "@/features/planning_data/usePlan";
 
 // indexeddb
 import {
@@ -725,7 +726,22 @@ export function useQueryRepository() {
 			fetchFn: async (params: { planUuid: string }) => {
 				const session: number = queryStore.sessionGeneration;
 				const data = await callGetPlan(params.planUuid);
-				if (isCurrentSession(session)) planningStore.setPlan(data);
+				if (isCurrentSession(session)) {
+					planningStore.setPlan(data);
+
+					/*
+						raukk: the backend just told us what this plan
+						really looks like. If a sourcing snapshot was
+						computed against a different version — an edit
+						made on another machine, which no local save hook
+						can see — its numbers no longer describe this
+						plan and it has to be flagged.
+					*/
+					raukkSourcingStore.markStaleIfPlanChanged(
+						params.planUuid,
+						planContentFingerprint(data)
+					);
+				}
 				return data;
 			},
 			hydrateFn: async (params: { planUuid: string }) => {

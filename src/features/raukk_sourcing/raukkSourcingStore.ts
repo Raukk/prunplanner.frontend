@@ -3,6 +3,7 @@ import { ref, Ref, watch } from "vue";
 
 // Stores
 import { usePlanningStore } from "@/stores/planningStore";
+import { planContentFingerprint } from "@/features/planning_data/usePlan";
 
 // Util
 import { inertClone } from "@/util/data";
@@ -377,6 +378,34 @@ export const useRaukkSourcingStore = defineStore(
 		 *
 		 * @param {string} planUuid Plan Uuid
 		 */
+		/**
+		 * Flags a plans snapshot stale when the plan itself has moved on
+		 * since the numbers were computed. Local edits already call
+		 * `markStale` through `PatchPlan`; this covers the version that
+		 * arrives from a background revalidation, i.e. an edit made on
+		 * another machine, which nothing else in the app can see.
+		 *
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 * @param {string} fingerprint Fingerprint of the current plan
+		 * @returns {boolean} True when the snapshot was flagged
+		 */
+		function markStaleIfPlanChanged(
+			planUuid: string,
+			fingerprint: string
+		): boolean {
+			const own: IRaukkSnapshot | undefined = snapshots.value[planUuid];
+
+			// nothing stored, or predates fingerprinting: leave it alone
+			// rather than flag every old snapshot on first sight
+			if (!own?.planFingerprint) return false;
+			if (own.planFingerprint === fingerprint) return false;
+
+			markStale(planUuid);
+			return true;
+		}
+
 		function markStale(planUuid: string): void {
 			const own: IRaukkSnapshot | undefined = snapshots.value[planUuid];
 			if (own) own.stale = true;
@@ -1466,9 +1495,21 @@ export const useRaukkSourcingStore = defineStore(
 			const previous: IRaukkSnapshot | undefined =
 				snapshots.value[planUuid];
 
+			/*
+				Record which version of the plan these numbers describe.
+				The snapshot was just computed from the plan the query
+				cache wrote through to the planning store, so that is the
+				version, and `markStaleIfPlanChanged` can later tell that
+				a newer one arrived from somewhere else.
+			*/
+			const plan = usePlanningStore().plans[planUuid];
+
 			snapshots.value[planUuid] = {
 				...inertClone(snapshot),
 				stale: false,
+				planFingerprint: plan
+					? planContentFingerprint(plan)
+					: undefined,
 			};
 
 			// dependents derive from the new draws as well
@@ -1724,6 +1765,7 @@ export const useRaukkSourcingStore = defineStore(
 			setShipProfile,
 			resetShipProfile,
 			markStale,
+			markStaleIfPlanChanged,
 			markAllStale,
 			deletePlanData,
 			setChain,
