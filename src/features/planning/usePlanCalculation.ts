@@ -427,7 +427,7 @@ export async function usePlanCalculation(
 				computedBuildingInformation[b.name].buildingRecipes;
 
 			// add currently active recipes
-			b.active_recipes.forEach((r) => {
+			b.active_recipes.forEach((r, planIndex) => {
 				// go raw to loose Proxy
 				const recipeInfo: IRecipe | undefined = toRaw(
 					buildingRecipes.find((ar) => ar.recipe_id == r.recipeid)
@@ -455,6 +455,7 @@ export async function usePlanCalculation(
 
 					activeRecipes.push({
 						recipeId: r.recipeid,
+						planIndex,
 						amount: r.amount,
 						dailyShare: 1,
 						// time adjusted to efficiency and amount
