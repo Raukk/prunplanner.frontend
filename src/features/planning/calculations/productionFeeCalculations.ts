@@ -24,6 +24,12 @@ const WORKFORCE_BUILDING_FIELD_MAP: Record<
  * tiers pays their workforce-weighted average — more employees of a tier
  * only shift the mix, they never multiply the bill. Fees are set per
  * planet by its government, per industry and tier.
+ *
+ * Confirmed by the APEX handbook, "Local Rules" → Production Fees: "the
+ * weighted sum of all workforces that are required by the given
+ * building", worked as (10 x 15 + 25 x 12) / (10 + 25) = 12.9, then
+ * multiplied by the production duration ratio.
+ * @see https://handbook.apex.prosperousuniverse.com/wiki/local-rules/index.html
  * @author raukk
  *
  * @export

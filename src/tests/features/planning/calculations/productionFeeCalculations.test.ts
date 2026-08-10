@@ -81,6 +81,49 @@ describe("productionFeeCalculations", () => {
 			expect(calculateProductionFeeRate(empty, fakeFees)).toBe(0);
 		});
 
+		it("reproduces the APEX handbook worked example", () => {
+			// handbook "Local Rules": a polymer plant of 10 pioneers at 15
+			// and 25 settlers at 12 pays (10 * 15 + 25 * 12) / 35 = 12.9,
+			// then 12.9 * (8.5 / 24) = 4.56 for an 8.5h order. Both of the
+			// handbooks figures are rounded: the exact rate is 450 / 35 =
+			// 12.857, and carrying it unrounded gives 4.5535 per batch
+			const polymerPlant = {
+				ticker: "POL",
+				expertise: "CHEMISTRY",
+				pioneers: 10,
+				settlers: 25,
+				technicians: 0,
+				engineers: 0,
+				scientists: 0,
+			} as unknown as IBuilding;
+
+			const handbookFees = {
+				...fakeFees,
+				production_fees: {
+					CHEMISTRY: {
+						pioneer: 15,
+						settler: 12,
+						technician: 0,
+						engineer: 0,
+						scientist: 0,
+					},
+				},
+			} as IFIOPlanetFees;
+
+			expect(
+				calculateProductionFeeRate(polymerPlant, handbookFees)
+			).toBeCloseTo(450 / 35, 8);
+
+			expect(
+				calculateProductionFeeBatch(
+					polymerPlant,
+					handbookFees,
+					8.5 * 60 * 60 * 1000,
+					1
+				)
+			).toBeCloseTo((450 / 35) * (8.5 / 24), 8);
+		});
+
 		it("returns 0 on unknown fees", () => {
 			expect(calculateProductionFeeRate(fakeBuilding, null)).toBe(0);
 		});
