@@ -15,10 +15,13 @@
 
 	const {
 		materials,
+		repairDay = undefined,
 		sourcedPrices = {},
 		sourcedStale = false,
 	} = defineProps<{
 		materials: IMaterialIO[];
+		/** raukk: repair cycle length in days, amortizes the amount */
+		repairDay?: number;
 		/** raukk: internal ȼ/u of plan sourced repair materials */
 		sourcedPrices?: Record<string, number>;
 		/** raukk: the sourcing snapshot backing the prices is stale */
@@ -36,6 +39,24 @@
 			{ cost: 0, weight: 0, volume: 0 }
 		);
 	});
+
+	/*
+	 * raukk: amount amortized over the repair cycle
+	 *
+	 * The amount column is what a repair at the selected day consumes in
+	 * one go; per day is that same amount spread over the cycle, which is
+	 * the rate the plan has to produce or buy the material at. Almost
+	 * always a fraction of a unit, so it carries more decimals.
+	 */
+
+	const hasPerDay = computed(() => repairDay !== undefined && repairDay > 0);
+
+	const columnCount = computed(() => (hasPerDay.value ? 4 : 3));
+
+	/** Units of a repair material needed per day of the repair cycle */
+	function perDay(input: number): number {
+		return hasPerDay.value ? input / (repairDay as number) : 0;
+	}
 
 	// raukk: internal cost note, market numbers above stay untouched
 
@@ -64,6 +85,10 @@
 			<tr>
 				<th>{{ $t("plan.tools.repair_analysis.table.material") }}</th>
 				<th>{{ $t("plan.tools.repair_analysis.table.amount") }}</th>
+				<!-- raukk: the same amount spread over the repair cycle -->
+				<th v-if="hasPerDay" class="text-end!">
+					{{ $t("raukk_repair.day_table.per_day") }}
+				</th>
 				<th class="text-end!">
 					{{ $t("plan.tools.repair_analysis.table.cost") }}
 				</th>
@@ -80,6 +105,12 @@
 				</td>
 				<td>
 					{{ material.input }}
+				</td>
+				<td v-if="hasPerDay" class="text-end">
+					{{ formatNumber(perDay(material.input), 4, true) }}
+					<span class="pl-1 font-light text-white/50">
+						{{ $t("raukk_repair.day_table.per_day_unit") }}
+					</span>
 				</td>
 				<td class="text-end">
 					{{ formatNumber(-1 * material.price) }}
@@ -103,7 +134,7 @@
 		</tbody>
 		<tfoot>
 			<tr>
-				<td colspan="3" class="border-t!">
+				<td :colspan="columnCount" class="border-t!">
 					<div
 						class="grid grid-cols-2 gap-1 child:even:text-end child:not-even:font-bold">
 						<div>
