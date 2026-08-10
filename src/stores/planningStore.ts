@@ -228,7 +228,9 @@ export const usePlanningStore = defineStore(
 		 * @returns {ICX[]} CX Preference Data Array
 		 */
 		function getAllCX(): ICX[] {
-			return Object.values(cxs.value);
+			// inert copies: callers must not hold live store proxies,
+			// they mutate them and hand them to structuredClone
+			return Object.values(cxs.value).map((c) => inertClone(c));
 		}
 
 		/**
@@ -238,7 +240,8 @@ export const usePlanningStore = defineStore(
 		 * @returns {ISharedPlan[]} Sharing Information List
 		 */
 		function getSharedList(): ISharedPlan[] {
-			return Object.values(shared.value);
+			// see getAllCX
+			return Object.values(shared.value).map((s) => inertClone(s));
 		}
 		async function getStoreSize() {
 			const stores = [
