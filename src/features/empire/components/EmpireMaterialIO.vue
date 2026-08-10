@@ -1,15 +1,18 @@
 <script setup lang="ts">
-	import { PropType, computed, watch } from "vue";
+	import { ComputedRef, PropType, computed, watch } from "vue";
 
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
 
 	// Components
 	import MaterialTile from "@/features/material_tile/components/MaterialTile.vue";
+	// raukk: share of the exchange's traded volume this row sells
+	import CXVolumeShare from "@/features/cx/components/CXVolumeShare.vue";
 
 	// Composables
 	import { usePlanetData } from "@/database/services/usePlanetData";
 	const { planetNames, loadPlanetNames } = usePlanetData();
+	import { useCXVolumeShare } from "@/features/cx/useCXVolumeShare";
 
 	// Stores
 	// raukk: bases leasing from one another share a docking site
@@ -27,6 +30,7 @@
 
 	// Types & Interfaces
 	import { IEmpireMaterialIO } from "@/features/empire/empire.types";
+	import { ICXVolumeRow } from "@/features/cx/cxVolumeShare.types";
 
 	// UI
 	import { XNDataTable, XNDataTableColumn } from "@skit/x.naive-ui";
@@ -35,6 +39,11 @@
 		empireMaterialIO: {
 			type: Array as PropType<IEmpireMaterialIO[]>,
 			required: true,
+		},
+		cxUuid: {
+			type: String,
+			required: false,
+			default: undefined,
 		},
 	});
 
@@ -53,6 +62,26 @@
 				sourcingStore.configs[planUuid]?.leaseHostPlanUuid
 		)
 	);
+
+	const localCXUuid: ComputedRef<string | undefined> = computed(
+		() => props.cxUuid
+	);
+
+	/**
+	 * Units per day of every empire surplus that reach the exchange. The
+	 * empire delta is already netted across every plan in it, so no
+	 * sourcing configuration is needed to exclude what the empire itself
+	 * consumes — and unlike the per plan warning, this one catches the
+	 * bases that each move a harmless share but jointly move the price.
+	 * @author raukk
+	 */
+	const localVolumeRows: ComputedRef<ICXVolumeRow[]> = computed(() =>
+		localEmpireMaterialIO.value
+			.filter((row) => row.delta > 0)
+			.map((row) => ({ ticker: row.ticker, soldPerDay: row.delta }))
+	);
+
+	const { volumeShares } = useCXVolumeShare(localVolumeRows, localCXUuid);
 
 	watch(
 		() => props.empireMaterialIO,
@@ -102,6 +131,8 @@
 						">
 						{{ formatNumber(rowData.delta) }}
 					</span>
+					<!-- raukk: share of the exchange's traded volume -->
+					<CXVolumeShare :share="volumeShares.get(rowData.ticker)" />
 				</template>
 			</x-n-data-table-column>
 			<x-n-data-table-column

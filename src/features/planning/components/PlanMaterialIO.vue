@@ -1,5 +1,6 @@
 <script setup lang="ts">
 	import { computed, ComputedRef, PropType } from "vue";
+	import { useRoute } from "vue-router";
 
 	import { useI18n } from "vue-i18n";
 	const { t } = useI18n();
@@ -9,12 +10,22 @@
 	// raukk: sourcing annotation + sourced cost note of a material I/O row
 	import RaukkMaterialIOInfo from "@/features/raukk_sourcing/components/RaukkMaterialIOInfo.vue";
 	import RaukkMaterialIOCost from "@/features/raukk_sourcing/components/RaukkMaterialIOCost.vue";
+	// raukk: share of the exchange's traded volume this row sells
+	import CXVolumeShare from "@/features/cx/components/CXVolumeShare.vue";
+
+	// Stores
+	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+
+	// Composables
+	import { useCXVolumeShare } from "@/features/cx/useCXVolumeShare";
 
 	// Types & Interfaces
 	import { IMaterialIO } from "@/features/planning/usePlanCalculation.types";
+	import { ICXVolumeRow } from "@/features/cx/cxVolumeShare.types";
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
+	import { soldToCXPerDay } from "@/features/cx/cxVolumeShare";
 
 	// UI
 	import { XNDataTable, XNDataTableColumn } from "@skit/x.naive-ui";
@@ -28,6 +39,16 @@
 			type: Boolean,
 			required: true,
 		},
+		planUuid: {
+			type: String,
+			required: false,
+			default: undefined,
+		},
+		cxUuid: {
+			type: String,
+			required: false,
+			default: undefined,
+		},
 	});
 
 	// Local State
@@ -37,6 +58,50 @@
 	const localShowBasked: ComputedRef<boolean> = computed(
 		() => props.showBasked
 	);
+
+	const raukkSourcingStore = useRaukkSourcingStore();
+	const route = useRoute();
+
+	/** Plan uuid, falling back to the plan view's route parameter */
+	const localPlanUuid: ComputedRef<string | undefined> = computed(() => {
+		if (props.planUuid) return props.planUuid;
+
+		const routeUuid: unknown = route?.params?.planUuid;
+
+		return typeof routeUuid === "string" && routeUuid !== ""
+			? routeUuid
+			: undefined;
+	});
+
+	const localCXUuid: ComputedRef<string | undefined> = computed(
+		() => props.cxUuid
+	);
+
+	/**
+	 * Units per day of every output row that actually reach the exchange.
+	 * The row's delta already nets this base's own consumption, what other
+	 * plans draw through their sourcing configuration comes off on top of
+	 * it — those units never touch the market.
+	 * @author raukk
+	 */
+	const localVolumeRows: ComputedRef<ICXVolumeRow[]> = computed(() =>
+		localMaterialIOData.value
+			.filter((row) => row.delta > 0)
+			.map((row) => ({
+				ticker: row.ticker,
+				soldPerDay: soldToCXPerDay(
+					row.delta,
+					localPlanUuid.value
+						? raukkSourcingStore.subscription(
+								localPlanUuid.value,
+								row.ticker
+							).totalDrawnPerDay
+						: 0
+				),
+			}))
+	);
+
+	const { volumeShares } = useCXVolumeShare(localVolumeRows, localCXUuid);
 </script>
 
 <template>
@@ -84,6 +149,8 @@
 				<RaukkMaterialIOInfo
 					:ticker="rowData.ticker"
 					:delta="rowData.delta" />
+				<!-- raukk: share of the exchange's traded volume -->
+				<CXVolumeShare :share="volumeShares.get(rowData.ticker)" />
 			</template>
 		</XNDataTableColumn>
 		<XNDataTableColumn
