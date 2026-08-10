@@ -4,8 +4,7 @@
 // their height encoding total draw, and every draw is one cubic Bézier
 // ribbon between the two — both sides on ONE shared u/d scale, so an
 // overflow ribbon visibly runs past its producer's node bottom instead
-// of being rescaled. See docs/raukk_sourcing/oversubscription-report.md,
-// "Visualization tabs". Pure functions, no store and no Vue.
+// of being rescaled. Pure functions, no store and no Vue.
 
 // Calculations
 import {

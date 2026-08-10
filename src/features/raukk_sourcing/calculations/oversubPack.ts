@@ -1,8 +1,7 @@
 // Pure layout helpers of the oversubscription visualization tabs:
 // the squarified treemap of the Blocks tab, its ordered strip slicing,
 // the headroom share metric, and the deterministic circle packing of
-// the Bubbles tab (field + drill-in). Ported from the validated mockup
-// `docs/raukk_sourcing/oversub-mockup.html`. No DOM, no Vue, no RNG —
+// the Bubbles tab (field + drill-in). No DOM, no Vue, no RNG —
 // identical inputs always yield identical geometry.
 
 // Types & Interfaces

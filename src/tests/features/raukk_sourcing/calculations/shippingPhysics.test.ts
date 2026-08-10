@@ -19,12 +19,11 @@ import {
 } from "@/features/raukk_sourcing/calculations/shippingPhysics";
 
 /*
- * Every expectation below is an observation transcribed from
- * docs/raukk_sourcing/shipping-calibration.md — sections 7 and 11, the
- * latter leg by leg in docs/raukk_sourcing/btf_flights.json. Batch 9 is
- * exact enough to assert on directly: its surface legs carry printed
- * seconds and its three blueprints all sit on an 8 g plate, so the
- * acceleration is known to be 78.48 m/s².
+ * Every expectation below is an observation transcribed from the
+ * Blueprint Test Flight campaign. Batch 9 is exact enough to assert on
+ * directly: its surface legs carry printed seconds and its three
+ * blueprints all sit on an 8 g plate, so the acceleration is known to be
+ * 78.48 m/s².
  */
 
 /** Acceleration of every batch 9 blueprint: a Basic plate at 8 g */

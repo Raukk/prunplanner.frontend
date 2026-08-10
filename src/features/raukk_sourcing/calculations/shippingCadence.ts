@@ -1,8 +1,7 @@
 // Cadence of the shipping model: how many DAYS may pass between two
 // visits of one cargo bucket, and what that makes of a lane.
-// See docs/raukk_sourcing/shipping-cadence-plan.md, "Phase 1 — cadence
-// model on direct lanes". Pure arithmetic over plain numbers, no store
-// and no Vue — the caps arrive resolved, the loads as ship loads per day.
+// Pure arithmetic over plain numbers, no store and no Vue — the caps
+// arrive resolved, the loads as ship loads per day.
 
 // Types & Interfaces
 import {

@@ -3,7 +3,6 @@
 // chain models already compute — never a second damage formula, see
 // `calculateTripDamage` of shipping.ts. Display consumers only; the
 // per trip repair charge inside the cost model stays where it is.
-// See docs/raukk_sourcing/shipping-wear-plan.md, "Phase A".
 
 // Calculations
 import { RAUKK_REPAIR_AT_DAMAGE } from "@/features/raukk_sourcing/calculations/shipping";

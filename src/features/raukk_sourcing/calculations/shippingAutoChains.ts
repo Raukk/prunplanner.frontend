@@ -1,8 +1,7 @@
 // AUTOMATIC chains: the loops nobody authored, derived from the flows
 // that are left once the user authored chains claimed theirs.
-// See docs/raukk_sourcing/shipping-cadence-plan.md, "Phase 2 — auto
-// chains + exchange hub/spoke": one loop per cadence class per exchange
-// region, CX → A → … → CX, at most five stops, ordered exactly.
+// One loop per cadence class per exchange region, CX → A → … → CX, at
+// most five stops, ordered exactly.
 //
 // Pure functions over plain data — no store, no Vue, no prices. The
 // anchor of a base, the cadence cap of a consuming plan and the flows
@@ -1136,11 +1135,11 @@ export function raukkFlowConcernsPlan(
 /**
  * The exchange hub/spoke listing: what nobody hauls directly.
  *
- * RESOURCE first, never base only (shipping-cadence-plan.md, Phase 2): a
- * row names the ticker, its cargo class and its share of everything
- * rerouted, optionally split by the base pair it moves between. Only
- * base to base flows appear — a flow already addressed to an exchange is
- * a plain market lane and was never a candidate for a direct haul.
+ * RESOURCE first, never base only: a row names the ticker, its cargo
+ * class and its share of everything rerouted, optionally split by the
+ * base pair it moves between. Only base to base flows appear — a flow
+ * already addressed to an exchange is a plain market lane and was never
+ * a candidate for a direct haul.
  *
  * Ordering: ungrouped rows list largest share first. Grouped rows keep
  * each base pair CONTIGUOUS — pairs ordered by their summed share

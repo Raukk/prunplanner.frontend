@@ -16,10 +16,9 @@ import { IRaukkShipRepairBom } from "@/features/raukk_sourcing/calculations/ship
 
 /*
  * Every expectation is one of the community calculator's own worked
- * examples, transcribed in docs/raukk_sourcing/repair_and_damage.json.
- * Its two reference ships are a 90 plate LHP hull with no shielding and
- * a 90 plate AHP hull carrying an advanced whipple, an advanced thermal
- * and a specialized anti-rad.
+ * examples. Its two reference ships are a 90 plate LHP hull with no
+ * shielding and a 90 plate AHP hull carrying an advanced whipple, an
+ * advanced thermal and a specialized anti-rad.
  */
 
 /** The calculator's unshielded reference ship */

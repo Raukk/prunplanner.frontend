@@ -1,8 +1,7 @@
 // Row builders of the empire oversubscription report: which producer ×
-// ticker is overdrawn, and which ship type is overbooked. See
-// docs/raukk_sourcing/oversubscription-report.md. Pure functions, no
-// store and no Vue — snapshots, chains, results and the fleet arrive as
-// plain data from the caller.
+// ticker is overdrawn, and which ship type is overbooked. Pure
+// functions, no store and no Vue — snapshots, chains, results and the
+// fleet arrive as plain data from the caller.
 //
 // The store's `subscription()` getter is deliberately NOT used here: it
 // includes the self draw in `byPlan` and divides by gross, so building

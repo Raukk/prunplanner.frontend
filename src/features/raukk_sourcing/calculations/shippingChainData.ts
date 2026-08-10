@@ -1,8 +1,6 @@
 // Typed accessors over the two static chain assets: planet orbits and
-// per system meteoroid density. See docs/raukk_sourcing/
-// shipping-chains-v2.md, sections "Same-system legs" and "Per-system
-// damage". Both files were fetched from the open FIO API on 2026-08-08
-// (rest.fnar.net/planet/allplanets/full and
+// per system meteoroid density. Both files were fetched from the open
+// FIO API on 2026-08-08 (rest.fnar.net/planet/allplanets/full and
 // rest.fnar.net/systemstars/star/*). Lazy singleton, same shape as
 // routeDistance: the JSON is only parsed once something asks for it.
 

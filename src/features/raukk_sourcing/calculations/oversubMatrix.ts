@@ -2,9 +2,8 @@
 // oversubscription report: the deterministic consumer column set of the
 // load matrix, the fleet lane columns, the producer → consumer pair
 // aggregation of the adjacency grid and its margins, plus the shared
-// blue ramp and the √-scaled square side. See
-// docs/raukk_sourcing/oversubscription-report.md, "Visualization tabs".
-// Pure functions, no store and no Vue.
+// blue ramp and the √-scaled square side. Pure functions, no store and
+// no Vue.
 
 // Types & Interfaces
 import { IRaukkOversubConsumerSlots } from "@/features/raukk_sourcing/calculations/oversubDisplay";

@@ -1,10 +1,8 @@
 // Blueprint-seeded ship profiles: the Performance block of the in-game
 // BLUEPRINT panel, turned into the profile constants a ship starts with
 // BEFORE a single test flight was entered.
-// See docs/raukk_sourcing/shipping-fleet.md, section "Blueprint-seeded
-// profiles" — calibration order is blueprint seed → BTF flights refine →
-// manual override wins. The physics itself lives in shippingPhysics.ts
-// and is sourced from docs/raukk_sourcing/shipping-calibration.md.
+// Calibration order is blueprint seed → BTF flights refine → manual
+// override wins. The physics itself lives in shippingPhysics.ts.
 // Pure functions, no store and no Vue.
 
 // Calculations

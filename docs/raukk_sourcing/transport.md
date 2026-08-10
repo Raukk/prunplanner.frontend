@@ -1,121 +1,18 @@
 # Account-wide transport table
 
-A "Transport" section of the account `/shipping` page's section strip,
-between Fleet and Chains: every stored lane of the account, with what
-the own fleet charges to fly it and what an LM transport ad would.
-Editable — the LM ȼ/trip rate and the per-lane ship assignment both
-live here.
+Code: `shippingDisplay.ts`, `useRaukkTransport.ts`, `RaukkTransport{Section,Table}.vue`, `shipping.ts` (lane freeze), `raukkSourcingStore.schemas.ts`; JSDoc + `en_US/raukk_sourcing.json` authoritative, values in `facts/transport.json`.
 
-Supersedes two earlier surfaces, both on the plan Sourcing tool and
-both removed: the "Hired Transport" LM rates table and the read-only
-"Transport for this base" section. They listed overlapping lanes with
-different freshness and different columns, and the state they edited
-(`shippingConfig.lmRates`, `assignments`) is account-global, so a
-per-plan tab was the wrong home for it.
+Supersedes (removed, no repo trace): plan tool's "Hired Transport" rates table + read-only "Transport for this base" section — overlapping lanes, differing freshness/columns, edited state account-global.
 
-## Scope rule
+Rejected, live account-wide rebuild: needs every plan's `planResult.materialio`; re-derives hub substitution, depot suppression, auto hull pick at read time (can disagree with frozen `lane.shipTypeId`); `/shipping` owns no plan, so its anchorless repair bill prints a different ȼ than the plan tab.
 
-Stored state only, never a live recomputation — the same rule
-`useRaukkFleet.ts` follows, and for the same reason: one fleet serves
-every plan, so this is an account-level question. The table is a
-grouped READ of `raukkSourcingStore.snapshots[*].lanes`, scoped through
-`scopedSnapshots()` (a plan assigned to no empire ships nothing account
-wide).
+Constraints the code cannot state:
 
-Live reconstruction was considered and rejected. Rebuilding the pairs
-account-wide would need each plan's `planResult.materialio`, and would
-have to re-derive hub substitution, depot suppression and the automatic
-hull pick at read time — where the read-time pick could disagree with
-the frozen `lane.shipTypeId`. Worse, the ȼ would not match: the
-`/shipping` page belongs to no plan, so its repair bill is priced the
-way a chain without an anchor planet is, and the same lane would print
-one number on the plan tab and another here.
+- New lane field ⇒ mirror in `RaukkSnapshotLaneSchema`; `z.object` strips unknown keys, unmirrored fields die on export/import.
+- Two price bases per row: frozen `ownCostPerTrip` = owning plan's repair bill; wear tooltip ȼ/trip = read-time anchorless account bill. That field only; damage fraction and trips/days-to-repair pure. `FleetSection` alike.
 
-## Frozen figures
+Losses vs the removed surfaces:
 
-`calculatePairShipping` freezes three per-leg figures that the
-comparison needs and the charged figures do not carry:
-
-- `ownCostPerTrip` — what the own fleet would charge, stated **even
-  while the lane is hired**. `costPerTrip` is the LM rate on a hired
-  lane, so it cannot stand in: the comparison is what hiring buys.
-- `ownDamagePerTrip` — likewise, since `damagePerTrip` is a hard zero
-  on a hired lane (someone else's hull wears).
-- `unitsPerDay` — the denominator of the lane-wide ȼ per unit.
-
-All three land on `IRaukkSnapshotLane` as OPTIONAL fields, mirrored in
-`RaukkSnapshotLaneSchema` — `z.object` strips unknown keys, so a field
-missing from the schema would be deleted on every export/import round
-trip. A lane frozen before they existed reports them as `undefined`
-and the table prints an em-dash: a zero would read as free freight and
-make hiring look like a pure loss. Same convention as `damagePerTrip`,
-`bucket` and `visitDays`.
-
-## Grouping
-
-One row per pair key, one leg per cargo bucket riding it. A lane is
-hired as a whole however many buckets ride it, so trips per day are
-summed over the legs and the own ȼ per trip is the trip-weighted mean
-over them — a lane whose production and repair cargo fly on two
-different hulls has no single cost per trip, only an average one. Round
-trip minutes are trip-weighted the same way, so `trips × minutes` stays
-the ship time of the whole lane. `tripWeighted` returns `undefined` as
-soon as ONE leg lacks the figure: the mean of a partially known lane is
-unknown, not smaller.
-
-A pair key names its owner and lanes are frozen onto the owner's own
-snapshot, so one key only ever meets one snapshot; staleness is still
-OR-ed rather than overwritten, since an imported payload need not hold
-to that.
-
-## Known losses
-
-- A pair that ships nothing yields no snapshot lanes at all, so the
-  account table cannot list it — the old per-plan table did, so a rate
-  could be entered before the cargo existed. Enter the rate once the
-  lane carries something.
-- Base SCOPING is gone. The old section answered "what transport
-  touches *this* base", foreign lanes pointing at it included; the
-  table is account-wide and merely sorted by owning base. Deliberate:
-  the lanes and the fleet are account-global, and the per-base cut was
-  the reason the same lane appeared twice on two surfaces.
-- The chains half of the old base section is not reproduced here. The
-  Chains section of the same page already lists every chain with a
-  superset of those columns, and editable.
-
-## Where the ȼ come from
-
-`ownCostPerTrip` is frozen, and therefore priced with the owning plan's
-repair bill. The wear tooltip's "wear costs N ȼ per trip" is NOT: it is
-derived at read time from the frozen `ownDamagePerTrip` against the
-page's own account-level, anchorless repair bill. For a plan whose
-anchor exchange prices the repair materials differently from the
-account default, those two ȼ in one row rest on different price bases.
-Only that one tooltip field is affected — the damage fraction, trips
-until repair and days until repair are pure damage math. `FleetSection`
-on the same page already mixes frozen damage with the account bill, so
-the reading is at least consistent across the page.
-
-## Figures
-
-Per row: owning base (+ stale tag), lane counterpart or an "Exchange"
-tag (+ hired tag), ship type (editable, blank = auto), visit cadence
-per bucket leg, units/day, round trip minutes, own ȼ/trip, repair-in
-days, LM ȼ/trip (editable), own ȼ/u, hired ȼ/u, saving ȼ/u.
-
-## Modules
-
-- `calculations/shippingDisplay.ts` — `raukkPairIdentity`,
-  `buildTransportRows`, and the `tripWeighted` helper. Pure, no store.
-- `useRaukkTransport.ts` — thin composable; reads through
-  `store.scopedSnapshots()`, which filters `snapshots.value` without
-  cloning, so the computed still tracks (reactivity rule: never through
-  the `getSnapshot`/`getConfig` cloning getters, which `toRaw` first).
-  It also owns the display ORDER — by owning base name, then
-  counterpart name — because the builder only ever sees plan uuids.
-- `components/RaukkTransportSection.vue` — the section and its store
-  writes; `components/RaukkTransportTable.vue` — the table.
-
-Tests: `src/tests/features/raukk_sourcing/calculations/
-shippingDisplay.test.ts`, plus the freeze itself in
-`calculations/shipping.test.ts`.
+- No cargo ⇒ no lane ⇒ no row; old table took an LM rate before cargo existed.
+- Base scoping dropped deliberately — lanes and fleet account-global, per-base cut caused the duplicate surfaces.
+- Chains half not reproduced; Chains section is a superset, editable.

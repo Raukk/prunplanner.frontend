@@ -386,13 +386,12 @@ function planCargo(input: IRaukkShippingInput): IRaukkPairPlanFlows {
  * Flows a chain already claimed off this plan, from the STORED chain
  * results.
  *
- * The OWNERSHIP gate of the chain model (shipping-plan.md, "Ownership
- * rule"): every chain flow was authored by exactly one member plans
- * snapshot, and only that plan may fold its freight or subtract its
- * units. Endpoints alone cannot say so — a plan to plan lane touches
- * both plans, and letting the SOURCE plan fold it too would bill the
- * same freight twice, once into the producers break even price and once
- * more into the consumers inbound.
+ * The OWNERSHIP gate of the chain model: every chain flow was authored
+ * by exactly one member plans snapshot, and only that plan may fold its
+ * freight or subtract its units. Endpoints alone cannot say so — a plan
+ * to plan lane touches both plans, and letting the SOURCE plan fold it
+ * too would bill the same freight twice, once into the producers break
+ * even price and once more into the consumers inbound.
  *
  * COMPATIBILITY, chosen and documented: a chain result frozen before
  * ownership was carried has no `ownerPlanUuid`. Such a flow degrades to
@@ -515,8 +514,7 @@ function chainClaimedUnits(
 }
 
 /**
- * The exchange hub/spoke half of this plans routing
- * (shipping-cadence-plan.md, Phase 2).
+ * The exchange hub/spoke half of this plans routing.
  *
  * Cargo no chain carries does NOT get a direct lane: the consumer buys
  * it at its own exchange and the producers excess ships out on its own

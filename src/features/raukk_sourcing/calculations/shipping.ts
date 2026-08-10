@@ -1,8 +1,6 @@
 // Shipping cost model: pure math over the route pairs a plan owns.
-// See docs/raukk_sourcing/shipping-plan.md, sections "Ownership rule"
-// and "Model math", and docs/raukk_sourcing/shipping-cadence-plan.md
-// "Phase 1" for the LEGS a lane is flown as. No store, no Vue, no price
-// fetching — repair bill prices arrive through the callers resolver.
+// No store, no Vue, no price fetching — repair bill prices arrive
+// through the callers resolver.
 
 // Calculations
 import {
@@ -855,8 +853,7 @@ function mergeLegPerUnit(
  * by their load share, and an empty backhaul therefore leaves the loaded
  * direction paying the full round trip — exactly the sourcing pair case,
  * where a reverse flow either lost the mutual verdict and routes via the
- * exchanges, or won it and owns the only lane (shipping-decisions.md
- * round 7).
+ * exchanges, or won it and owns the only lane.
  *
  * A hired LM rate replaces the own fleet cost per trip of EVERY leg and
  * takes the pair out of the shipping fraction: someone elses ship is

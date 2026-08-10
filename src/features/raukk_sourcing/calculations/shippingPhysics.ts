@@ -1,9 +1,8 @@
 // The physical flight model of the game, as it was measured.
-// Every constant and every law in this file is sourced from
-// docs/raukk_sourcing/shipping-calibration.md — the record of the
-// Blueprint Test Flight campaign — and the section it comes from is
+// Every constant and every law in this file comes from the Blueprint
+// Test Flight campaign, and the calibration section it was read from is
 // named at each one. Nothing here is fitted, guessed or rounded beyond
-// the range that document states.
+// the range those measurements state.
 // Pure functions over plain numbers: no store, no Vue, no assets.
 
 /**

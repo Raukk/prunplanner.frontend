@@ -1,8 +1,7 @@
 // Display shapes of the fleet page: which bay code a hull is, what one
 // fleet row states, and which ship types can still be added.
-// See docs/raukk_sourcing/shipping-fleet.md, section "Fleet page". Pure
-// functions with no store and no Vue — the components stay thin wiring
-// and everything testable lives here.
+// Pure functions with no store and no Vue — the components stay thin
+// wiring and everything testable lives here.
 
 // Calculations
 import { RAUKK_REPAIR_AT_DAMAGE } from "@/features/raukk_sourcing/calculations/shipping";

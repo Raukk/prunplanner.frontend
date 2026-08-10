@@ -2,7 +2,6 @@
 // user asks the only question that matters to a base — "how often does a
 // ship show up here?" — and, per hull type, how much ship time that
 // schedule costs.
-// See docs/raukk_sourcing/shipping-cadence-plan.md, "Phase 3 — display".
 // Pure functions with no store, no Vue and no i18n: the sentence itself
 // lives in the locale, this file only decides what numbers go into it.
 
