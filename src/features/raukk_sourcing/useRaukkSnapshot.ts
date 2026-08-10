@@ -16,6 +16,10 @@ import {
 	calculateRepairMaterialsPerDay,
 } from "@/features/raukk_sourcing/calculations/repairCapitalCost";
 import { calculateBaseFraction } from "@/features/raukk_sourcing/calculations/baseFraction";
+import {
+	RAUKK_LOOP_SOLVE_MAX_UNKNOWNS,
+	solveAffineFixedPoint,
+} from "@/features/raukk_sourcing/calculations/raukkLoopSolve";
 import { resolveLocalPrice } from "@/features/raukk_sourcing/calculations/priceMode";
 import { raukkSplitCargoBuckets } from "@/features/raukk_sourcing/calculations/cargoBuckets";
 import {
@@ -78,6 +82,7 @@ import {
 	IRaukkChainFlowCost,
 	IRaukkChainResult,
 	IRaukkLocalPrice,
+	IRaukkOutputCost,
 	IRaukkPlanConfig,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
@@ -154,19 +159,35 @@ export interface IRaukkPriceCaches {
 	dimensions: Record<string, IRaukkCargoDimension>;
 }
 
+/**
+ * Producer prices ONE computation is to use instead of the stored ones,
+ * keyed by producing plan uuid and then by ticker.
+ *
+ * The probe hook of the closed form loop solve: an override lets a
+ * computation be evaluated at a TRIAL price without writing anything to
+ * the store, which is what makes the affine map of a supply loop
+ * extractable at all. Absent entries keep the stored `costPerUnit`, so an
+ * empty or omitted override is exactly the normal computation.
+ */
+export type IRaukkProducerPriceOverride = Record<
+	string,
+	Record<string, number>
+>;
+
 /** Outcome of one snapshot computation */
 export interface IRaukkPlanSnapshotResult {
 	snapshot: IRaukkSnapshot;
 	prices: IRaukkPriceCaches;
 }
 
-/** Iteration cap of the self supply fixed point, see
+/** Iteration cap of the self supply FALLBACK loop, see
  * {@link computePlanSnapshot} */
 const RAUKK_SELF_LOOP_MAX_ITERATIONS: number = 10;
 
-// The self supply loop settles within the hybrid tolerance of
-// {@link outputsSettled}, over the `RAUKK_EPSILON_SETTLE` floor: an
-// output whose ȼ per unit no longer moves at its own magnitude.
+// The self supply loop is solved in closed form and only iterates when
+// that solve does not apply. Either way it settles within the hybrid
+// tolerance of {@link outputsSettled}, over the `RAUKK_EPSILON_SETTLE`
+// floor: an output whose ȼ per unit no longer moves at its own magnitude.
 
 /**
  * All tickers a plans sourcing numbers need prices for: everything
@@ -979,12 +1000,16 @@ async function loadRaukkPrices(params: {
  * snapshot so a caller displaying live numbers can adopt exactly the
  * ones the frozen values were computed from.
  *
- * A plan may source from itself — own output feeding own repairs — in
- * which case the pipeline reruns against its own freshly stored value
- * until the numbers settle (a fixed point exists because the self drawn
- * share is a fraction of the total cost) or the iteration cap is hit.
- * Cross plan loops settle the same way, but across chain recompute
- * passes instead of within one call.
+ * A plan may source from itself — own output feeding own repairs — which
+ * makes its own output cost both an input and a result of its cost math.
+ * That fixed point is solved EXACTLY rather than iterated: all cost math
+ * is units × price and the allocation weights are unit based, so the map
+ * from the self prices onto the computed ones is affine and one linear
+ * solve answers it (`calculations/raukkLoopSolve.ts`). The pipeline is
+ * probed at trial prices through an override that writes nothing, then
+ * evaluated once at the solution and verified there; only when that
+ * verification fails does the old iteration take over. Cross plan loops
+ * still settle by iterating, across chain recompute passes.
  *
  * Aggregate draws are pre split into concrete producer uuids before
  * storing, the persisted `draws` keys are always plan uuids. The base
@@ -1041,8 +1066,34 @@ export async function computePlanSnapshot(
 	 * One full snapshot computation against the current store state.
 	 * Reads the configuration and the producer snapshots live, so a
 	 * rerun after a store write picks up the plans own new value.
+	 *
+	 * `priceOverride` substitutes producer prices for THIS computation
+	 * only and writes nothing: it is how the loop solve probes the
+	 * pipeline at trial prices. Every consumer of a producer price inside
+	 * this function goes through the wrapped lookup below — the resolver,
+	 * the aggregate pools, the shipping origins and the draw splitting —
+	 * so an overridden self price is seen by all of them, an aggregate
+	 * pool the plan is itself a member of included.
 	 */
-	function computeOnce(): IRaukkSnapshot {
+	function computeOnce(
+		priceOverride?: IRaukkProducerPriceOverride
+	): IRaukkSnapshot {
+		/** The stores producers, with the overridden prices applied */
+		const producersOf = (ticker: string): IRaukkProducerOption[] => {
+			const producers: IRaukkProducerOption[] = getProducers(ticker);
+
+			if (priceOverride === undefined) return producers;
+
+			return producers.map((producer) => {
+				const costPerUnit: number | undefined =
+					priceOverride[producer.planUuid]?.[ticker];
+
+				return costPerUnit === undefined
+					? producer
+					: { ...producer, costPerUnit };
+			});
+		};
+
 		const config: IRaukkPlanConfig = sourcingStore.getConfig(
 			context.planUuid
 		);
@@ -1084,7 +1135,7 @@ export async function computePlanSnapshot(
 			inputBuckets,
 			inertClone(sourcingStore.sourcingDefaults),
 			(ticker: string, sourcePlanUuid: string) =>
-				getProducers(ticker).some(
+				producersOf(ticker).some(
 					(producer) => producer.planUuid === sourcePlanUuid
 				)
 		);
@@ -1099,7 +1150,7 @@ export async function computePlanSnapshot(
 			getExchange: (ticker: string) => prices.exchangePrices[ticker],
 			getDefaultPrice: (ticker: string) =>
 				prices.defaultPrices[ticker] ?? 0,
-			getProducers,
+			getProducers: producersOf,
 			getDemand: (ticker: string) => demandPerDay[ticker] ?? 0,
 			getOthersDrawn: (ticker: string) =>
 				othersDrawnPerDay(sourcingStore, context.planUuid, ticker),
@@ -1123,7 +1174,7 @@ export async function computePlanSnapshot(
 			planResult: context.planResult,
 			resolver,
 			shipResolver,
-			getProducers,
+			getProducers: producersOf,
 			shippingConfig,
 			sources: config.sources,
 			localSales: config.localSales ?? {},
@@ -1160,7 +1211,7 @@ export async function computePlanSnapshot(
 			// account wide: which producer the fuel comes from is a fleet
 			// question, so the draw follows the ship resolvers answer
 			withFuelDraws(result.draws, fuelUnitsPerDay, shipResolver),
-			getProducers
+			producersOf
 		);
 
 		const inputPrices: Record<string, number> = {};
@@ -1254,8 +1305,101 @@ export async function computePlanSnapshot(
 	let snapshot: IRaukkSnapshot = computeOnce();
 	sourcingStore.setSnapshot(context.planUuid, snapshot);
 
-	// self supply fixed point: rerun against the own stored value until
-	// the outputs settle, see the function doc
+	/*
+	 * Self supply fixed point, solved in CLOSED FORM.
+	 *
+	 * The unknowns are the own output tickers the plan draws from itself:
+	 * their ȼ per unit is both an input and an output of the cost math.
+	 * Every other price the computation sees is a constant of this
+	 * system, so the map from the k self prices onto the k freshly
+	 * computed ones is affine and `solveAffineFixedPoint` recovers it
+	 * exactly from k + 1 probe computations, none of which writes to the
+	 * store. See `calculations/raukkLoopSolve.ts`.
+	 */
+	const selfDraw: IRaukkMaterialUnits | undefined =
+		snapshot.draws[context.planUuid];
+
+	const unknowns: string[] =
+		selfDraw === undefined
+			? []
+			: Object.keys(selfDraw)
+					.filter((ticker) => snapshot.outputs[ticker] !== undefined)
+					.sort();
+
+	if (
+		unknowns.length > 0 &&
+		unknowns.length <= RAUKK_LOOP_SOLVE_MAX_UNKNOWNS
+	) {
+		/** One trial point as a producer price override of this plan */
+		const overrideOf = (
+			selfPrices: number[]
+		): IRaukkProducerPriceOverride => ({
+			[context.planUuid]: Object.fromEntries(
+				unknowns.map((ticker, index) => [ticker, selfPrices[index]])
+			),
+		});
+
+		const solved: number[] | null = solveAffineFixedPoint(
+			(selfPrices: number[]) => {
+				const probe: IRaukkSnapshot = computeOnce(
+					overrideOf(selfPrices)
+				);
+
+				return unknowns.map(
+					(ticker) => probe.outputs[ticker]?.costPerUnit ?? Number.NaN
+				);
+			},
+			unknowns.map((ticker) => snapshot.outputs[ticker].costPerUnit)
+		);
+
+		if (solved !== null) {
+			const final: IRaukkSnapshot = computeOnce(overrideOf(solved));
+
+			/*
+			 * VERIFICATION, and the one reason the iteration below still
+			 * exists: the solve assumes one affine map, and a discrete
+			 * decision inside the pipeline — an `AGG_MAX` argmax picking
+			 * another producer, an automatic hull pick — may flip between
+			 * two price points and split it into two. Evaluating at the
+			 * solved prices has to reproduce them within the very
+			 * tolerance the iteration would have stopped at; anything else
+			 * means the solved point is not a fixed point of the map that
+			 * actually applies there, and the iteration takes over.
+			 */
+			const predicted: Record<string, IRaukkOutputCost> = {};
+			const produced: Record<string, IRaukkOutputCost> = {};
+
+			unknowns.forEach((ticker, index) => {
+				const output: IRaukkOutputCost | undefined =
+					final.outputs[ticker];
+
+				// a ticker the solved point no longer produces at all is a
+				// structural change, which `outputsSettled` refuses below
+				if (output === undefined) return;
+
+				produced[ticker] = output;
+				predicted[ticker] = { ...output, costPerUnit: solved[index] };
+			});
+
+			if (
+				Object.keys(produced).length === unknowns.length &&
+				outputsSettled(predicted, produced)
+			) {
+				sourcingStore.setSnapshot(context.planUuid, final);
+
+				return { snapshot: final, prices };
+			}
+		}
+	}
+
+	/*
+	 * FALLBACK, reached when the closed form solve did not apply: more
+	 * unknowns than it attempts, a singular system (a loop consuming
+	 * 100 % of its own output has no finite fixed point), a probe that
+	 * produced no finite number, or a solved point the verification above
+	 * rejected. Rerun against the own stored value until the outputs
+	 * settle or the iteration cap is hit, exactly as before the solve.
+	 */
 	for (
 		let iteration = 1;
 		snapshot.draws[context.planUuid] !== undefined &&
