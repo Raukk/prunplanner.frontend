@@ -55,7 +55,6 @@
 		"total_cost": "Total Input Cost / Day",
 		"shipping_cost": "…of which Shipping / Day",
 		"repair_cost": "Repair Capital Cost / Day",
-		"no_producers": "No plan produces this ticker",
 		"market": "Market",
 		"lm_buy": "LM Buy",
 		"lm_buy_tooltip": "LM Buy prices this input at an ad on the local market of this base's own planet: nothing is bought at the exchange and no freight is charged for it, whatever cargo class it belongs to. Pick a basis and a price — Manual is the absolute ȼ/unit you offer, any market basis follows that price at the exchange named next to the basis minus the offset you enter (negative bids above it), never dropping below zero. A basis whose side of the book is empty — every side of the synthetic UNIVERSE exchange is — falls back to the 30 day VWAP. The resolved ȼ/unit is shown after the field and turns red once the offset has eaten the whole basis price. Trading on the local market needs a Pro license in game; a Basic account can still trade when the counterpart holds one.",
@@ -103,7 +102,8 @@
 		"self": "Own output",
 		"stale": "stale snapshot",
 		"agg_avg_mkt": "All producers (weighted avg + market top-up)",
-		"pooled": "from own bases"
+		"pooled": "from own bases",
+		"unavailable": "Unavailable source — the base no longer produces this"
 	},
 	"shipping_page": {
 		"view_title": "Shipping",

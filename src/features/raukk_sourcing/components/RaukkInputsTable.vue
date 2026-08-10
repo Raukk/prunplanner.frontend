@@ -1,9 +1,6 @@
 <script setup lang="ts">
 	import { computed, ComputedRef, PropType } from "vue";
 
-	import { useI18n } from "vue-i18n";
-	const { t } = useI18n();
-
 	// Components
 	import MaterialTile from "@/features/material_tile/components/MaterialTile.vue";
 	import RaukkLocalPriceInput from "@/features/raukk_sourcing/components/RaukkLocalPriceInput.vue";
@@ -13,32 +10,18 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PSelect, PTable, PTag, PTooltip } from "@/ui";
-	import { PSelectOption } from "@/ui/ui.types";
+	import { PTable, PTag, PTooltip } from "@/ui";
 
 	// Types & Interfaces
 	import {
 		IRaukkLocalPrice,
 		IRaukkTickerSource,
-		RAUKK_PRICE_MODE,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
 	import {
 		IRaukkInputRow,
 		IRaukkSourceOption,
 	} from "@/features/raukk_sourcing/raukkSourcingUi.types";
 	import { IRaukkExchangePrices } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
-
-	/** Sentinel of the "no configuration, use CX preference" entry */
-	const DEFAULT_MODE: string = "DEFAULT";
-
-	/** Sentinel of the "CX preference, ignore the account default" entry */
-	const CX_MODE: string = "CX";
-
-	/** Sentinel of the "bought on the local market here" entry */
-	const LOCAL_MODE: string = "LOCAL";
-
-	/** Ad price a freshly picked local buy starts from */
-	const DEFAULT_LOCAL_PRICE: IRaukkLocalPrice = { basis: "BID", value: 0 };
 
 	const props = defineProps({
 		rows: {
@@ -89,51 +72,6 @@
 		): void;
 	}>();
 
-	const priceModeOptions: ComputedRef<PSelectOption[]> = computed(() => [
-		{ label: t("raukk_sourcing.price_modes.default"), value: DEFAULT_MODE },
-		{ label: t("raukk_sourcing.price_modes.cx"), value: CX_MODE },
-		{ label: t("raukk_sourcing.price_modes.BID"), value: "BID" },
-		{ label: t("raukk_sourcing.price_modes.ASK"), value: "ASK" },
-		{ label: t("raukk_sourcing.price_modes.MID"), value: "MID" },
-		{ label: t("raukk_sourcing.price_modes.AVG7D"), value: "AVG7D" },
-		{ label: t("raukk_sourcing.price_modes.AVG30D"), value: "AVG30D" },
-		{ label: t("raukk_sourcing.inputs.lm_buy"), value: LOCAL_MODE },
-	]);
-
-	function priceModeValue(row: IRaukkInputRow): string {
-		if (row.source?.mode === "local") return LOCAL_MODE;
-		if (row.source?.mode === "cx") return CX_MODE;
-
-		return row.source?.mode === "market"
-			? row.source.priceMode
-			: DEFAULT_MODE;
-	}
-
-	function changePriceMode(row: IRaukkInputRow, value: string): void {
-		if (value === DEFAULT_MODE) {
-			emit("update:source", row.ticker, undefined);
-			return;
-		}
-
-		if (value === CX_MODE) {
-			emit("update:source", row.ticker, { mode: "cx" });
-			return;
-		}
-
-		if (value === LOCAL_MODE) {
-			emit("update:source", row.ticker, {
-				mode: "local",
-				price: { ...DEFAULT_LOCAL_PRICE },
-			});
-			return;
-		}
-
-		emit("update:source", row.ticker, {
-			mode: "market",
-			priceMode: value as RAUKK_PRICE_MODE,
-		});
-	}
-
 	/**
 	 * Ad price of a locally bought input, undefined while the ticker is
 	 * bought at the exchange or drawn from another plan.
@@ -160,7 +98,7 @@
 
 	/** Columns left of the value column, drives the footer colspans */
 	const labelColumns: ComputedRef<number> = computed(() =>
-		props.shippingEnabled ? 7 : 6
+		props.shippingEnabled ? 6 : 5
 	);
 
 	/** One display group of input rows */
@@ -210,7 +148,7 @@
 					{{ $t("raukk_sourcing.inputs.daily_need") }}
 				</th>
 				<th>
-					{{ $t("raukk_sourcing.inputs.price_mode") }}
+					{{ $t("raukk_sourcing.inputs.source") }}
 					<PTooltip>
 						<template #trigger>
 							<span class="pl-1 text-white/40 hover:cursor-help">
@@ -220,7 +158,6 @@
 						{{ $t("raukk_sourcing.inputs.lm_buy_tooltip") }}
 					</PTooltip>
 				</th>
-				<th>{{ $t("raukk_sourcing.inputs.source") }}</th>
 				<th v-if="shippingEnabled" class="text-right!">
 					{{ $t("raukk_sourcing.inputs.shipping_price") }}
 				</th>
@@ -275,19 +212,16 @@
 					</td>
 					<td>
 						<div class="flex flex-col gap-y-1">
-							<PSelect
-								class="w-37.5!"
-								:value="priceModeValue(row)"
-								:options="priceModeOptions"
-								:disabled="
-									disabled || row.source?.mode === 'plan'
+							<RaukkSourceCell
+								:source="row.source"
+								:from-default="row.fromDefault"
+								:options="
+									sourceOptions(row.ticker, row.unitsPerDay)
 								"
-								@update:value="
-									(v) =>
-										changePriceMode(
-											row,
-											String(v ?? DEFAULT_MODE)
-										)
+								:disabled="disabled"
+								@update:source="
+									(source) =>
+										emit('update:source', row.ticker, source)
 								" />
 							<RaukkLocalPriceInput
 								:price="localPrice(row)"
@@ -302,19 +236,6 @@
 										})
 								" />
 						</div>
-					</td>
-					<td>
-						<RaukkSourceCell
-							:source="row.source"
-							:from-default="row.fromDefault"
-							:options="
-								sourceOptions(row.ticker, row.unitsPerDay)
-							"
-							:disabled="disabled"
-							@update:source="
-								(source) =>
-									emit('update:source', row.ticker, source)
-							" />
 					</td>
 					<td v-if="shippingEnabled" class="text-right text-white/60">
 						{{ formatNumber(row.shippingPerUnit) }}

@@ -381,8 +381,18 @@ export function withFuelDraws(
  * shows up in the netted material I/O, feeding own repairs from own
  * output is therefore a legitimate edge. Supply loops are allowed —
  * frozen snapshot pricing never recurses, looping values settle over
- * repeated recomputes. The synthetic aggregates are appended as soon as
- * two or more producers exist.
+ * repeated recomputes.
+ *
+ * `AGG_AVG_MKT` is offered ALWAYS, a ticker nothing produces included.
+ * It is the one aggregate that stays correct across a changing set of
+ * bases: it prices the share the pool covers at the pool average and
+ * buys the rest at the market, so no producers at all simply means the
+ * full need is bought there — the same number `cx` would state. A row
+ * set to it therefore survives adding or removing a producing base
+ * without ever having to be reset by hand. `AGG_AVG` and `AGG_MAX`
+ * charge the whole need at pool cost however little the pool covers,
+ * which only makes sense once a pool actually exists: those two are
+ * still appended only from two producers up.
  *
  * `ownPct` is this plans prospective draw, `othersPct` everything other
  * plans already draw from the stored edges; the consumers own stored
@@ -398,8 +408,6 @@ export function buildSourceOptions(
 	input: IRaukkSourceOptionInput
 ): IRaukkSourceOption[] {
 	const producers: IRaukkProducerOption[] = input.producers;
-
-	if (producers.length === 0) return [];
 
 	function othersOf(producer: IRaukkProducerOption): number {
 		const subscription = input.subscriptionOf(
@@ -444,8 +452,6 @@ export function buildSourceOptions(
 			baseFraction: baseFractionOf(producer),
 		};
 	});
-
-	if (producers.length < 2) return options;
 
 	const unitsTotal: number = producers.reduce(
 		(sum, producer) => sum + producer.unitsPerDay,
@@ -509,7 +515,16 @@ export function buildSourceOptions(
 		othersTotal
 	);
 
-	(["AGG_AVG", "AGG_MAX", "AGG_AVG_MKT"] as RAUKK_SOURCE_AGGREGATE[]).forEach(
+	/**
+	 * The market topping aggregate always, the two pool-only ones from a
+	 * real pool of two upwards, see the function doc.
+	 */
+	const offered: RAUKK_SOURCE_AGGREGATE[] =
+		producers.length < 2
+			? ["AGG_AVG_MKT"]
+			: ["AGG_AVG", "AGG_MAX", "AGG_AVG_MKT"];
+
+	offered.forEach(
 		(aggregate) => {
 			const average: number = aggregateProducerPrice(
 				producers,

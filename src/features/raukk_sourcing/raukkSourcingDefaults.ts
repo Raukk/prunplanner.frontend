@@ -94,10 +94,32 @@ export function classifyInputBuckets(
 }
 
 /**
+ * Source every input bucket falls back to while the account stores no
+ * default of its own.
+ *
+ * The market topping aggregate, because it is the only source that stays
+ * right no matter what the account produces: it prices the share the own
+ * bases cover at their pool average and buys the rest at the exchange, so
+ * a ticker nothing produces costs EXACTLY what the CX preference price
+ * charged before this fallback existed. Adding or removing a producing
+ * base moves the numbers on its own, without a single row having to be
+ * re-pointed by hand — which is the entire reason the sourcing tool
+ * defaults to it rather than to the plain CX price.
+ *
+ * @author raukk
+ */
+export const RAUKK_BUILTIN_DEFAULT_SOURCE: IRaukkTickerSource = {
+	mode: "plan",
+	sourcePlanUuid: "AGG_AVG_MKT",
+};
+
+/**
  * Account wide default source of a ticker, given the buckets it sits in.
  *
- * The first bucket of {@link RAUKK_SOURCE_BUCKET_ORDER} carrying a default
- * wins; a ticker in no bucket, or in none with a default, has none.
+ * The first bucket of {@link RAUKK_SOURCE_BUCKET_ORDER} carrying a stored
+ * default wins. A ticker in a bucket none of which stores one falls back
+ * to {@link RAUKK_BUILTIN_DEFAULT_SOURCE}; only a ticker in no bucket at
+ * all — ship fuel, a ticker the plan does not consume — has no default.
  *
  * @author raukk
  *
@@ -109,14 +131,14 @@ export function defaultSourceOf(
 	buckets: RAUKK_SOURCE_BUCKET[] | undefined,
 	defaults: IRaukkSourcingDefaults
 ): IRaukkTickerSource | undefined {
-	if (!buckets) return undefined;
+	if (!buckets || buckets.length === 0) return undefined;
 
 	const bucket: RAUKK_SOURCE_BUCKET | undefined =
 		RAUKK_SOURCE_BUCKET_ORDER.find(
 			(candidate) => buckets.includes(candidate) && defaults[candidate]
 		);
 
-	return bucket ? defaults[bucket] : undefined;
+	return bucket ? defaults[bucket] : { ...RAUKK_BUILTIN_DEFAULT_SOURCE };
 }
 
 /**

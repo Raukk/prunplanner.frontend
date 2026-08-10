@@ -525,8 +525,34 @@ describe("Raukk Sourcing Pricing", () => {
 			expect(options[4].costPerUnit).toBe(17.5);
 		});
 
-		it("is empty without producers", () => {
-			expect(build({ producers: [] })).toStrictEqual([]);
+		it("offers the market top up alone without producers", () => {
+			const options: IRaukkSourceOption[] = build({ producers: [] });
+
+			expect(options.map((option) => option.value)).toStrictEqual([
+				"AGG_AVG_MKT",
+			]);
+		});
+
+		it("prices the market top up at the market without producers", () => {
+			const options: IRaukkSourceOption[] = build({
+				producers: [],
+				marketPrice: 42,
+			});
+
+			// nothing produced covers nothing, the whole need is bought
+			expect(options[0].coverage).toBe(0);
+			expect(options[0].costPerUnit).toBe(42);
+		});
+
+		it("offers the market top up next to a single producer", () => {
+			const options: IRaukkSourceOption[] = build({
+				producers: [producer("a", 10, 100)],
+			});
+
+			expect(options.map((option) => option.value)).toStrictEqual([
+				"a",
+				"AGG_AVG_MKT",
+			]);
 		});
 
 		it("handles producers without any output", () => {
