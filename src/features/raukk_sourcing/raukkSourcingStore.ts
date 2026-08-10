@@ -3,6 +3,7 @@ import { ref, Ref, watch } from "vue";
 
 // Stores
 import { usePlanningStore } from "@/stores/planningStore";
+import { planContentFingerprint } from "@/features/planning_data/usePlan";
 
 // Util
 import { inertClone } from "@/util/data";
@@ -256,6 +257,26 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Snapshots the CROSS PLAN sourcing steps — the producer pool and
+		 * the subscription rollup — are allowed to see.
+		 *
+		 * Follows `shippingConfig.allowUnassignedSources`: switched off,
+		 * which is the default, a plan belonging to no empire neither
+		 * produces for nor draws from the plans that do. Switched on, the
+		 * whole store answers, which is what the tool did before the rule
+		 * existed.
+		 * @author raukk
+		 *
+		 * @returns {Record<string, IRaukkSnapshot>} Snapshots in scope
+		 */
+		function sourcingScopedSnapshots(): Record<string, IRaukkSnapshot> {
+			if (shippingConfig.value.allowUnassignedSources === true)
+				return snapshots.value;
+
+			return scopedSnapshots();
+		}
+
+		/**
 		 * Gets a ship profile by id: the users override when one exists,
 		 * the shipped preset otherwise. An unknown id degrades to the
 		 * configured default profile and, should even that be gone, to
@@ -302,13 +323,18 @@ export const useRaukkSourcingStore = defineStore(
 		 * Lists all plans whose snapshot holds the given ticker as an
 		 * output. Stale snapshots are included and flagged as such,
 		 * their numbers still display in the source dropdown.
+		 *
+		 * Plans belonging to no empire are left out, see
+		 * {@link sourcingScopedSnapshots}. A configuration still naming
+		 * one therefore finds no producer and falls back to the market
+		 * default, which is exactly how a vanished snapshot degrades.
 		 * @author raukk
 		 *
 		 * @param {string} ticker Material Ticker
 		 * @returns {IRaukkProducerOption[]} Producing Plans
 		 */
 		function producersOf(ticker: string): IRaukkProducerOption[] {
-			return Object.entries(snapshots.value)
+			return Object.entries(sourcingScopedSnapshots())
 				.filter(([, snapshot]) => snapshot.outputs[ticker])
 				.map(([planUuid, snapshot]) => {
 					const output = snapshot.outputs[ticker];
@@ -329,6 +355,10 @@ export const useRaukkSourcingStore = defineStore(
 		 * Aggregates all draws other plans hold against one source
 		 * plans output ticker. Oversubscription is allowed, the
 		 * percentage can therefore exceed 1.
+		 *
+		 * Consumers belonging to no empire are left out, see
+		 * {@link sourcingScopedSnapshots}: a base the account does not
+		 * operate must not eat a real bases output on paper.
 		 * @author raukk
 		 *
 		 * @param {string} sourcePlanUuid Producing Plan Uuid
@@ -342,15 +372,17 @@ export const useRaukkSourcingStore = defineStore(
 			const byPlan: IRaukkSubscriptionEntry[] = [];
 			let totalDrawnPerDay: number = 0;
 
-			Object.entries(snapshots.value).forEach(([planUuid, snapshot]) => {
-				const amount: number | undefined =
-					snapshot.draws[sourcePlanUuid]?.[ticker];
+			Object.entries(sourcingScopedSnapshots()).forEach(
+				([planUuid, snapshot]) => {
+					const amount: number | undefined =
+						snapshot.draws[sourcePlanUuid]?.[ticker];
 
-				if (amount === undefined || amount === 0) return;
+					if (amount === undefined || amount === 0) return;
 
-				totalDrawnPerDay += amount;
-				byPlan.push({ planUuid, unitsPerDay: amount });
-			});
+					totalDrawnPerDay += amount;
+					byPlan.push({ planUuid, unitsPerDay: amount });
+				}
+			);
 
 			const sourceUnitsPerDay: number =
 				snapshots.value[sourcePlanUuid]?.outputs[ticker]?.unitsPerDay ??
@@ -377,6 +409,34 @@ export const useRaukkSourcingStore = defineStore(
 		 *
 		 * @param {string} planUuid Plan Uuid
 		 */
+		/**
+		 * Flags a plans snapshot stale when the plan itself has moved on
+		 * since the numbers were computed. Local edits already call
+		 * `markStale` through `PatchPlan`; this covers the version that
+		 * arrives from a background revalidation, i.e. an edit made on
+		 * another machine, which nothing else in the app can see.
+		 *
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 * @param {string} fingerprint Fingerprint of the current plan
+		 * @returns {boolean} True when the snapshot was flagged
+		 */
+		function markStaleIfPlanChanged(
+			planUuid: string,
+			fingerprint: string
+		): boolean {
+			const own: IRaukkSnapshot | undefined = snapshots.value[planUuid];
+
+			// nothing stored, or predates fingerprinting: leave it alone
+			// rather than flag every old snapshot on first sight
+			if (!own?.planFingerprint) return false;
+			if (own.planFingerprint === fingerprint) return false;
+
+			markStale(planUuid);
+			return true;
+		}
+
 		function markStale(planUuid: string): void {
 			const own: IRaukkSnapshot | undefined = snapshots.value[planUuid];
 			if (own) own.stale = true;
@@ -434,19 +494,29 @@ export const useRaukkSourcingStore = defineStore(
 		 * Marks all snapshots stale, unless shipping was off before and
 		 * stays off: a change that cannot move a single number must not
 		 * flag the users whole empire.
+		 *
+		 * `allowUnassignedSources` is the one field that escapes that
+		 * exemption: it decides which plans may price each other, which
+		 * is a sourcing question and moves numbers with shipping off just
+		 * as well.
 		 * @author raukk
 		 *
 		 * @param {Partial<IRaukkShippingConfig>} patch Configuration Patch
 		 */
 		function setShippingConfig(patch: Partial<IRaukkShippingConfig>): void {
 			const wasEnabled: boolean = shippingConfig.value.enabled;
+			const scopeChanged: boolean =
+				patch.allowUnassignedSources !== undefined &&
+				patch.allowUnassignedSources !==
+					shippingConfig.value.allowUnassignedSources;
 
 			shippingConfig.value = {
 				...shippingConfig.value,
 				...inertClone(patch),
 			};
 
-			if (wasEnabled || shippingConfig.value.enabled) markAllStale();
+			if (wasEnabled || shippingConfig.value.enabled || scopeChanged)
+				markAllStale();
 		}
 
 		/**
@@ -1466,9 +1536,21 @@ export const useRaukkSourcingStore = defineStore(
 			const previous: IRaukkSnapshot | undefined =
 				snapshots.value[planUuid];
 
+			/*
+				Record which version of the plan these numbers describe.
+				The snapshot was just computed from the plan the query
+				cache wrote through to the planning store, so that is the
+				version, and `markStaleIfPlanChanged` can later tell that
+				a newer one arrived from somewhere else.
+			*/
+			const plan = usePlanningStore().plans[planUuid];
+
 			snapshots.value[planUuid] = {
 				...inertClone(snapshot),
 				stale: false,
+				planFingerprint: plan
+					? planContentFingerprint(plan)
+					: undefined,
 			};
 
 			// dependents derive from the new draws as well
@@ -1698,6 +1780,7 @@ export const useRaukkSourcingStore = defineStore(
 			getConfig,
 			getSnapshot,
 			scopedSnapshots,
+			sourcingScopedSnapshots,
 			getShipProfile,
 			listShipProfiles,
 			producersOf,
@@ -1724,6 +1807,7 @@ export const useRaukkSourcingStore = defineStore(
 			setShipProfile,
 			resetShipProfile,
 			markStale,
+			markStaleIfPlanChanged,
 			markAllStale,
 			deletePlanData,
 			setChain,

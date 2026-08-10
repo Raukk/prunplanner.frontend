@@ -482,7 +482,8 @@ LM rate and ship assignment are pair-keyed.
 
 ## Round 16 (base-scoped transport view, WO-2)
 
-1. **The per-plan transport view exists now** (base-transport.md),
+1. **The per-plan transport view exists now** (superseded — see
+   transport.md),
    settling the "open, NOT decided" item of round 15.2 — as a
    collapsible "Transport for this base" section on the Sourcing tool
    next to the Shipping section, NOT a new route. The account page
@@ -922,8 +923,41 @@ had ever made a freighter faster. Full brief and design in
 6. **Lanes and chains both**, so the same journey never gets two
    answers.
 
+## Round 28 (unassigned plans stop bleeding into the account)
+
+Bug report: a chain kept routing through a plan the user had unchecked
+on the Management screen (2026-08-09, user, Shipping page). The account
+has many theoretical bases nobody operates.
+
+1. **Ownership scoping was not enough**: `scopedSnapshots()` already
+   dropped unassigned plans as flow OWNERS, but an ASSIGNED plan still
+   named an unassigned one as its source. That flow rode along, and the
+   automatic chain builder routed a loop through the unassigned planet.
+   The flow filter now looks at both ends — `raukkScopedFlows` drops a
+   lane whose `ownerPlanUuid` or `sourcePlanUuid` is out of scope — and
+   it lives inside `raukkScopedSnapshots`, so every account level reader
+   (chains, fleet rollup, hub/spoke, visuals, oversub) gets it without a
+   call-site change. Authored chains follow the same rule: membership
+   and member flows are read off the scoped snapshots.
+2. **The pricing question is the user's, so it is a setting**: whether
+   an unassigned plan may still be a SOURCE is
+   `shippingConfig.allowUnassignedSources`, DEFAULT OFF. Off, the plan
+   leaves the producer pool entirely — `producersOf` and `subscription`
+   read `sourcingScopedSnapshots()` — and a configuration still naming
+   it degrades to the market default with no draw booked, which is the
+   path a vanished snapshot already took. On, the old behaviour returns
+   for the price only; the flow filter of point 1 is unconditional,
+   because an unassigned base is not somewhere a hull actually flies.
+3. **Scoping is symmetric**: an unassigned CONSUMER stops eating an
+   operated base's output in the subscription rollup as well. A base the
+   account does not run cannot oversubscribe one it does.
+4. **The flip stales everything, shipping on or off**: it changes which
+   plans price each other, which is a sourcing question, so
+   `setShippingConfig` breaks its own "shipping off, nothing moved"
+   exemption for this one field.
+
 See shipping-plan.md for the implementation plan,
 shipping-chains-v2.md for the chains follow-up,
 shipping-fleet.md for fleet & calibration,
 shipping-cadence-plan.md for the cadence redesign phases, and
-base-transport.md for the base-scoped transport view.
+transport.md for the account-wide transport table.

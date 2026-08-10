@@ -337,6 +337,7 @@ describe("Raukk Sourcing: Ship Profiles", () => {
 			cadenceInOutDays: 14,
 			cadenceWorkforceDays: 30,
 			cxAnchorMode: "nearest",
+			allowUnassignedSources: false,
 		});
 		// the SCB starter hull every new game account flies
 		expect(RAUKK_DEFAULT_SHIP_PROFILE_ID).toBe("500x500-quick-charge");

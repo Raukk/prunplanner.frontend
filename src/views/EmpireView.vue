@@ -20,6 +20,7 @@
 	// Composables
 	import { useQuery } from "@/lib/query_cache/useQuery";
 	import { usePlanCalculation } from "@/features/planning/usePlanCalculation";
+	import { holdGameData } from "@/database/stores";
 	import { useMaterialIOUtil } from "@/features/planning/util/materialIO.util";
 	// raukk: background computation of missing sourcing snapshots
 	import { useRaukkEmpireAutoSnapshot } from "@/features/raukk_sourcing/useRaukkEmpireAutoSnapshot";
@@ -130,44 +131,58 @@
 	async function calculateEmpire(clearCache = false): Promise<void> {
 		isCalculating.value = true;
 
-		calculatedPlans.value = {};
-		progressTotal.value = planData.value.length;
-		progressCurrent.value = 0;
+		/*
+			Every plan below has to be priced from the same market
+			snapshot. Without this a background refresh landing between
+			two plans prices the rest of the empire differently, and the
+			totals — which are also PATCHed back to the backend — end up a
+			mix of both.
+		*/
+		const releaseGameData: () => Promise<void> = holdGameData();
 
-		if (clearCache) cacheCalculatedPlans.clear();
+		try {
+			calculatedPlans.value = {};
+			progressTotal.value = planData.value.length;
+			progressCurrent.value = 0;
 
-		for (const plan of planData.value) {
-			// note, calculation depends on empire + cx, so a plan is only
-			// calculated properly within this context
+			if (clearCache) cacheCalculatedPlans.clear();
 
-			const cacheKey: string = `${plan.uuid}#${selectedCXUuid.value}#${selectedCXUuid.value}`;
+			for (const plan of planData.value) {
+				// note, calculation depends on empire + cx, so a plan is
+				// only calculated properly within this context
 
-			if (cacheCalculatedPlans.has(cacheKey)) {
-				calculatedPlans.value[plan.uuid!] =
-					cacheCalculatedPlans.get(cacheKey)!;
-				progressCurrent.value++;
-			} else {
-				await Promise.resolve();
+				const cacheKey: string = `${plan.uuid}#${selectedCXUuid.value}#${selectedCXUuid.value}`;
 
-				const { calculate } = await usePlanCalculation(
-					toRef(plan),
-					selectedEmpireUuid,
-					refEmpireList,
-					selectedCXUuid
-				);
+				if (cacheCalculatedPlans.has(cacheKey)) {
+					calculatedPlans.value[plan.uuid!] =
+						cacheCalculatedPlans.get(cacheKey)!;
+					progressCurrent.value++;
+				} else {
+					await Promise.resolve();
 
-				const result = await calculate();
-				calculatedPlans.value[plan.uuid!] = result;
-				progressCurrent.value++;
+					const { calculate } = await usePlanCalculation(
+						toRef(plan),
+						selectedEmpireUuid,
+						refEmpireList,
+						selectedCXUuid
+					);
 
-				// cache
-				cacheCalculatedPlans.set(cacheKey, result);
-				// yield back to vue and update DOM
-				await new Promise((r) => setTimeout(r, 0));
+					const result = await calculate();
+					calculatedPlans.value[plan.uuid!] = result;
+					progressCurrent.value++;
+
+					// cache
+					cacheCalculatedPlans.set(cacheKey, result);
+					// yield back to vue and update DOM
+					await new Promise((r) => setTimeout(r, 0));
+				}
 			}
+		} finally {
+			// a hold that is never released would freeze game data for
+			// the rest of the session
+			await releaseGameData();
+			isCalculating.value = false;
 		}
-
-		isCalculating.value = false;
 
 		empireMaterialIOState(
 			selectedEmpire.value,

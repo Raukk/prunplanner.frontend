@@ -1,11 +1,21 @@
-import { reactive, computed, ComputedRef, Reactive } from "vue";
+import {
+	reactive,
+	computed,
+	ComputedRef,
+	Reactive,
+	ref,
+	Ref,
+	onScopeDispose,
+} from "vue";
 import { defineStore } from "pinia";
+import pLimit from "p-limit";
 
 import { userActivity } from "@/features/user_activity/userActivityStore";
 import { useQueryRepository } from "@/lib/query_cache/queryRepository";
 import { isSubset, toCacheKey } from "@/lib/query_cache/cacheKeys";
 
 import {
+	IQueryCacheMeta,
 	IQueryDefinition,
 	IQueryState,
 	JSONValue,
@@ -16,6 +26,55 @@ import {
 	ParamsOfDefinition,
 } from "@/lib/query_cache/queryRepository.types";
 
+/**
+ * Bumped whenever the persisted meta shape changes, a mismatch drops
+ * all persisted meta on load.
+ */
+export const CACHE_META_VERSION: number = 1;
+
+/**
+ * Upper bound of persisted meta entries, oldest are pruned first.
+ * Meta holds no payloads, so this is only a guard against unbounded
+ * localStorage growth from parameterized keys (planets, searches).
+ */
+export const CACHE_META_MAX_ENTRIES: number = 500;
+
+/**
+ * Entries whose data outlived their expiry by this much are dropped
+ * from memory entirely, even though stale data is normally kept and
+ * revalidated in the background.
+ */
+export const CACHE_GC_MS: number = 24 * 60 * 60 * 1000;
+
+/**
+ * Parallel requests a manual full refresh is allowed to fire. A cache
+ * holding many planets would otherwise burst dozens of calls at once.
+ */
+export const REFRESH_CONCURRENCY: number = 6;
+
+/**
+ * Cooldown after a failed background revalidation. A background failure
+ * deliberately keeps the cached payload and records no error, so without
+ * this the entry stays expired and would be retried on every watcher
+ * tick and every read for as long as the backend is down.
+ */
+export const REVALIDATE_RETRY_MS: number = 60_000;
+
+/**
+ * Channel other tabs of this browser listen on. Tabs share localStorage
+ * and IndexedDB but not memory, so an invalidation performed by the tab
+ * that saved would otherwise be invisible everywhere else — leaving the
+ * other tabs serving, and hydrating, the pre-save plan.
+ */
+export const CACHE_CHANNEL_NAME: string = "prunplanner_query_cache";
+
+/** Message a tab publishes after a mutation invalidated cache keys. */
+export interface IQueryCacheMessage {
+	type: "invalidate" | "reset";
+	key?: JSONValue;
+	exact?: boolean;
+}
+
 export const useQueryStore = defineStore(
 	"prunplanner_query_store",
 	() => {
@@ -23,16 +82,216 @@ export const useQueryStore = defineStore(
 
 		const queryRepository = useQueryRepository();
 
+		/**
+		 * Cross tab channel. Absent in environments without
+		 * BroadcastChannel, in which case the cache simply behaves as a
+		 * single tab one.
+		 */
+		let channel: BroadcastChannel | null = null;
+		try {
+			channel =
+				typeof BroadcastChannel !== "undefined"
+					? new BroadcastChannel(CACHE_CHANNEL_NAME)
+					: null;
+		} catch {
+			channel = null;
+		}
+
+		function publish(message: IQueryCacheMessage): void {
+			try {
+				channel?.postMessage(message);
+			} catch (err) {
+				console.error("Query cache broadcast failed", err);
+			}
+		}
+
 		const cacheState: Reactive<
 			Record<string, IQueryState<unknown, unknown>>
 		> = reactive({});
 
-		function deleteState(key: string) {
-			delete cacheState[key];
+		/**
+		 * Persisted, payload-free description of what was cached and
+		 * when. Rehydrating a payload uses the definitions `hydrateFn`
+		 * against IndexedDB or the persisted planning store, so the
+		 * megabytes of game data are never duplicated into
+		 * localStorage.
+		 */
+		const cacheMeta: Reactive<Record<string, IQueryCacheMeta>> = reactive(
+			{}
+		);
+
+		const cacheMetaVersion: Ref<number> = ref(CACHE_META_VERSION);
+		const cacheAppVersion: Ref<string> = ref(
+			typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""
+		);
+
+		/**
+		 * Hydration attempt per key, successful or not. Holding the
+		 * promise rather than a flag lets concurrent callers await the
+		 * same attempt instead of racing into a duplicate fetch.
+		 */
+		const hydrationAttempted = new Map<string, Promise<boolean>>();
+
+		/** True while a user triggered full refresh is running. */
+		const refreshing: Ref<boolean> = ref(false);
+
+		/**
+		 * Views holding unsaved work register here. Remounting is not a
+		 * route navigation, so `onBeforeRouteLeave` cannot protect them
+		 * and a refresh would silently discard the edits.
+		 */
+		const remountGuards = new Set<() => boolean>();
+
+		/**
+		 * Registers a guard that blocks the post refresh remount while
+		 * it returns true.
+		 *
+		 * @author jplacht
+		 *
+		 * @param {() => boolean} guard Blocks remount while true
+		 * @returns {() => void} Unregister callback
+		 */
+		function registerRemountGuard(guard: () => boolean): () => void {
+			remountGuards.add(guard);
+			return () => {
+				remountGuards.delete(guard);
+			};
 		}
 
-		function $reset(): void {
-			Object.keys(cacheState).forEach((key) => delete cacheState[key]);
+		/**
+		 * Per key counter, bumped whenever an entry is dropped. Work that
+		 * started before a drop must not write its result back into the
+		 * entry, otherwise an invalidation triggered by a mutation is
+		 * silently undone by an older in-flight read.
+		 */
+		const invalidationEpoch = new Map<string, number>();
+
+		/**
+		 * Key prefixes invalidated during this session. A mutation makes
+		 * the local stores behind the backend for its whole key space,
+		 * not just for keys that happen to be cached right now, so
+		 * hydration must stop trusting them — including keys read for the
+		 * first time after the mutation. Game data is never invalidated
+		 * by a mutation, so it keeps hydrating.
+		 */
+		const invalidatedPrefixes = new Map<string, JSONValue>();
+
+		function blockHydration(key: JSONValue): void {
+			invalidatedPrefixes.set(toCacheKey(key), key);
+		}
+
+		function isHydrationBlocked(key: JSONValue): boolean {
+			for (const prefix of invalidatedPrefixes.values()) {
+				if (isSubset(prefix, key)) return true;
+			}
+			return false;
+		}
+
+		function epochOf(key: string): number {
+			return invalidationEpoch.get(key) ?? 0;
+		}
+
+		function bumpEpoch(key: string): void {
+			invalidationEpoch.set(key, epochOf(key) + 1);
+		}
+
+		/**
+		 * Incremented after every completed manual refresh. Views key
+		 * their data wrappers on it so a refresh re-reads the cache
+		 * without a page reload.
+		 */
+		const refreshGeneration: Ref<number> = ref(0);
+
+		/**
+		 * Incremented by `$reset`, i.e. on logout. A fetch that started
+		 * for the previous user seeds sibling entries from inside its
+		 * fetchFn, which the per key epoch cannot cover because those
+		 * keys were never in the cache to be bumped. Callers capture this
+		 * before fetching and hand it back so those writes can be
+		 * dropped.
+		 */
+		const sessionGeneration: Ref<number> = ref(0);
+
+		function deleteState(key: string) {
+			delete cacheState[key];
+			delete cacheMeta[key];
+			hydrationAttempted.delete(key);
+			bumpEpoch(key);
+
+			/*
+				Clearing the hydration attempt is safe because staleness is
+				tracked separately: a mutation records its key prefix in
+				`invalidatedPrefixes` and hydration refuses anything under
+				it. An eviction records nothing, so the entry may be
+				rebuilt from local storage — which is what keeps an offline
+				user's data reachable after the stale GC drops it.
+			*/
+		}
+
+		/**
+		 * Applies an invalidation another tab performed. Never refetches:
+		 * a background tab has nothing on screen to refresh, and N tabs
+		 * stampeding the backend after one save would be worse than
+		 * letting each fetch lazily on its next read.
+		 *
+		 * @author jplacht
+		 *
+		 * @param {MessageEvent<IQueryCacheMessage>} event Channel message
+		 */
+		function onChannelMessage(event: MessageEvent<IQueryCacheMessage>) {
+			const message = event.data;
+			if (!message) return;
+
+			if (message.type === "reset") {
+				$reset(true);
+				return;
+			}
+
+			if (message.type === "invalidate" && message.key !== undefined) {
+				invalidateKey(message.key, {
+					exact: message.exact ?? true,
+					skipRefetch: true,
+					fromRemote: true,
+				});
+			}
+		}
+
+		if (channel) channel.onmessage = onChannelMessage;
+
+		// an open channel is a live handle; leaving it dangling keeps the
+		// store's scope reachable and, in tests, every torn down
+		// environment behind
+		onScopeDispose(() => {
+			try {
+				channel?.close();
+			} catch {
+				/* already closed */
+			}
+			channel = null;
+		});
+
+		/**
+		 * Clears the whole cache, e.g. on logout.
+		 *
+		 * @author jplacht
+		 *
+		 * @param {boolean} [fromRemote=false] Set when another tab asked
+		 * 		for this, which must not be echoed back to it
+		 */
+		function $reset(fromRemote: boolean = false): void {
+			if (!fromRemote) publish({ type: "reset" });
+
+			Object.keys(cacheState).forEach((key) => {
+				delete cacheState[key];
+				bumpEpoch(key);
+			});
+			Object.keys(cacheMeta).forEach((key) => delete cacheMeta[key]);
+			hydrationAttempted.clear();
+			invalidatedPrefixes.clear();
+			sessionGeneration.value += 1;
+			// note: invalidationEpoch is deliberately NOT cleared, the
+			// bumps above are what stop a request still in flight for the
+			// previous user from writing its result back
 			inFlight.clear();
 		}
 
@@ -55,8 +314,81 @@ export const useQueryStore = defineStore(
 					error: null,
 					timestamp: 0,
 					autoRefetch: false,
+					revalidating: false,
+					hasData: false,
 					...updateData,
 				};
+		}
+
+		/**
+		 * Records a cache entry in the persisted meta so a later session
+		 * knows the payload exists locally and how old it is.
+		 *
+		 * @author jplacht
+		 *
+		 * @param {string} keyHash Cache Key hash
+		 * @param {string} definitionName Query definition name
+		 * @param {unknown} params Query params
+		 * @param {number} timestamp Fetch timestamp
+		 * @param {(number | undefined)} expireTime Definition expiry
+		 */
+		function writeMeta(
+			keyHash: string,
+			definitionName: string,
+			params: unknown,
+			timestamp: number,
+			expireTime: number | undefined
+		): void {
+			cacheMeta[keyHash] = {
+				definitionName,
+				params: params ?? null,
+				timestamp,
+				expireTime,
+			};
+
+			pruneMeta();
+		}
+
+		/**
+		 * Keeps persisted meta bounded by dropping the oldest entries.
+		 *
+		 * @author jplacht
+		 */
+		function pruneMeta(): void {
+			const keys = Object.keys(cacheMeta);
+			if (keys.length <= CACHE_META_MAX_ENTRIES) return;
+
+			keys.sort(
+				(a, b) =>
+					(cacheMeta[a]?.timestamp ?? 0) -
+					(cacheMeta[b]?.timestamp ?? 0)
+			)
+				.slice(0, keys.length - CACHE_META_MAX_ENTRIES)
+				.forEach((key) => delete cacheMeta[key]);
+		}
+
+		/**
+		 * Drops all persisted meta if it was written by a different app
+		 * or meta version. Payloads live in IndexedDB and the planning
+		 * store, both of which are versioned separately, so a mismatch
+		 * only means "do not trust these timestamps".
+		 *
+		 * @author jplacht
+		 */
+		function validateMetaVersion(): void {
+			const appVersion =
+				typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "";
+
+			if (
+				cacheMetaVersion.value === CACHE_META_VERSION &&
+				cacheAppVersion.value === appVersion
+			) {
+				return;
+			}
+
+			Object.keys(cacheMeta).forEach((key) => delete cacheMeta[key]);
+			cacheMetaVersion.value = CACHE_META_VERSION;
+			cacheAppVersion.value = appVersion;
 		}
 
 		function getCachedData<K extends keyof IQueryRepository>(
@@ -64,6 +396,312 @@ export const useQueryStore = defineStore(
 		): DataOfDefinition<IQueryRepository[K]> | null {
 			const state = cacheState[keyHash];
 			return state?.data as DataOfDefinition<IQueryRepository[K]> | null;
+		}
+
+		/**
+		 * True if the entry holds a usable payload. Tracked separately
+		 * from `data !== null` so a definition that legitimately caches
+		 * null is not refetched forever.
+		 *
+		 * @author jplacht
+		 *
+		 * @param {string} keyHash Cache Key hash
+		 * @returns {boolean} Entry holds a payload
+		 */
+		function hasCachedData(keyHash: string): boolean {
+			const state = cacheState[keyHash];
+			if (!state) return false;
+			return state.hasData === true || state.data !== null;
+		}
+
+		/**
+		 * Attempts to rebuild a queries payload from local durable
+		 * storage instead of the network. Silently gives up on any
+		 * failure, the caller then falls back to fetching.
+		 *
+		 * @author jplacht
+		 *
+		 * @async
+		 * @template K Query definition key
+		 * @param {string} keyHash Cache Key hash
+		 * @param {K} definitionName Query definition name
+		 * @param {ParamsOfDefinition<IQueryRepository[K]>} params Params
+		 * @returns {Promise<boolean>} Hydration provided data
+		 */
+		async function hydrateEntry<K extends keyof IQueryRepository>(
+			keyHash: string,
+			definitionName: K,
+			params: ParamsOfDefinition<IQueryRepository[K]>
+		): Promise<boolean> {
+			const definition = queryRepository.repository[
+				definitionName
+			] as IQueryDefinition<
+				ParamsOfDefinition<IQueryRepository[K]>,
+				DataOfDefinition<IQueryRepository[K]>
+			>;
+
+			if (!definition?.hydrateFn || definition.persist === false) {
+				return false;
+			}
+
+			// a mutation already made local storage stale for this key
+			// space, only the backend can be trusted for it now
+			if (isHydrationBlocked(definition.key(params))) return false;
+
+			const startEpoch = epochOf(keyHash);
+
+			try {
+				const data = await definition.hydrateFn(params);
+
+				// the entry was invalidated while we read local storage,
+				// resurrecting it here would undo that invalidation
+				if (epochOf(keyHash) !== startEpoch) return false;
+
+				// nothing stored locally
+				if (data === null || data === undefined) return false;
+				if (Array.isArray(data) && data.length === 0) return false;
+
+				// a known meta timestamp keeps the entry fresh for the
+				// remainder of its ttl, an unknown one marks it stale so
+				// it renders instantly and revalidates in background
+				const meta = cacheMeta[keyHash];
+
+				updateState(keyHash, {
+					definitionName,
+					params: params ?? undefined,
+					data,
+					hasData: true,
+					hydrated: true,
+					error: null,
+					timestamp: meta?.timestamp ?? 0,
+					expireTime: definition.expireTime,
+					autoRefetch: definition.autoRefetch,
+				});
+
+				return true;
+			} catch (err) {
+				console.error("Query cache hydration failed", keyHash, err);
+				return false;
+			}
+		}
+
+		/**
+		 * Hydrates a key at most once per session, sharing one attempt
+		 * between concurrent callers so a second consumer cannot slip
+		 * past an unfinished hydration into a duplicate fetch.
+		 *
+		 * @author jplacht
+		 *
+		 * @async
+		 * @template K Query definition key
+		 * @param {string} keyHash Cache Key hash
+		 * @param {K} definitionName Query definition name
+		 * @param {ParamsOfDefinition<IQueryRepository[K]>} params Params
+		 * @returns {Promise<boolean>} Hydration provided data
+		 */
+		function ensureHydrated<K extends keyof IQueryRepository>(
+			keyHash: string,
+			definitionName: K,
+			params: ParamsOfDefinition<IQueryRepository[K]>
+		): Promise<boolean> {
+			let attempt = hydrationAttempted.get(keyHash);
+
+			if (!attempt) {
+				attempt = hydrateEntry(keyHash, definitionName, params);
+				hydrationAttempted.set(keyHash, attempt);
+			}
+
+			return attempt;
+		}
+
+		/**
+		 * Runs a definitions fetchFn and writes the result into the
+		 * cache. A background run keeps any existing payload visible and
+		 * flags `revalidating` instead of `loading`.
+		 *
+		 * @author jplacht
+		 *
+		 * @template K Query definition key
+		 * @param {string} keyHash Cache Key hash
+		 * @param {K} definitionName Query definition name
+		 * @param {ParamsOfDefinition<IQueryRepository[K]>} params Params
+		 * @param {boolean} background Run as background revalidation
+		 * @returns {Promise<DataOfDefinition<IQueryRepository[K]>>} Data
+		 */
+		function runFetch<K extends keyof IQueryRepository>(
+			keyHash: string,
+			definitionName: K,
+			params: ParamsOfDefinition<IQueryRepository[K]>,
+			background: boolean
+		): Promise<DataOfDefinition<IQueryRepository[K]>> {
+			const definition = queryRepository.repository[
+				definitionName
+			] as IQueryDefinition<
+				ParamsOfDefinition<IQueryRepository[K]>,
+				DataOfDefinition<IQueryRepository[K]>
+			>;
+
+			const shouldCache = definition.persist !== false;
+			const startEpoch = epochOf(keyHash);
+
+			updateState(keyHash, {
+				definitionName,
+				params: params ?? undefined,
+				loading: background
+					? (cacheState[keyHash]?.loading ?? false)
+					: true,
+				revalidating: background,
+				error: background ? (cacheState[keyHash]?.error ?? null) : null,
+				autoRefetch: definition.autoRefetch,
+				expireTime: definition.expireTime,
+			});
+
+			/*
+				Held in an object rather than a plain binding so the body
+				can tell whether this run is still the one registered in
+				`inFlight`. A fetchFn that throws before its first await
+				runs the `finally` while the initializer is still on the
+				stack, where `run.promise` simply reads undefined instead
+				of hitting a temporal dead zone.
+			*/
+			const run: {
+				promise?: Promise<DataOfDefinition<IQueryRepository[K]>>;
+			} = {};
+
+			run.promise = (async () => {
+				try {
+					const result: DataOfDefinition<IQueryRepository[K]> =
+						await definition.fetchFn(
+							params as ParamsOfDefinition<IQueryRepository[K]>
+						);
+
+					// invalidated mid-flight: hand the result to the
+					// caller but do not write it back, it is already
+					// known to be outdated
+					if (epochOf(keyHash) !== startEpoch) {
+						return result as DataOfDefinition<IQueryRepository[K]>;
+					}
+
+					if (shouldCache) {
+						const timestamp = Date.now();
+
+						updateState(keyHash, {
+							data: result,
+							hasData: true,
+							hydrated: false,
+							error: null,
+							timestamp,
+							// the backend answered, drop any backoff
+							revalidateFailedAt: undefined,
+						});
+
+						writeMeta(
+							keyHash,
+							definitionName as string,
+							params,
+							timestamp,
+							definition.expireTime
+						);
+					}
+
+					return result as DataOfDefinition<IQueryRepository[K]>;
+				} catch (err) {
+					const error =
+						err instanceof Error ? err : new Error(String(err));
+
+					// a failed background refresh must not destroy the
+					// cached payload the user is currently looking at,
+					// nor may either case revive an invalidated entry
+					if (background || epochOf(keyHash) !== startEpoch) {
+						/*
+							A background failure records no error so the
+							cached payload stays usable, so note the
+							attempt instead or the entry stays expired and
+							is retried on every tick and every read. Only
+							while this run still owns the entry: a
+							superseded run must not back off the
+							replacement that took its place.
+						*/
+						if (
+							cacheState[keyHash] &&
+							epochOf(keyHash) === startEpoch
+						) {
+							updateState(keyHash, {
+								revalidateFailedAt: Date.now(),
+							});
+						}
+						console.error(err);
+					} else {
+						updateState(keyHash, {
+							error,
+							timestamp: Date.now(),
+						});
+						console.error(err);
+					}
+
+					throw error;
+				} finally {
+					/*
+						Only tidy up what this run still owns. A run that
+						was superseded — by an invalidation, or by a
+						replacement fetch for the same key — must not
+						clear the flags of, or drop the in-flight entry
+						of, whatever took its place.
+					*/
+					const superseded = epochOf(keyHash) !== startEpoch;
+
+					if (!superseded && cacheState[keyHash]) {
+						updateState(keyHash, {
+							loading: background
+								? (cacheState[keyHash]?.loading ?? false)
+								: false,
+							revalidating: false,
+						});
+					}
+
+					if (inFlight.get(keyHash) === run.promise) {
+						inFlight.delete(keyHash);
+					}
+
+					if (!shouldCache && !superseded) deleteState(keyHash);
+				}
+			})();
+
+			inFlight.set(keyHash, run.promise);
+
+			return run.promise as Promise<
+				DataOfDefinition<IQueryRepository[K]>
+			>;
+		}
+
+		/**
+		 * Kicks off a background revalidation, swallowing failures. The
+		 * caller keeps serving the cached payload either way.
+		 *
+		 * @author jplacht
+		 *
+		 * @template K Query definition key
+		 * @param {string} keyHash Cache Key hash
+		 * @param {K} definitionName Query definition name
+		 * @param {ParamsOfDefinition<IQueryRepository[K]>} params Params
+		 */
+		function revalidate<K extends keyof IQueryRepository>(
+			keyHash: string,
+			definitionName: K,
+			params: ParamsOfDefinition<IQueryRepository[K]>
+		): void {
+			if (inFlight.has(keyHash)) return;
+
+			// back off after a failure, an entry serving stale data is
+			// not worth hammering an unreachable backend for
+			const failedAt = cacheState[keyHash]?.revalidateFailedAt ?? 0;
+			if (failedAt && Date.now() - failedAt < REVALIDATE_RETRY_MS) {
+				return;
+			}
+
+			runFetch(keyHash, definitionName, params, true).catch(() => {
+				/* handled in runFetch, cached data stays valid */
+			});
 		}
 
 		async function execute<K extends keyof IQueryRepository>(
@@ -85,19 +723,60 @@ export const useQueryStore = defineStore(
 				updateState(keyHash, { definitionName });
 			}
 
+			updateState(keyHash, { expireTime: definition.expireTime });
+
+			const startEpoch = epochOf(keyHash);
+
+			// no payload in memory yet: try local storage before the
+			// network, this is what removes the loading screen after a
+			// hard refresh
+			if (!options?.forceRefetch && !hasCachedData(keyHash)) {
+				await ensureHydrated(keyHash, definitionName, params);
+			}
+
+			/*
+				Awaiting hydration gives an invalidation the chance to drop
+				this entry, so the invariant established above no longer
+				holds. Rebuild a clean entry and let it fall through to a
+				fetch rather than trusting anything from before the drop.
+			*/
+			if (epochOf(keyHash) !== startEpoch) {
+				delete cacheState[keyHash];
+			}
+
+			if (!cacheState[keyHash]) {
+				updateState(keyHash, {
+					definitionName,
+					expireTime: definition.expireTime,
+				});
+			}
+
 			const state = cacheState[keyHash]!;
 
 			const now = Date.now();
 			const ttl = definition.expireTime;
 			const expired = ttl !== undefined && now - state.timestamp > ttl;
-			const shouldCache = definition.persist !== false;
 
-			updateState(keyHash, { expireTime: definition.expireTime });
+			/*
+				Data restored from local storage for a definition without
+				an expiry is user owned (plans, empires, cx) and may have
+				been changed from another browser. It paints instantly,
+				but is always confirmed against the backend once per
+				session. Game data carries a ttl and is trusted until it
+				runs out.
+			*/
+			const unconfirmed = state.hydrated === true && ttl === undefined;
 
-			// return cached data if valid
-			const cachedData = getCachedData<K>(keyHash);
-			if (cachedData !== null && !options?.forceRefetch && !expired) {
-				return cachedData;
+			// serve cached data, revalidating in the background when it
+			// aged past its expiry
+			if (hasCachedData(keyHash) && !options?.forceRefetch) {
+				if (expired || unconfirmed) {
+					revalidate(keyHash, definitionName, params);
+				}
+
+				return getCachedData<K>(keyHash) as DataOfDefinition<
+					IQueryRepository[K]
+				>;
 			}
 
 			// return in-flight promise if exists
@@ -107,47 +786,7 @@ export const useQueryStore = defineStore(
 				>;
 			}
 
-			// mark as loading
-			updateState(keyHash, {
-				params: params ?? undefined,
-				loading: true,
-				error: null,
-				autoRefetch: definition.autoRefetch,
-			});
-
-			const promise = (async () => {
-				try {
-					const result: DataOfDefinition<IQueryRepository[K]> =
-						await definition.fetchFn(
-							params as ParamsOfDefinition<IQueryRepository[K]>
-						);
-
-					if (shouldCache) {
-						updateState(keyHash, {
-							data: result,
-							timestamp: Date.now(),
-						});
-					}
-
-					return result as DataOfDefinition<IQueryRepository[K]>;
-				} catch (err) {
-					updateState(keyHash, {
-						error:
-							err instanceof Error ? err : new Error(String(err)),
-						timestamp: Date.now(),
-					});
-					console.error(err);
-					throw err;
-				} finally {
-					updateState(keyHash, { loading: false });
-					inFlight.delete(keyHash);
-					if (!shouldCache) deleteState(keyHash);
-				}
-			})();
-
-			inFlight.set(keyHash, promise);
-
-			return promise as Promise<DataOfDefinition<IQueryRepository[K]>>;
+			return runFetch(keyHash, definitionName, params, false);
 		}
 
 		/**
@@ -217,19 +856,23 @@ export const useQueryStore = defineStore(
 		 * @template TParams Query Params Type
 		 * @template TData Query Data Type
 		 * @param {JSONValue} key Query Key
-		 * @param {{ exact?: boolean; forceRefetch?: boolean; skipRefetch?: boolean }} [options={
+		 * @param {{ exact?: boolean; forceRefetch?: boolean; skipRefetch?: boolean; keepHydration?: boolean }} [options={
 		 * 			exact: true,
 		 * 			forceRefetch: false,
 		 * 			skipRefetch: false,
-		 * 		}] Options, by default will check for exact matches and doesn't force refresh
+		 * 		}] Options, by default will check for exact matches and doesn't force refresh.
+		 * 		`keepHydration` marks the call as eviction rather than a
+		 * 		mutation, leaving local storage trusted for the key.
 		 * @returns {Promise<void>}
 		 */
 		async function invalidateKey<K extends keyof IQueryRepository, TParams>(
 			key: JSONValue,
 			options: {
+				keepHydration?: boolean;
 				exact?: boolean;
 				forceRefetch?: boolean;
 				skipRefetch?: boolean;
+				fromRemote?: boolean;
 			} = {
 				exact: true,
 				forceRefetch: false,
@@ -237,6 +880,29 @@ export const useQueryStore = defineStore(
 			}
 		): Promise<void> {
 			const keyHash: string = toCacheKey(key);
+
+			/*
+				Everything under this key is now known to be behind the
+				backend, whether or not it is currently cached. Eviction
+				(stale GC, dropping FIO data on sign-out) is not a
+				mutation and must not disable hydration for the key.
+			*/
+			if (!options.keepHydration) blockHydration(key);
+
+			/*
+				Tell the other tabs. They hold their own copy of this key
+				in their own memory, and their own planningStore that
+				hydration reads from, neither of which this mutation
+				touched. `fromRemote` stops a received message being
+				echoed straight back out.
+			*/
+			if (!options.keepHydration && !options.fromRemote) {
+				publish({
+					type: "invalidate",
+					key,
+					exact: options.exact ?? true,
+				});
+			}
 
 			const toRefetch: {
 				definitionKey: K;
@@ -318,8 +984,18 @@ export const useQueryStore = defineStore(
 			key: JSONValue,
 			definitionName: K,
 			params: TParams,
-			data: TData
+			data: TData,
+			sessionGuard?: number
 		): Promise<void> {
+			// seeded by a fetch that belonged to a previous session, e.g.
+			// one still in flight when the user logged out
+			if (
+				sessionGuard !== undefined &&
+				sessionGuard !== sessionGeneration.value
+			) {
+				return;
+			}
+
 			const keyHash: string = toCacheKey(key);
 			// identify correct definition
 			const definition: IQueryRepository[K] =
@@ -327,20 +1003,37 @@ export const useQueryStore = defineStore(
 
 			// do not overwrite existing state for key
 			if (!cacheState[keyHash]) {
+				const timestamp = Date.now();
+
 				updateState(keyHash, {
 					definitionName,
 					params: params,
 					data: data,
+					hasData: true,
+					hydrated: false,
 					loading: false,
 					error: null,
-					timestamp: Date.now(),
+					timestamp,
 					expireTime: definition.expireTime,
 				});
+
+				if (definition.persist !== false) {
+					writeMeta(
+						keyHash,
+						definitionName as string,
+						params,
+						timestamp,
+						definition.expireTime
+					);
+				}
 			}
 		}
 
 		/**
-		 * True, if any cache state is currently loading
+		 * True, if any cache state is currently blocking-loading. A
+		 * background revalidation of already usable data is explicitly
+		 * not counted, it must never gate rendering.
+		 *
 		 * @author jplacht
 		 *
 		 * @type {ComputedRef<boolean>}
@@ -349,12 +1042,160 @@ export const useQueryStore = defineStore(
 			Object.values(cacheState).some((s) => s.loading)
 		);
 
+		/**
+		 * True, if any cache entry is refreshing in the background.
+		 *
+		 * @author jplacht
+		 *
+		 * @type {ComputedRef<boolean>}
+		 */
+		const isAnythingRevalidating: ComputedRef<boolean> = computed(() =>
+			Object.values(cacheState).some((s) => s.revalidating)
+		);
+
+		/**
+		 * Timestamp of the oldest still cached payload, i.e. the age the
+		 * displayed data is at worst. Null while nothing is cached.
+		 *
+		 * @author jplacht
+		 *
+		 * @type {ComputedRef<number | null>}
+		 */
+		const oldestDataTimestamp: ComputedRef<number | null> = computed(() => {
+			const withData = Object.values(cacheState).filter(
+				(s) => s.hasData === true || s.data !== null
+			);
+
+			/*
+				An entry restored from local storage without a persisted
+				timestamp has an unknown, potentially very old age.
+				Reporting the minimum of the others would claim the data on
+				screen is fresher than it is, so say nothing instead.
+			*/
+			if (withData.some((s) => s.timestamp <= 0)) return null;
+
+			return withData.length > 0
+				? Math.min(...withData.map((s) => s.timestamp))
+				: null;
+		});
+
+		/**
+		 * True while something on screen came from local storage with no
+		 * recorded fetch time, i.e. its age cannot be stated. Lets the UI
+		 * say "unknown" rather than silently show nothing, which matters
+		 * for a cache whose whole purpose is serving data that is old.
+		 *
+		 * @author jplacht
+		 *
+		 * @type {ComputedRef<boolean>}
+		 */
+		const hasUnknownDataAge: ComputedRef<boolean> = computed(() =>
+			Object.values(cacheState).some(
+				(s) =>
+					(s.hasData === true || s.data !== null) && s.timestamp <= 0
+			)
+		);
+
+		/**
+		 * Forces a refetch of every cached entry that holds data,
+		 * keeping the current payload visible while it runs. This backs
+		 * the manual "refresh data" action, letting a user pull fresh
+		 * prices without a page reload.
+		 *
+		 * @author jplacht
+		 *
+		 * @async
+		 * @template K Query definition key
+		 * @param {JSONValue} [key] Optional key prefix, refreshes all when omitted
+		 * @returns {Promise<void>}
+		 */
+		async function refreshAll<K extends keyof IQueryRepository>(
+			key?: JSONValue
+		): Promise<void> {
+			// a second pass would double every request and its finally
+			// would clear `refreshing` while the first is still running
+			if (refreshing.value) return;
+
+			refreshing.value = true;
+
+			const targets: {
+				definitionName: K;
+				params: ParamsOfDefinition<IQueryRepository[K]>;
+			}[] = [];
+
+			for (const [existingKey, entry] of Object.entries(cacheState)) {
+				if (!entry.definitionName) continue;
+				if (entry.loading || entry.revalidating) continue;
+
+				const definition =
+					queryRepository.repository[entry.definitionName as K];
+				if (!definition || definition.persist === false) continue;
+
+				if (
+					key !== undefined &&
+					!isSubset(key, JSON.parse(existingKey) as JSONValue)
+				) {
+					continue;
+				}
+
+				targets.push({
+					definitionName: entry.definitionName as K,
+					params: entry.params as ParamsOfDefinition<
+						IQueryRepository[K]
+					>,
+				});
+			}
+
+			// a full refresh can touch every cached planet, keep the
+			// burst off the backends throat
+			const limit = pLimit(REFRESH_CONCURRENCY);
+
+			try {
+				await Promise.allSettled(
+					targets.map((t) =>
+						limit(() =>
+							execute(t.definitionName, t.params, {
+								forceRefetch: true,
+							})
+						)
+					)
+				);
+			} finally {
+				refreshing.value = false;
+
+				/*
+					Views hold snapshots of their query results taken when
+					they mounted, bumping the generation lets the app
+					remount them against the now current cache. A view
+					carrying unsaved work blocks that: the cache is still
+					refreshed, it just keeps its own state until the user
+					navigates.
+				*/
+				let blocked = false;
+				for (const guard of remountGuards) {
+					try {
+						if (guard()) blocked = true;
+					} catch (err) {
+						console.error("Remount guard failed", err);
+					}
+				}
+
+				if (!blocked) refreshGeneration.value += 1;
+			}
+		}
+
 		// Regular status watcher
 		let intervalId: ReturnType<typeof setInterval> | null = null;
 
 		/**
 		 * Iterates over cache entries and triggers refresh if
-		 * marked as to be automatically refetched
+		 * marked as to be automatically refetched.
+		 *
+		 * Stale entries that still hold a usable payload are kept: they
+		 * are served immediately and revalidated on next access, so the
+		 * user never waits on a loading screen for data that only just
+		 * aged out. Only entries without data, or long past their
+		 * expiry, are dropped.
 		 *
 		 * @author jplacht
 		 */
@@ -370,6 +1211,7 @@ export const useQueryStore = defineStore(
 				if (
 					entry.expireTime &&
 					!entry.loading &&
+					!entry.revalidating &&
 					entry.error === null &&
 					entry.timestamp &&
 					entry.expireTime &&
@@ -386,9 +1228,18 @@ export const useQueryStore = defineStore(
 								IQueryRepository[K]
 							>
 						);
-					} else {
-						// delete as stale and should not refetch
-						invalidateKey(JSON.parse(key) as JSONValue);
+					} else if (
+						!(entry.hasData === true || entry.data !== null) ||
+						now - entry.timestamp > CACHE_GC_MS
+					) {
+						// nothing usable to serve, or far beyond any
+						// reasonable staleness => drop it
+						// eviction, not a mutation: local storage is
+						// still a valid source for this key
+						invalidateKey(JSON.parse(key) as JSONValue, {
+							exact: true,
+							keepHydration: true,
+						});
 					}
 				}
 			}
@@ -416,23 +1267,47 @@ export const useQueryStore = defineStore(
 		return {
 			$reset,
 			cacheState,
+			cacheMeta,
+			cacheMetaVersion,
+			cacheAppVersion,
 			peekQueryState,
 			execute,
 			invalidateKey,
 			addCacheState,
+			refreshAll,
+			refreshing,
+			refreshGeneration,
+			sessionGeneration,
+			registerRemountGuard,
 			isAnythingLoading,
+			isAnythingRevalidating,
+			oldestDataTimestamp,
+			hasUnknownDataAge,
 			// only exposed for testing
 			checkEntryStatusAndRefresh,
 			startStatusWatcher,
+			validateMetaVersion,
 		};
+	},
+	{
+		persist: {
+			pick: ["cacheMeta", "cacheMetaVersion", "cacheAppVersion"],
+			// runs after localStorage was read back into the store,
+			// dropping meta that a different app version wrote
+			afterHydrate: (ctx) => {
+				(
+					ctx.store as unknown as {
+						validateMetaVersion: () => void;
+					}
+				).validateMetaVersion();
+			},
+		},
+		// broadcast: {
+		// 	enable: true,
+		// 	persisted: false,
+		// 	pick: ["cacheState"],
+		// 	debounce: 1_000,
+		// 	channel: "prunplanner_query_data",
+		// },
 	}
-	// {
-	// 	broadcast: {
-	// 		enable: true,
-	// 		persisted: false,
-	// 		pick: ["cacheState"],
-	// 		debounce: 1_000,
-	// 		channel: "prunplanner_query_data",
-	// 	},
-	// }
 );

@@ -156,6 +156,9 @@ export const RaukkShippingConfigSchema = z.object({
 	// "nearest" or a fixed exchange code; an unknown code degrades to the
 	// nearest exchange at read time rather than failing the import
 	cxAnchorMode: z.string().min(1).default(RAUKK_CX_ANCHOR_NEAREST),
+	// a plan belonging to no empire is not part of the operation; letting
+	// it price other plans again is opt in
+	allowUnassignedSources: z.boolean().default(false),
 	perEdgeProfile: z.record(z.string(), z.string()).optional(),
 	lmRates: z.record(z.string(), z.number()).optional(),
 });
@@ -387,6 +390,10 @@ export const RaukkSnapshotLaneSchema = z.object({
 	hired: z.boolean(),
 	// absent on snapshots frozen before the wear rollup
 	damagePerTrip: z.number().optional(),
+	// absent on snapshots frozen before the account wide transport table
+	ownCostPerTrip: z.number().optional(),
+	ownDamagePerTrip: z.number().optional(),
+	unitsPerDay: z.number().optional(),
 });
 
 export const RaukkPlanConfigSchema = z.object({
@@ -421,6 +428,9 @@ export const RaukkOutputCostSchema = z.object({
 export const RaukkSnapshotSchema = z.object({
 	computedAt: z.string(),
 	stale: z.boolean(),
+	// raukk: plan version the numbers describe, absent on snapshots
+	// written before remote plan changes were detectable
+	planFingerprint: z.string().optional(),
 	planName: z.string(),
 	planetNaturalId: z.string(),
 	outputs: z.record(z.string(), RaukkOutputCostSchema),

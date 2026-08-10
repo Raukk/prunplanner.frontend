@@ -1,15 +1,10 @@
 // Display helpers of the shipping section: pure functions turning the
-// route pairs a plan owns into the rows the UI renders. No store, no Vue
-// and no price fetching — the components hand in plain data, exactly as
-// `shipping.ts` and `shippingPairs.ts` do.
+// stored lanes of every snapshot into the rows the account wide
+// transport table renders. No store, no Vue and no price fetching — the
+// components hand in plain data, exactly as `shipping.ts` and
+// `shippingPairs.ts` do.
 
 // Calculations
-import {
-	calculateCostPerTrip,
-	calculateTripDamage,
-	raukkPairGatePath,
-	raukkLaneLegs,
-} from "@/features/raukk_sourcing/calculations/shipping";
 import {
 	IRaukkShipWear,
 	raukkWearOf,
@@ -17,13 +12,13 @@ import {
 
 // Types & Interfaces
 import {
-	IRaukkCadenceCaps,
-	IRaukkLaneLeg,
-	IRaukkShippedTicker,
 	IRaukkShippingConfig,
-	IRaukkShippingPair,
 	RAUKK_CARGO_BUCKET,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
+import {
+	IRaukkSnapshot,
+	IRaukkSnapshotLane,
+} from "@/features/raukk_sourcing/raukkSourcing.types";
 
 /** Exchange pair of the plan itself, or a lane to one source plan */
 export type RAUKK_PAIR_KIND = "cx" | "sourcing";
@@ -40,34 +35,50 @@ export interface IRaukkPairIdentity {
 /**
  * One CARGO BUCKET of a lane, flown on its own cadence.
  *
- * A lane is not one rhythm but up to three ({@link IRaukkLaneLeg}), so
- * the comparison row states them individually: a single "trips per day"
- * over a lane whose production cargo visits fortnightly and whose
- * workforce cargo visits monthly describes neither of the two.
+ * A lane is not one rhythm but up to three, so the transport row states
+ * them individually: a single "trips per day" over a lane whose
+ * production cargo visits fortnightly and whose workforce cargo visits
+ * monthly describes neither of the two.
  */
-export interface IRaukkLmComparisonLeg {
-	bucket: RAUKK_CARGO_BUCKET;
+export interface IRaukkTransportLeg {
+	/** Cargo bucket, `null` on a lane frozen before the cadence model */
+	bucket: RAUKK_CARGO_BUCKET | null;
 	shipTypeId: string;
-	/** Days per visit the bucket may not exceed */
-	capDays: number;
-	/** Days between two visits, `min(capDays, fillDays)` */
-	visitDays: number;
+	/** Days between two visits, `null` on a pre cadence lane */
+	visitDays: number | null;
 	tripsPerDay: number;
 }
 
-/** One lane of the hired versus own fleet comparison */
-export interface IRaukkLmComparisonRow {
+/**
+ * One lane of the account wide transport table.
+ *
+ * Built from the FROZEN lanes of every snapshot rather than from live
+ * pairs: one fleet serves every plan, so this is an account level
+ * question and the fleet rollup answers it the same way. It is also
+ * what makes these ȼ agree with the plan that owns the lane — only that
+ * plan could price the repair bill that went into them, the account
+ * page belongs to no plan.
+ */
+export interface IRaukkTransportRow {
 	pairKey: string;
 	identity: IRaukkPairIdentity;
+	/** True while the owning plan's snapshot is stale: every ȼ below was
+	 * frozen by that snapshot and ages with it */
+	stale: boolean;
 	/** The buckets riding this lane, each on its own cadence */
-	legs: IRaukkLmComparisonLeg[];
+	legs: IRaukkTransportLeg[];
 	tripsPerDay: number;
-	/** Units per day riding this pair, both directions summed */
-	unitsPerDay: number;
-	/** ȼ per trip with the plans own ship */
-	ownCostPerTrip: number;
+	/** Trip weighted round trip time of the whole lane, in minutes */
+	roundTripMinutes: number;
+	/** True while a manual LM rate replaced the own fleet cost */
+	hired: boolean;
+	/** Units per day riding this lane, both directions summed.
+	 * `undefined` on lanes frozen before the figure was stored */
+	unitsPerDay: number | undefined;
+	/** ȼ per trip with the own fleet, `undefined` where never frozen */
+	ownCostPerTrip: number | undefined;
 	/** Own fleet ȼ per unit shipped, averaged over the whole lane */
-	ownCostPerUnit: number;
+	ownCostPerUnit: number | undefined;
 	/** Manually entered LM rate, undefined while the lane is not hired */
 	lmRatePerTrip: number | undefined;
 	/** Hired ȼ per unit shipped, undefined without a rate */
@@ -78,8 +89,9 @@ export interface IRaukkLmComparisonRow {
 	 * Wear of the OWN fleet flying this lane, trip weighted over the
 	 * legs. Stated even while the lane is hired — the comparison is what
 	 * hiring buys, and part of it is the wear the own hulls are spared.
+	 * `undefined` where the snapshot never froze the own damage.
 	 */
-	ownWear: IRaukkShipWear;
+	ownWear: IRaukkShipWear | undefined;
 }
 
 /** Counterpart marker of the exchange pair, see `raukkCxPairKey` */
@@ -116,146 +128,194 @@ export function raukkPairIdentity(pairKey: string): IRaukkPairIdentity {
 	return { kind: "sourcing", planUuid, sourcePlanUuid: counterpart };
 }
 
+/** The legs of one lane, with the staleness of the snapshot holding it */
+interface IRaukkLaneGroup {
+	lanes: IRaukkSnapshotLane[];
+	stale: boolean;
+}
+
 /**
- * Daily units riding one pair, both directions summed.
+ * Trip weighted mean of one frozen per leg figure.
  *
- * The unit count is the denominator of the lane wide ȼ per unit the LM
- * comparison shows. It deliberately mixes tickers: a lane is hired as a
- * whole, so the comparison is a lane average and not a per ticker
- * freight rate — those live in the inputs table.
+ * `undefined` as soon as a single leg never froze the figure: the mean
+ * of a partially known lane is not a smaller number, it is an unknown
+ * one, and a zero standing in would read as free freight.
  *
  * @author raukk
  *
- * @param {IRaukkShippedTicker[]} tickers Daily cargo of both directions
- * @returns {number} Units per day
+ * @param {IRaukkSnapshotLane[]} lanes Legs of one lane
+ * @param {number} tripsPerDay Trips per day of the whole lane
+ * @param {(lane: IRaukkSnapshotLane) => number | undefined} pick Figure
+ * @returns {number | undefined} Trip weighted mean, undefined if unknown
  */
-function unitsOf(tickers: IRaukkShippedTicker[]): number {
-	return tickers.reduce(
-		(sum, entry) => sum + Math.max(entry.unitsPerDay, 0),
-		0
+function tripWeighted(
+	lanes: IRaukkSnapshotLane[],
+	tripsPerDay: number,
+	pick: (lane: IRaukkSnapshotLane) => number | undefined
+): number | undefined {
+	if (lanes.some((lane) => pick(lane) === undefined)) return undefined;
+	if (lanes.length === 0) return undefined;
+
+	// no trip is flown, so nothing weights the legs: the plain mean is
+	// the only statement left, and every leg of such a lane is idle
+	if (tripsPerDay <= 0)
+		return (
+			lanes.reduce((sum, lane) => sum + (pick(lane) ?? 0), 0) /
+			lanes.length
+		);
+
+	return (
+		lanes.reduce(
+			(sum, lane) => sum + lane.tripsPerDay * (pick(lane) ?? 0),
+			0
+		) / tripsPerDay
 	);
 }
 
 /**
- * Builds the hired versus own fleet comparison of every pair a plan
- * owns.
+ * Builds the account wide transport table: every stored lane of every
+ * snapshot, with what the own fleet charges for it and what hiring it
+ * out would.
  *
- * Trips per day are cadence driven and therefore identical either way —
- * hiring replaces the ȼ per trip, not the amount of freight. They are
- * summed over the LANES LEGS, one per cargo bucket riding it, and the
- * own ȼ per trip is the trip weighted mean over those legs: a lane whose
+ * Lanes are grouped by pair key — a lane is hired as a whole, however
+ * many cargo buckets ride it. Trips per day are cadence driven and
+ * therefore identical either way, hiring replaces the ȼ per trip and
+ * not the amount of freight, so they are summed over the legs; the own
+ * ȼ per trip is the trip weighted mean over them, because a lane whose
  * production and repair cargo fly on two different hulls has no single
- * cost per trip, only an average one. The legs are reported individually
- * too, so the table can state the days per visit of each bucket instead
- * of an average nobody flies. A lane moving nothing is still listed with
- * zero trips and no legs so the user can enter a rate before the flows
- * exist.
+ * cost per trip, only an average one. The legs are reported
+ * individually too, so the table can state the days per visit of each
+ * bucket instead of an average nobody flies.
+ *
+ * A lane frozen before the own cost was stored reports it as
+ * `undefined` and never as zero: a zero would read as free freight and
+ * would make hiring look like a pure loss.
  *
  * @author raukk
  *
- * @param {IRaukkShippingPair[]} pairs Route pairs the plan owns
+ * @param {Record<string, IRaukkSnapshot>} snapshots Stored snapshots
  * @param {IRaukkShippingConfig} config Shipping configuration
  * @param {number} repairBillCost ȼ of a full repair bill
- * @param {IRaukkCadenceCaps} caps Cadence caps of the consuming plan
- * @returns {IRaukkLmComparisonRow[]} Comparison rows
+ * @returns {IRaukkTransportRow[]} Transport rows, one per stored lane
  */
-export function buildLmComparison(
-	pairs: IRaukkShippingPair[],
+export function buildTransportRows(
+	snapshots: Record<string, IRaukkSnapshot>,
 	config: IRaukkShippingConfig,
-	repairBillCost: number,
-	caps: IRaukkCadenceCaps
-): IRaukkLmComparisonRow[] {
-	return pairs.map((pair) => {
-		const legs: IRaukkLaneLeg[] = raukkLaneLegs(pair, caps);
+	repairBillCost: number
+): IRaukkTransportRow[] {
+	/*
+	 * A pair key names its owner, and lanes are frozen onto the owners
+	 * own snapshot, so one key really only ever meets one snapshot. The
+	 * staleness is still OR-ed rather than overwritten: an imported
+	 * payload is not required to hold to that.
+	 */
+	const grouped: Map<string, IRaukkLaneGroup> = new Map();
 
-		const tripsPerDay: number = legs.reduce(
-			(sum, leg) => sum + leg.tripsPerDay,
-			0
-		);
-		const unitsPerDay: number = unitsOf(pair.out) + unitsOf(pair.back);
+	Object.values(snapshots).forEach((snapshot: IRaukkSnapshot) => {
+		(snapshot.lanes ?? []).forEach((lane: IRaukkSnapshotLane) => {
+			const group: IRaukkLaneGroup | undefined = grouped.get(
+				lane.pairKey
+			);
 
-		const ownDailyCost: number = legs.reduce(
-			(sum, leg) =>
-				sum +
-				leg.tripsPerDay *
-					calculateCostPerTrip(
-						pair.route,
-						leg.profile,
-						config,
-						repairBillCost,
-						raukkPairGatePath(pair, leg.profile) ?? undefined
-					),
-			0
-		);
+			if (group === undefined) {
+				grouped.set(lane.pairKey, {
+					lanes: [lane],
+					stale: snapshot.stale,
+				});
+				return;
+			}
 
-		const ownCostPerTrip: number =
-			tripsPerDay > 0
-				? ownDailyCost / tripsPerDay
-				: calculateCostPerTrip(
-						pair.route,
-						pair.profile,
-						config,
-						repairBillCost,
-						raukkPairGatePath(pair, pair.profile) ?? undefined
-					);
-
-		/** Trip weighted damage of the own fleet, the pairs own profile
-		 * standing in while nothing moves — same fallback as the cost */
-		const ownDamagePerTrip: number =
-			tripsPerDay > 0
-				? legs.reduce(
-						(sum, leg) =>
-							sum +
-							leg.tripsPerDay *
-								calculateTripDamage(
-									pair.route,
-									leg.profile,
-									raukkPairGatePath(pair, leg.profile) ??
-										undefined
-								),
-						0
-					) / tripsPerDay
-				: calculateTripDamage(
-						pair.route,
-						pair.profile,
-						raukkPairGatePath(pair, pair.profile) ?? undefined
-					);
-
-		const lmRatePerTrip: number | undefined =
-			config.lmRates?.[pair.pairKey];
-
-		/** ȼ per unit of a ȼ per trip rate, zero without any cargo */
-		function perUnit(costPerTrip: number): number {
-			return unitsPerDay > 0
-				? (tripsPerDay * costPerTrip) / unitsPerDay
-				: 0;
-		}
-
-		const ownCostPerUnit: number = perUnit(ownCostPerTrip);
-		const hiredCostPerUnit: number | undefined =
-			lmRatePerTrip === undefined ? undefined : perUnit(lmRatePerTrip);
-
-		return {
-			pairKey: pair.pairKey,
-			identity: raukkPairIdentity(pair.pairKey),
-			legs: legs.map((leg) => ({
-				bucket: leg.bucket,
-				shipTypeId: leg.shipTypeId,
-				capDays: leg.capDays,
-				visitDays: leg.visitDays,
-				tripsPerDay: leg.tripsPerDay,
-			})),
-			tripsPerDay,
-			unitsPerDay,
-			ownCostPerTrip,
-			ownCostPerUnit,
-			lmRatePerTrip,
-			hiredCostPerUnit,
-			savingPerUnit:
-				hiredCostPerUnit === undefined
-					? undefined
-					: ownCostPerUnit - hiredCostPerUnit,
-			ownWear: raukkWearOf(ownDamagePerTrip, tripsPerDay, repairBillCost),
-		};
+			group.lanes.push(lane);
+			group.stale = group.stale || snapshot.stale;
+		});
 	});
+
+	return [...grouped.entries()]
+		.sort(([left], [right]) => left.localeCompare(right))
+		.map(([pairKey, group]) => {
+			const lanes: IRaukkSnapshotLane[] = group.lanes;
+
+			const tripsPerDay: number = lanes.reduce(
+				(sum, lane) => sum + lane.tripsPerDay,
+				0
+			);
+
+			/** Unknown as soon as one leg predates the frozen figure */
+			const unitsPerDay: number | undefined = lanes.some(
+				(lane) => lane.unitsPerDay === undefined
+			)
+				? undefined
+				: lanes.reduce((sum, lane) => sum + (lane.unitsPerDay ?? 0), 0);
+
+			const ownCostPerTrip: number | undefined = tripWeighted(
+				lanes,
+				tripsPerDay,
+				(lane) => lane.ownCostPerTrip
+			);
+
+			const ownDamagePerTrip: number | undefined = tripWeighted(
+				lanes,
+				tripsPerDay,
+				(lane) => lane.ownDamagePerTrip
+			);
+
+			const roundTripMinutes: number =
+				tripWeighted(
+					lanes,
+					tripsPerDay,
+					(lane) => lane.roundTripMinutes
+				) ?? 0;
+
+			const lmRatePerTrip: number | undefined = config.lmRates?.[pairKey];
+
+			/**
+			 * ȼ per unit of a ȼ per trip rate. Unknown without cargo:
+			 * dividing by nothing is not a rate of zero.
+			 */
+			function perUnit(
+				costPerTrip: number | undefined
+			): number | undefined {
+				if (costPerTrip === undefined) return undefined;
+				if (unitsPerDay === undefined || unitsPerDay <= 0)
+					return undefined;
+
+				return (tripsPerDay * costPerTrip) / unitsPerDay;
+			}
+
+			const ownCostPerUnit: number | undefined = perUnit(ownCostPerTrip);
+			const hiredCostPerUnit: number | undefined = perUnit(lmRatePerTrip);
+
+			return {
+				pairKey,
+				identity: raukkPairIdentity(pairKey),
+				stale: group.stale,
+				legs: lanes.map((lane) => ({
+					bucket: lane.bucket ?? null,
+					shipTypeId: lane.shipTypeId,
+					visitDays: lane.visitDays ?? null,
+					tripsPerDay: lane.tripsPerDay,
+				})),
+				tripsPerDay,
+				roundTripMinutes,
+				hired: lanes.some((lane) => lane.hired),
+				unitsPerDay,
+				ownCostPerTrip,
+				ownCostPerUnit,
+				lmRatePerTrip,
+				hiredCostPerUnit,
+				savingPerUnit:
+					ownCostPerUnit === undefined ||
+					hiredCostPerUnit === undefined
+						? undefined
+						: ownCostPerUnit - hiredCostPerUnit,
+				ownWear:
+					ownDamagePerTrip === undefined
+						? undefined
+						: raukkWearOf(
+								ownDamagePerTrip,
+								tripsPerDay,
+								repairBillCost
+							),
+			};
+		});
 }

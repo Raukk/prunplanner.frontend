@@ -6,6 +6,10 @@ type SharedState<T extends object> = {
 	allData: ReturnType<typeof ref<T[]>>;
 	cache: Map<string, T>;
 	loaded: boolean;
+	/** Outstanding `hold()` calls, see there. */
+	holds: number;
+	/** A refresh arrived while held and still has to be applied. */
+	pendingRefresh: boolean;
 };
 
 const storeStateMap = new WeakMap<
@@ -25,6 +29,8 @@ function ensureState<T extends object, K extends keyof T & string>(
 			allData: ref<T[]>([]) as Ref<T[]>,
 			cache: new Map<string, T>(),
 			loaded: false,
+			holds: 0,
+			pendingRefresh: false,
 		};
 		storeStateMap.set(store, state);
 	}
@@ -48,6 +54,20 @@ export function useDB<T extends object, K extends keyof T & string>(
 		// skip if already loaded
 		if (!force && state.loaded) return;
 
+		/*
+			A refresh replaces the shared map every reader resolves
+			through. Swapping it while a multi step calculation is running
+			would price the steps before the swap from one snapshot of the
+			market and the steps after it from another, and the totals are
+			then a mix of both. Defer it until the caller lets go. Only a
+			REFRESH is deferred: with nothing loaded yet there is nothing
+			to be consistent with, and holding would starve the readers.
+		*/
+		if (state.loaded && state.holds > 0) {
+			state.pendingRefresh = true;
+			return;
+		}
+
 		const all = await store.getAll();
 
 		state.allData.value = all;
@@ -59,6 +79,32 @@ export function useDB<T extends object, K extends keyof T & string>(
 		}
 
 		state.loaded = true;
+	}
+
+	/**
+	 * Pins the currently loaded data so a background refresh cannot swap
+	 * it mid-calculation. Returns the release, which applies any refresh
+	 * that arrived while held. Nestable — the data unpins once every
+	 * holder has released.
+	 *
+	 * @author jplacht
+	 *
+	 * @returns {() => Promise<void>} Release the hold
+	 */
+	function hold(): () => Promise<void> {
+		state.holds++;
+		let released: boolean = false;
+
+		return async () => {
+			if (released) return;
+			released = true;
+			state.holds--;
+
+			if (state.holds === 0 && state.pendingRefresh) {
+				state.pendingRefresh = false;
+				await preload(true);
+			}
+		};
 	}
 
 	async function get(key: KeyType): Promise<T | undefined> {
@@ -76,6 +122,7 @@ export function useDB<T extends object, K extends keyof T & string>(
 		allData: state.allData,
 		cacheData: state.cache,
 		preload,
+		hold,
 		get,
 	};
 }

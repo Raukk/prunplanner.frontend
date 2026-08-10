@@ -419,6 +419,29 @@ export function combineHubRoute(
 	};
 }
 
+/**
+ * Daily units of one leg, both directions summed.
+ *
+ * Deliberately mixes tickers: a lane is hired as a whole, so it is the
+ * denominator of a lane wide ȼ per unit and never a per ticker freight
+ * rate — those live in the inputs table.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkShippedTicker[]} out Daily cargo leaving the plan
+ * @param {IRaukkShippedTicker[]} back Daily cargo returning to it
+ * @returns {number} Units per day
+ */
+function legUnits(
+	out: IRaukkShippedTicker[],
+	back: IRaukkShippedTicker[]
+): number {
+	return [...out, ...back].reduce(
+		(sum, entry) => sum + Math.max(entry.unitsPerDay, 0),
+		0
+	);
+}
+
 /** Daily weight and volume of one leg, per direction */
 function legDemand(
 	out: IRaukkShippedTicker[],
@@ -886,11 +909,31 @@ export function calculatePairShipping(
 		const mixedPath: IRaukkMultiModalPath | undefined =
 			raukkPairGatePath(pair, leg.profile) ?? undefined;
 
+		/*
+		 * What the own fleet would charge and suffer on this leg,
+		 * computed whether or not the lane is hired: the hire
+		 * comparison needs the counterfactual, and freezing it onto the
+		 * snapshot is what lets the account wide transport table state
+		 * the same ȼ the plan does. Both take the leg's own gate path,
+		 * exactly as the charged figures below do — a counterfactual
+		 * flown on a different route is not one.
+		 */
+		const ownCostPerTrip: number = calculateCostPerTrip(
+			pair.route,
+			leg.profile,
+			config,
+			repairBillCost,
+			mixedPath
+		);
+		const ownDamagePerTrip: number = calculateTripDamage(
+			pair.route,
+			leg.profile,
+			mixedPath
+		);
+
 		// a hired lane wears someone elses hull, that is a hard zero —
 		// the same reasoning that zeroes its shipping fraction below
-		const damagePerTrip: number = hired
-			? 0
-			: calculateTripDamage(pair.route, leg.profile, mixedPath);
+		const damagePerTrip: number = hired ? 0 : ownDamagePerTrip;
 		const repairCostPerTrip: number = hired
 			? 0
 			: calculateRepairCostPerTrip(
@@ -900,15 +943,7 @@ export function calculatePairShipping(
 					mixedPath
 				);
 		const costPerTrip: number =
-			lmRatePerTrip !== undefined
-				? lmRatePerTrip
-				: calculateCostPerTrip(
-						pair.route,
-						leg.profile,
-						config,
-						repairBillCost,
-						mixedPath
-					);
+			lmRatePerTrip !== undefined ? lmRatePerTrip : ownCostPerTrip;
 
 		const legDailyCost: number = leg.tripsPerDay * costPerTrip;
 
@@ -976,6 +1011,9 @@ export function calculatePairShipping(
 			costPerTrip,
 			repairCostPerTrip,
 			damagePerTrip,
+			ownCostPerTrip,
+			ownDamagePerTrip,
+			unitsPerDay: legUnits(leg.out, leg.back),
 			dailyCost: legDailyCost,
 			roundTripMinutes,
 			shippingFraction: legFraction,

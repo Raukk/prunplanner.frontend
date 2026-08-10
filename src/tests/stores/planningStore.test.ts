@@ -191,3 +191,30 @@ describe("FIO Data", async () => {
 		});
 	});
 });
+
+describe("planningStore setPlans replace", () => {
+	it("merges by default so an empire subset does not delete everything", () => {
+		const store = usePlanningStore();
+		store.$reset();
+
+		// @ts-expect-error mock data
+		store.setPlans([{ uuid: "a", plan_name: "A" }]);
+		// @ts-expect-error mock data
+		store.setPlans([{ uuid: "b", plan_name: "B" }]);
+
+		expect(Object.keys(store.plans).sort()).toStrictEqual(["a", "b"]);
+	});
+
+	it("drops plans missing from an authoritative list", () => {
+		const store = usePlanningStore();
+		store.$reset();
+
+		// @ts-expect-error mock data
+		store.setPlans([{ uuid: "a" }, { uuid: "b" }]);
+		// the account list no longer contains b, e.g. deleted elsewhere
+		// @ts-expect-error mock data
+		store.setPlans([{ uuid: "a" }], true);
+
+		expect(Object.keys(store.plans)).toStrictEqual(["a"]);
+	});
+});

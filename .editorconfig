@@ -11,3 +11,17 @@ charset = utf-8
 trim_trailing_whitespace = true
 insert_final_newline = true
 max_line_length = 80
+
+# ---------------------------------------------------------------------
+# Raukk fork only — NOT upstream. Revert this block (delete down to the
+# end of the file) before any push back to PRUNplanner/prunplanner.frontend,
+# restoring max_line_length = 80 for these files.
+# Fork-authored markdown is unwrapped: one line per paragraph and per
+# bullet, no hard wrap.
+# ---------------------------------------------------------------------
+
+[CLAUDE*.md]
+max_line_length = off
+
+[docs/raukk_sourcing/*.md]
+max_line_length = off

@@ -821,6 +821,9 @@ function buildPlanLanes(shipping: IRaukkShippingResult): IRaukkSnapshotLane[] {
 			roundTripMinutes: leg.roundTripMinutes,
 			hired: pair.hired,
 			damagePerTrip: leg.damagePerTrip,
+			ownCostPerTrip: leg.ownCostPerTrip,
+			ownDamagePerTrip: leg.ownDamagePerTrip,
+			unitsPerDay: leg.unitsPerDay,
 		}))
 	);
 }
