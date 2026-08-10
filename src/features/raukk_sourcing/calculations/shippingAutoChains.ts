@@ -37,6 +37,7 @@ import {
 	IRaukkAutoChain,
 	IRaukkAutoChainCandidate,
 	IRaukkAutoChainInput,
+	IRaukkHubSpokeLaneRow,
 	IRaukkHubSpokeRow,
 	IRaukkOrderedLoop,
 	RAUKK_AUTO_CHAIN_REASON,
@@ -1675,4 +1676,92 @@ export function raukkHubSpokeRows(
 			? left.ticker.localeCompare(right.ticker)
 			: right.share - left.share;
 	});
+}
+
+/**
+ * The grouped hub/spoke listing folded onto its LANES: one line per base
+ * pair and cargo class, whatever number of materials it carries.
+ *
+ * A base commonly hands several of its outputs to the same neighbour —
+ * HCP and MAI both leaving one hydroponics base for the same consumer —
+ * and they ride the same visit, so the listing states the lane and sums
+ * what it moves. The per-ticker rows are kept on `items`, which is where
+ * the display reads the material list and its breakdown from.
+ *
+ * Lanes never merge across cargo classes: a class is a cadence, and two
+ * cadences are two visits.
+ *
+ * The share is recomputed over the whole input, not summed from the
+ * member rows: a row's share is already the LARGER of its weight and its
+ * volume share, and adding maxima up would overstate the lane.
+ *
+ * Rows carrying no base pair — the ungrouped listing — name no lane and
+ * are dropped rather than folded into a nameless one.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkHubSpokeRow[]} rows Grouped rows, see
+ * {@link raukkHubSpokeRows}
+ * @returns {IRaukkHubSpokeLaneRow[]} Lanes, largest share first
+ */
+export function raukkHubSpokeLanes(
+	rows: IRaukkHubSpokeRow[]
+): IRaukkHubSpokeLaneRow[] {
+	const totalWeight: number = rows.reduce(
+		(sum, row) => sum + row.weightPerDay,
+		0
+	);
+	const totalVolume: number = rows.reduce(
+		(sum, row) => sum + row.volumePerDay,
+		0
+	);
+
+	const lanes: Map<string, IRaukkHubSpokeLaneRow> = new Map();
+
+	rows.forEach((row) => {
+		if (row.fromStop === undefined || row.toStop === undefined) return;
+
+		const key: string = `${row.bucket}|${row.fromStop}|${row.toStop}`;
+		const known: IRaukkHubSpokeLaneRow | undefined = lanes.get(key);
+
+		if (known !== undefined) {
+			known.items.push(row);
+			known.unitsPerDay += row.unitsPerDay;
+			known.weightPerDay += row.weightPerDay;
+			known.volumePerDay += row.volumePerDay;
+			return;
+		}
+
+		lanes.set(key, {
+			bucket: row.bucket,
+			fromStop: row.fromStop,
+			toStop: row.toStop,
+			items: [row],
+			unitsPerDay: row.unitsPerDay,
+			weightPerDay: row.weightPerDay,
+			volumePerDay: row.volumePerDay,
+			share: 0,
+		});
+	});
+
+	return Array.from(lanes.values())
+		.map((lane) => ({
+			...lane,
+			items: [...lane.items].sort((left, right) =>
+				left.share === right.share
+					? left.ticker.localeCompare(right.ticker)
+					: right.share - left.share
+			),
+			share: Math.max(
+				totalWeight > 0 ? lane.weightPerDay / totalWeight : 0,
+				totalVolume > 0 ? lane.volumePerDay / totalVolume : 0
+			),
+		}))
+		.sort((left, right) =>
+			left.share === right.share
+				? `${left.fromStop}|${left.toStop}`.localeCompare(
+						`${right.fromStop}|${right.toStop}`
+					)
+				: right.share - left.share
+		);
 }

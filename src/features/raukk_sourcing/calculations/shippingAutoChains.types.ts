@@ -125,3 +125,24 @@ export interface IRaukkHubSpokeRow {
 	/** Share of the whole hub/spoke cargo, the larger of both dimensions */
 	share: number;
 }
+
+/**
+ * One LANE of the grouped hub/spoke listing: everything one base hands
+ * to one other base in one cargo class, on a single line.
+ *
+ * Several outputs of a base commonly leave for the same neighbour and
+ * ride the same visit, so the lane is what the listing states and the
+ * per-ticker rows it aggregates survive on {@link items}.
+ */
+export interface IRaukkHubSpokeLaneRow {
+	bucket: RAUKK_CARGO_BUCKET;
+	fromStop: RAUKK_STOP_REF;
+	toStop: RAUKK_STOP_REF;
+	/** The aggregated per-ticker rows, share descending */
+	items: IRaukkHubSpokeRow[];
+	unitsPerDay: number;
+	weightPerDay: number;
+	volumePerDay: number;
+	/** Share of the whole hub/spoke cargo, the larger of both dimensions */
+	share: number;
+}

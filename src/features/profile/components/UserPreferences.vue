@@ -35,6 +35,8 @@
 	const {
 		burnDaysRed,
 		burnDaysYellow,
+		cxVolumeYellowPercent,
+		cxVolumeRedPercent,
 		burnResupplyDays,
 		burnOrigin,
 		locale,
@@ -174,6 +176,24 @@
 		</PFormItem>
 		<PFormItem :label="t('profile.preferences.form.buy_from_cx')">
 			<PCheckbox v-model:checked="defaultBuyItemsFromCX" />
+		</PFormItem>
+
+		<!-- raukk: CX volume warning thresholds -->
+		<PFormItem :label="t('cx_volume.preferences_yellow')">
+			<PInputNumber
+				v-model:value="cxVolumeYellowPercent"
+				show-button
+				:min="0"
+				:max="100"
+				class="w-full" />
+		</PFormItem>
+		<PFormItem :label="t('cx_volume.preferences_red')">
+			<PInputNumber
+				v-model:value="cxVolumeRedPercent"
+				show-button
+				:min="0"
+				:max="100"
+				class="w-full" />
 		</PFormItem>
 
 		<PFormSeperator>

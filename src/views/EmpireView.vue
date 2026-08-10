@@ -351,6 +351,7 @@
 <template>
 	<WrapperPlanningDataLoader
 		empire-list
+		load-c-x
 		:empire-uuid="selectedEmpireUuid"
 		@data:empire:plans="(value: IPlan[]) => (planData = value)"
 		@update:empire-uuid="(value: string) => (selectedEmpireUuid = value)"
