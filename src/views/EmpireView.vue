@@ -285,6 +285,7 @@
 					permits: plan.plan_permits_used,
 					cogc: plan.plan_cogc,
 					profit: planResult.profit,
+					roi: planResult.overview.roi,
 				};
 			}
 		);
