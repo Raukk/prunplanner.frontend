@@ -521,6 +521,34 @@ describe("shippingDamage — stellar geometry", () => {
 			}
 		});
 
+		it("shrugs off the tilts real lanes actually carry", () => {
+			// short hops through a 130-unit-thick slab are genuinely
+			// tilted: over each system's eight nearest neighbours rho runs
+			// 0.472 (p1) to 0.966 (median). A narrow band survives even the
+			// campaign's worst, ZV-759 to ANT at rho = 0.811 — section 7.3
+			for (const [a, d] of [
+				[0.988, 0.401],
+				[1.982, 0.447],
+				[6.125, 0.447],
+			] as [number, number][]) {
+				const band = raukkStellarGeometry(a, d);
+
+				expect(band.high / band.low).toBeLessThan(2.5);
+				expect(
+					longRunMean(a, d, 0.811) / band.expected
+				).toBeGreaterThan(0.95);
+			}
+
+			// a leg overshooting its orbit radius does not survive it, and
+			// that is exactly the lane the band is there to flag
+			const wide = raukkStellarGeometry(0.225, 0.447);
+
+			expect(wide.high / wide.low).toBeGreaterThan(50);
+			expect(
+				longRunMean(0.225, 0.447, 0.968) / wide.expected
+			).toBeLessThan(0.6);
+		});
+
 		it("is bounded by the band, so a narrow band means a safe lane", () => {
 			// where the dose barely varies with direction the tilt cannot
 			// matter either, which is what makes `high / low` a usable

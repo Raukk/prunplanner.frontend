@@ -183,7 +183,7 @@ Repeated flights on one lane DO converge — orbital phase sweeps the whole circ
 
 The reason is that a lane's direction is fixed in the galactic frame while the planet orbits, so the direction cosine to the star runs `cos(theta) = rho x cos(phase)` where `rho` is the lane's IN-PLANE component. `rho = 1` is a lane lying in the orbital plane, which sweeps the full -1 to +1 and is what `raukkStellarGeometry` averages over. A lane inclined out of the plane never reaches the extremes at all: at 60 degrees `rho = 0.5` and the cosine only ever runs -0.5 to +0.5.
 
-Inclination is a property of the lane — the same two systems, forever. It is not phase and it does not average away. What it costs, as a shortfall against `expected`:
+Inclination is a property of the lane — the same two systems, forever. It is not phase and it does not average away. What it WOULD cost, per degree of tilt, as a shortfall against `expected`:
 
 | anchor | band width | 30 deg out | 60 deg out | 90 deg out |
 |---|---|---|---|---|
@@ -194,13 +194,48 @@ Inclination is a property of the lane — the same two systems, forever. It is n
 | NL-534c (a = 6.125) | 1.2x | -0.1% | -0.3% | -0.4% |
 | NL-534g (a = 85.33) | 1.0x | ~0 | ~0 | ~0 |
 
-Two things fall out of that table, and both are useful.
+**And `rho` is not a free parameter — it is computable.** `fio_systemstars.json` carries `PositionX/Y/Z` for all 698 systems, so the lane vector is known exactly, and if the orbital plane is the galactic plane then `rho = sqrt(1 - (dz/|d|)^2)` falls straight out with no fitting and no timestamps.
+
+Doing that reveals the galaxy is flat but the LANES are not. The slab is 20:1 flattened — x spans 2,580 units and y 2,717 against z's 130 — so over all pairs of systems `rho` sits at a median of 1.000. That population is misleading: it is dominated by long hops where 130 units of thickness is nothing against 2,000 of separation. Ships fly SHORT hops, where the same 130 units is most of the distance. Over the eight nearest neighbours of each system:
+
+| quantile | p1 | p5 | p25 | median | p75 |
+|---|---|---|---|---|---|
+| `rho` | 0.472 | 0.673 | 0.897 | 0.966 | 0.993 |
+
+Only 29% of near-neighbour lanes clear `rho = 0.99`. The campaign's own lanes run 14-16 degrees of tilt for most anchors and 36 degrees (`rho = 0.811`, a 72% grade) for ZV-759 to ANT. Tilt is real and it is routine.
+
+What it costs at those tilts, by band width — the band is the driver, since both come from how much the dose varies with direction:
+
+| band | `rho` = 0.968 | 0.963 | 0.811 | 0.700 |
+|---|---|---|---|---|
+| 91.4x (leg 2x the orbit radius) | -45.5% | -47.1% | -63.6% | -67.4% |
+| 4.9x | -3.8% | -4.3% | -14.3% | -18.3% |
+| 2.4x | -0.9% | -1.0% | -4.3% | -6.1% |
+| 1.6x | -0.2% | -0.3% | -1.2% | -1.8% |
+| 1.2x | 0.0% | 0.0% | -0.1% | -0.2% |
+
+So a lane whose band is under about 2x is safe from tilt at any tilt the galaxy produces, and the extreme-band lanes are unusable without it.
+
+**But computing `rho` does not fix the residuals.** Pricing all 66 legs with each lane's true `rho` instead of 1:
+
+| | pooled bias | anchors within +-5% | worst anchor |
+|---|---|---|---|
+| `rho` assumed 1 | +4.49% | 9 of 19 | YK-715a +47.3% |
+| `rho` computed per lane | +3.00% | 8 of 19 | YK-715a +46.6% |
+
+ANT moves from +23.4% to +19.9% and nothing else moves at all, because the campaign's ANT legs run 21-27 Mkm against a 33.6 Mkm orbit radius — they do not overshoot, so their band is narrow and their tilt sensitivity is small. The anchors with the large residuals are all narrow-band ones, which is exactly where tilt CANNOT be the explanation.
+
+That is a real result: it rules tilt out. Whatever drives the -32% to +47% spread, it is not the orbital plane, and section 9.2's open item is worth less than it looked. The remaining candidates are a genuine per-anchor coefficient, an error in `Sunlight` for those systems, or simply phase — most of these anchors carry two legs from a single capture, which is one sample of phase, not a mean.
+
+**One assumption still carries the `rho` calculation**: that each system's orbital plane coincides with the galactic plane. Nothing published states it, and no source carries an inclination at all — `raukk_orbits.json` holds `[semiMajorAxis, eccentricity]` and nothing more, and both the community visualiser and `raukkPlanetPosition` model orbits as flat and coplanar. Since computing `rho` buys 1.5 points of pooled bias and no per-anchor accuracy, the assumption is not currently load-bearing either way.
+
+Two things fall out of the sensitivity, and both are useful.
 
 **The error is one-sided.** `rho = 1` sweeps the widest, and the path integral is convex in the cosine, so full sweep gives the LARGEST mean of any inclination. `expected` is therefore an upper bound on what a lane converges to — it over-budgets damage, never under-budgets it.
 
 **The band width already tells you when to care.** Both quantities are driven by the same thing: how much the dose varies with direction. Where the band is narrow the lane cannot be far off `expected` whatever its inclination; where the band is wide it can be off by most of its value. `high / low` needs no calibration and no new data — it is computed today, for every leg.
 
-That inverts the practical advice. `expected` is trustworthy per lane to within a few percent on any anchor whose band is under roughly 2x, which is most of them; it is unreliable exactly on the tight-orbit anchors flying long legs, which are also the ones the band already flags.
+That inverts the practical advice. `expected` is trustworthy per lane to within a percent on any anchor whose band is under roughly 5x, which is nearly all of them; it is unreliable only on the tight-orbit anchors flying legs that overshoot their orbit radius, which are also the ones the band already flags.
 
 It also explains the sign pattern in the residuals. Over-prediction (ANT +16%, NL-534a +25%, YK-715a +47%) is what inclination produces. Under-prediction (LS-231a -32%, LE-137a -26%) is NOT, so something else is in play there — a per-anchor coefficient error, or simply that those anchors carry two legs from one capture and are showing phase, not bias.
 
