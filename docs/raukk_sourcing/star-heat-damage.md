@@ -1,41 +1,61 @@
 # Stellar (heat/radiation) damage
 
-Behaviour lives in `src/features/raukk_sourcing/calculations/shippingDamage.ts` and `shippingDamage.types.ts` over the assets `raukk_stellar.json`, `raukk_pressure.json` and `raukk_orbits.json`; their JSDoc and `src/locales/en_US/raukk_sourcing.json` are authoritative for how it behaves, `facts/star-heat-damage.json` for every constant, equation and measurement, and the transcripts `btf_flights.json`, `btf_star_damage.json`, `btf_ant_reflight.json`, `star_damage_community.json` and `ki439_orbit_log.json` for the flights.
+Behaviour lives in `src/features/raukk_sourcing/calculations/shippingDamage.ts` and `shippingDamage.types.ts` over the assets `raukk_stellar.json`, `raukk_pressure.json` and `raukk_orbits.json`; their JSDoc and `src/locales/en_US/raukk_sourcing.json` are authoritative for how it behaves, `facts/star-heat-damage.json` for every constant, equation and measurement, and the transcripts `btf_flights.json`, `btf_star_damage.json`, `btf_ant_reflight.json`, `star_damage_community.json`, `repair_and_damage.json` and `ki439_orbit_log.json` for the flights and the shield table. Lane geometry is computed off `src/assets/static/fio_systemstars.json` (`PositionX/Y/Z` and `Connections`), which the damage model itself never opens.
 
 ## Section numbers are a contract
 
-`shippingDamage.ts:710` and `:748` cite this doc's section 9. Numbering is frozen:
+`shippingDamage.ts:19`, `:37`, `:139`, `:788` and `:826`, and `shippingDamage.test.ts:477`, `:528`, `:883` and `:914`, cite this doc by section. Numbering is frozen; it has already slipped once — "On calibrating an anchor" was section 7.3 and is now 7.4 — and nothing cited may move again.
 
-| § | subject |
-|---|---|
-| 1 | the closed-form stellar law |
-| 2 | luminosity from FIO `Sunlight` |
-| 3 | evidence: NL-534 ladder, cross-class control, exponent |
-| 4 | the meteoroid law, cross-checked |
-| 5 | ship dependence, path geometry |
-| 6 | community sheet: landing and KI-439 tabs |
-| 7 | the shipped simulator, bounds, measured accuracy |
-| 8 | capture dates, orbital motion between batches |
-| 9 | the simulation clock, no free parameters |
-| 10 | downstream |
+| § | subject | cited from |
+|---|---|---|
+| 1 | the closed-form stellar law | |
+| 2 | luminosity from FIO `Sunlight` | |
+| 3 | evidence: NL-534 ladder, cross-class control, exponent | |
+| 4 | the meteoroid law, cross-checked | |
+| 5 | ship dependence, path geometry | |
+| 6 | community sheet: landing and KI-439 tabs | |
+| 7 | the shipped simulator, its five terms and two assets | |
+| 7.1 | the stellar term is bounded, not fuzzed | |
+| 7.2 | accuracy, measured | `shippingDamage.ts:19`, `shippingDamage.test.ts:883` |
+| 7.3 | what "accurate" means; lane tilt, and why it is not the answer | `shippingDamage.test.ts:477`, `:528` |
+| 7.4 | calibrating an anchor | `shippingDamage.test.ts:914` |
+| 7.5 | heat and radiation merged; the shielding defect | `shippingDamage.ts:139` |
+| 7.6 | what the spread means for a plan | `shippingDamage.ts:37` |
+| 8 | capture dates, orbital motion between batches | |
+| 9 | the simulation clock, no free parameters | `shippingDamage.ts:788`, `:826` |
+| 10 | downstream | |
+
+## Defect: heat and radiation are merged (§7.5)
+
+`shippingDamage.ts:131-145` carries the defect itself — one `stellar` type where the game has two, and `reliefOf` summing a heat relief onto a radiation one and capping at 1. What the code cannot carry is the evidence, the symmetry of the failure, and the verdict.
+
+- The proof is `damageModifiers` and `damageTypeSplit` in `repair_and_damage.json`, and the split there is MEASURED, not inferred: fly a lane bare in the BTF simulator, re-fly with one shield type installed, attribute the drop, wear is the remainder. Our own panels print one damage figure per leg and can never see it, which is why merging looked free. Greps `damageTypeSplit`, `damageModifiers`, `differencing`, `not measurable` all miss.
+- The failure runs BOTH ways and neither direction is small: a heat shield can zero a lane that is almost pure radiation, a radiation shield can gut a lane that is almost pure heat. Per-lane composition and both consequences are in FACTS. Greps `Giedi`, `Ice Station` miss — no lane composition reaches `src`.
+- Verdict: bare hulls are trustworthy, shield comparisons are not. Treat any output that varies a stellar shield fit as unsourced until the term is split. Grep `shield fit` misses.
+- It is the one defect a planning horizon makes worse rather than better. Everything else in the residual is a phase draw that averages out over a plan's months; this is a fixed mispricing for as long as the shields stay fitted. `shippingDamage.ts:30-37` argues the averaging case for the model as a whole and does not carve this out.
 
 ## Rejected
 
-- **The orbit-implied luminosity ladder** (O = 32x G, from the median innermost orbit). It assumed the generator places the innermost planet at constant flux; it does not. Real spread is O/M ~ 750,000 — class table in `star_damage_community.json`. Greps `ladder`, `luminosity ladder` miss.
-- **Splitting the stellar coefficient by leg type.** The DEP/APP split is real (1.5x, holding across a ship change) but tuning two constants makes the BOUNDS worse — worst escape 2.6% to 28.9% over 33 flights — because the per-epoch solves are exactly determined and their coefficient absorbs whatever the geometry gets wrong. Greps `depCoefficient`, `appCoefficient`, `legTypeCoefficient`, `28.9` miss.
+- **The orbit-implied luminosity ladder** (O = 32x G, from the median innermost orbit). It assumed the generator places the innermost planet at constant flux; it does not. Real spread is O/M ~ 750,000 — class table in `star_damage_community.json`. Greps `luminosity ladder`, `orbit-implied`, `constant flux` miss; bare `ladder` hits only `shippingDamage.test.ts:721`, the NL-534 distance-collapse test, which is a different ladder.
+- **Splitting the stellar coefficient by leg type.** The DEP/APP split is real (1.5x, holding across a ship change) but tuning two constants makes the BOUNDS worse — worst escape multiplied by an order of magnitude, figures in FACTS — because the per-epoch solves are exactly determined and their coefficient absorbs whatever the geometry gets wrong. Greps `depCoefficient`, `appCoefficient`, `legTypeCoefficient`, `28.9%` miss.
+- **Refitting the stellar coefficient at all.** A global refit and a DEP/APP pair both zero the pooled bias and both leave the per-anchor spread exactly where it was. That is the signature of a residual that is not a scaling error, so no scalar can fix it. Greps `2.956`, `refit` miss in the damage model.
+- **Lane inclination as the explanation of the per-anchor residuals.** `rho`, a lane's in-plane component, is not a free parameter: `fio_systemstars.json` gives the lane vector and each system's `Connections` gives the FTL edge a leg actually flies, and because the warp point is set by the NEXT hop rather than the final destination, a multi-jump route's DEP and APP legs point somewhere other than where they end up. Computing it properly barely moves the pooled bias (figures in FACTS) and leaves every large per-anchor residual untouched, because those anchors are all NARROW-band ones that tilt cannot reach. Tilt is therefore ruled OUT, and section 9.2's open item is worth less than it looked; the remaining candidates are a per-anchor coefficient, a bad `Sunlight`, or single-capture phase. Greps `rules out`, `next hop`, `jump sequence`, `Connections` (in the damage model) miss; `rho` appears only in `shippingDamage.test.ts` as a sensitivity check that never prices a real leg.
 - **The community landing formula** (`star_damage_community.json`, `landingDamageCandidate`). Shape kept, coefficient refitted: theirs runs uniformly ~1.9x high on this campaign's landings. Grep `1.9x` misses.
 - **Reading the sim clock as time since the servers came up.** That demands a 47x game/real ratio, which the 74-flight fit rejects (r = 0.06 against 0.974). Greps `servers came up`, `47x` miss.
 
 ## Constraints the code obeys but cannot explain
 
-- `RAUKK_DAMAGE_SIM_CALIBRATION_MS` and `..._YEARS` are copied off a third-party page but not carried on trust: sweeping either destroys the 74-flight fit — half a game year, or one percent on the ratio, flips r from 0.974 to negative. Grep `third-party` misses.
+- **Every orbital plane is assumed to be the galactic plane.** No source states it and none carries an inclination at all: `raukk_orbits.json` holds `[semiMajorAxis, eccentricity]` and nothing more, and both the community visualiser and `raukkPlanetPosition` model orbits flat and coplanar. It is the assumption that makes `rho` computable without fitting — and since computing `rho` buys nothing per anchor, it is not load-bearing either way today. Greps `coplanar`, `OrbitInclination`, `RightAscension`, `orbitalPlane` miss; `inclination` hits only `shippingDamage.ts:26`, which asserts that inclination does not average away without ever saying which frame it is measured in.
+- `RAUKK_DAMAGE_SIM_CALIBRATION_MS` and `..._YEARS` are copied off a third-party page but not carried on trust: sweeping either destroys the 74-flight fit — half a game year, or one percent on the ratio, flips r from 0.974 to negative. Grep `third-party` misses across `src/features/raukk_sourcing/`; the only trace in the model is the bare URL at `shippingDamage.ts:109`.
 - The epoch aliases — 200.0 game years also scores 0.970, 115.0 scores -0.970 — because a 21-day window cannot separate epochs offset by a common multiple of both periods. Harmless: any aliased value gives identical positions today. Grep `alias` misses.
-- Capture dates. Panels within ONE batch were minutes apart, so a planet holds one orbital position per batch; ACROSS batches the dates are NOT established. The 6.3 and 7.5 real-hour gaps in FACTS are inferred from the fit, not known. Greps `capturedAt`, `batch 9` miss.
+- Capture dates. Panels within ONE batch were minutes apart, so a planet holds one orbital position per batch; ACROSS batches the dates are NOT established. The 6.3 and 7.5 real-hour gaps in FACTS are inferred from the fit, not known. Greps `capturedAt`, `captureTime`, `capture date` miss; the only mention of a batch anywhere in the model is the prose at `shippingDamage.test.ts:248`, which carries no date either.
 
 ## Unbuilt
 
-- **Nothing consumes the model.** `shippingDamage` appears nowhere in `src` outside its own two files and its test, nor do `raukkTripDamage`, `raukkLegDamage` or `raukkStellarGeometry`, and `src/locales/en_US/raukk_sourcing.json` carries no key for it. The wired wear model is still `shippingPhysics.ts:548` (`raukkStlDamage`, wear + meteoroid only), so no view prices a stellar term.
+- **Nothing consumes the model.** `shippingDamage` appears nowhere in `src` outside its own two files and its test, nor do `raukkTripDamage`, `raukkLegDamage` or `raukkStellarGeometry`, and `src/locales/en_US/raukk_sourcing.json` carries no key for it. The wired wear model is still `shippingPhysics.ts:547` (`raukkStlDamage`, wear + meteoroid only), so no view prices a stellar term.
+- **Splitting the stellar term in two.** The fix for §7.5 is a second coefficient and a second relief table, not a constant — the sheet's per-lane heat share spans the whole 0 to 1, so no ratio collapses it. Blocked on nothing but the work: `repair_and_damage.json` already carries both the modifiers and the measured split.
+- **Repeat flights on ONE lane, spread across its orbital period.** The only way to separate a genuine per-lane bias from a phase draw, and the only route to per-lane accuracy that does not first need section 9.2's plane orientation. Cost is one BTF panel per capture, about five captures across the anchor's period — days for a tight orbit, months for a wide one. Worth doing for a lane a base depends on, never universally. Greps `five captures`, `hide under` miss.
 - **The warp-IN asymmetry.** Departures out of one system all measure the same distance whatever planet they leave from; approaches on what resolves to the same inbound lane vary 21.0 to 27.4 Mkm and leave a 14% residual on the position fit. The model treats DEP and APP alike. (`asymmetr` hits only `shippingPhysics.ts:204`, the DEP/APP FUEL share.)
 - **Solving each planet's position rather than bounding it.** `fio_systemstars.json` carries `PositionX/Y/Z` per system, so the direction to any target is computable and only one angle per planet per day is unknown. Three lanes off one anchor fit it exactly-determined — consistency, not proof; it wants five or more in one sitting. Greps `over-determin`, `exactly determined` miss.
-- **Orbital-plane orientation in the galactic frame** — two fixed angles per system, published by no source. Fit them once and that system's stellar term becomes a point estimate instead of a band. Blocked on flights carrying no capture time. Greps `orbitalPlane`, `inclination`, `OrbitInclination`, `RightAscension` all miss.
+- **Orbital-plane orientation in the galactic frame** — two fixed angles per system, published by no source. Fit them once and that system's stellar term becomes a point estimate instead of a band. Blocked on flights carrying no capture time, and demoted by §7.3: solving it would not move the per-anchor residuals it was expected to explain.
 - **One blueprint flown both directions on a single pair**, settling the DEP/APP split by direct measurement rather than cross-batch inference.
