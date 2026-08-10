@@ -131,3 +131,13 @@ export interface IRaukkInputRowSource {
 	workforceMaterialIO: { ticker: string; input: number }[];
 	productionMaterialIO: { ticker: string; input: number }[];
 }
+
+/** One end of a lease link as the UI shows it: a name, and the plan
+ * route to follow the link by. Both are optional, a plan may be known
+ * to the sourcing store alone and hold no planet yet */
+export interface IRaukkLeaseLink {
+	planUuid: string;
+	planName?: string;
+	planetNaturalId?: string;
+	route?: string;
+}

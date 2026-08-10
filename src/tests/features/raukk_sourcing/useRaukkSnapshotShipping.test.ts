@@ -510,6 +510,184 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 		});
 	});
 
+	/*
+	 * A base leased on a planet the account already sits on is two plans
+	 * on ONE planet: their materials change hands over a same-location
+	 * contract and no ship ever flies. The rule is the generalisation of
+	 * self sourcing and applies to every same-planet draw, unconditionally
+	 * — see docs/raukk_sourcing/shipping-decisions.md, round 12.
+	 */
+	describe("local transfer rule", () => {
+		/** Freight of the same import bought at the consumers exchange */
+		const CX_IMPORT_COST: number = (0.1 * (2 * CX_TO_CONSUMER * 10)) / 100;
+
+		beforeEach(() => {
+			store.setShippingConfig({ enabled: true });
+		});
+
+		/**
+		 * An ORE producer on the given planet, drawn by the consumer.
+		 *
+		 * @param {string} planUuid Producing plan uuid
+		 * @param {string} planetNaturalId Planet it sits on
+		 * @param {number} unitsPerDay Daily output, the aggregate weight
+		 */
+		function withProducer(
+			planUuid: string,
+			planetNaturalId: string,
+			unitsPerDay: number = 1000
+		): void {
+			store.setSnapshot(planUuid, {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: planUuid,
+				planetNaturalId,
+				outputs: {
+					ORE: {
+						ticker: "ORE",
+						unitsPerDay,
+						costPerUnit: 5,
+						breakdown: {
+							workforce: 0,
+							repair: 0,
+							inputs: 5,
+							shipping: 0,
+						},
+					},
+				},
+				draws: {},
+			});
+		}
+
+		it("charges no freight on a draw from the same planet", async () => {
+			withProducer("lease", CONSUMER_PLANET);
+			store.setTickerSource("consumer", "ORE", {
+				mode: "plan",
+				sourcePlanUuid: "lease",
+			});
+
+			// ALO is weightless, the ORE import is the only cargo there is
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			// no sourcing lane, and no market lane standing in for one
+			expect(snapshot.lanes?.map((lane) => lane.pairKey)).not.toContain(
+				"consumer>lease"
+			);
+			expect(
+				snapshot.flows?.filter((flow) => flow.ticker === "ORE")
+			).toStrictEqual([]);
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBe(0);
+
+			// the draw itself, its price and the base fraction are the
+			// ordinary plan sourced ones — only the freight is gone
+			expect(snapshot.draws).toStrictEqual({ lease: { ORE: 100 } });
+			expect(snapshot.outputs.ALO.breakdown.inputs).toBe(5);
+			expect(snapshot.outputs.ALO.costPerUnit).toBe(5);
+			// the leased base still counts towards the base fraction, the
+			// exemption is about freight and nothing else
+			expect(snapshot.baseFraction).toBeGreaterThan(1);
+		});
+
+		it("still routes a draw from another planet via the exchange", async () => {
+			withProducer("remote", SOURCE_PLANET);
+			store.setTickerSource("consumer", "ORE", {
+				mode: "plan",
+				sourcePlanUuid: "remote",
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				CX_IMPORT_COST,
+				10
+			);
+			expect(snapshot.draws).toStrictEqual({ remote: { ORE: 100 } });
+		});
+
+		it("exempts only the local half of a mixed aggregate", async () => {
+			withProducer("lease", CONSUMER_PLANET, 500);
+			withProducer("remote", SOURCE_PLANET, 500);
+			store.setTickerSource("consumer", "ORE", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			// the pool splits the 100 ORE evenly, and only the 50 units the
+			// remote producer covers ever board a ship
+			expect(snapshot.draws).toStrictEqual({
+				lease: { ORE: 50 },
+				remote: { ORE: 50 },
+			});
+
+			const ore = (snapshot.flows ?? []).filter(
+				(flow) => flow.ticker === "ORE"
+			);
+
+			expect(ore.map((flow) => flow.fromStop)).toStrictEqual([
+				SOURCE_PLANET,
+			]);
+			expect(ore[0].unitsPerDay).toBeCloseTo(50, 10);
+			expect(ore[0].sourcePlanUuid).toBe("remote");
+		});
+
+		it("keeps a same planet draw out of the producers exchange sells", async () => {
+			// the mirror side: the drawing plan sits on THIS planet, so the
+			// units `subscribedOf` took off the exchange sells stay off it
+			store.setSnapshot("lease", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Lease",
+				planetNaturalId: CONSUMER_PLANET,
+				outputs: {},
+				draws: { consumer: { ALO: 100 } },
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			/*
+			 * 300 t of ALO would have gone out and 100 t of ORE come back;
+			 * with the whole ALO output handed over locally only the import
+			 * is left, 0.1 trips a day instead of 0.3.
+			 */
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				CX_IMPORT_COST,
+				10
+			);
+		});
+
+		it("does not push the exchange sells negative when oversubscribed", async () => {
+			store.setSnapshot("lease", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Lease",
+				planetNaturalId: CONSUMER_PLANET,
+				outputs: {},
+				// more than the plan produces, a supported state
+				draws: { consumer: { ALO: 150 } },
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				CX_IMPORT_COST,
+				10
+			);
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeGreaterThan(0);
+		});
+	});
+
 	describe("fuel derived costs", () => {
 		beforeEach(() => {
 			store.setShippingConfig({ enabled: true });

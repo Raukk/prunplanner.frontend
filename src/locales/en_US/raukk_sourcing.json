@@ -930,5 +930,20 @@
 		"info": "Default source of every base at once, per input group. A ticker without its own setting on a base follows the default of its group — rations, drinking water and the repair materials are configured once here instead of base by base. Changing a default marks every stored snapshot stale.",
 		"note": "Account defaults —",
 		"note_link": "manage"
+	},
+	"lease": {
+		"title": "Lease",
+		"info": "A base leased from another player sits on a planet you already ship to, so both bases share one docking site. Linking them plans and pays the whole site's shipping on the host base: one visit, one hull, combined tonnage.",
+		"select_label": "This base is leased — ships via",
+		"select_placeholder": "Host base on this planet",
+		"no_candidates": "No other base of yours on this planet holds a snapshot yet, so there is nothing to lease from.",
+		"linked": "Leased base — shipping delegated to {host}",
+		"unlink": "Unlink Lease",
+		"hosting": "This base hosts {count} leased base(s); their cargo ships with yours.",
+		"delegated_note": "Shipping is planned on {host}.",
+		"host_note": "Site totals — includes {count} leased base(s):",
+		"badge_lease": "Lease → {host}",
+		"badge_host": "+{count} leased",
+		"unknown_plan": "Unknown plan"
 	}
 }

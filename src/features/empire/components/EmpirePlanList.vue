@@ -8,6 +8,10 @@
 	import { usePlanetData } from "@/database/services/usePlanetData";
 	const { planetNames, loadPlanetNames } = usePlanetData();
 
+	// Components
+	// raukk: lease link of a plan, shown next to its name
+	import RaukkLeaseBadge from "@/features/raukk_sourcing/components/RaukkLeaseBadge.vue";
+
 	// Util
 	import { formatNumber } from "@/util/numbers";
 
@@ -46,12 +50,14 @@
 			sorter="default"
 			default-sort-order="ascend">
 			<template #render-cell="{ rowData }">
-				<div class="text-wrap">
+				<div
+					class="text-wrap flex flex-row flex-wrap gap-1 items-center">
 					<router-link
 						:to="`/plan/${rowData.planet}/${rowData.uuid}`"
 						class="text-link-primary font-bold hover:underline">
 						{{ rowData.name }}
 					</router-link>
+					<RaukkLeaseBadge :plan-uuid="rowData.uuid" />
 				</div>
 			</template>
 		</XNDataTableColumn>
