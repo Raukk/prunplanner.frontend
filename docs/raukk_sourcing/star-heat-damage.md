@@ -196,13 +196,15 @@ Inclination is a property of the lane — the same two systems, forever. It is n
 
 **And `rho` is not a free parameter — it is computable.** `fio_systemstars.json` carries `PositionX/Y/Z` for all 698 systems, so the lane vector is known exactly, and if the orbital plane is the galactic plane then `rho = sqrt(1 - (dz/|d|)^2)` falls straight out with no fitting and no timestamps.
 
-Doing that reveals the galaxy is flat but the LANES are not. The slab is 20:1 flattened — x spans 2,580 units and y 2,717 against z's 130 — so over all pairs of systems `rho` sits at a median of 1.000. That population is misleading: it is dominated by long hops where 130 units of thickness is nothing against 2,000 of separation. Ships fly SHORT hops, where the same 130 units is most of the distance. Over the eight nearest neighbours of each system:
+Doing that reveals the galaxy is flat but the LANES are not. The slab is 20:1 flattened — x spans 2,580 units and y 2,717 against z's 130 — so over all pairs of systems `rho` sits at a median of 1.000. That population is meaningless here: a ship cannot fly between two arbitrary systems. It flies the FTL graph, and `fio_systemstars.json` carries it in each system's `Connections` — 894 edges over 698 systems, degree 1 to 6, median hop length 81.8 units against a slab 130 thick. Over those actual edges:
 
 | quantile | p1 | p5 | p25 | median | p75 |
 |---|---|---|---|---|---|
-| `rho` | 0.472 | 0.673 | 0.897 | 0.966 | 0.993 |
+| `rho` | 0.439 | 0.626 | 0.872 | 0.956 | 0.991 |
 
-Only 29% of near-neighbour lanes clear `rho = 0.99`. The campaign's own lanes run 14-16 degrees of tilt for most anchors and 36 degrees (`rho = 0.811`, a 72% grade) for ZV-759 to ANT. Tilt is real and it is routine.
+Only 25.6% of FTL edges clear `rho = 0.99` and 30.6% fall below 0.9. The campaign's own lanes run 14-16 degrees of tilt for most anchors and 36 degrees (`rho = 0.811`, a 72% grade) for ZV-759 to ANT. Tilt is real and it is routine.
+
+A route is also not one lane. Fifteen of the 33 flights jump two or three times, and the warp point is set by the NEXT hop, not the final destination — so a DEP leg points at the first jump target and an APP leg is entered from the last jump's source. All 50 hops in the flight records check out as real edges of the `Connections` graph, and using them moves `rho` on 24 of the 66 legs.
 
 What it costs at those tilts, by band width — the band is the driver, since both come from how much the dose varies with direction:
 
@@ -221,7 +223,8 @@ So a lane whose band is under about 2x is safe from tilt at any tilt the galaxy 
 | | pooled bias | anchors within +-5% | worst anchor |
 |---|---|---|---|
 | `rho` assumed 1 | +4.49% | 9 of 19 | YK-715a +47.3% |
-| `rho` computed per lane | +3.00% | 8 of 19 | YK-715a +46.6% |
+| `rho` from origin to final destination | +3.00% | 8 of 19 | YK-715a +46.6% |
+| `rho` from the actual jump sequence | +3.44% | 7 of 19 | YK-715a +46.3% |
 
 ANT moves from +23.4% to +19.9% and nothing else moves at all, because the campaign's ANT legs run 21-27 Mkm against a 33.6 Mkm orbit radius — they do not overshoot, so their band is narrow and their tilt sensitivity is small. The anchors with the large residuals are all narrow-band ones, which is exactly where tilt CANNOT be the explanation.
 
@@ -244,6 +247,29 @@ It also explains the sign pattern in the residuals. Over-prediction (ANT +16%, N
 `raukkCalibrateStellar` back-solves an anchor's coefficient from one observed leg. It pins that lane AT THAT MOMENT — the planet keeps orbiting, so the same lane flown months later presents a different angle and a different apparent coefficient. Average several observations spread across an orbital period and the result converges on `expected`; a single one does not.
 
 This is the only route to per-lane accuracy that does not require solving section 9.2. Cost is one BTF panel per capture, about five captures spread across the anchor's orbital period — section 8.2 gives those: a week for ANT at 1.63 days, three months for NL-534a at 17.8. Worth doing for a lane a base depends on, not worth doing universally.
+
+### 7.5 Heat and radiation are merged, and the shielding is wrong because of it
+
+The model carries ONE stellar term. The game carries two, and `repair_and_damage.json` proves it: `damageModifiers` lists `heat` (BPT 0.5, APT 1.0) and `radiation` (BRP 0.15, ARP 0.35, SRP 0.7) as separate types with separate shields, and `damageTypeSplit` measures the split per lane by differencing in the BTF simulator — fly bare, re-fly with one shield type, attribute the drop.
+
+The header of `shippingDamage.ts` says the split "is not measurable from flight data". That is true of OUR flight data and false of the sheet's, which measured it 36 lanes deep. The two are not proportional and cannot be collapsed into a ratio:
+
+| lane | wear | meteoroid | heat | radiation | heat share of stellar |
+|---|---|---|---|---|---|
+| Ant -> Eos | 15% | 7% | 1% | 77% | **0.01** |
+| Ant -> Origo | 18% | 47% | 2% | 33% | 0.06 |
+| Ant -> Deimos | 29% | 12% | 34% | 25% | 0.58 |
+| Ant -> Ice Station | 7% | 26% | 48% | 19% | 0.71 |
+| Ben -> Giedi Prime | 8% | 3% | 89% | 1% | **0.99** |
+
+Across all 36 lanes the heat share of the stellar term runs the full 0.00 to 1.00. Same origin, opposite composition — these are two different physical laws, not one term with a constant mix.
+
+For an UNSHIELDED hull merging them costs nothing: the sum is the sum, and the sum is what every constant here was fitted against. It breaks as soon as a ship carries stellar shielding, because `reliefOf` adds the heat and radiation reliefs together and caps at 1:
+
+- APT alone reads as relief 1.0 and zeroes the WHOLE stellar term. On Ant -> Eos it should remove 1% of it.
+- SRP alone removes 70% of the whole term. On Ben -> Giedi Prime it should remove almost none.
+
+So the model is trustworthy on bare hulls and misleading on exactly the question a shield table exists to answer. Anything comparing shield fits should be treated as unsourced until the term is split.
 
 ## 8. Capture dates, and what the orbit does between them
 

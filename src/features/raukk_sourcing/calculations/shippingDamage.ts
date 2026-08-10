@@ -132,8 +132,15 @@ const ZERO_BAND: IRaukkDamageBand = { low: 0, expected: 0, high: 0 };
  * Source: `docs/raukk_sourcing/repair_and_damage.json`. `general`
  * applies to the whole leg (hull plates, repair drones; LHP is
  * negative, it RAISES damage). `stellar` merges the heat and
- * radiation entries: the panel prints one damage figure per leg, so
- * the split between the two is not measurable from flight data.
+ * radiation entries, which the game shields SEPARATELY.
+ *
+ * KNOWN WRONG for shielded hulls, see star-heat-damage.md section 7.5.
+ * Merging is exact on a bare hull, which is what every constant here
+ * was fitted against, but `reliefOf` then adds a heat relief to a
+ * radiation one: APT alone reads as 1.0 and zeroes the whole term, on
+ * lanes the community sheet measures as 99% radiation. The sheet has
+ * the per-lane split for 36 lanes and it runs the full 0 to 1, so this
+ * needs a second term rather than a constant.
  *
  * @author raukk
  */
