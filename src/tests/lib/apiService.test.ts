@@ -56,7 +56,7 @@ describe("ApiService", () => {
 					responseSchema,
 					true
 				)
-			).rejects.toThrowError(/^timeout of 0ms exceeded$/);
+			).rejects.toThrowError(/^timeout of 30000ms exceeded$/);
 		});
 
 		it("axios error", async () => {
@@ -70,7 +70,7 @@ describe("ApiService", () => {
 
 			await expect(
 				apiService.get<responseType>("/test", responseSchema)
-			).rejects.toThrowError(/^timeout of 0ms exceeded$/);
+			).rejects.toThrowError(/^timeout of 30000ms exceeded$/);
 		});
 	});
 
@@ -155,7 +155,7 @@ describe("ApiService", () => {
 					payloadSchema,
 					responseSchema
 				)
-			).rejects.toThrowError(/^timeout of 0ms exceeded$/);
+			).rejects.toThrowError(/^timeout of 30000ms exceeded$/);
 		});
 	});
 
@@ -197,7 +197,7 @@ describe("ApiService", () => {
 					payloadSchema,
 					responseSchema
 				)
-			).rejects.toThrowError(/^timeout of 0ms exceeded$/);
+			).rejects.toThrowError(/^timeout of 30000ms exceeded$/);
 		});
 	});
 
@@ -214,7 +214,7 @@ describe("ApiService", () => {
 			mock.onDelete("/test").timeout();
 
 			await expect(apiService.delete("/test")).rejects.toThrowError(
-				/^timeout of 0ms exceeded$/
+				/^timeout of 30000ms exceeded$/
 			);
 		});
 	});

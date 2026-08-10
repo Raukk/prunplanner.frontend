@@ -39,8 +39,50 @@ export async function getDB() {
 						}
 					}
 				},
+				/*
+				 * An open that needs a version upgrade waits silently until
+				 * every tab holding an older connection lets go. Without
+				 * these callbacks that wait is invisible and unbounded:
+				 * dbPromise never settles, and every game data read of this
+				 * tab — and everything suspended on one — pends forever
+				 * with no error. The stale tab meanwhile keeps working and
+				 * never learns it is in the way.
+				 */
+				blocked(currentVersion, blockedVersion) {
+					console.error(
+						`[db] open blocked: another PRUNplanner tab still holds version ${currentVersion}, this tab waits for it to close before upgrading to ${blockedVersion}. Close or reload the other tabs.`
+					);
+				},
+				blocking(currentVersion, blockedVersion) {
+					// a deletion also lands here, with no target version.
+					// Only resetDB and the test harness delete, and both
+					// manage the connection themselves — closing it out from
+					// under them kills reads that are still mid-flight
+					if (blockedVersion === null) return;
+
+					// this tab is the outdated one: release the database so
+					// the newer tab can upgrade. Later reads here fail fast
+					// (closed or version-rejected connection) instead of
+					// deadlocking the other tab; a reload recovers this one.
+					console.warn(
+						`[db] this tab holds version ${currentVersion} and blocks an upgrade to ${blockedVersion}, releasing the database. Reload this tab.`
+					);
+					void dbPromise?.then((db) => db.close());
+					dbPromise = null;
+				},
+				terminated() {
+					// browser force-closed the connection, reopen on next use
+					dbPromise = null;
+				},
 			}
 		);
+		// a failed open must not latch as the database for the rest of
+		// the session, the next read deserves a fresh attempt — but only
+		// clear the slot if no newer attempt has taken it over
+		const opened = dbPromise;
+		opened.catch(() => {
+			if (dbPromise === opened) dbPromise = null;
+		});
 	}
 	// Request persistence after DB is ready
 	try {
