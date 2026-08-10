@@ -18,6 +18,15 @@ class ApiService {
 		this.client = axios;
 		this.client.defaults.baseURL = config.API_BASE_URL;
 
+		// A request with no timeout can pend forever on a half-dead
+		// connection. Everything above this client — the query cache's
+		// in-flight dedupe, the token refresh every 401 waits on, any
+		// async setup behind a <Suspense> — then pends with it, with no
+		// error and no way back short of a hard refresh. A rejection is
+		// recoverable; a pending promise is not. (The FIO client pins
+		// its own timeout in fioData.api.ts.)
+		this.client.defaults.timeout = 30_000;
+
 		// Set default headers to disable cache
 		this.client.defaults.headers.get["Cache-Control"] =
 			"no-cache, no-store, must-revalidate";
