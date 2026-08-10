@@ -1,0 +1,302 @@
+{
+ "source": "Damage_plotting.xlsx 'KI-439' tab, 74 real KI-439b<->KI-439d flights logged 2026-03-11 to 2026-04-02. The log's clock is naive; its offset was fitted against the orbit model and lands on UTC-4. flownMkm is the panel's TRA distance, a pursuit curve rather than the straight-line separation.",
+ "utcOffsetFitted": -4,
+ "flights": [
+  {
+   "atUtc": "2026-03-11T18:32Z",
+   "flownMkm": 83.855
+  },
+  {
+   "atUtc": "2026-03-12T06:35Z",
+   "flownMkm": 63.373
+  },
+  {
+   "atUtc": "2026-03-12T09:04Z",
+   "flownMkm": 51.411
+  },
+  {
+   "atUtc": "2026-03-12T18:06Z",
+   "flownMkm": 47.44
+  },
+  {
+   "atUtc": "2026-03-12T19:44Z",
+   "flownMkm": 38.647
+  },
+  {
+   "atUtc": "2026-03-13T07:42Z",
+   "flownMkm": 33.806
+  },
+  {
+   "atUtc": "2026-03-13T11:04Z",
+   "flownMkm": 48.451
+  },
+  {
+   "atUtc": "2026-03-13T16:10Z",
+   "flownMkm": 52.358
+  },
+  {
+   "atUtc": "2026-03-14T08:57Z",
+   "flownMkm": 89.775
+  },
+  {
+   "atUtc": "2026-03-14T15:00Z",
+   "flownMkm": 108.003
+  },
+  {
+   "atUtc": "2026-03-14T16:35Z",
+   "flownMkm": 108.362
+  },
+  {
+   "atUtc": "2026-03-14T21:27Z",
+   "flownMkm": 149.827
+  },
+  {
+   "atUtc": "2026-03-15T06:07Z",
+   "flownMkm": 138.276
+  },
+  {
+   "atUtc": "2026-03-15T12:07Z",
+   "flownMkm": 163.831
+  },
+  {
+   "atUtc": "2026-03-15T14:17Z",
+   "flownMkm": 156.262
+  },
+  {
+   "atUtc": "2026-03-15T21:11Z",
+   "flownMkm": 156.617
+  },
+  {
+   "atUtc": "2026-03-16T06:55Z",
+   "flownMkm": 166.739
+  },
+  {
+   "atUtc": "2026-03-16T14:32Z",
+   "flownMkm": 131.131
+  },
+  {
+   "atUtc": "2026-03-16T19:31Z",
+   "flownMkm": 141.181
+  },
+  {
+   "atUtc": "2026-03-17T16:58Z",
+   "flownMkm": 73.588
+  },
+  {
+   "atUtc": "2026-03-17T21:33Z",
+   "flownMkm": 61.756
+  },
+  {
+   "atUtc": "2026-03-18T09:47Z",
+   "flownMkm": 36.851
+  },
+  {
+   "atUtc": "2026-03-18T12:44Z",
+   "flownMkm": 31.606
+  },
+  {
+   "atUtc": "2026-03-18T20:08Z",
+   "flownMkm": 31.482
+  },
+  {
+   "atUtc": "2026-03-19T06:47Z",
+   "flownMkm": 43.223
+  },
+  {
+   "atUtc": "2026-03-19T07:45Z",
+   "flownMkm": 54.221
+  },
+  {
+   "atUtc": "2026-03-20T06:35Z",
+   "flownMkm": 94.639
+  },
+  {
+   "atUtc": "2026-03-20T07:59Z",
+   "flownMkm": 98.309
+  },
+  {
+   "atUtc": "2026-03-20T12:11Z",
+   "flownMkm": 109.066
+  },
+  {
+   "atUtc": "2026-03-20T20:03Z",
+   "flownMkm": 128.412
+  },
+  {
+   "atUtc": "2026-03-21T11:22Z",
+   "flownMkm": 169.153
+  },
+  {
+   "atUtc": "2026-03-21T14:25Z",
+   "flownMkm": 164.806
+  },
+  {
+   "atUtc": "2026-03-21T21:39Z",
+   "flownMkm": 133.197
+  },
+  {
+   "atUtc": "2026-03-22T08:56Z",
+   "flownMkm": 138.223
+  },
+  {
+   "atUtc": "2026-03-22T15:22Z",
+   "flownMkm": 112.629
+  },
+  {
+   "atUtc": "2026-03-22T17:16Z",
+   "flownMkm": 118.974
+  },
+  {
+   "atUtc": "2026-03-23T06:39Z",
+   "flownMkm": 79.991
+  },
+  {
+   "atUtc": "2026-03-23T08:23Z",
+   "flownMkm": 75.281
+  },
+  {
+   "atUtc": "2026-03-23T15:18Z",
+   "flownMkm": 60.244
+  },
+  {
+   "atUtc": "2026-03-24T07:44Z",
+   "flownMkm": 34.371
+  },
+  {
+   "atUtc": "2026-03-24T10:45Z",
+   "flownMkm": 44.047
+  },
+  {
+   "atUtc": "2026-03-24T15:50Z",
+   "flownMkm": 44.179
+  },
+  {
+   "atUtc": "2026-03-24T21:25Z",
+   "flownMkm": 48.98
+  },
+  {
+   "atUtc": "2026-03-25T06:32Z",
+   "flownMkm": 61.267
+  },
+  {
+   "atUtc": "2026-03-25T11:28Z",
+   "flownMkm": 76.175
+  },
+  {
+   "atUtc": "2026-03-25T21:33Z",
+   "flownMkm": 90.028
+  },
+  {
+   "atUtc": "2026-03-26T07:25Z",
+   "flownMkm": 125.728
+  },
+  {
+   "atUtc": "2026-03-26T09:50Z",
+   "flownMkm": 122.72
+  },
+  {
+   "atUtc": "2026-03-26T15:06Z",
+   "flownMkm": 145.865
+  },
+  {
+   "atUtc": "2026-03-26T17:33Z",
+   "flownMkm": 144.334
+  },
+  {
+   "atUtc": "2026-03-26T20:42Z",
+   "flownMkm": 174.648
+  },
+  {
+   "atUtc": "2026-03-27T09:53Z",
+   "flownMkm": 177.779
+  },
+  {
+   "atUtc": "2026-03-27T17:02Z",
+   "flownMkm": 151.05
+  },
+  {
+   "atUtc": "2026-03-27T18:57Z",
+   "flownMkm": 154.115
+  },
+  {
+   "atUtc": "2026-03-27T21:37Z",
+   "flownMkm": 129.413
+  },
+  {
+   "atUtc": "2026-03-28T06:17Z",
+   "flownMkm": 129.935
+  },
+  {
+   "atUtc": "2026-03-28T09:35Z",
+   "flownMkm": 116.71
+  },
+  {
+   "atUtc": "2026-03-28T11:38Z",
+   "flownMkm": 119.356
+  },
+  {
+   "atUtc": "2026-03-28T17:07Z",
+   "flownMkm": 101.17
+  },
+  {
+   "atUtc": "2026-03-28T19:13Z",
+   "flownMkm": 104.92
+  },
+  {
+   "atUtc": "2026-03-29T10:15Z",
+   "flownMkm": 67.356
+  },
+  {
+   "atUtc": "2026-03-29T11:32Z",
+   "flownMkm": 56.98
+  },
+  {
+   "atUtc": "2026-03-29T14:08Z",
+   "flownMkm": 59.657
+  },
+  {
+   "atUtc": "2026-03-29T18:42Z",
+   "flownMkm": 41.551
+  },
+  {
+   "atUtc": "2026-03-29T21:10Z",
+   "flownMkm": 44.953
+  },
+  {
+   "atUtc": "2026-03-30T11:30Z",
+   "flownMkm": 46.067
+  },
+  {
+   "atUtc": "2026-03-30T14:13Z",
+   "flownMkm": 37.729
+  },
+  {
+   "atUtc": "2026-03-30T20:10Z",
+   "flownMkm": 67.585
+  },
+  {
+   "atUtc": "2026-03-31T08:01Z",
+   "flownMkm": 76.833
+  },
+  {
+   "atUtc": "2026-03-31T11:45Z",
+   "flownMkm": 82.712
+  },
+  {
+   "atUtc": "2026-03-31T13:17Z",
+   "flownMkm": 87.597
+  },
+  {
+   "atUtc": "2026-03-31T18:17Z",
+   "flownMkm": 98.842
+  },
+  {
+   "atUtc": "2026-04-02T05:20Z",
+   "flownMkm": 169.931
+  },
+  {
+   "atUtc": "2026-04-02T11:35Z",
+   "flownMkm": 154.597
+  }
+ ]
+}
