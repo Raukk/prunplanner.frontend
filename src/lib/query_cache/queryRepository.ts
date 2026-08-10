@@ -586,26 +586,25 @@ export function useQueryRepository() {
 			fetchFn: async (params: { empireUuid: string }) => {
 				// dropped if the session ends while this is in flight
 				const session: number = queryStore.sessionGeneration;
-				try {
-					const data = await callGetEmpirePlans(params.empireUuid);
 
-					if (isCurrentSession(session)) planningStore.setPlans(data);
+				// see GetAllPlans: a failure must not masquerade as an
+				// empire with no plans
+				const data = await callGetEmpirePlans(params.empireUuid);
 
-					// manually set individual plans
-					data.forEach((p) =>
-						queryStore.addCacheState(
-							["planningdata", "plan", p.uuid],
-							"GetPlan",
-							{ planUuid: p.uuid! },
-							p,
-							session
-						)
-					);
+				if (isCurrentSession(session)) planningStore.setPlans(data);
 
-					return data;
-				} catch {
-					return [];
-				}
+				// manually set individual plans
+				data.forEach((p) =>
+					queryStore.addCacheState(
+						["planningdata", "plan", p.uuid],
+						"GetPlan",
+						{ planUuid: p.uuid! },
+						p,
+						session
+					)
+				);
+
+				return data;
 			},
 			hydrateFn: async (params: { empireUuid: string }) => {
 				const empire = planningStore.empires[params.empireUuid];
@@ -760,29 +759,32 @@ export function useQueryRepository() {
 			fetchFn: async () => {
 				// dropped if the session ends while this is in flight
 				const session: number = queryStore.sessionGeneration;
-				try {
-					const data = await callGetPlanlist();
-					// authoritative list: drop plans it does not contain,
-					// otherwise the record accumulates every plan ever
-					// loaded and hydration rebuilds a superset
-					if (isCurrentSession(session))
-						planningStore.setPlans(data, true);
 
-					// manually set individual plans
-					data.forEach((p) =>
-						queryStore.addCacheState(
-							["planningdata", "plan", p.uuid],
-							"GetPlan",
-							{ planUuid: p.uuid! },
-							p,
-							session
-						)
-					);
+				/*
+					Deliberately not caught: swallowing the failure into an
+					empty list told every caller the user owns no plans,
+					which renders as an empty planning screen instead of an
+					error, and cached that emptiness as a success.
+				*/
+				const data = await callGetPlanlist();
 
-					return data;
-				} catch {
-					return [];
-				}
+				// authoritative list: drop plans it does not contain,
+				// otherwise the record accumulates every plan ever
+				// loaded and hydration rebuilds a superset
+				if (isCurrentSession(session)) planningStore.setPlans(data, true);
+
+				// manually set individual plans
+				data.forEach((p) =>
+					queryStore.addCacheState(
+						["planningdata", "plan", p.uuid],
+						"GetPlan",
+						{ planUuid: p.uuid! },
+						p,
+						session
+					)
+				);
+
+				return data;
 			},
 			hydrateFn: async () => {
 				const data = Object.values(planningStore.plans);

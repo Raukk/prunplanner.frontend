@@ -285,16 +285,33 @@ describe("queryStore: stale-while-revalidate", () => {
 		expect(store.cacheState[hash].timestamp).toBe(NOW);
 	});
 
-	it("sets error and rejects when a foreground fetch fails", async () => {
+	it("drops the entry and rejects when a foreground fetch fails", async () => {
 		mocks.fetchTtl.mockRejectedValueOnce(new Error("boom"));
 
 		const hash: string = toCacheKey(["ttlQuery", "fgfail"]);
 
 		await expect(exec("ttlQuery", "fgfail")).rejects.toThrow("boom");
 
-		expect(store.cacheState[hash].error).toBeInstanceOf(Error);
-		expect(store.cacheState[hash].data).toBeNull();
-		expect(store.cacheState[hash].loading).toBe(false);
+		// nothing usable to keep, so no record of the failure is left
+		// behind to poison the next read
+		expect(store.cacheState[hash]).toBeUndefined();
+		expect(store.isAnythingLoading).toBe(false);
+	});
+
+	it("refetches cleanly after a foreground failure", async () => {
+		mocks.hydrateTtl.mockResolvedValue(null);
+		mocks.fetchTtl.mockRejectedValueOnce(new Error("boom"));
+		mocks.fetchTtl.mockResolvedValueOnce({ v: "recovered" });
+
+		const hash: string = toCacheKey(["ttlQuery", "fgretry"]);
+
+		await expect(exec("ttlQuery", "fgretry")).rejects.toThrow("boom");
+
+		const data = await exec("ttlQuery", "fgretry");
+
+		expect(data).toStrictEqual({ v: "recovered" });
+		expect(store.cacheState[hash].data).toStrictEqual({ v: "recovered" });
+		expect(store.cacheState[hash].hasData).toBe(true);
 	});
 
 	it("awaits the network and returns fresh data on forceRefetch", async () => {
@@ -370,20 +387,43 @@ describe("queryStore: hydration", () => {
 		expect(store.cacheState[hash].timestamp).toBe(NOW);
 	});
 
-	it("attempts hydration only once per key, even when it yields nothing", async () => {
+	it("attempts hydration only once per key while the entry survives", async () => {
 		mocks.hydrateTtl.mockResolvedValue(null);
-		mocks.fetchTtl.mockRejectedValueOnce(new Error("offline"));
-		mocks.fetchTtl.mockResolvedValueOnce({ v: "network" });
+		mocks.fetchTtl.mockResolvedValue({ v: "network" });
 
-		await expect(exec("ttlQuery", "h3")).rejects.toThrow("offline");
+		await exec("ttlQuery", "h3");
 		expect(mocks.hydrateTtl).toHaveBeenCalledTimes(1);
 
-		// second attempt: still no cached payload, but hydration is not
-		// retried
+		// second read is served from the cached payload, hydration is
+		// not attempted again
 		const data = await exec("ttlQuery", "h3");
 
 		expect(data).toStrictEqual({ v: "network" });
 		expect(mocks.hydrateTtl).toHaveBeenCalledTimes(1);
+		expect(mocks.fetchTtl).toHaveBeenCalledTimes(1);
+	});
+
+	it("re-attempts hydration after a failed fetch dropped the entry", async () => {
+		mocks.hydrateTtl.mockResolvedValueOnce(null);
+		mocks.hydrateTtl.mockResolvedValueOnce({ v: "local" });
+		mocks.fetchTtl.mockRejectedValueOnce(new Error("offline"));
+
+		/*
+			The dropped entry takes its hydration attempt with it, so a
+			user whose backend is unreachable still reaches local data on
+			the retry instead of being locked out by the first failure.
+		*/
+		await expect(exec("ttlQuery", "h4")).rejects.toThrow("offline");
+		expect(mocks.hydrateTtl).toHaveBeenCalledTimes(1);
+
+		const data = await exec("ttlQuery", "h4");
+
+		expect(data).toStrictEqual({ v: "local" });
+		expect(mocks.hydrateTtl).toHaveBeenCalledTimes(2);
+
+		// hydrated data carries no known timestamp, so it paints
+		// immediately and revalidates in the background — the caller
+		// never waited on that second call
 		expect(mocks.fetchTtl).toHaveBeenCalledTimes(2);
 	});
 
@@ -912,7 +952,12 @@ describe("queryStore: refreshAll", () => {
 
 		expect(store.refreshing).toBe(false);
 		expect(store.refreshGeneration).toBe(generationBefore + 1);
-		expect(store.cacheState[hash].error).toBeInstanceOf(Error);
+
+		// the payload the user is looking at survives a failed refresh,
+		// the failure only arms the revalidation backoff
+		expect(store.cacheState[hash].data).toStrictEqual({ v: 1 });
+		expect(store.cacheState[hash].hasData).toBe(true);
+		expect(store.cacheState[hash].revalidateFailedAt).toBeGreaterThan(0);
 	});
 });
 

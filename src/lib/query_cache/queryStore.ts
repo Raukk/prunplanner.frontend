@@ -609,10 +609,12 @@ export const useQueryStore = defineStore(
 					const error =
 						err instanceof Error ? err : new Error(String(err));
 
+					const superseded = epochOf(keyHash) !== startEpoch;
+
 					// a failed background refresh must not destroy the
 					// cached payload the user is currently looking at,
 					// nor may either case revive an invalidated entry
-					if (background || epochOf(keyHash) !== startEpoch) {
+					if (background || superseded) {
 						/*
 							A background failure records no error so the
 							cached payload stays usable, so note the
@@ -622,20 +624,35 @@ export const useQueryStore = defineStore(
 							superseded run must not back off the
 							replacement that took its place.
 						*/
-						if (
-							cacheState[keyHash] &&
-							epochOf(keyHash) === startEpoch
-						) {
+						if (cacheState[keyHash] && !superseded) {
 							updateState(keyHash, {
 								revalidateFailedAt: Date.now(),
 							});
 						}
 						console.error(err);
-					} else {
+					} else if (hasCachedData(keyHash)) {
+						// a forced refresh that failed, e.g. the manual
+						// "refresh data" action: the caller is told, but
+						// the payload on screen survives it
 						updateState(keyHash, {
-							error,
-							timestamp: Date.now(),
+							revalidateFailedAt: Date.now(),
 						});
+						console.error(err);
+					} else {
+						/*
+							Nothing usable came back and nothing usable was
+							there before, so keeping the entry only leaves a
+							record of the failure behind: it holds no data,
+							`checkEntryStatusAndRefresh` skips anything
+							carrying an error, and the recorded hydration
+							attempt would stop local storage being consulted
+							on the next try. Drop it instead — the caller
+							still gets the rejection, and the next read
+							starts clean, hydration included, so a retry can
+							fall back to local data when the backend is the
+							thing that is broken.
+						*/
+						deleteState(keyHash);
 						console.error(err);
 					}
 
