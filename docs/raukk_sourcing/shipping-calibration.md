@@ -1,6 +1,6 @@
 # Shipping model calibration — residue
 
-Implemented behaviour lives in `src/features/raukk_sourcing/calculations/shippingPhysics.ts`, `shippingProfiles.ts`, `shippingBlueprint.ts`, `shippingCalibration.ts`, `shippingRepair.ts` and `routeDistance.ts`; their JSDoc and `src/locales/en_US/raukk_sourcing.json` are authoritative for how it behaves, and `docs/raukk_sourcing/facts/shipping-calibration.json` for every constant, equation and measurement this campaign produced.
+Implemented behaviour lives in `src/features/raukk_sourcing/calculations/shippingPhysics.ts`, `shippingProfiles.ts`, `shippingBlueprint.ts`, `shippingCalibration.ts`, `shippingRepair.ts`, `shippingDamage.ts` and `routeDistance.ts`; their JSDoc and `src/locales/en_US/raukk_sourcing.json` are authoritative for how it behaves, and `docs/raukk_sourcing/facts/shipping-calibration.json` for every constant, equation and measurement this campaign produced.
 
 Raw logs, not restated here: `docs/raukk_sourcing/btf_flights.json` (batches 8-10, leg by leg) and `docs/raukk_sourcing/repair_and_damage.json` (§14 in full — repair bill law, relief table, damage-type split, price snapshot).
 
@@ -47,9 +47,7 @@ Nothing below has a consumer in src. Values, where measured, are in FACTS.
 
 | item | why it is not built | grep that misses |
 |---|---|---|
-| Damage-type split into wear / meteoroid / heat / radiation, each with its own shield | replaces `damagePerStlBlock` with four terms and gives profiles real shield slots — a stored-profile-shape change touching chain math, fleet UI and the calibration modal. Law and shares already transcribed in `repair_and_damage.json` | `wearShare`, `heatShare`, `radShare`, `shieldRelief` |
-| The Antares excess | direction-dependent, three independent sightings, magnitude in FACTS. Hypothesis: a near-star heat term, which the split above would absorb. Per-type damage telemetry is NOT available in game (user-confirmed). Until then, flag lanes anchored on Antares Station and price them off observed flights | `Antares` (only an unrelated orbital-radius aside), `anomaly`, `near-star` |
-| Landing damage per planet AND per mass | modelled as one placeholder. Both dependences are measured; no law fits them yet | `LND` damage table, per-planet lookup |
+| Damage-type split wired into ship profiles | the terms themselves are built and tested in `shippingDamage.ts` (heat and radiation merged: the panel prints one figure per leg, so they are not separable), but nothing consumes them. Wiring them in replaces `damagePerStlBlock` and gives profiles real shield slots — a stored-profile-shape change touching chain math, fleet UI and the calibration modal | `wearShare`, `heatShare`, `radShare`, `shieldRelief`; `damagePerStlBlock` still the live path in `shipping.ts:199` |
 | Real per-leg distances | needs a warp point per system pair plus the body's orbital drift over the flight. The drift is linear in elapsed trip hours and the fit is in FACTS | `warpPoint`, `chord`, `arcFactor` |
 | CX station orbital elements | six stations, elements in FACTS. `raukk_orbits.json` holds planets only — no station keys — so the in-system distance layer has no station side yet | station tickers absent as keys in `src/features/raukk_sourcing/assets/raukk_orbits.json` |
 | In-app ship designer | §2.3 is the dropdowns-to-stats mapping: pick the same components as in game, derive BOM, mass, volume, accel, tanks, cargo, and price the BOM through the existing resolver. Requires transcribing the component table to a raukk asset — no drydock dependency at runtime | `bomWeight`, `bomVolume`, `STL_FUEL_CAPACITY`, `FTL_VOLUME_SPAN` |
@@ -62,10 +60,9 @@ Nothing below has a consumer in src. Values, where measured, are in FACTS.
 Each unblocks the matching row above. Same ship, same slider unless stated.
 
 1. SLIDER LAW — one pair, at MIN / default / 10% / 20% / 25%. Gives speed as a function of the slider. The 25% run also settles per-leg against per-trip budget on its own.
-2. ANTARES TERM — Antares Station out to each of the three Antares I planets and one reverse. Semi-major axes in FACTS. If damage per Mkm falls with mean distance from the star, the term is heat and four points fit its exponent.
-3. LND PER PLANET — the landing row (km, time, damage) on four planets, at two masses.
-4. JUMP OVERHEAD — one short hop and one long hop at the SAME reactor setting. Every existing pair mixes settings, so per-jump overhead and per-parsec time stay confounded.
-5. DEP/APP ASYMMETRY — falls out of run 1.
+2. ORBITAL RESHOOT — the three Antares Station lanes again at a RECORDED wall-clock time, spaced a good fraction of that anchor's 1.63-day orbit from the last shot. The stellar term bands over the departure angle because no flight so far carries a timestamp; a dated pair says whether the term tracks the anchor's orbital position, which collapses the band to a point.
+3. JUMP OVERHEAD — one short hop and one long hop at the SAME reactor setting. Every existing pair mixes settings, so per-jump overhead and per-parsec time stay confounded.
+4. DEP/APP ASYMMETRY — falls out of run 1.
 
 ## Provenance with no repo record
 
