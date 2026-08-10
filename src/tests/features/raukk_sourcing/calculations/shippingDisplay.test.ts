@@ -105,7 +105,7 @@ describe("raukk shipping display helpers", () => {
 			expect(row.ownCostPerUnit).toBeCloseTo(0.2, 10);
 			expect(row.lmRatePerTrip).toBeUndefined();
 			expect(row.hiredCostPerUnit).toBeUndefined();
-			expect(row.savingPerUnit).toBeUndefined();
+			expect(row.differencePerUnit).toBeUndefined();
 			expect(row.identity.planUuid).toBe("consumer");
 			expect(row.hired).toBe(false);
 			expect(row.stale).toBe(false);
@@ -135,18 +135,18 @@ describe("raukk shipping display helpers", () => {
 			expect(row.hired).toBe(true);
 			expect(row.lmRatePerTrip).toBe(100);
 			expect(row.hiredCostPerUnit).toBeCloseTo(0.1, 10);
-			// own 0.2 minus hired 0.1: hiring saves half
-			expect(row.savingPerUnit).toBeCloseTo(0.1, 10);
+			// hired 0.1 minus own 0.2: the ad runs half as dear
+			expect(row.differencePerUnit).toBeCloseTo(-0.1, 10);
 		});
 
-		it("reports a negative saving when hiring is dearer", () => {
+		it("reports a positive difference when hiring is dearer", () => {
 			const [row] = buildTransportRows(
 				{ consumer: snapshot([lane()]) },
 				{ ...config, lmRates: { [PAIR_KEY]: 1000 } },
 				0
 			);
 
-			expect(row.savingPerUnit).toBeLessThan(0);
+			expect(row.differencePerUnit).toBeGreaterThan(0);
 		});
 
 		it("still states the own cost of a hired lane", () => {
@@ -202,8 +202,8 @@ describe("raukk shipping display helpers", () => {
 		});
 
 		it("reports a figure the snapshot never froze as unknown", () => {
-			// a zero would read as free freight and make hiring look
-			// like a pure loss
+			// a zero would read as free freight and make the whole
+			// hired rate look like a surcharge
 			const [row] = buildTransportRows(
 				{
 					consumer: snapshot([
@@ -223,7 +223,7 @@ describe("raukk shipping display helpers", () => {
 			expect(row.unitsPerDay).toBeUndefined();
 			expect(row.ownWear).toBeUndefined();
 			expect(row.hiredCostPerUnit).toBeUndefined();
-			expect(row.savingPerUnit).toBeUndefined();
+			expect(row.differencePerUnit).toBeUndefined();
 			// the rate itself was entered, not frozen, so it survives
 			expect(row.lmRatePerTrip).toBe(100);
 		});

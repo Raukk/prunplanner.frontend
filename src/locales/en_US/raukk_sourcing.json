@@ -142,7 +142,7 @@
 	},
 	"transport": {
 		"title": "Transport",
-		"info": "Every stored lane of the account, with what your own fleet charges to fly it and what an LM transport ad would. Enter the ȼ per trip an ad asks for and the saving column compares the two: a hired lane pays that rate instead of the own fleet cost and drops out of the shipping fraction, the rate covering the whole lane and all of its legs. A lane is flown as one leg per cargo class riding it, each on its own cadence, so days per visit is listed per class. The ȼ are the ones the owning plan froze when it last computed — recompute a stale plan to refresh them.",
+		"info": "Every stored lane of the account, with what your own fleet charges to fly it and what an LM transport ad would. Enter the ȼ per trip an ad asks for and the difference column states the two side by side: a hired lane pays that rate instead of the own fleet cost and drops out of the shipping fraction, the rate covering the whole lane and all of its legs. The comparison is OPERATING cost only — fuel, wear and the repair bill — and the cost it cannot show is the one that usually decides the question: a hull costs millions before it charges its first ȼ, and hiring is how you fly a lane without buying one. A lane that runs dearer hired is therefore not a mistake; it is what not owning that ship costs per unit. A lane is flown as one leg per cargo class riding it, each on its own cadence, so days per visit is listed per class. The ȼ are the ones the owning plan froze when it last computed — recompute a stale plan to refresh them.",
 		"base": "Base",
 		"lane": "Lane",
 		"cx_lane": "Exchange",
@@ -162,7 +162,8 @@
 		"rate_placeholder": "not hired",
 		"own_per_unit": "Own ȼ/u",
 		"hired_per_unit": "Hired ȼ/u",
-		"saving": "Saving ȼ/u",
+		"difference": "Difference ȼ/u",
+		"difference_tooltip": "Hired ȼ/u minus own ȼ/u: what a hired unit costs on top of flying it yourself, negative where the ad is the cheaper one to run. Operating cost only — the own ȼ presume a hull you already own, and buying one is not in either column.",
 		"hired": "Hired",
 		"stale": "stale",
 		"empty": "No stored lanes yet — compute a plan snapshot, or check that its inputs and outputs actually move."

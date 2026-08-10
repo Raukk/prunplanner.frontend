@@ -219,9 +219,13 @@
 				class="flex flex-row items-center cursor-pointer bg-white/5 text-white/80 rounded-sm pr-2 min-h-7"
 				:class="!useSearch ? 'py-1 ' : ''"
 				@click="toggleOpen">
+				<!-- min-w-0 and the ellipsis: a flex child sizes to its own
+				content, so a label longer than a width-constrained select
+				used to spill out of the box and over the column beside it -->
 				<div
 					v-if="!useSearch"
-					class="grow px-2 text-nowrap"
+					class="grow min-w-0 px-2 text-nowrap overflow-hidden text-ellipsis"
+					:title="displayValue"
 					@click.stop="ensureOpened">
 					{{ displayValue }}
 				</div>

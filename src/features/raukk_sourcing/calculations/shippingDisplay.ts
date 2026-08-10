@@ -83,8 +83,19 @@ export interface IRaukkTransportRow {
 	lmRatePerTrip: number | undefined;
 	/** Hired ȼ per unit shipped, undefined without a rate */
 	hiredCostPerUnit: number | undefined;
-	/** `own − hired`, positive means hiring is the cheaper option */
-	savingPerUnit: number | undefined;
+	/**
+	 * `hired − own`: what a hired unit costs ON TOP of flying it yourself.
+	 * Positive means the ad is dearer to run than the own fleet, negative
+	 * that it is cheaper to run than it.
+	 *
+	 * Deliberately not called a saving in either direction. This is an
+	 * OPERATING comparison — fuel, wear and the repair bill — and the
+	 * reason a lane is hired is usually the one cost missing from it: the
+	 * hull itself, which the own fleet has to buy before it can charge
+	 * the ȼ next to this figure. A positive difference is the price of
+	 * not owning a ship, not a loss.
+	 */
+	differencePerUnit: number | undefined;
 	/**
 	 * Wear of the OWN fleet flying this lane, trip weighted over the
 	 * legs. Stated even while the lane is hired — the comparison is what
@@ -189,7 +200,7 @@ function tripWeighted(
  *
  * A lane frozen before the own cost was stored reports it as
  * `undefined` and never as zero: a zero would read as free freight and
- * would make hiring look like a pure loss.
+ * would make the whole hired rate look like a surcharge.
  *
  * @author raukk
  *
@@ -303,11 +314,11 @@ export function buildTransportRows(
 				ownCostPerUnit,
 				lmRatePerTrip,
 				hiredCostPerUnit,
-				savingPerUnit:
+				differencePerUnit:
 					ownCostPerUnit === undefined ||
 					hiredCostPerUnit === undefined
 						? undefined
-						: ownCostPerUnit - hiredCostPerUnit,
+						: hiredCostPerUnit - ownCostPerUnit,
 				ownWear:
 					ownDamagePerTrip === undefined
 						? undefined

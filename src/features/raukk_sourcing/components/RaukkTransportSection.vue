@@ -33,7 +33,7 @@
 		() => sourcingStore.shippingConfig
 	);
 
-	const { rows, planNames } = useRaukkTransport(
+	const { rows, planNames, planPlanets } = useRaukkTransport(
 		toRef(props, "repairBillCost")
 	);
 
@@ -92,6 +92,7 @@
 		<RaukkTransportTable
 			:rows="rows"
 			:plan-names="planNames"
+			:plan-planets="planPlanets"
 			:ship-type-options="props.shipTypeOptions"
 			:assignments="assignments"
 			@update:rate="changeLmRate"
