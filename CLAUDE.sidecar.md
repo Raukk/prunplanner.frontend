@@ -27,12 +27,19 @@ anywhere in the repo. Not retroactive.
 - 2026-08-07: Adopted sidecar pattern (rules above) per user request.
 - 2026-08-10: `## Output style` section added to CLAUDE.md (user
   request, explicit approval per the no-new-sections rule). Text is the
-  user's, unaltered except line wrapping to the file's width and one
-  trailing space removed. Placed before `## Commands` — it governs
-  replies, not code, so it is not part of the architecture body.
-  Reason for living here rather than a claude.ai profile setting: the
-  claude.ai chat styles/preferences are injected by that surface only
-  and never reach Claude Code's system prompt.
+  user's, unaltered except one trailing space removed. Placed before
+  `## Commands` — it governs replies, not code, so it is not part of
+  the architecture body. Reason for living here rather than a claude.ai
+  profile setting: the claude.ai chat styles/preferences are injected
+  by that surface only and never reach Claude Code's system prompt.
+- 2026-08-10: CLAUDE.md is UNWRAPPED — one line per paragraph and per
+  bullet, no hard wrap (user decision). It had been hand-wrapped at
+  ~72 cols and the first draft of the Output style section matched
+  that; the user rejected the wrapping. `.editorconfig` `[*]` sets
+  `max_line_length = 80`, which nominally covers `.md`; CLAUDE.md is
+  an intentional exception. Nothing enforces it here — `.prettierignore`
+  lists `*.md`, so Prettier never touches markdown. This sidecar is
+  still wrapped; the rule is CLAUDE.md-specific unless told otherwise.
 - 2026-08-07: Sourcing feature — supply loops are now ALLOWED (user
   decision; previously refused by a cycle guard). Frozen-snapshot
   pricing never recurses; loops settle over repeated recomputes
