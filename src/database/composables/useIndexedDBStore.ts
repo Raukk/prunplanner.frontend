@@ -54,6 +54,12 @@ export async function getDB() {
 					);
 				},
 				blocking(currentVersion, blockedVersion) {
+					// a deletion also lands here, with no target version.
+					// Only resetDB and the test harness delete, and both
+					// manage the connection themselves — closing it out from
+					// under them kills reads that are still mid-flight
+					if (blockedVersion === null) return;
+
 					// this tab is the outdated one: release the database so
 					// the newer tab can upgrade. Later reads here fail fast
 					// (closed or version-rejected connection) instead of
