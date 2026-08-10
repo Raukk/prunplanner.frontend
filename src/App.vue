@@ -27,6 +27,8 @@
 	import { useUserStore } from "@/stores/userStore";
 	const userStore = useUserStore();
 	import { userActivity } from "@/features/user_activity/userActivityStore";
+	import { useQueryStore } from "@/lib/query_cache/queryStore";
+	const queryStore = useQueryStore();
 
 	const isLoggedIn = computed(() => userStore.isLoggedIn);
 	const showUpdateNotification = computed(
@@ -56,7 +58,7 @@
 				<MobileToggle v-if="isLoggedIn" />
 
 				<Suspense>
-					<RouterView />
+					<RouterView :key="queryStore.refreshGeneration" />
 				</Suspense>
 
 				<AppFooter />

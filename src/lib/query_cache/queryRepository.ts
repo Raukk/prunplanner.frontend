@@ -14,6 +14,7 @@ import { usePlanningStore } from "@/stores/planningStore";
 import { useUserStore } from "@/stores/userStore";
 // raukk: sourcing snapshots follow plan saves and deletions
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+import { planContentFingerprint } from "@/features/planning_data/usePlan";
 
 // indexeddb
 import {
@@ -24,6 +25,31 @@ import {
 	buildingsStore,
 } from "@/database/stores";
 import { useDB } from "@/database/composables/useDB";
+import { useIndexedDBStore } from "@/database/composables/useIndexedDBStore";
+
+/**
+ * Rebuilds a full game data payload from its IndexedDB store instead of
+ * the network and warms the in-memory read cache the database services
+ * read through. Returns null when nothing is stored locally, the caller
+ * then falls back to fetching.
+ *
+ * @author jplacht
+ *
+ * @async
+ * @template T Record type
+ * @template K Key path
+ * @param {ReturnType<typeof useIndexedDBStore<T, K>>} store IndexedDB store
+ * @returns {Promise<T[] | null>} Stored records or null
+ */
+async function hydrateFromStore<T extends object, K extends keyof T & string>(
+	store: ReturnType<typeof useIndexedDBStore<T, K>>
+): Promise<T[] | null> {
+	const data = await store.getAll();
+	if (data.length === 0) return null;
+
+	await useDB(store).preload(true);
+	return data;
+}
 
 // API Calls
 import {
@@ -167,6 +193,21 @@ export function useQueryRepository() {
 	// raukk: sourcing store, snapshot staleness follows plan mutations
 	const raukkSourcingStore = useRaukkSourcingStore();
 
+	/**
+	 * True while the session a request started in is still the current
+	 * one. A response that arrives after logout must not write the
+	 * previous user's data into the persisted planning store, where the
+	 * next session would hydrate it straight back out.
+	 *
+	 * @author jplacht
+	 *
+	 * @param {number} session Session generation captured before fetching
+	 * @returns {boolean} Safe to write through
+	 */
+	function isCurrentSession(session: number): boolean {
+		return queryStore.sessionGeneration === session;
+	}
+
 	const repository: IQueryRepository = {
 		GetMaterials: {
 			key: () => ["gamedata", "materials"],
@@ -177,6 +218,7 @@ export function useQueryRepository() {
 
 				return data;
 			},
+			hydrateFn: () => hydrateFromStore(materialsStore),
 			autoRefetch: true,
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_MATERIALS,
 			persist: true,
@@ -190,6 +232,7 @@ export function useQueryRepository() {
 
 				return data;
 			},
+			hydrateFn: () => hydrateFromStore(exchangesStore),
 			autoRefetch: true,
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_EXCHANGES,
 			persist: true,
@@ -203,6 +246,7 @@ export function useQueryRepository() {
 
 				return data;
 			},
+			hydrateFn: () => hydrateFromStore(recipesStore),
 			autoRefetch: true,
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_RECIPES,
 			persist: true,
@@ -215,6 +259,7 @@ export function useQueryRepository() {
 				await useDB(buildingsStore).preload(true);
 				return data;
 			},
+			hydrateFn: () => hydrateFromStore(buildingsStore),
 			autoRefetch: true,
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_BUILDINGS,
 			persist: true,
@@ -234,6 +279,12 @@ export function useQueryRepository() {
 
 				return data;
 			},
+			hydrateFn: async (params: { planetNaturalId: string }) => {
+				const db = useDB(planetsStore);
+				await db.preload();
+
+				return (await db.get(params.planetNaturalId)) ?? null;
+			},
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
 			autoRefetch: true,
 			persist: true,
@@ -246,6 +297,8 @@ export function useQueryRepository() {
 				params.planetNaturalIds,
 			],
 			fetchFn: async (params: { planetNaturalIds: string[] }) => {
+				// dropped if the session ends while this is in flight
+				const session: number = queryStore.sessionGeneration;
 				try {
 					const data: IPlanet[] = await callDataMultiplePlanets(
 						params.planetNaturalIds
@@ -261,7 +314,8 @@ export function useQueryRepository() {
 							["gamedata", "planet", p.planet_natural_id],
 							"GetPlanet",
 							{ planetNaturalId: p.planet_natural_id },
-							p
+							p,
+							session
 						);
 					});
 
@@ -269,6 +323,22 @@ export function useQueryRepository() {
 				} catch {
 					return [];
 				}
+			},
+			hydrateFn: async (params: { planetNaturalIds: string[] }) => {
+				if (params.planetNaturalIds.length === 0) return null;
+
+				const db = useDB(planetsStore);
+				await db.preload();
+
+				const planets = await Promise.all(
+					params.planetNaturalIds.map((id) => db.get(id))
+				);
+
+				// all-or-nothing: a partial set would silently hide
+				// planets from empire views until the refetch lands
+				if (planets.some((p) => !p)) return null;
+
+				return planets as IPlanet[];
 			},
 			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
 			autoRefetch: true,
@@ -328,9 +398,15 @@ export function useQueryRepository() {
 		GetAllShared: {
 			key: () => ["planningdata", "shared", "list"],
 			fetchFn: async () => {
+				const session: number = queryStore.sessionGeneration;
 				const data = await callGetSharedList();
-				planningStore.setSharedList(data);
+				if (isCurrentSession(session))
+					planningStore.setSharedList(data);
 				return data;
+			},
+			hydrateFn: async () => {
+				const data = planningStore.getSharedList();
+				return data.length > 0 ? (data as unknown as IShared[]) : null;
 			},
 			persist: true,
 			autoRefetch: true,
@@ -488,9 +564,14 @@ export function useQueryRepository() {
 		GetAllEmpires: {
 			key: () => ["planningdata", "empire", "list"],
 			fetchFn: async () => {
+				const session: number = queryStore.sessionGeneration;
 				const data = await callGetEmpireList();
-				planningStore.setEmpires(data);
+				if (isCurrentSession(session)) planningStore.setEmpires(data);
 				return data;
+			},
+			hydrateFn: async () => {
+				const data = Object.values(planningStore.empires);
+				return data.length > 0 ? data : null;
 			},
 			autoRefetch: false,
 			persist: true,
@@ -503,10 +584,12 @@ export function useQueryRepository() {
 				params.empireUuid,
 			],
 			fetchFn: async (params: { empireUuid: string }) => {
+				// dropped if the session ends while this is in flight
+				const session: number = queryStore.sessionGeneration;
 				try {
 					const data = await callGetEmpirePlans(params.empireUuid);
 
-					planningStore.setPlans(data);
+					if (isCurrentSession(session)) planningStore.setPlans(data);
 
 					// manually set individual plans
 					data.forEach((p) =>
@@ -514,7 +597,8 @@ export function useQueryRepository() {
 							["planningdata", "plan", p.uuid],
 							"GetPlan",
 							{ planUuid: p.uuid! },
-							p
+							p,
+							session
 						)
 					);
 
@@ -522,6 +606,20 @@ export function useQueryRepository() {
 				} catch {
 					return [];
 				}
+			},
+			hydrateFn: async (params: { empireUuid: string }) => {
+				const empire = planningStore.empires[params.empireUuid];
+				if (!empire) return null;
+
+				const plans = empire.plans.map(
+					(p) => planningStore.plans[p.uuid]
+				);
+
+				// a plan of the empire was never stored individually =>
+				// the rebuilt list would be incomplete
+				if (plans.length === 0 || plans.some((p) => !p)) return null;
+
+				return plans;
 			},
 			autoRefetch: false,
 			persist: true,
@@ -607,9 +705,14 @@ export function useQueryRepository() {
 		GetAllCX: {
 			key: () => ["planningdata", "cx"],
 			fetchFn: async () => {
+				const session: number = queryStore.sessionGeneration;
 				const data = await callGetCXList();
-				planningStore.setCXs(data);
+				if (isCurrentSession(session)) planningStore.setCXs(data);
 				return data;
+			},
+			hydrateFn: async () => {
+				const data = planningStore.getAllCX();
+				return data.length > 0 ? data : null;
 			},
 			autoRefetch: false,
 			persist: true,
@@ -621,9 +724,33 @@ export function useQueryRepository() {
 				params.planUuid,
 			],
 			fetchFn: async (params: { planUuid: string }) => {
+				const session: number = queryStore.sessionGeneration;
 				const data = await callGetPlan(params.planUuid);
-				planningStore.setPlan(data);
+				if (isCurrentSession(session)) {
+					planningStore.setPlan(data);
+
+					/*
+						raukk: the backend just told us what this plan
+						really looks like. If a sourcing snapshot was
+						computed against a different version — an edit
+						made on another machine, which no local save hook
+						can see — its numbers no longer describe this
+						plan and it has to be flagged.
+					*/
+					raukkSourcingStore.markStaleIfPlanChanged(
+						params.planUuid,
+						planContentFingerprint(data)
+					);
+				}
 				return data;
+			},
+			hydrateFn: async (params: { planUuid: string }) => {
+				// getPlan throws when the plan was never stored
+				try {
+					return await planningStore.getPlan(params.planUuid);
+				} catch {
+					return null;
+				}
 			},
 			autoRefetch: false,
 			persist: true,
@@ -631,9 +758,15 @@ export function useQueryRepository() {
 		GetAllPlans: {
 			key: () => ["planningdata", "plan", "list"],
 			fetchFn: async () => {
+				// dropped if the session ends while this is in flight
+				const session: number = queryStore.sessionGeneration;
 				try {
 					const data = await callGetPlanlist();
-					planningStore.setPlans(data);
+					// authoritative list: drop plans it does not contain,
+					// otherwise the record accumulates every plan ever
+					// loaded and hydration rebuilds a superset
+					if (isCurrentSession(session))
+						planningStore.setPlans(data, true);
 
 					// manually set individual plans
 					data.forEach((p) =>
@@ -641,7 +774,8 @@ export function useQueryRepository() {
 							["planningdata", "plan", p.uuid],
 							"GetPlan",
 							{ planUuid: p.uuid! },
-							p
+							p,
+							session
 						)
 					);
 
@@ -649,6 +783,10 @@ export function useQueryRepository() {
 				} catch {
 					return [];
 				}
+			},
+			hydrateFn: async () => {
+				const data = Object.values(planningStore.plans);
+				return data.length > 0 ? data : null;
 			},
 			autoRefetch: false,
 			persist: true,
@@ -793,10 +931,29 @@ export function useQueryRepository() {
 		GetFIOStorage: {
 			key: () => ["gamedata", "fio", "storage"],
 			fetchFn: async () => {
+				const session: number = queryStore.sessionGeneration;
 				return await callDataFIOStorage().then((data: IFIOStorage) => {
-					planningStore.setFIOStorageData(data);
+					if (isCurrentSession(session))
+						planningStore.setFIOStorageData(data);
 					return data;
 				});
+			},
+			hydrateFn: async () => {
+				const lastModified = planningStore.fio_storage_timestamp;
+				if (!lastModified) return null;
+
+				// inverse of planningStore.setFIOStorageData, the pieces
+				// are persisted separately. Dates come back as strings
+				// from the JSON round trip and need coercing.
+				return {
+					storage_data: {
+						planets: planningStore.fio_storage_planets,
+						warehouses: planningStore.fio_storage_warehouses,
+						ships: planningStore.fio_storage_ships,
+					},
+					sites_data: planningStore.fio_sites_planets,
+					last_modified: new Date(lastModified),
+				} as IFIOStorage;
 			},
 			autoRefetch: true,
 			persist: true,

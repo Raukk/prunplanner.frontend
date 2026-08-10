@@ -1,4 +1,6 @@
 import { useQuery } from "@/lib/query_cache/useQuery";
+import { useQueryStore } from "@/lib/query_cache/queryStore";
+import { toCacheKey } from "@/lib/query_cache/cacheKeys";
 
 import { usePlanningStore } from "@/stores/planningStore";
 
@@ -10,6 +12,27 @@ import {
 } from "@/features/planning_data/usePlan.types";
 import { PLANET_COGCPROGRAM_TYPE } from "@/features/api/gameData.types";
 import { IPlan, PLAN_COGCPROGRAM_TYPE } from "@/stores/planningStore.types";
+
+/**
+ * Stable fingerprint of a plans editable content. Deliberately excludes
+ * `uuid` and `empires`: those differ between the plan, plan list and
+ * empire plan endpoints without the plan itself having changed.
+ *
+ * @author jplacht
+ *
+ * @param {IPlan} plan Plan Data
+ * @returns {string} Fingerprint of the editable content
+ */
+export function planContentFingerprint(plan: IPlan): string {
+	return toCacheKey({
+		plan_name: plan.plan_name ?? "",
+		planet_natural_id: plan.planet_natural_id,
+		plan_permits_used: plan.plan_permits_used,
+		plan_corphq: plan.plan_corphq,
+		plan_cogc: plan.plan_cogc,
+		plan_data: plan.plan_data,
+	});
+}
 
 const cogcValues: string[] = [
 	"---",
@@ -301,12 +324,44 @@ export function usePlan() {
 		}
 	}
 
+	/**
+	 * Asks the backend whether this plan changed since the editor loaded
+	 * it. `PatchPlan` is a full PUT with no etag, so without this a
+	 * second tab's — or another machine's — save is silently overwritten
+	 * by whatever the open editor happens to hold.
+	 *
+	 * Both sides of the comparison are backend responses, so their
+	 * formatting matches and only real content differences register.
+	 *
+	 * @author jplacht
+	 *
+	 * @async
+	 * @param {string} planUuid Plan Uuid
+	 * @param {IPlan} baseline Plan as the backend last gave it to us
+	 * @returns {Promise<boolean>} Backend holds a different plan now
+	 */
+	async function detectRemotePlanChange(
+		planUuid: string,
+		baseline: IPlan
+	): Promise<boolean> {
+		const current: IPlan = await useQueryStore().execute(
+			"GetPlan",
+			{ planUuid },
+			{ forceRefetch: true }
+		);
+
+		return (
+			planContentFingerprint(current) !== planContentFingerprint(baseline)
+		);
+	}
+
 	return {
 		isEditDisabled,
 		mapPlanetToPlanType,
 		createBlankDefinition,
 		createNewPlan,
 		saveExistingPlan,
+		detectRemotePlanChange,
 		reloadExistingPlan,
 		getPlanNamePlanet,
 		cloneSharedPlan,

@@ -1,4 +1,5 @@
 import { useIndexedDBStore } from "@/database/composables/useIndexedDBStore";
+import { useDB } from "@/database/composables/useDB";
 
 // Types & Interfaces
 import {
@@ -33,3 +34,28 @@ export const buildingsStore = useIndexedDBStore<IBuilding, "building_ticker">(
 	"gamedata_buildings",
 	"building_ticker" as const
 );
+
+/**
+ * Pins every game data store for the duration of a multi step
+ * calculation, so a background refresh cannot swap prices, recipes or
+ * planet data between one step and the next and leave the totals a mix
+ * of two snapshots. Returns the release, which applies whatever
+ * refreshes arrived while held.
+ *
+ * @author jplacht
+ *
+ * @returns {() => Promise<void>} Release the hold
+ */
+export function holdGameData(): () => Promise<void> {
+	const releases: Array<() => Promise<void>> = [
+		useDB(materialsStore).hold(),
+		useDB(exchangesStore).hold(),
+		useDB(recipesStore).hold(),
+		useDB(buildingsStore).hold(),
+		useDB(planetsStore).hold(),
+	];
+
+	return async () => {
+		await Promise.all(releases.map((release) => release()));
+	};
+}

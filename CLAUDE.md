@@ -31,7 +31,7 @@ Test: the reader can act on the reply without a second pass, and cannot find a s
 - Feature folders: `src/features/<name>/{components,use*.ts,*.types.ts}`. Views in `src/views/`, routes in `src/router/index.ts`.
 - State, 3 layers:
   - Pinia `src/stores/`: user domain data, persisted. `planningStore` = plans/empires/cxs/shared, keyed by uuid.
-  - Query cache `src/lib/query_cache/`: named queries in `queryRepository.ts`; each `fetchFn` = API call + store write-through + invalidation. Register ALL backend interactions here, never ad-hoc.
+  - Query cache `src/lib/query_cache/`: named queries in `queryRepository.ts`; each `fetchFn` = API call + store write-through + invalidation. Register ALL backend interactions here, never ad-hoc. Stale-while-revalidate: cached data is served instantly and refreshed in the background. Optional `hydrateFn` rebuilds a payload from IndexedDB/`planningStore` on boot so a reload needs no network; only payload-free `cacheMeta` is persisted. Mutations broadcast their invalidation to other tabs. `refreshAll()` = manual refetch, bumps `refreshGeneration` which re-keys `RouterView`.
   - IndexedDB `src/database/`: static game data only; read via `src/database/services/*` composables (useMaterialData etc.).
 - API: `call*` fns in `src/features/api/*.api.ts`; zod schemas in `src/features/api/schemas/` parse both request and response.
 - Plan calc: `src/features/planning/usePlanCalculation.ts` — deep watch on plan ref triggers `calculate()`. UI mutates plan_data ONLY via `usePlanCalculationHandlers.ts`. Pure math in `src/features/planning/calculations/`.
