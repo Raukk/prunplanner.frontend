@@ -1,7 +1,12 @@
-// One tooltip for every oversubscription visualization tab: the section
-// mounts a single `RaukkOversubTooltip` host, tabs drive it through
-// this provide/inject pair. Payloads are pre-rendered text lines — the
-// tab owns wording and i18n, the host only positions and paints.
+// One tooltip for every raukk visualization: the section mounts a
+// single `RaukkOversubTooltip` host, its views drive it through this
+// provide/inject pair. Payloads are pre-rendered text lines — the view
+// owns wording and i18n, the host only positions and paints.
+//
+// Provided by `RaukkOversubReportSection` for the oversubscription tabs
+// and by `RaukkShippingVisualsSection` for the star map and the
+// weight/volume plane. Both mount their own host; the injection key is
+// module level, so a view only ever reaches the section it sits in.
 
 import { inject, InjectionKey, provide, ref, Ref } from "vue";
 
@@ -39,9 +44,37 @@ const RAUKK_OVERSUB_TOOLTIP_KEY: InjectionKey<IRaukkOversubTooltip> = Symbol(
 );
 
 /**
+ * A payload from one newline separated i18n string: the first line is
+ * the title and the rest are the body, blank lines dropped.
+ *
+ * The map and the plane already state their readings as multi-line
+ * message strings, which is exactly the shape an SVG `<title>` wants
+ * and exactly the wrong shape for a hover host that lays lines out
+ * itself. Splitting here keeps ONE wording per reading — a second,
+ * line-by-line set of keys would drift from the first.
+ *
+ * @author raukk
+ *
+ * @param {string} text Newline separated message
+ * @returns {IRaukkOversubTooltipPayload} Title and body lines
+ */
+export function raukkTooltipFromText(
+	text: string
+): IRaukkOversubTooltipPayload {
+	const [title, ...rest]: string[] = text.split("\n");
+
+	return {
+		title: title ?? "",
+		lines: rest
+			.filter((line) => line.trim() !== "")
+			.map((line) => ({ text: line })),
+	};
+}
+
+/**
  * Creates the shared tooltip state and provides it to the section's
- * subtree. Called once by `RaukkOversubReportSection`, which also
- * mounts the one `RaukkOversubTooltip` host rendering it.
+ * subtree. Called once per section that shows visualizations, which
+ * also mounts the one `RaukkOversubTooltip` host rendering it.
  *
  * @author raukk
  *
@@ -89,7 +122,7 @@ export function useRaukkOversubTooltip(): IRaukkOversubTooltip {
 
 	if (tooltip === undefined)
 		throw new Error(
-			"useRaukkOversubTooltip outside RaukkOversubReportSection"
+			"useRaukkOversubTooltip outside a section providing it"
 		);
 
 	return tooltip;
