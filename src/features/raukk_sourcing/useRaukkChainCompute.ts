@@ -1,10 +1,13 @@
-import { ref } from "vue";
-
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
 // Composables
-import { usePrice } from "@/features/cx/usePrice";
+// raukk: fuel and the ship repair bill are sourced account wide
+import {
+	createRaukkShipPriceResolver,
+	IRaukkShipPriceCaches,
+	raukkLoadShipPrices,
+} from "@/features/raukk_sourcing/useRaukkShipSourcing";
 
 // Calculations
 import {
@@ -72,6 +75,7 @@ import {
 	IRaukkCxSplitResult,
 } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 import { IRaukkAutoChain } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
+import { IRaukkPriceResolver } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 
 /**
  * Tickers the account level chain step needs prices for: the four ship
@@ -93,12 +97,14 @@ export type IRaukkChainPriceLoader = (
 ) => Promise<IRaukkShippingPriceResolver>;
 
 /**
- * Prices of the repair bill and the two fuels at one planets exchange
- * preference.
+ * Prices of the repair bill and the two fuels, at the ACCOUNT WIDE ship
+ * sourcing over one planets exchange preference.
  *
- * A chain has no single owning plan, so it is priced at its first PLANET
- * stop — the anchor the user authored it from. A ticker that fails to
- * price degrades to 0, exactly as the snapshot pipeline does.
+ * A chain has no single owning plan, so its exchange fallback is its
+ * first PLANET stop — the anchor the user authored it from. What the
+ * fleet consumes is an account question though, so a configured ship
+ * source wins over that exchange price here exactly as it does inside a
+ * plans snapshot: the same fuel costs the same on every loop.
  *
  * @author raukk
  *
@@ -108,21 +114,15 @@ export type IRaukkChainPriceLoader = (
 export const raukkLoadChainPrices: IRaukkChainPriceLoader = async (
 	planetNaturalId: string | undefined
 ) => {
-	const { getPrice } = await usePrice(ref(undefined), ref(planetNaturalId));
+	const caches: IRaukkShipPriceCaches =
+		await raukkLoadShipPrices(planetNaturalId);
 
-	const prices: Record<string, number> = {};
+	const resolve: IRaukkPriceResolver = createRaukkShipPriceResolver({
+		getDefaultPrice: (ticker: string) => caches.prices[ticker] ?? 0,
+		getExchange: (ticker: string) => caches.exchange[ticker],
+	});
 
-	await Promise.all(
-		RAUKK_CHAIN_PRICE_TICKERS.map(async (ticker) => {
-			try {
-				prices[ticker] = await getPrice(ticker, "BUY");
-			} catch {
-				prices[ticker] = 0;
-			}
-		})
-	);
-
-	return (ticker: string): number => prices[ticker] ?? 0;
+	return (ticker: string): number => resolve(ticker).price;
 };
 
 /** One chain the pass could not compute */

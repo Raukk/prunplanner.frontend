@@ -15,6 +15,7 @@ Decision notes and change logging (e.g. "User decision 2026-08-07", "Previously 
 
 ## Decision log
 
+- 2026-08-10: `docs/raukk_sourcing/ship-sourcing.md` added to CLAUDE.md's optional deeper reading list (one bullet, existing section). Ship fuel and the ship repair bill moved from per-plan sourcing to an account-wide axis (`shipSourcing`), so the pricing map in the architecture body would otherwise point only at the per-base one.
 - 2026-08-07: Single root CLAUDE.md; no per-directory CLAUDE.md files for now — feature folders are uniform, per-section files would duplicate the root. Candidate for a future child file: `src/features/planning/` if the subsection/planning feature adds enough local complexity.
 - 2026-08-07: Adopted sidecar pattern (rules above) per user request.
 - 2026-08-10: `## Output style` section added to CLAUDE.md (user request, explicit approval per the no-new-sections rule). Text is the user's, unaltered except one trailing space removed. Placed before `## Commands` — it governs replies, not code, so it is not part of the architecture body. Reason for living here rather than a claude.ai profile setting: the claude.ai chat styles/preferences are injected by that surface only and never reach Claude Code's system prompt.

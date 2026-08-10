@@ -60,11 +60,12 @@
 		"lm_buy": "LM Buy",
 		"lm_buy_tooltip": "LM Buy prices this input at an ad on the local market of this base's own planet: nothing is bought at the exchange and no freight is charged for it, whatever cargo class it belongs to. Pick a basis and a price — Manual is the absolute ȼ/unit you offer, any market basis follows that price at the exchange named next to the basis minus the offset you enter (negative bids above it), never dropping below zero. A basis whose side of the book is empty — every side of the synthetic UNIVERSE exchange is — falls back to the 30 day VWAP. The resolved ȼ/unit is shown after the field and turns red once the offset has eaten the whole basis price. Trading on the local market needs a Pro license in game; a Basic account can still trade when the counterpart holds one.",
 		"empty": "This plan has no net inputs.",
+		"ship_fuel_link": "sourced account-wide — manage",
 		"groups": {
 			"workforce": "Workforce Consumables",
 			"repair": "Repair Materials",
 			"production": "Production Inputs",
-			"shipFuel": "Ship Fuel (already in the shipping cost)"
+			"shipFuel": "Ship Fuel (already in the shipping cost, sourced account-wide)"
 		}
 	},
 	"buckets": {
@@ -112,6 +113,7 @@
 		"sections": {
 			"settings": "Settings",
 			"defaults": "Defaults",
+			"sourcing": "Sourcing",
 			"fleet": "Fleet",
 			"transport": "Transport",
 			"chains": "Chains",
@@ -121,6 +123,7 @@
 			"calibration": "Calibration",
 			"settings_tooltip": "Account-wide shipping switches: whether shipping is charged at all, the default ship profile, cadences and the CX anchor rule.",
 			"defaults_tooltip": "Where every base sources each input group by default, set once instead of base by base. Independent of the shipping switch.",
+			"sourcing_tooltip": "Where the fleet gets its fuel and its repair materials from, account-wide. Refuelling and repairs happen at the exchange or the depot, so none of it is shipped.",
 			"fleet_tooltip": "Every ship the account commits, its wear and its share of the repair bill.",
 			"transport_tooltip": "Every stored lane, what your own fleet charges to fly it and what hiring an LM carrier would cost instead.",
 			"chains_tooltip": "Routes the cargo actually flies — authored chains, the automatic ones and the hub/spoke rollup.",
@@ -890,6 +893,19 @@
 		"legend_outside": "A ringed point overflows it and needs a bigger bay or a shorter cadence",
 		"legend_diagonal": "Above the diagonal the cargo is volume bound, below it weight bound",
 		"legend_clamped": "A point pinned to the plot edge reaches beyond the axis — its tooltip carries the real figure"
+	},
+	"ship_sourcing": {
+		"title": "Fleet Sourcing",
+		"info": "Where the fleet gets what it consumes, for the whole account at once: the fuel every ship burns and the materials every repair eats. Both are fleet costs, not base costs — one fleet serves every base — so they are set here instead of base by base. Refuelling and repairs happen at the exchange or at a depot, so none of these materials is ever shipped and none of them pays freight. Changing anything marks every stored snapshot and every chain result stale.",
+		"tooltip": "The group setting applies to every ticker of the group that has no row setting of its own. \"All producers\" prices the units at your own bases: weighted average, worst case, or the weighted average with a market top-up for the share your bases cannot cover. A row setting always wins; pick \"CX Preference (pinned)\" on a row to opt that one ticker out of its group setting.",
+		"none": "No group setting (exchange price)",
+		"follow_group": "Group setting",
+		"daily_need": "Fleet Need / Day",
+		"total_cost": "Total Fleet Material Cost / Day",
+		"groups": {
+			"fuel": "Ship Fuel",
+			"shipRepair": "Ship Repair Materials"
+		}
 	},
 	"defaults": {
 		"title": "Sourcing Defaults",
