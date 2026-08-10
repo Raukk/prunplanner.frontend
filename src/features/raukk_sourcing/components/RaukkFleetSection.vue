@@ -101,7 +101,11 @@
 		sourcingStore.fleetSpillover
 			? raukkFleetSpilloverRows(
 					rows.value,
-					raukkFleetSpillover(utilization.value)
+					raukkFleetSpillover(
+						utilization.value,
+						(shipTypeId: string) =>
+							sourcingStore.getShipProfile(shipTypeId).stlOnly
+					)
 				)
 			: rows.value
 	);

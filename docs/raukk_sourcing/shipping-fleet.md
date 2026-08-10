@@ -125,6 +125,20 @@ Verified against user BTF runs (ZV-759c → ANT, 4 pc, both hulls):
   fallback could assign work to a hull the account owns none of, drawing
   a fleet row with a capacity of zero. Only a fleet without a single hull
   still reaches the default, which is the documented starter assumption.
+- STL-ONLY HULLS GET FIRST DIBS (round 23). An STL-only hull clears two
+  bars to be offered at all (`raukkStlOnlyCandidates`: the lane or loop
+  is gate/same-system servable AND calls at a depot). Where it clears
+  them it no longer merely competes with the FTL hulls on density and
+  size — it TAKES the route: the FTL candidates are dropped from the
+  choice entirely and `raukkPickHull` picks the best STL hull for the
+  cargo. Rationale: an FTL hull holding a gate lane can be moved to any
+  other lane in the account, an STL hull denied one cannot fly anything
+  else at all, so the scarce assignment goes to the constrained ship.
+  The rule applies to the advisory pool too, so a servable lane advises
+  the better STL build rather than an FTL hull the account may already
+  own; `SHIP_PROFILE_PRESETS` carries an STL sibling per hull, so that
+  pool always has one to advise. A MANUAL assignment still passes
+  unfiltered, in both directions.
 - Per-plan shipping fraction remains (sum of the plan's own lanes)
   but the fleet page is the account-level truth.
 
@@ -158,6 +172,21 @@ the toggle off everything renders exactly as before.
   no capacity to receive with, no number a spill could relieve.
   If total overflow exceeds total spare, the remainder stays on the
   donors (proportionally) and their numbers stay red and uncapped.
+- OVERFLOW ONLY MOVES ONTO A HULL THAT COULD FLY IT (round 23), so the
+  redistribution runs in two passes rather than one pool. Pass 1: STL
+  overflow onto STL spare, its own exclusive pool — draining the FTL
+  spare first would starve the FTL donors, which have nowhere else to
+  go. Pass 2: what pass 1 could not place, plus the whole FTL overflow,
+  onto the FTL spare; an FTL hull can fly an STL hull's gate lane, so it
+  takes both. FTL overflow NEVER reaches STL spare: the STL types got
+  first dibs on everything they could serve (see the hull-pick rule
+  above), so whatever is still booked on an FTL type is work an STL hull
+  would have to jump for, and it carries no drive. Counting that spare
+  as fleet capacity would report an over-booked fleet as comfortable.
+  The class comes from the ship PROFILE (`stlOnly`), handed in by
+  `RaukkFleetSection.vue`; the rollup itself stays class-blind, and a
+  caller passing no resolver reads every type as FTL — the single pool
+  of a fleet that owns no STL hull.
 - Donor row: bar draws full (100%), the printed number is the RESIDUAL
   percentage after spilling — 100% when everything fit, red only while
   still past 100%. Recipient row: own load in the usual green, the
