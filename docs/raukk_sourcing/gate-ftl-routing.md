@@ -10,6 +10,8 @@ Behaviour: `src/features/raukk_sourcing/calculations/` — `shippingStl.ts` (`ra
 ## Constraints the code obeys silently
 
 - v1 lanes and v2 chains adopt gates together — both or neither. Otherwise the two views disagree about the same journey.
+- A gate link is one UNDIRECTED edge (`buildGraph` pushes both directions, `routeDistance.ts:610`), so a planned pair stored twice — reversed, or between two other planets of the same two systems — is one edge billed twice. `setPlannedGate` throws on such a pair and the add form refuses it; the check runs only when the endpoints move, so an imported table carrying duplicates stays editable and flags them per row instead.
+- `IRaukkPlannedGate.buildEnds` (1 or 2, absent means 2) is a BILLING knob only: a link needs a gate at each end to exist, and one end is priced when the far gate already stands or is a partner's. It touches no spec, no fee, no edge, and stales nothing. User, 2026-08-10.
 
 ## Unbuilt
 

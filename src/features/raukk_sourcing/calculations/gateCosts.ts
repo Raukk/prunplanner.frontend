@@ -101,18 +101,45 @@ export const RAUKK_GATE_BASE_SPECS: IRaukkGateSpecs = ASSET.baseSpecs;
 export const RAUKK_GATE_UPKEEP: IRaukkMaterialAmounts = ASSET.upkeep;
 
 /**
- * Daily upkeep of a whole LINK: both gates, since both are yours.
+ * Ends of a link the account pays for: the pair, or one of the two.
+ *
+ * A link is always two gates — that is the game — but the bill is not
+ * always the user's twice over: the far end may already stand, or a
+ * partner may be putting it up. Which is a question of WHO PAYS and
+ * nothing else: one end or two, the link flies the same.
+ *
+ * @author raukk
+ */
+export type RAUKK_GATE_BUILD_ENDS = 1 | 2;
+
+/**
+ * Ends the caller means, defaulting to the whole link.
+ *
+ * @author raukk
+ *
+ * @param {number | undefined} ends Wanted ends
+ * @returns {RAUKK_GATE_BUILD_ENDS} 1 or 2
+ */
+export function raukkGateBuildEnds(
+	ends: number | undefined
+): RAUKK_GATE_BUILD_ENDS {
+	return ends === 1 ? 1 : 2;
+}
+
+/**
+ * Daily upkeep of a LINK: both gates by default, since both are yours.
  *
  * Independent of the upgrade levels, unlike the build bill.
  *
  * @author raukk
  *
+ * @param {number} ends Ends the account keeps, 1 or 2
  * @returns {IRaukkMaterialAmounts} Materials per day
  */
-export function raukkGateLinkUpkeep(): IRaukkMaterialAmounts {
+export function raukkGateLinkUpkeep(ends: number = 2): IRaukkMaterialAmounts {
 	const total: IRaukkMaterialAmounts = {};
 
-	add(total, ASSET.upkeep, 2);
+	add(total, ASSET.upkeep, raukkGateBuildEnds(ends));
 
 	return total;
 }
@@ -359,23 +386,30 @@ export function raukkGateBuildCost(
 }
 
 /**
- * Materials a whole LINK costs: two gates, one at each end.
+ * Materials a LINK costs: by default two gates, one at each end.
  *
  * Both ends are assumed identically upgraded, which is what the planning
  * model states a planned link to be — one fee, one clearance, two equal
  * ends.
  *
+ * `ends` is a BILLING question, not a routing one: a link needs a gate on
+ * both sides to exist at all, and passing 1 says the other side is
+ * somebody else's — already standing, or a partner's to put up — so only
+ * one gate is charged here. The link routes identically either way.
+ *
  * @author raukk
  *
  * @param {IRaukkGateUpgrades} upgrades Upgrade levels of each end
+ * @param {number} ends Ends the account pays for, 1 or 2
  * @returns {IRaukkMaterialAmounts} Materials
  */
 export function raukkGateLinkBuildCost(
-	upgrades: IRaukkGateUpgrades = RAUKK_GATE_NO_UPGRADES
+	upgrades: IRaukkGateUpgrades = RAUKK_GATE_NO_UPGRADES,
+	ends: number = 2
 ): IRaukkMaterialAmounts {
 	const total: IRaukkMaterialAmounts = {};
 
-	add(total, raukkGateBuildCost(upgrades), 2);
+	add(total, raukkGateBuildCost(upgrades), raukkGateBuildEnds(ends));
 
 	return total;
 }

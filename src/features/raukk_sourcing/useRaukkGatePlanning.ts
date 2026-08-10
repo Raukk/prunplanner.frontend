@@ -10,6 +10,9 @@ import { usePrice } from "@/features/cx/usePrice";
 import {
 	IRaukkPlannedGate,
 	IRaukkPlannedGateValue,
+	raukkPlannedGateBuildEnds,
+	raukkPlannedGateDuplicate,
+	raukkPlannedGateLabel,
 	raukkPlannedGateUpgrades,
 	raukkPlannedGateValue,
 } from "@/features/raukk_sourcing/calculations/gatePlanning";
@@ -25,10 +28,19 @@ import { RAUKK_DEFAULT_CHAIN_ROUTES } from "@/features/raukk_sourcing/calculatio
 export interface IRaukkGatePlanningRow {
 	gate: IRaukkPlannedGate;
 	value: IRaukkPlannedGateValue;
-	/** Materials BOTH ends of the link come to */
+	/** Materials the ends this account pays for come to */
 	materials: IRaukkMaterialAmounts;
 	/** ȼ those materials come to, 0 while prices are still loading */
 	buildCostAic: number;
+	/**
+	 * Label of an EARLIER gate on the same pair, `null` for a unique one.
+	 *
+	 * Only ever set for gates that were already stored — the editor
+	 * refuses a duplicate at the point of adding one — so it is a flag on
+	 * an imported or pre-existing table, not a state a user can reach by
+	 * typing.
+	 */
+	duplicateOf: string | null;
 }
 
 /** Rollup of the gate planning table */
@@ -37,6 +49,8 @@ export interface IRaukkGatePlanningTotals {
 	enabled: number;
 	/** Planned gates the routing could not place */
 	broken: number;
+	/** Rows that re-plan a pair an earlier row already links */
+	duplicates: number;
 	/** Minutes the enabled gates save on their own endpoints, summed */
 	savedMinutes: number;
 	/** ȼ every planned gate on the table would cost to build */
@@ -96,10 +110,27 @@ export function useRaukkGatePlanning(): {
 		pricesLoaded.value = true;
 	});
 
-	const rows: ComputedRef<IRaukkGatePlanningRow[]> = computed(() =>
-		Object.values(sourcingStore.plannedGates).map((gate) => {
+	const rows: ComputedRef<IRaukkGatePlanningRow[]> = computed(() => {
+		const gates: IRaukkPlannedGate[] = Object.values(
+			sourcingStore.plannedGates
+		);
+
+		return gates.map((gate, index) => {
 			const materials: IRaukkMaterialAmounts = raukkGateLinkBuildCost(
-				raukkPlannedGateUpgrades(gate)
+				raukkPlannedGateUpgrades(gate),
+				raukkPlannedGateBuildEnds(gate)
+			);
+
+			/*
+			 * Compared against the gates BEFORE this one only, so a pair
+			 * planned twice flags the second row and not both: the first
+			 * one is the gate, the second is the copy.
+			 */
+			const earlier: IRaukkPlannedGate | null = raukkPlannedGateDuplicate(
+				gates.slice(0, index),
+				gate.planetA,
+				gate.planetB,
+				gate.id
 			);
 
 			return {
@@ -110,13 +141,16 @@ export function useRaukkGatePlanning(): {
 					materials,
 					(ticker) => refPrices.value[ticker] ?? 0
 				),
+				duplicateOf:
+					earlier === null ? null : raukkPlannedGateLabel(earlier),
 			};
-		})
-	);
+		});
+	});
 
 	const totals: ComputedRef<IRaukkGatePlanningTotals> = computed(() => ({
 		enabled: rows.value.filter((row) => row.gate.enabled).length,
 		broken: rows.value.filter((row) => row.value.issue !== "").length,
+		duplicates: rows.value.filter((row) => row.duplicateOf !== null).length,
 		savedMinutes: rows.value
 			.filter((row) => row.gate.enabled)
 			.reduce((sum, row) => sum + row.value.savedMinutes, 0),

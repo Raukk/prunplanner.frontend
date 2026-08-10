@@ -23,8 +23,10 @@
 import {
 	IRaukkGateSpecs,
 	IRaukkGateUpgrades,
+	RAUKK_GATE_BUILD_ENDS,
 	RAUKK_GATE_NO_UPGRADES,
 	RAUKK_GATE_UPGRADE_CAPS,
+	raukkGateBuildEnds,
 	raukkGateSpecs,
 	raukkGateUpgradeLevel,
 } from "@/features/raukk_sourcing/calculations/gateCosts";
@@ -100,6 +102,15 @@ export interface IRaukkPlannedGate {
 	volumeUpgrades: number;
 	/** Range upgrade levels of each end, 0 to 3 — sets how far it links */
 	rangeUpgrades: number;
+	/**
+	 * Ends of the link the account PAYS for, 1 or 2, absent means 2.
+	 *
+	 * A link is two gates whatever this says — the routing, the clearance
+	 * and the fee are untouched by it. It only decides whose bill the far
+	 * end is: `1` for a link whose other side already stands or is
+	 * somebody else's to build.
+	 */
+	buildEnds?: RAUKK_GATE_BUILD_ENDS;
 	/** Fed into the route graph while on */
 	enabled: boolean;
 	status: RAUKK_PLANNED_GATE_STATUS;
@@ -133,6 +144,23 @@ export function raukkPlannedGateUpgrades(
 		volume: raukkGateUpgradeLevel("volume", gate.volumeUpgrades ?? 0),
 		range: raukkGateUpgradeLevel("range", gate.rangeUpgrades ?? 0),
 	};
+}
+
+/**
+ * Ends of one planned gate the account pays for, 1 or 2.
+ *
+ * A gate stored before the field existed is a whole link, which is what
+ * every bill written until then meant.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkPlannedGate} gate Planned gate
+ * @returns {RAUKK_GATE_BUILD_ENDS} Ends billed
+ */
+export function raukkPlannedGateBuildEnds(
+	gate: IRaukkPlannedGate
+): RAUKK_GATE_BUILD_ENDS {
+	return raukkGateBuildEnds(gate.buildEnds);
 }
 
 /**
@@ -347,6 +375,91 @@ export function raukkPlannedGateBuildable(
 	if (parsecs === null) return false;
 
 	return parsecs <= raukkPlannedGateSpecs(gate).linkingRangeParsecs;
+}
+
+/**
+ * Identity of the LINK a planned gate is, direction blind.
+ *
+ * A gate is bidirectional: the route graph adds both directions of every
+ * link, so `A ⇄ B` and `B ⇄ A` are one and the same edge, and planning
+ * both is planning one gate twice — at twice the bill and with nothing
+ * gained. The key is therefore the unordered pair.
+ *
+ * Compared by SYSTEM wherever both ends resolve, because a gate links
+ * systems: a second link between two other planets of the same two
+ * systems is the same edge again, however different the planet ids read.
+ * Ends the systems JSON cannot place fall back to the planet id, cased
+ * and padded alike, which still catches the plain reversed duplicate.
+ *
+ * @author raukk
+ *
+ * @param {string} planetA Planet natural id of the a side
+ * @param {string} planetB Planet natural id of the b side
+ * @param {IRaukkPlannedGateRoutes} routes Route lookups
+ * @returns {string} Pair key, `""` when an end is missing
+ */
+export function raukkPlannedGatePairKey(
+	planetA: string,
+	planetB: string,
+	routes: IRaukkPlannedGateRoutes = DEFAULT_ROUTES
+): string {
+	const sideKey = (planet: string): string => {
+		const trimmed: string = planet.trim();
+
+		if (trimmed === "") return "";
+
+		return (
+			routes.resolveSystemId(trimmed)?.toUpperCase() ??
+			trimmed.toUpperCase()
+		);
+	};
+
+	const a: string = sideKey(planetA);
+	const b: string = sideKey(planetB);
+
+	if (a === "" || b === "") return "";
+
+	return [a, b].sort().join("|");
+}
+
+/**
+ * The planned gate that already links the same pair, `null` when none.
+ *
+ * `gateId` is the gate ASKING, and is never its own duplicate — the same
+ * call answers for a row being edited and for a row about to be added,
+ * which is the whole point of taking an id at all.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkPlannedGate[]} gates Planned gates already stored
+ * @param {string} planetA Planet natural id of the a side
+ * @param {string} planetB Planet natural id of the b side
+ * @param {string} gateId Id of the gate asking, `""` for a new one
+ * @param {IRaukkPlannedGateRoutes} routes Route lookups
+ * @returns {(IRaukkPlannedGate | null)} The gate already on that pair
+ */
+export function raukkPlannedGateDuplicate(
+	gates: IRaukkPlannedGate[],
+	planetA: string,
+	planetB: string,
+	gateId: string = "",
+	routes: IRaukkPlannedGateRoutes = DEFAULT_ROUTES
+): IRaukkPlannedGate | null {
+	const key: string = raukkPlannedGatePairKey(planetA, planetB, routes);
+
+	if (key === "") return null;
+
+	return (
+		gates.find(
+			(other) =>
+				other.id !== gateId &&
+				raukkPlannedGatePairKey(
+					other.planetA,
+					other.planetB,
+					routes
+				) === key
+		) ?? null
+	);
 }
 
 /**

@@ -44,6 +44,7 @@ describe("Raukk Sourcing: useRaukkGatePlanning", () => {
 		expect(totals.value).toStrictEqual({
 			enabled: 0,
 			broken: 0,
+			duplicates: 0,
 			savedMinutes: 0,
 			buildCostAic: 0,
 		});
@@ -103,6 +104,61 @@ describe("Raukk Sourcing: useRaukkGatePlanning", () => {
 		// volume upgrades are bought at both ends too, triangular: the
 		// third level costs 6 units of 200 PSH, doubled for the pair
 		expect(rows.value[0].materials.PSH).toBe(2 * (1000 + 6 * 200));
+	});
+
+	it("bills ONE gate for a link whose far end is not the accounts", () => {
+		store.setPlannedGate("g1", {
+			planetA: HEPHAESTUS,
+			planetB: FAR,
+			rangeUpgrades: 1,
+		});
+
+		const { rows } = useRaukkGatePlanning();
+
+		store.setPlannedGate("g1", { buildEnds: 1 });
+
+		expect(rows.value[0].materials.SEA).toBe(5000);
+
+		store.setPlannedGate("g1", { buildEnds: 2 });
+
+		expect(rows.value[0].materials.SEA).toBe(10000);
+	});
+
+	it("flags a stored row that repeats a link, the LATER one", () => {
+		// only reachable through an import: the store refuses to add one
+		store.plannedGates = {
+			first: {
+				id: "first",
+				name: "Long Haul",
+				planetA: HEPHAESTUS,
+				planetB: FAR,
+				fee: 4000,
+				capacityUpgrades: 0,
+				volumeUpgrades: 0,
+				rangeUpgrades: 1,
+				buildEnds: 2,
+				enabled: false,
+				status: "proposed",
+			},
+			second: {
+				id: "second",
+				planetA: FAR,
+				planetB: HEPHAESTUS,
+				fee: 4000,
+				capacityUpgrades: 0,
+				volumeUpgrades: 0,
+				rangeUpgrades: 1,
+				buildEnds: 2,
+				enabled: false,
+				status: "proposed",
+			},
+		};
+
+		const { rows, totals } = useRaukkGatePlanning();
+
+		expect(rows.value[0].duplicateOf).toBeNull();
+		expect(rows.value[1].duplicateOf).toBe("Long Haul");
+		expect(totals.value.duplicates).toBe(1);
 	});
 
 	it("counts what is switched on and what cannot route", () => {

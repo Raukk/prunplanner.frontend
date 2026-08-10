@@ -14,6 +14,7 @@ import {
 	raukkGateBuildCost,
 	raukkGateCostAic,
 	raukkGateCostTickers,
+	raukkGateBuildEnds,
 	raukkGateLinkBuildCost,
 	raukkGateLinkUpkeep,
 	raukkGateSpecs,
@@ -512,6 +513,25 @@ describe("Raukk Sourcing: gate costs", () => {
 				Object.keys(one).sort()
 			);
 		});
+
+		it("charges ONE gate when only one end is the accounts to build", () => {
+			expect(raukkGateLinkBuildCost(upgrades(1, 2, 2), 1)).toStrictEqual(
+				raukkGateBuildCost(upgrades(1, 2, 2))
+			);
+		});
+
+		it("takes anything but a one for the whole link", () => {
+			const both: IRaukkMaterialAmounts = raukkGateLinkBuildCost(
+				upgrades(0, 1, 1)
+			);
+
+			expect(raukkGateLinkBuildCost(upgrades(0, 1, 1), 2)).toStrictEqual(
+				both
+			);
+			expect(raukkGateBuildEnds(undefined)).toBe(2);
+			expect(raukkGateBuildEnds(0)).toBe(2);
+			expect(raukkGateBuildEnds(1)).toBe(1);
+		});
 	});
 
 	describe("the upgrade budget", () => {
@@ -602,6 +622,12 @@ describe("Raukk Sourcing: gate costs", () => {
 
 			Object.entries(RAUKK_GATE_UPKEEP).forEach(([ticker, amount]) => {
 				expect(link[ticker]).toBe(amount * 2);
+			});
+		});
+
+		it("charges one gate of upkeep for a one ended bill", () => {
+			expect(raukkGateLinkUpkeep(1)).toStrictEqual({
+				...RAUKK_GATE_UPKEEP,
 			});
 		});
 

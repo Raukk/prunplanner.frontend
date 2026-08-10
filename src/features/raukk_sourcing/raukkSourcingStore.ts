@@ -55,11 +55,15 @@ import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippi
 // raukk: planned gates are edges of the route graph while switched on
 import {
 	RAUKK_PLANNED_GATE_DEFAULT_FEE,
+	raukkPlannedGateDuplicate,
+	raukkPlannedGateLabel,
 	raukkPlannedGateLinks,
 } from "@/features/raukk_sourcing/calculations/gatePlanning";
 import {
 	IRaukkGateUpgrades,
+	RAUKK_GATE_BUILD_ENDS,
 	RAUKK_GATE_UPGRADE,
+	raukkGateBuildEnds,
 	raukkGateUpgradesFit,
 } from "@/features/raukk_sourcing/calculations/gateCosts";
 import { setRaukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations/routeDistance";
@@ -1058,6 +1062,36 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * The planned gate that already links the same pair, `null` when
+		 * none does.
+		 *
+		 * A gate is BIDIRECTIONAL — the route graph carries both directions
+		 * of every link — so `A ⇄ B` and `B ⇄ A` are one edge, and two rows
+		 * for it double the build bill for nothing. Compared by system, so
+		 * a second link between two other planets of the same two systems
+		 * counts as well. Backs the gate editors refusal before
+		 * {@link setPlannedGate} throws.
+		 * @author raukk
+		 *
+		 * @param {string} gateId Gate asking, `""` for one not added yet
+		 * @param {string} planetA Planet Natural Id of the a side
+		 * @param {string} planetB Planet Natural Id of the b side
+		 * @returns {IRaukkPlannedGate | null} Gate already on that pair
+		 */
+		function plannedGateDuplicateOf(
+			gateId: string,
+			planetA: string,
+			planetB: string
+		): IRaukkPlannedGate | null {
+			return raukkPlannedGateDuplicate(
+				Object.values(plannedGates.value),
+				planetA,
+				planetB,
+				gateId
+			);
+		}
+
+		/**
 		 * Stores one PLANNED gate, or patches the one that id already is.
 		 *
 		 * A planned gate that is switched ON is an edge of the route
@@ -1069,9 +1103,15 @@ export const useRaukkSourcingStore = defineStore(
 		 * shipped (the rule {@link setShippingConfig} follows).
 		 *
 		 * A patch that touches nothing routable — the label, the note,
-		 * the status of a gate that stays switched off — stales NOTHING:
-		 * a knob that moves no stored number leaves the results alone,
-		 * the rule the depot rent and the ship count follow.
+		 * the status of a gate that stays switched off, the ends billed —
+		 * stales NOTHING: a knob that moves no stored number leaves the
+		 * results alone, the rule the depot rent and the ship count follow.
+		 * `buildEnds` is squarely such a knob: it says who pays for the far
+		 * gate, and a link flies the same whoever that is.
+		 *
+		 * A pair another gate already links THROWS, see
+		 * {@link plannedGateDuplicateOf} — the rule {@link setChain}
+		 * follows for overlapping chains.
 		 *
 		 * Non finite numbers are refused rather than stored, so the users
 		 * own JSON backup cannot be poisoned with a `null` fee.
@@ -1124,6 +1164,10 @@ export const useRaukkSourcingStore = defineStore(
 				raised
 			);
 
+			const buildEnds: RAUKK_GATE_BUILD_ENDS = raukkGateBuildEnds(
+				patch.buildEnds ?? known?.buildEnds
+			);
+
 			const next: IRaukkPlannedGate = {
 				id,
 				name: patch.name ?? known?.name,
@@ -1136,6 +1180,7 @@ export const useRaukkSourcingStore = defineStore(
 				capacityUpgrades: upgrades.capacity,
 				volumeUpgrades: upgrades.volume,
 				rangeUpgrades: upgrades.range,
+				buildEnds,
 				enabled: patch.enabled ?? known?.enabled ?? false,
 				status: patch.status ?? known?.status ?? "proposed",
 				note: patch.note ?? known?.note,
@@ -1143,6 +1188,28 @@ export const useRaukkSourcingStore = defineStore(
 
 			// a gate needs both ends to be a link at all
 			if (next.planetA === "" || next.planetB === "") return;
+
+			/*
+			 * A gate is bidirectional, so the same pair the other way round
+			 * is the same link: storing it would bill a second gate for an
+			 * edge the graph already has. Only checked when the ENDPOINTS
+			 * move — a payload imported with duplicates in it must stay
+			 * editable and removable rather than throwing on every keystroke.
+			 */
+			if (
+				known === undefined ||
+				known.planetA !== next.planetA ||
+				known.planetB !== next.planetB
+			) {
+				const duplicate: IRaukkPlannedGate | null =
+					plannedGateDuplicateOf(id, next.planetA, next.planetB);
+
+				if (duplicate !== null) {
+					throw new Error(
+						`'${raukkPlannedGateLabel(duplicate)}' already links ${duplicate.planetA} and ${duplicate.planetB}; a gate is bidirectional, so the same pair either way round is one gate.`
+					);
+				}
+			}
 
 			plannedGates.value[id] = next;
 
@@ -1875,6 +1942,7 @@ export const useRaukkSourcingStore = defineStore(
 			assignedShipTypeId,
 			depotStopRefs,
 			listPlannedGates,
+			plannedGateDuplicateOf,
 			// setters
 			setTickerSource,
 			clearTickerSource,

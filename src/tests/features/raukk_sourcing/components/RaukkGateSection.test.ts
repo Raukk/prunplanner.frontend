@@ -13,7 +13,7 @@ import RaukkGateSection from "@/features/raukk_sourcing/components/RaukkGateSect
 import { setRaukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations/routeDistance";
 
 // UI
-import { PButton, PCheckbox, PInput } from "@/ui";
+import { PButton, PCheckbox, PInput, PSelect } from "@/ui";
 
 // Locales
 import common from "@/locales/en_US/common.json";
@@ -236,6 +236,95 @@ describe("Raukk Sourcing: RaukkGateSection", () => {
 
 		expect(store.plannedGates["g1"].enabled).toBe(false);
 		expect(wrapper.text()).not.toContain("Not Routed");
+	});
+
+	it("refuses a link already planned, the other way round too", async () => {
+		store.setPlannedGate("g1", {
+			planetA: HEPH,
+			planetB: FAR,
+			name: "Long Haul",
+			rangeUpgrades: 1,
+		});
+
+		const wrapper: VueWrapper = render();
+		await typeLink(wrapper, FAR, HEPH);
+
+		expect(wrapper.text()).toContain("'Long Haul' already links");
+		expect(wrapper.text()).toContain("a gate is bidirectional");
+		expect(addButton(wrapper).props("disabled")).toBe(true);
+
+		await addButton(wrapper).trigger("click");
+
+		expect(store.listPlannedGates()).toHaveLength(1);
+	});
+
+	it("refuses a second link between the same two SYSTEMS", async () => {
+		store.setPlannedGate("g1", {
+			planetA: HEPH,
+			planetB: FAR,
+			rangeUpgrades: 1,
+		});
+
+		const wrapper: VueWrapper = render();
+		// another planet of the same two systems is the same graph edge
+		await typeLink(wrapper, "ZV-307d", "IA-335a");
+
+		expect(addButton(wrapper).props("disabled")).toBe(true);
+		expect(wrapper.text()).toContain("already links");
+	});
+
+	it("bills one end when the far gate is not the accounts", async () => {
+		store.setPlannedGate("g1", {
+			planetA: HEPH,
+			planetB: FAR,
+			rangeUpgrades: 1,
+		});
+
+		const wrapper: VueWrapper = render();
+
+		expect(wrapper.text()).toContain("Build both ends");
+
+		await wrapper
+			.findAllComponents(PSelect)
+			.find((select) => select.props("value") === 2)!
+			.vm.$emit("update:value", 1);
+
+		expect(store.plannedGates["g1"].buildEnds).toBe(1);
+	});
+
+	it("flags an imported row that repeats a link", () => {
+		store.plannedGates = {
+			first: {
+				id: "first",
+				name: "Long Haul",
+				planetA: HEPH,
+				planetB: FAR,
+				fee: 4000,
+				capacityUpgrades: 0,
+				volumeUpgrades: 0,
+				rangeUpgrades: 1,
+				buildEnds: 2,
+				enabled: false,
+				status: "proposed",
+			},
+			second: {
+				id: "second",
+				planetA: FAR,
+				planetB: HEPH,
+				fee: 4000,
+				capacityUpgrades: 0,
+				volumeUpgrades: 0,
+				rangeUpgrades: 1,
+				buildEnds: 2,
+				enabled: false,
+				status: "proposed",
+			},
+		};
+
+		const text: string = render().text();
+
+		expect(text).toContain("Duplicate");
+		expect(text).toContain("counted twice");
 	});
 
 	it("removes a gate", async () => {
