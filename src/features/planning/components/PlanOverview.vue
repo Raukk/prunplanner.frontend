@@ -9,6 +9,8 @@
 
 	// raukk: sourced cost note under the overview table
 	import RaukkOverviewNote from "@/features/raukk_sourcing/components/RaukkOverviewNote.vue";
+	// raukk: estimated freight per day, one row of the table below
+	import RaukkOverviewShippingRow from "@/features/raukk_sourcing/components/RaukkOverviewShippingRow.vue";
 
 	// Types & Interfaces
 	import {
@@ -94,6 +96,8 @@
 							<span class="font-light text-white/50"> ȼ </span>
 						</td>
 					</tr>
+					<!-- raukk: estimated freight per day -->
+					<RaukkOverviewShippingRow />
 					<tr>
 						<td>
 							{{ $t("plan.components.overview.table.plan_cost") }}
