@@ -896,6 +896,63 @@ describe("Raukk Sourcing: Shipping", () => {
 				expect(leg.unservableReason).toBeNull();
 			});
 
+			it("takes such a lane off a better FTL hull", () => {
+				/** The small hull, built without an FTL drive */
+				const stlSmall: IRaukkHullCandidate = {
+					...hull("stl_small", 500, 500),
+					profile: {
+						...hull("stl_small", 500, 500).profile,
+						stlOnly: true,
+					},
+				};
+
+				const [leg] = raukkLaneLegs(
+					{
+						...fleetPair(
+							[ticker("ORE", 5000, 1, 1)],
+							[hull("heavy", 5000, 5000), stlSmall]
+						),
+						hulls: {
+							owned: [hull("heavy", 5000, 5000), stlSmall],
+							all: [hull("heavy", 5000, 5000), stlSmall],
+						},
+						route: { parsecs: 0, jumps: 0, sameSystem: true },
+						depotServed: true,
+					},
+					caps
+				);
+
+				// the heavy hull would fly it in a single trip, but it can
+				// fly every OTHER lane of the account too — the STL hull
+				// cannot, so what it is able to serve is served by it first
+				expect(leg.shipTypeId).toBe("stl_small");
+				expect(leg.advisory).toBeNull();
+			});
+
+			it("is advised over an FTL hull on a lane it could serve", () => {
+				const stlHeavy: IRaukkHullCandidate = stlHull("stl_heavy");
+
+				const [leg] = raukkLaneLegs(
+					{
+						...fleetPair(
+							[ticker("ORE", 5000, 1, 1)],
+							[hull("small", 500, 500)]
+						),
+						hulls: {
+							owned: [hull("small", 500, 500)],
+							all: [hull("heavy", 5000, 5000), stlHeavy],
+						},
+						route: { parsecs: 0, jumps: 0, sameSystem: true },
+						depotServed: true,
+					},
+					caps
+				);
+
+				// the FTL heavy hull is the same hold, but the lane is one
+				// the cheaper STL build reaches
+				expect(leg.advisory?.suggestedShipTypeId).toBe("stl_heavy");
+			});
+
 			it("is not picked for a lane that calls at no depot", () => {
 				const [leg] = raukkLaneLegs(
 					{
