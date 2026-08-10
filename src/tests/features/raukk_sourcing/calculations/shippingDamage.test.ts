@@ -470,6 +470,83 @@ describe("shippingDamage — stellar geometry", () => {
 		expect(band.low).toBeCloseTo(1 / 2 - 1 / 2.5, 9);
 	});
 
+	describe("what a lane converges to over many flights", () => {
+		// A lane's direction is fixed in the galactic frame while the
+		// planet orbits, so cos(theta) = rho * cos(phase), where rho is
+		// the lane's in-plane component. The geometry averages rho = 1,
+		// a lane lying in the orbital plane. See section 7.3.
+		const longRunMean = (a: number, d: number, rho: number): number => {
+			const floor: number = RAUKK_DAMAGE_CLOSEST_FRACTION * a;
+			const worst: number = raukkStellarMinimumCosine(a, d);
+			let total: number = 0;
+			let counted: number = 0;
+
+			for (let i = 0; i < 4000; i++) {
+				const cosine: number =
+					rho * Math.cos((2 * Math.PI * (i + 0.5)) / 4000);
+				const allowed: boolean =
+					raukkStellarClosestApproach(a, d, cosine) >= floor;
+				const value: number = raukkStellarPathIntegral(
+					a,
+					d,
+					allowed ? cosine : worst
+				);
+
+				if (!Number.isFinite(value)) continue;
+
+				total += value;
+				counted++;
+			}
+
+			return total / counted;
+		};
+
+		it("never converges above the expected value, whatever the tilt", () => {
+			// the integral is convex in the cosine, so the widest sweep
+			// gives the largest mean: `expected` bounds a lane from above
+			// and therefore over-budgets damage, never under-budgets it
+			for (const [a, d] of [
+				[0.225, 0.447],
+				[0.406, 0.267],
+				[1.982, 0.447],
+				[6.125, 0.447],
+			] as [number, number][]) {
+				const expected: number = raukkStellarGeometry(a, d).expected;
+
+				for (const rho of [1, 0.87, 0.5, 0]) {
+					expect(longRunMean(a, d, rho)).toBeLessThanOrEqual(
+						expected * (1 + 1e-6)
+					);
+				}
+			}
+		});
+
+		it("is bounded by the band, so a narrow band means a safe lane", () => {
+			// where the dose barely varies with direction the tilt cannot
+			// matter either, which is what makes `high / low` a usable
+			// per-lane trust signal with no calibration at all
+			for (const [a, d] of [
+				[1.982, 0.447],
+				[6.125, 0.447],
+				[85.33, 0.447],
+			] as [number, number][]) {
+				const band = raukkStellarGeometry(a, d);
+				const worstTilt: number = longRunMean(a, d, 0);
+
+				expect(band.high / band.low).toBeLessThan(2);
+				expect(worstTilt / band.expected).toBeGreaterThan(0.95);
+			}
+
+			// and where it is wide, the tilt can take most of the value
+			const ant = raukkStellarGeometry(0.225, 0.447);
+
+			expect(ant.high / ant.low).toBeGreaterThan(50);
+			expect(longRunMean(0.225, 0.447, 0) / ant.expected).toBeLessThan(
+				0.4
+			);
+		});
+	});
+
 	it("bounds a leg shorter than its orbit without any floor assumption", () => {
 		// the ship cannot reach the star, so the worst case is the leg
 		// run straight inwards, stopping at a - d

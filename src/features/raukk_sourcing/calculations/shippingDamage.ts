@@ -19,12 +19,20 @@
 // section 7.2 for the containment rate, which `shippingDamage.test.ts`
 // asserts so it cannot drift.
 //
-// The stellar term is accurate IN AGGREGATE and not per lane. Pooled
-// over the 33 flights the point estimate runs +1.7%, but individual
-// anchors span -32% to +47% and no global coefficient moves that: the
-// residual is each system's unmodelled orbital-plane orientation, per
-// section 9.2. Calibrate a lane you care about with
-// `raukkCalibrateStellar` rather than trusting `expected` on it.
+// `expected` averages a lane lying IN the anchor's orbital plane, which
+// sweeps the widest range of angles there is. A lane tilted out of that
+// plane never reaches the extremes, so it converges BELOW `expected` by
+// a fixed amount that flying more never erodes — orbital phase averages
+// away, inclination does not. The path integral is convex in the angle,
+// so `expected` bounds every tilt from above: it over-budgets damage,
+// never under-budgets it.
+//
+// `high / low` is the trust signal, and it costs nothing. Both it and
+// the tilt sensitivity come from the same place — how much the dose
+// varies with direction — so a lane whose band is under about 2x sits
+// within a few percent of `expected` whatever its tilt, and a lane with
+// a wide band can be off by most of its value. See star-heat-damage.md
+// section 7.3 for the measured table.
 //
 // Pure functions, no store and no Vue.
 

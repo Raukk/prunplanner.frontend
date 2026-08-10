@@ -179,9 +179,30 @@ The point estimate is an orbital MEAN. Pooled across all 33 flights it runs +1.7
 
 Every global constant moves the pooled figure and leaves the spread alone, which is the signature of a residual that is not a scaling error. It is the per-system orbital plane orientation of section 9.2 plus the phase on the day, and neither is a scalar.
 
-The data also cannot settle whether repeated flights on ONE lane converge to `expected`. ANT carries 21 legs, but they come from two capture batches roughly 6-7 hours apart against a 1.63-day period — two phase samples, not 21 — and it still sits +16% after a refit. "The residual averages away" and "the model is wrong on this lane" fit the evidence equally well.
+Repeated flights on one lane DO converge — orbital phase sweeps the whole circle and averages out exactly as you would expect. But they converge to the lane's own number, not to `expected`, and the gap is a fixed geometric constant that no amount of flying erodes.
 
-Practical reading: trust `expected` for a fleet, not for a lane. For a lane that matters, calibrate it (section 7.4).
+The reason is that a lane's direction is fixed in the galactic frame while the planet orbits, so the direction cosine to the star runs `cos(theta) = rho x cos(phase)` where `rho` is the lane's IN-PLANE component. `rho = 1` is a lane lying in the orbital plane, which sweeps the full -1 to +1 and is what `raukkStellarGeometry` averages over. A lane inclined out of the plane never reaches the extremes at all: at 60 degrees `rho = 0.5` and the cosine only ever runs -0.5 to +0.5.
+
+Inclination is a property of the lane — the same two systems, forever. It is not phase and it does not average away. What it costs, as a shortfall against `expected`:
+
+| anchor | band width | 30 deg out | 60 deg out | 90 deg out |
+|---|---|---|---|---|
+| ANT (a = 0.225) | 91.4x | -60.5% | -70.9% | -73.3% |
+| YK-715a (a = 0.406) | 4.9x | -11.5% | -22.8% | -26.3% |
+| LS-231a (a = 0.988) | 2.4x | -3.3% | -8.4% | -10.5% |
+| NL-534a (a = 1.982) | 1.6x | -0.9% | -2.6% | -3.3% |
+| NL-534c (a = 6.125) | 1.2x | -0.1% | -0.3% | -0.4% |
+| NL-534g (a = 85.33) | 1.0x | ~0 | ~0 | ~0 |
+
+Two things fall out of that table, and both are useful.
+
+**The error is one-sided.** `rho = 1` sweeps the widest, and the path integral is convex in the cosine, so full sweep gives the LARGEST mean of any inclination. `expected` is therefore an upper bound on what a lane converges to — it over-budgets damage, never under-budgets it.
+
+**The band width already tells you when to care.** Both quantities are driven by the same thing: how much the dose varies with direction. Where the band is narrow the lane cannot be far off `expected` whatever its inclination; where the band is wide it can be off by most of its value. `high / low` needs no calibration and no new data — it is computed today, for every leg.
+
+That inverts the practical advice. `expected` is trustworthy per lane to within a few percent on any anchor whose band is under roughly 2x, which is most of them; it is unreliable exactly on the tight-orbit anchors flying long legs, which are also the ones the band already flags.
+
+It also explains the sign pattern in the residuals. Over-prediction (ANT +16%, NL-534a +25%, YK-715a +47%) is what inclination produces. Under-prediction (LS-231a -32%, LE-137a -26%) is NOT, so something else is in play there — a per-anchor coefficient error, or simply that those anchors carry two legs from one capture and are showing phase, not bias.
 
 ### 7.4 On calibrating an anchor
 
