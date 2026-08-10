@@ -183,7 +183,8 @@
 		</div>
 		<EmpireMaterialIO
 			v-if="content === 'materialio'"
-			:empire-material-i-o="filteredMaterialIO" />
+			:empire-material-i-o="filteredMaterialIO"
+			:cx-uuid="cxUuid" />
 		<EmpireAnalysis
 			v-else-if="content === 'analysis'"
 			:empire-material-i-o="filteredMaterialIO"

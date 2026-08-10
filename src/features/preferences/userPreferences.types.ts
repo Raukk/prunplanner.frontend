@@ -28,6 +28,18 @@ export interface IPreference {
 	 */
 	habOptimizePerPlan?: boolean;
 
+	/**
+	 * Share of an exchange's daily traded volume, in percent, at which a
+	 * plan's sale of a material is flagged amber respectively red — the
+	 * point where selling the surplus starts moving the price you priced
+	 * the plan with. See `cxVolumeShare.ts`.
+	 *
+	 * Optional and client side only, like `habOptimizePerPlan`: both are
+	 * absent from `UserPreferenceSchema` and never reach the backend.
+	 */
+	cxVolumeYellowPercent?: number;
+	cxVolumeRedPercent?: number;
+
 	// seeding per plan defaults
 	planOverrides: Record<string, Partial<IPreferencePerPlan>>;
 

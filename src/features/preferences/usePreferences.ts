@@ -94,6 +94,22 @@ export function usePreferences() {
 		set: (v) => userStore.setPreference("burnOrigin", v),
 	});
 
+	const cxVolumeYellowPercent: WritableComputedRef<number, number> =
+		computed<number>({
+			get: () =>
+				userStore.preferences.cxVolumeYellowPercent ??
+				preferenceDefaults.cxVolumeYellowPercent!,
+			set: (v) => userStore.setPreference("cxVolumeYellowPercent", v),
+		});
+
+	const cxVolumeRedPercent: WritableComputedRef<number, number> =
+		computed<number>({
+			get: () =>
+				userStore.preferences.cxVolumeRedPercent ??
+				preferenceDefaults.cxVolumeRedPercent!,
+			set: (v) => userStore.setPreference("cxVolumeRedPercent", v),
+		});
+
 	const planSettings: ComputedRef<
 		Record<string, Partial<IPreferencePerPlan>>
 	> = computed(() => {
@@ -239,6 +255,8 @@ export function usePreferences() {
 		burnDaysYellow,
 		burnResupplyDays,
 		burnOrigin,
+		cxVolumeYellowPercent,
+		cxVolumeRedPercent,
 		planSettings,
 		planSettingsOverview,
 		layoutNavigationStyle,
