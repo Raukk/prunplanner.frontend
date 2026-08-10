@@ -41,6 +41,7 @@ Test: the reader can act on the reply without a second pass, and cannot find a s
 ## Conventions
 
 - Prettier: tabs, 80 col, double quotes. `<script setup lang="ts">`, indented script, imports grouped under comment banners.
+- Never hard-wrap prose — one line per paragraph and per bullet; unwrap any fork-authored file (`.md` especially) found wrapped.
 - Interfaces `I`-prefixed; types in sibling `*.types.ts`; JSDoc on exported fns.
 - UI: prefer `src/ui` P* wrappers (PButton, PTable, ...) over raw naive-ui.
 - i18n: keys namespaced by filename in `src/locales/en_US/*.json`; edit en_US only (Crowdin owns other locales).
