@@ -2,10 +2,8 @@
 // flights actually determined, which ones the blueprint seeded, which
 // ones stayed at the reference, and how a solver warning code becomes a
 // translatable message.
-// See docs/raukk_sourcing/shipping-fleet.md, sections "Calibration by
-// observed flight" and "Blueprint-seeded profiles" — the documented
-// order is blueprint seed → BTF flights refine → manual override wins.
-// Pure functions, no store and no Vue.
+// The order is blueprint seed → BTF flights refine → manual override
+// wins. Pure functions, no store and no Vue.
 
 // Types & Interfaces
 import { IRaukkBlueprintSeed } from "@/features/raukk_sourcing/calculations/shippingBlueprint";

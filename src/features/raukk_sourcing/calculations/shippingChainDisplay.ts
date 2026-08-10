@@ -2,9 +2,8 @@
 // one leg row states, how the split, the reversed loop and the drop rule
 // compare, and where a chain visits a stop less often than that stop's
 // storage can bridge.
-// See docs/raukk_sourcing/shipping-chains-v2.md, section "UI". Pure
-// functions with no store and no Vue: the components stay thin wiring
-// and every number below is unit tested.
+// Pure functions with no store and no Vue: the components stay thin
+// wiring and every number below is unit tested.
 
 // Calculations
 import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculations/shippingChains";
@@ -609,10 +608,9 @@ export function raukkStorageFilledDays(
 /**
  * Stops a chain reaches less often than their storage lasts.
  *
- * A WARNING and never a gate (shipping-chains-v2.md, "Storage
- * cross-check"): the model has no notion of a full warehouse, so all it
- * can honestly do is say that a loop visiting every 4.2 days serves a
- * stop whose storage bridges 3.1.
+ * A WARNING and never a gate: the model has no notion of a full
+ * warehouse, so all it can honestly do is say that a loop visiting every
+ * 4.2 days serves a stop whose storage bridges 3.1.
  *
  * @author raukk
  *

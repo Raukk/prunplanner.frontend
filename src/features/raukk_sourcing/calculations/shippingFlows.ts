@@ -1,7 +1,6 @@
 // The flow list of one plan: the same cargo the v1 pairs carry, stated
 // as directed (ticker, fromStop, toStop) flows the CHAIN model consumes.
-// See docs/raukk_sourcing/shipping-chains-v2.md, section "Architecture":
-// a chains trips depend on every member plans flows, so those flows are
+// A chains trips depend on every member plans flows, so those flows are
 // frozen onto the plans snapshot and the account level chain step reads
 // them from there — never live, never from another plans live numbers.
 //
@@ -86,8 +85,7 @@ export const RAUKK_CX_ANCHOR_NEAREST: string = "nearest";
  * — the nearest exchange by parsecs. A plan may state `"nearest"`
  * explicitly, which is an answer of its own and overrides a fixed account
  * mode. A region is nothing more than the set of bases sharing an anchor,
- * which is what the automatic chains are built per
- * (shipping-cadence-plan.md, Phase 2).
+ * which is what the automatic chains are built per.
  *
  * @author raukk
  *
@@ -460,13 +458,12 @@ function mergeDirection(
  * time of the lanes a plan owns, while a chain is flown for the whole
  * empire and is accounted on the fleet page instead.
  *
- * OWNERSHIP, the load bearing rule (shipping-plan.md, "Ownership rule"):
- * only the plan that AUTHORED a flow may fold its freight. A plan to
- * plan lane belongs to the consumer alone; folding it into the SOURCE
- * plans outbound as well would raise that plans break even price, which
- * the consumer then pays a second time through the producer price.
- * `ownPlanUuid` enforces that here, on top of the ownership filter the
- * caller already applies.
+ * OWNERSHIP, the load bearing rule: only the plan that AUTHORED a flow
+ * may fold its freight. A plan to plan lane belongs to the consumer
+ * alone; folding it into the SOURCE plans outbound as well would raise
+ * that plans break even price, which the consumer then pays a second
+ * time through the producer price. `ownPlanUuid` enforces that here, on
+ * top of the ownership filter the caller already applies.
  *
  * @author raukk
  *

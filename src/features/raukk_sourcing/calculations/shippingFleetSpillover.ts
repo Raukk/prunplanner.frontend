@@ -1,8 +1,7 @@
 // Spillover math of the fleet page: the notional redistribution of an
 // over-booked ship types overflow onto the owned types with spare
-// capacity. See docs/raukk_sourcing/shipping-fleet.md, section
-// "Utilization spillover". Pure functions, no store and no Vue — the
-// utilization rollup arrives as plain data from the caller.
+// capacity. Pure functions, no store and no Vue — the utilization
+// rollup arrives as plain data from the caller.
 //
 // v1 transfers RAW ship minutes 1:1, a stated approximation: minutes do
 // not convert exactly across hulls, the same work costs different

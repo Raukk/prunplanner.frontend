@@ -1,6 +1,5 @@
 // STL-only ships: which legs they may fly, and what a gate served leg
-// costs them. See docs/raukk_sourcing/shipping-calibration.md section 4
-// for the gate constants and shipping-decisions.md for the model itself.
+// costs them.
 //
 // An STL-only hull carries neither FTL drive nor reactor — roughly a
 // quarter cheaper to build — and can therefore only reach another system
@@ -134,12 +133,12 @@ export function raukkGateOnlyPath(
 /**
  * Prices the gate terms of one leg an STL-only ship flies.
  *
- * Exactly what shipping-calibration.md section 4 states and nothing
- * beyond it: one fee per traversal charged by the ORIGIN side gate,
- * 25 STL units of traversal overhead priced at the profiles own STL
- * fuel price, the traversal minutes the multi modal search already
- * timed, and a flat hull damage per traversal. Currencies trade ~1:1,
- * so a fee is taken at face value whatever it is denominated in.
+ * Exactly what the gate calibration measured and nothing beyond it: one
+ * fee per traversal charged by the ORIGIN side gate, 25 STL units of
+ * traversal overhead priced at the profiles own STL fuel price, the
+ * traversal minutes the multi modal search already timed, and a flat
+ * hull damage per traversal. Currencies trade ~1:1, so a fee is taken
+ * at face value whatever it is denominated in.
  *
  * Hop damage arrives as a PERCENTAGE — 0.006 meaning 0.006% — while the
  * profiles damage constants are fractions, so it is divided by a hundred

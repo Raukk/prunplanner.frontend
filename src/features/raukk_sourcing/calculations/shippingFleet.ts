@@ -1,9 +1,8 @@
 // Fleet math of the shipping model: which ship type serves a lane or a
 // chain, and how much of that types capacity the assigned work claims.
-// See docs/raukk_sourcing/shipping-fleet.md, sections "Fleet page" and
-// "Blueprint-seeded profiles". Pure functions, no store and no Vue — the
-// fleet counts, the assignments and the per lane numbers arrive as plain
-// data from the caller.
+// Pure functions, no store and no Vue — the fleet counts, the
+// assignments and the per lane numbers arrive as plain data from the
+// caller.
 
 // Calculations
 import { RAUKK_STARTER_FLEET } from "@/features/raukk_sourcing/calculations/shippingProfiles";

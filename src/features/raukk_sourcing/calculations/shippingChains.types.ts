@@ -1,8 +1,6 @@
 // Types of the raukk shipping CHAIN model (v2).
-// See docs/raukk_sourcing/shipping-chains-v2.md, sections "Model",
-// "Flow claiming", "CX-split rule", "Low-utilization leg drop rule",
-// "Same-system legs" and "Per-system damage". Purely additive over the
-// v1 shapes in shipping.types.ts, which stay untouched.
+// Purely additive over the v1 shapes in shipping.types.ts, which stay
+// untouched.
 
 // Types & Interfaces
 import {
@@ -137,12 +135,12 @@ export interface IRaukkChainFlow {
 	 * Plan whose snapshot AUTHORED this flow, the one plan allowed to
 	 * fold its chain freight into its own numbers.
 	 *
-	 * The ownership rule of shipping-plan.md restated for the chain
-	 * model: a plan to plan lane is authored by the CONSUMER alone, so
-	 * only the consumer may be charged for it. Endpoints cannot express
-	 * that — both plans touch them — which is why ownership is carried
-	 * explicitly. Optional for the usual reason: flows frozen before
-	 * this field existed know no owner.
+	 * The ownership rule restated for the chain model: a plan to plan
+	 * lane is authored by the CONSUMER alone, so only the consumer may
+	 * be charged for it. Endpoints cannot express that — both plans
+	 * touch them — which is why ownership is carried explicitly.
+	 * Optional for the usual reason: flows frozen before this field
+	 * existed know no owner.
 	 */
 	ownerPlanUuid?: string;
 	/**

@@ -214,12 +214,11 @@ export function raukkHasGate(planetNaturalId: string): boolean {
 /**
  * Traversal constants of a gate hop, calibrated from the BTF campaign.
  *
- * Source: `docs/raukk_sourcing/shipping-calibration.md` section 4. The
- * traversal itself costs `minutesPerParsec` per parsec of the straight
- * line between the two gate systems and is VOLUME-INDEPENDENT (17 pc
- * took 5h41m for 413, 833, 1,483 and 1,484 m³ hulls alike). On top of it
- * every traversal pays a ship-independent overhead — TRA 10s/15u, LOCK
- * 10m/5u, DCAY 10m/5u — and takes a flat hull damage.
+ * The traversal itself costs `minutesPerParsec` per parsec of the
+ * straight line between the two gate systems and is VOLUME-INDEPENDENT
+ * (17 pc took 5h41m for 413, 833, 1,483 and 1,484 m³ hulls alike). On
+ * top of it every traversal pays a ship-independent overhead — TRA
+ * 10s/15u, LOCK 10m/5u, DCAY 10m/5u — and takes a flat hull damage.
  *
  * The origin side fee is NOT here: it is per link data and lives in the
  * asset, see {@link IRaukkGateSide}.

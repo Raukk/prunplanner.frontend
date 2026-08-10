@@ -1,5 +1,4 @@
 // Shared type contract for the raukk sourcing feature.
-// See docs/raukk_sourcing/spec.md for the full model.
 
 // Types & Interfaces
 import {
@@ -315,7 +314,7 @@ export interface IRaukkChainFlowCost {
 /**
  * One costing of a chain: the authored loop, or one sub chain of a CX
  * split. Both are always stored so the split premium the user pays for
- * durability stays visible (shipping-chains-v2.md, "CX-split rule").
+ * durability stays visible.
  */
 export interface IRaukkChainCosting {
 	stops: RAUKK_STOP_REF[];

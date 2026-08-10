@@ -1,10 +1,9 @@
 // Chain authoring rules that are NOT cost math: whether another chain
-// already reaches the same stops. See docs/raukk_sourcing/
-// shipping-chains-v2.md, section "Flow claiming": instead of precedence
-// logic between overlapping chains, two chains may share AT MOST ONE
-// stop and the editor refuses the second — the rule claiming actually
-// follows, since `claimChainFlows` claims every flow whose two endpoints
-// both appear in the stop list, adjacent or not.
+// already reaches the same stops. Instead of precedence logic between
+// overlapping chains, two chains may share AT MOST ONE stop and the
+// editor refuses the second — the rule claiming actually follows, since
+// `claimChainFlows` claims every flow whose two endpoints both appear in
+// the stop list, adjacent or not.
 
 // Types & Interfaces
 import {

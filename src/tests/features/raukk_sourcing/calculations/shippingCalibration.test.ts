@@ -88,8 +88,8 @@ const seed: IRaukkTimeCalibration = raukkNearestCalibration(hull, "standard");
 
 /**
  * The two recorded runs of the reference flight, ANT to ZV-759c on a
- * 3000 t freighter, fuel MIN and reactor MIN (shipping-decisions.md,
- * round 2 item 5): run C empty and run B with 3000 t aboard.
+ * 3000 t freighter, fuel MIN and reactor MIN: run C empty and run B
+ * with 3000 t aboard.
  */
 const emptyFlight: IRaukkObservedFlight = {
 	originPlanetNaturalId: "CA-001a",

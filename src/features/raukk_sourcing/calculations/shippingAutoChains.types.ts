@@ -1,7 +1,5 @@
 // Types of the AUTOMATIC chain builder and of the exchange hub/spoke
-// listing it leaves behind.
-// See docs/raukk_sourcing/shipping-cadence-plan.md, "Phase 2 — auto
-// chains + exchange hub/spoke". Purely additive over the authored chain
+// listing it leaves behind. Purely additive over the authored chain
 // shapes of shippingChains.types.ts, which stay untouched.
 
 // Types & Interfaces
@@ -106,10 +104,10 @@ export interface IRaukkAutoChainInput {
 /**
  * One line of the exchange hub/spoke listing.
  *
- * RESOURCE first (shipping-cadence-plan.md, Phase 2): a hub/spoke row
- * names a ticker and its share of the rerouted cargo, optionally grouped
- * by the base it comes from — never a base alone, which would say
- * nothing about what is actually being bought at the exchange.
+ * RESOURCE first: a hub/spoke row names a ticker and its share of the
+ * rerouted cargo, optionally grouped by the base it comes from — never a
+ * base alone, which would say nothing about what is actually being
+ * bought at the exchange.
  */
 export interface IRaukkHubSpokeRow {
 	ticker: string;

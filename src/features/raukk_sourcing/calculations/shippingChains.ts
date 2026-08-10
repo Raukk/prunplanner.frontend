@@ -1,8 +1,8 @@
 // Multi stop shipping chains: pure math over an ordered LOOP of stops.
-// See docs/raukk_sourcing/shipping-chains-v2.md — a v1 route pair is the
-// two stop degenerate case of this model and every primitive is reused
-// from shipping.ts rather than reimplemented. No store, no Vue, no
-// price fetching: the repair bill price arrives pre-computed.
+// A v1 route pair is the two stop degenerate case of this model and
+// every primitive is reused from shipping.ts rather than reimplemented.
+// No store, no Vue, no price fetching: the repair bill price arrives
+// pre-computed.
 
 // Calculations
 import {
@@ -157,18 +157,16 @@ export const RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_IN_OUT_PARSECS: number = 2;
 export const RAUKK_DEFAULT_AUTO_CHAIN_DETOUR_LOOSE_PARSECS: number = 6;
 
 /**
- * Defaults of the chain knobs, every one of them from
- * shipping-chains-v2.md.
+ * Defaults of the chain knobs.
  *
- * `stlCostPerMegameter` is the one value the document leaves to the
- * implementation: nothing in the v1 profile calibration prices sublight
- * DISTANCE, so it starts at 0 exactly like `costPerParsec` does and the
- * same system leg then costs whatever the two jump alternative costs.
+ * `stlCostPerMegameter` is the one value left to the implementation:
+ * nothing in the v1 profile calibration prices sublight DISTANCE, so it
+ * starts at 0 exactly like `costPerParsec` does and the same system leg
+ * then costs whatever the two jump alternative costs.
  *
- * The three `autoChain*` knobs come from shipping-cadence-plan.md phase 2
- * instead and are documented gut numbers: a stop is worth 5% of a
- * shipment, and a stop may add 2 parsecs of detour on the fortnightly
- * in/out class and 6 on the monthly and quarterly ones.
+ * The three `autoChain*` knobs are gut numbers instead: a stop is worth
+ * 5% of a shipment, and a stop may add 2 parsecs of detour on the
+ * fortnightly in/out class and 6 on the monthly and quarterly ones.
  *
  * @author raukk
  *
@@ -679,11 +677,11 @@ function priceLeg(
 	if (leg.route === null || leg.fromSystemId === null) return flat;
 
 	/*
-	 * An STL-only ship gate hopping to the next system: the gate terms
-	 * of shipping-calibration.md section 4 REPLACE the parsec terms —
-	 * no FTL fuel is burnt, no jump is charged and no per parsec damage
-	 * is taken. The one sublight block the caller charges per leg stays,
-	 * it is the planet↔gate flying the ship still does.
+	 * An STL-only ship gate hopping to the next system: the calibrated
+	 * gate terms REPLACE the parsec terms — no FTL fuel is burnt, no
+	 * jump is charged and no per parsec damage is taken. The one
+	 * sublight block the caller charges per leg stays, it is the
+	 * planet↔gate flying the ship still does.
 	 *
 	 * SEAM: the distance a gate route covers is reported as
 	 * `effectiveParsecs` so the per flow allocation keeps weighting by
@@ -1001,12 +999,11 @@ export function calculateChainShipping(
 		/*
 		 * Both modes wear the hull for what each of them does, and a leg
 		 * may be either or BOTH. Every gate traversal takes the flat
-		 * damage of shipping-calibration.md section 4 and no per parsec
-		 * damage — the ship never flies those parsecs, the gate does —
-		 * while the parsecs it does fly are charged at the per parsec
-		 * rate. `ftlParsecs` is zero on a pure gate leg and equal to the
-		 * whole route on a leg with no gate in it, so the one expression
-		 * covers all three cases.
+		 * calibrated damage and no per parsec damage — the ship never
+		 * flies those parsecs, the gate does — while the parsecs it does
+		 * fly are charged at the per parsec rate. `ftlParsecs` is zero
+		 * on a pure gate leg and equal to the whole route on a leg with
+		 * no gate in it, so the one expression covers all three cases.
 		 */
 		return (
 			pricing[index].ftlParsecs * pricing[index].damagePerParsec +
@@ -1779,7 +1776,7 @@ function standalonePairs(
 		 * plan, so the cadence caps are the ACCOUNT defaults with the
 		 * shipped repair cadence — the same answer a plan without any
 		 * override gets. Chains themselves stay one loop and are never
-		 * split per bucket (shipping-decisions.md round 10).
+		 * split per bucket.
 		 */
 		results.push(
 			calculatePairShipping(

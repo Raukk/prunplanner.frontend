@@ -10,7 +10,7 @@
 // nobody planning a link knows which side will end up the narrower one,
 // and the fee is the one thing the user does state: the operator sets it.
 // Currencies are not modelled at all, the four trade ~1:1 and the cost
-// math treats them as one unit (shipping-decisions.md round 8).
+// math treats them as one unit.
 //
 // The hard constraint that falls out of the panel is LINKING RANGE: a
 // gate reaches 10 parsecs, 5 more per range upgrade, and a gap wider than
@@ -385,8 +385,7 @@ export function raukkPlannedGateLinks(
  * Minutes one traversal of a gate of that length takes.
  *
  * The calibrated model of a real traversal, applied unchanged to a
- * planned one: a distance term plus a flat, ship independent overhead
- * (`docs/raukk_sourcing/shipping-calibration.md` section 4).
+ * planned one: a distance term plus a flat, ship independent overhead.
  *
  * @author raukk
  *

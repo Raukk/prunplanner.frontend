@@ -1,8 +1,7 @@
 // Row model of the empire oversubscription report. One shape, built
 // pure in `oversubReport.ts`, consumed by the table and every
-// visualization tab. See docs/raukk_sourcing/oversubscription-report.md,
-// "Row model". No Vue and no router import — a nav target is a plain
-// path string here, resolved by the rendering layer.
+// visualization tab. No Vue and no router import — a nav target is a
+// plain path string here, resolved by the rendering layer.
 
 /**
  * Reserved seam for the later CX top-up cost of an oversubscribed row:

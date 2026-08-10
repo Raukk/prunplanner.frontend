@@ -712,8 +712,7 @@ export function calculateTrueCosts(
 
 		/*
 		 * The freight of the units sold at the exchange is charged per
-		 * unit sold and added on top of the allocated inbound freight,
-		 * per docs/raukk_sourcing/shipping-plan.md.
+		 * unit sold and added on top of the allocated inbound freight.
 		 */
 		const shipping: number =
 			bucket.shipping === 0 && (shippingPerUnitOut[ticker] ?? 0) === 0
