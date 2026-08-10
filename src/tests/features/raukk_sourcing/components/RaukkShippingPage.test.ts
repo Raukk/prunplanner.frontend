@@ -43,6 +43,7 @@ const STUBS: Record<string, unknown> = {
 	RaukkFleetSection: { template: '<div id="s-fleet" />' },
 	RaukkTransportSection: { template: '<div id="s-transport" />' },
 	RaukkChainSection: { template: '<div id="s-chains" />' },
+	RaukkHubSpokeSection: { template: '<div id="s-hubspoke" />' },
 	RaukkDepotSection: { template: '<div id="s-depots" />' },
 	RaukkGateSection: { template: '<div id="s-gates" />' },
 	RaukkShippingVisualsSection: { template: '<div id="s-visuals" />' },
@@ -101,6 +102,7 @@ const MARKERS: Record<string, string> = {
 	RaukkFleetSection: "#s-fleet",
 	RaukkTransportSection: "#s-transport",
 	RaukkChainSection: "#s-chains",
+	RaukkHubSpokeSection: "#s-hubspoke",
 	RaukkDepotSection: "#s-depots",
 	RaukkGateSection: "#s-gates",
 	RaukkShippingVisualsSection: "#s-visuals",
@@ -130,6 +132,7 @@ describe("RaukkShippingPage section tabs", () => {
 			"Fleet",
 			"Transport",
 			"Chains",
+			"Hub/Spoke",
 			"Depots",
 			"Gates",
 			"Visuals",
@@ -164,6 +167,17 @@ describe("RaukkShippingPage section tabs", () => {
 		await clickTab(wrapper, "Gates");
 
 		expect(shown(wrapper)).toStrictEqual(["RaukkGateSection"]);
+	});
+
+	it("gives the hub/spoke listing a tab of its own", async () => {
+		// it used to hang below the Chains section's two tables, which is
+		// where nobody scrolled to
+		const { wrapper } = await render();
+
+		expect(wrapper.find("#s-hubspoke").exists()).toBe(false);
+		await clickTab(wrapper, "Hub/Spoke");
+
+		expect(shown(wrapper)).toStrictEqual(["RaukkHubSpokeSection"]);
 	});
 
 	it("collapses to the switch-independent sections while shipping is off", async () => {

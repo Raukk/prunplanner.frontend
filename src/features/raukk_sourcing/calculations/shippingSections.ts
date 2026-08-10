@@ -11,6 +11,7 @@ export const RAUKK_SHIPPING_SECTIONS = [
 	"fleet",
 	"transport",
 	"chains",
+	"hubspoke",
 	"depots",
 	"gates",
 	"visuals",

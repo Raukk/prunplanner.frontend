@@ -1,4 +1,4 @@
-# Shipping — decision residue (31 rounds)
+# Shipping — decision residue (32 rounds)
 
 Implemented behaviour lives in `src/features/raukk_sourcing/calculations/{shipping,shippingPairs,shippingAutoChains,shippingProfiles,routeDistance,gatePlanning}.ts`; their JSDoc and `src/locales/en_US/raukk_sourcing.json` are authoritative for what the code does, `facts/shipping-decisions.json` for every constant, equation and measurement. This file keeps only the WHY neither records. Code cites round numbers (`shippingProfiles.ts:90` — "round 5 decision 2"), so the tables below are that index.
 
@@ -24,6 +24,9 @@ Implemented behaviour lives in `src/features/raukk_sourcing/calculations/{shippi
 | 30 | two bases on one planet share one docking site; optional `leaseHostPlanUuid` names the host that flies it | the skip sits at the shipping INPUT, so freight, fuel and lanes fall out empty on their own rather than through a conditional per consumer. Never CHAINED: a host may not itself be a lease |
 | 30 | the lease freezes its residual cargo as `leaseCargo`; the host folds that frozen value in before pairs are built | sorting on the LEASE's side, over the shared `resolvePlanLaneCargo`, is what applies its own sources, LM flags and rd 29 where its configuration lives. Delegation is of shipping, not of sourcing |
 | 31 | empire material i/o site grouping is a DISPLAY step over a pure `groupMaterialIOSites` | `plan_details` are keyed by plan uuid and stored on the backend — a synthetic site entry there would change a persisted shape. Only LINKED plans fold; two unlinked plans on one planet stay two ship visits |
+| 32 | the hub/spoke listing left the Chains section for a tab of its own (USER) | it hung below two chain tables where nobody scrolled; the sticky strip, the `?section=hubspoke` deep link and the KeepAlive rules all come free. The section kept its `planUuid` / `planetNaturalId` scoping props even though only the account page mounts it — the scoped copy and `raukkFlowConcernsPlan` are what a plan-side listing would need again |
+| 32 | one grid per cargo class, the Class column dropped (USER) | a class is a cadence flown by its own visit, so reading one of them meant filtering a mixed table by eye. Share is deliberately still measured against ALL rerouted cargo rather than per grid: it is the one figure that would silently change meaning, and cross-grid comparability is the point of it |
+| 32 | grouped rows fold a base pair's materials onto ONE line, volumes summed (USER) | those materials ride the same visit, so the lane is what a ship sees. Per-ticker rows survive on `items` and are shown in the material cell's tooltip; the lane share is recomputed over the whole listing instead of summed from its members, since a row's share is already the LARGER of its weight and volume share and adding maxima up overstates the lane |
 
 ## Chains, cadence, depots
 
