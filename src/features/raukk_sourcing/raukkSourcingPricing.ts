@@ -27,7 +27,6 @@ import {
 } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 import { IRaukkProducerOption } from "@/features/raukk_sourcing/raukkSourcingStore.types";
 import {
-	IRaukkFuelRowSourcing,
 	IRaukkInputBuckets,
 	IRaukkInputRow,
 	IRaukkInputRowSource,
@@ -808,17 +807,10 @@ export function inputDemandPerDay(
  * and pay freight like anything else. Without a shipping map every row is
  * priced exactly as before.
  *
- * `fuelUnitsPerDay` adds the SHIP FUEL rows, the daily burn of the plans
- * own lanes. Their ȼ is INFORMATIONAL: the shipping model already charges
- * that fuel through the resolved profile, so the input total has to leave
- * them out. They carry no freight of their own either — refuelling
- * happens at the exchange or the depot, so no fuel is ever shipped.
- *
- * `fuel` is where those rows take their SOURCE from, and it is not this
- * plans configuration: fuel is sourced account wide (see
- * `calculations/shipSourcing.ts`), because one fleet serves every base.
- * Absent, the rows fall back to the plans own sources and resolver, which
- * is what every caller predating the account wide ship sourcing did.
+ * Ship fuel is NOT a row here. The fleet burns it, not the base: the
+ * shipping model already charges it through the resolved ship profile,
+ * and it is sourced account wide on the shipping page (see
+ * `calculations/shipSourcing.ts`) because one fleet serves every base.
  *
  * With `getDefaultPrice` given, rows sort by their daily cost at that
  * price — the CX preference price — instead of the effective one, so
@@ -835,9 +827,7 @@ export function inputDemandPerDay(
  * @param {IRaukkPriceResolver} resolve Price Resolver
  * @param {Record<string, number>} shippingPerUnitIn Inbound freight ȼ/u
  * @param {(ticker: string) => number} [getDefaultPrice] Stable sort price
- * @param {IRaukkMaterialUnits} fuelUnitsPerDay Ship fuel burnt per day
  * @param {Set<string>} defaulted Tickers following an account default
- * @param {IRaukkFuelRowSourcing} [fuel] Account wide fuel sourcing
  * @returns {IRaukkInputRow[]} Priced input rows
  */
 export function buildInputRows(
@@ -847,15 +837,8 @@ export function buildInputRows(
 	resolve: IRaukkPriceResolver,
 	shippingPerUnitIn: Record<string, number> = {},
 	getDefaultPrice?: (ticker: string) => number,
-	fuelUnitsPerDay: IRaukkMaterialUnits = {},
-	defaulted: Set<string> = new Set(),
-	fuel?: IRaukkFuelRowSourcing
+	defaulted: Set<string> = new Set()
 ): IRaukkInputRow[] {
-	const fuelSources: Record<string, IRaukkTickerSource> =
-		fuel?.sources ?? sources;
-	const resolveFuel: IRaukkPriceResolver = fuel?.resolve ?? resolve;
-	const fuelDefaulted: Set<string> = fuel?.defaulted ?? defaulted;
-
 	const units: IRaukkMaterialUnits = {};
 	/** Units riding a route pair, the material I/O ones only */
 	const shippedUnits: IRaukkMaterialUnits = {};
@@ -866,7 +849,6 @@ export function buildInputRows(
 			production: false,
 			workforce: false,
 			repair: false,
-			shipFuel: false,
 		};
 		buckets[ticker] = current;
 		return current;
@@ -906,42 +888,7 @@ export function buildInputRows(
 			: row.costPerDay;
 	}
 
-	/*
-	 * Ship fuel rows stand APART from the material ones, deliberately as
-	 * their own row objects rather than another bucket flag on a shared
-	 * one: a fuel that is also a recipe input must keep its production
-	 * need and its burn separate, and only the burn is the row whose
-	 * cost the shipping model already charges.
-	 */
-	const fuelRows: IRaukkInputRow[] = Object.entries(fuelUnitsPerDay)
-		.filter(([, unitsPerDay]) => unitsPerDay > 0)
-		.map(([ticker, unitsPerDay]) => {
-			const resolved: IRaukkResolvedPrice = resolveFuel(ticker);
-
-			return {
-				ticker,
-				buckets: {
-					production: false,
-					workforce: false,
-					repair: false,
-					shipFuel: true,
-				},
-				unitsPerDay,
-				source: fuelSources[ticker],
-				fromDefault: fuelDefaulted.has(ticker),
-				price: resolved.price,
-				// fuel is hauled to the exchange by the player, it rides
-				// no route pair and pays no freight of its own
-				shippedUnitsPerDay: 0,
-				shippingPerUnit: 0,
-				effectivePrice: resolved.price,
-				costPerDay: unitsPerDay * resolved.price,
-				fromPlanUuid: resolved.fromPlanUuid,
-			};
-		})
-		.sort((a, b) => sortCost(b) - sortCost(a));
-
-	const materialRows: IRaukkInputRow[] = Object.entries(units)
+	return Object.entries(units)
 		.map(([ticker, unitsPerDay]) => {
 			const resolved: IRaukkResolvedPrice = resolve(ticker);
 
@@ -965,8 +912,6 @@ export function buildInputRows(
 			};
 		})
 		.sort((a, b) => sortCost(b) - sortCost(a));
-
-	return [...materialRows, ...fuelRows];
 }
 
 /**
