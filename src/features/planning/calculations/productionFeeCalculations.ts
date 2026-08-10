@@ -46,25 +46,30 @@ export function calculateProductionFeeRate(
 }
 
 /**
- * Calculates the production fee of a single order batch. The game
- * charges fees on the recipes nominal worker-time when an order is
- * started: efficiency shortens the wall-clock duration but scales the
- * fee right back up, so the batch fee uses the unmodified recipe time.
+ * Calculates the production fee of a single order batch. The fee is
+ * charged on the orders REAL duration, so efficiency shortens the batch
+ * and shrinks its fee by the same factor: the recipe time is divided by
+ * the buildings total efficiency before the daily rate is applied.
  * @author raukk
  *
  * @export
  * @param {IBuilding} building Building Data
  * @param {IFIOPlanetFees | null} fees Planet Fee Data, null if unknown
  * @param {number} recipeTimeMs Unmodified recipe time in ms
+ * @param {number} efficiency Total Building Efficiency
  * @returns {number} Fee per batch, 0 if unknown
  */
 export function calculateProductionFeeBatch(
 	building: IBuilding,
 	fees: IFIOPlanetFees | null,
-	recipeTimeMs: number
+	recipeTimeMs: number,
+	efficiency: number
 ): number {
+	if (efficiency <= 0) return 0;
+
 	return (
-		calculateProductionFeeRate(building, fees) * (recipeTimeMs / TOTALMSDAY)
+		calculateProductionFeeRate(building, fees) *
+		(recipeTimeMs / efficiency / TOTALMSDAY)
 	);
 }
 
@@ -96,22 +101,20 @@ export function calculateProductionFeePerUnit(
 
 /**
  * Calculates the daily production fee of one continuously producing
- * building. Higher efficiency runs more batches per day, each charged
- * on nominal time, so the daily fee scales with efficiency and is
- * independent of the recipe mix.
+ * building. Each batch is charged on its real duration, so a day of
+ * production always costs exactly one day of the buildings fee rate:
+ * independent of both efficiency and the recipe mix.
  * @author raukk
  *
  * @export
  * @param {IBuilding} building Building Data
  * @param {IFIOPlanetFees | null} fees Planet Fee Data, null if unknown
- * @param {number} efficiency Total Building Efficiency
  * @returns {number} Daily fee as negative cost, 0 if unknown
  */
 export function calculateProductionFeeDaily(
 	building: IBuilding,
-	fees: IFIOPlanetFees | null,
-	efficiency: number
+	fees: IFIOPlanetFees | null
 ): number {
 	const feeRate: number = calculateProductionFeeRate(building, fees);
-	return feeRate === 0 ? 0 : -1 * feeRate * efficiency;
+	return feeRate === 0 ? 0 : -1 * feeRate;
 }
