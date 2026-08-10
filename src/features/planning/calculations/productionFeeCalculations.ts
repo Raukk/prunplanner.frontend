@@ -18,9 +18,12 @@ const WORKFORCE_BUILDING_FIELD_MAP: Record<
 };
 
 /**
- * Sums a buildings production fee rate per 24h of nominal runtime:
- * worker count x per-worker daily fee rate of the buildings industry,
- * over all workforce tiers. Fees are set per planet by its government.
+ * A buildings production fee rate per 24h of nominal runtime. The rate
+ * is charged per BUILDING, not per employee: a building staffed by one
+ * workforce tier pays that tiers daily rate flat, and a building mixing
+ * tiers pays their workforce-weighted average — more employees of a tier
+ * only shift the mix, they never multiply the bill. Fees are set per
+ * planet by its government, per industry and tier.
  * @author raukk
  *
  * @export
@@ -37,12 +40,19 @@ export function calculateProductionFeeRate(
 	const feeTable = fees.production_fees[building.expertise];
 	if (!feeTable) return 0;
 
-	return Object.entries(WORKFORCE_BUILDING_FIELD_MAP).reduce(
-		(sum, [workforce, field]) =>
-			sum +
-			building[field] * (feeTable[workforce as WORKFORCE_TYPE] ?? 0),
-		0
+	const { weighted, workers } = Object.entries(
+		WORKFORCE_BUILDING_FIELD_MAP
+	).reduce(
+		(acc, [workforce, field]) => ({
+			weighted:
+				acc.weighted +
+				building[field] * (feeTable[workforce as WORKFORCE_TYPE] ?? 0),
+			workers: acc.workers + building[field],
+		}),
+		{ weighted: 0, workers: 0 }
 	);
+
+	return workers > 0 ? weighted / workers : 0;
 }
 
 /**
