@@ -1,12 +1,12 @@
-import { computed, reactive, ref, Ref, watch, watchEffect } from "vue";
+import { computed } from "vue";
 
 import { useI18n } from "vue-i18n";
 
 // Stores & Repository
 import { useQueryStore } from "@/lib/query_cache/queryStore";
 
-// Util
-import { inertClone } from "@/util/data";
+// Composables
+import { useDataLoaderSteps } from "@/features/wrapper/useDataLoaderSteps";
 
 // Types & Interfaces
 import {
@@ -14,7 +14,6 @@ import {
 	GameDataLoaderProps,
 	GameDataStepConfigsType,
 } from "@/features/wrapper/gameDataLoader.types";
-import { StepState } from "@/features/wrapper/dataLoader.types";
 import {
 	IBuilding,
 	IExchange,
@@ -30,7 +29,6 @@ export function useGameDataLoader(
 	const { t } = useI18n();
 
 	const queryStore = useQueryStore();
-	const done: Ref<boolean> = ref(false);
 
 	const stepConfigs: GameDataStepConfigsType = [
 		{
@@ -95,94 +93,24 @@ export function useGameDataLoader(
 		},
 	];
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const steps = reactive<StepState<any>[]>(
-		stepConfigs.map((cfg) => ({
-			cfg,
-			data: null,
-			loading: false,
-			error: null,
-			triggered: false,
-		}))
-	);
-
-	// Orchestrator
-	watchEffect(() => {
-		steps.forEach((s) => {
-			if (!s.triggered && s.cfg.enabled()) {
-				const dep = s.cfg.dependsOn
-					? steps.find((p) => p.cfg.key === s.cfg.dependsOn)
-					: null;
-				if (!dep || dep.data != null) {
-					s.triggered = true;
-					s.loading = true;
-					s.error = null;
-					s.cfg
-						.load()
-						.then((d) => {
-							const shallowData = inertClone(d);
-							s.data = shallowData;
-							s.cfg.onSuccess(shallowData);
-						})
-						.catch((e) => {
-							console.error(e);
-							s.error =
-								e instanceof Error ? e : new Error(String(e));
-						})
-						.finally(() => {
-							s.loading = false;
-						});
-				}
-			}
-		});
-	});
-
-	const loadingSteps = computed(() =>
-		steps
-			.filter((s) => s.cfg.enabled())
-			.map((s) => ({
-				name: s.cfg.name,
-				loading: s.loading,
-				error: s.error,
-			}))
-	);
-
-	const hasError = computed(() =>
-		loadingSteps.value.some((l) => l.error != null)
-	);
-
-	const allLoaded = computed(() =>
-		steps
-			.filter((s) => s.cfg.enabled())
-			.every((s) => !s.loading && s.error == null && s.data != null)
-	);
-
-	watch(
+	const {
+		done,
 		allLoaded,
-		(ok) => {
-			if (ok) {
-				emits("complete");
-				done.value = true;
-			}
-		},
-		{ immediate: true }
-	);
+		hasError,
+		canRetry,
+		loadingSteps,
+		retryFailed,
+		stepData,
+	} = useDataLoaderSteps(stepConfigs, () => emits("complete"));
 
 	const results = computed(() => {
 		const data = {
-			materialData: steps.find((s) => s.cfg.key === "material")
-				?.data as IMaterial[],
-			exchangeData: steps.find((s) => s.cfg.key === "exchange")
-				?.data as IExchange[],
-			buildingData: steps.find((s) => s.cfg.key === "building")
-				?.data as IBuilding[],
-			recipeData: steps.find((s) => s.cfg.key === "recipe")
-				?.data as IRecipe[],
-			planetData: steps.find((s) => s.cfg.key === "planet")
-				?.data as IPlanet,
-			planetMultipleData: steps.find(
-				(s) => s.cfg.key === "planetMultiple"
-			)?.data as IPlanet[],
+			materialData: stepData<IMaterial[]>("material"),
+			exchangeData: stepData<IExchange[]>("exchange"),
+			buildingData: stepData<IBuilding[]>("building"),
+			recipeData: stepData<IRecipe[]>("recipe"),
+			planetData: stepData<IPlanet>("planet"),
+			planetMultipleData: stepData<IPlanet[]>("planetMultiple"),
 		};
 
 		return data;
@@ -192,7 +120,9 @@ export function useGameDataLoader(
 		done,
 		allLoaded,
 		hasError,
+		canRetry,
 		loadingSteps,
+		retryFailed,
 		results,
 	};
 }

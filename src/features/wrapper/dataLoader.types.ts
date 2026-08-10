@@ -13,4 +13,16 @@ export type StepState<TData> = {
 	loading: boolean;
 	error: Error | null;
 	triggered: boolean;
+	/** Loads started for this step, including the one currently running. */
+	attempts: number;
+	/** An automatic retry is waiting on its timer. */
+	retryScheduled: boolean;
+};
+
+export type LoadingStep = {
+	key: string;
+	name: string;
+	loading: boolean;
+	error: Error | null;
+	retryScheduled: boolean;
 };

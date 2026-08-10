@@ -22,6 +22,8 @@ import {
 	mergeSnapshotBuckets,
 	overriddenTickersOf,
 } from "@/features/raukk_sourcing/raukkSourcingDefaults";
+// raukk: what the FLEET consumes is sourced account wide, not per base
+import { raukkEmptyShipSourcing } from "@/features/raukk_sourcing/calculations/shipSourcing";
 
 // Schemas
 import {
@@ -79,11 +81,14 @@ import {
 	IRaukkPlanConfig,
 	IRaukkPlannedGate,
 	IRaukkShipProfile,
+	IRaukkShipSourcing,
+	IRaukkShipTickerSource,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
 	IRaukkSourcingDefaults,
 	IRaukkTickerSource,
 	RAUKK_REPAIR_DAY,
+	RAUKK_SHIP_SOURCE_GROUP,
 	RAUKK_SOURCE_BUCKET,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
@@ -182,6 +187,17 @@ export const useRaukkSourcingStore = defineStore(
 		const sourcingDefaults: Ref<IRaukkSourcingDefaults> = ref({});
 
 		/**
+		 * raukk: account wide sourcing of what the FLEET consumes — the two
+		 * ship fuels and the ship repair bill. Account global like the fleet
+		 * itself and for the same reason: one fleet serves every base, and a
+		 * hull refuels and repairs at the exchange or the depot it is at, so
+		 * the consuming plan is the wrong axis to configure it on.
+		 */
+		const shipSourcing: Ref<IRaukkShipSourcing> = ref(
+			raukkEmptyShipSourcing()
+		);
+
+		/**
 		 * Resets all store variables to their initial values
 		 * @author raukk
 		 */
@@ -199,6 +215,7 @@ export const useRaukkSourcingStore = defineStore(
 			depots.value = {};
 			plannedGates.value = {};
 			sourcingDefaults.value = {};
+			shipSourcing.value = raukkEmptyShipSourcing();
 		}
 
 		// getters
@@ -1339,6 +1356,68 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Sets or clears the account wide source of one SHIP sourcing group,
+		 * the fuel the fleet burns or the ship repair bill. `undefined` drops
+		 * it and the group falls back to the exchange price again.
+		 *
+		 * There is nothing to replace on any base afterwards, unlike the
+		 * input bucket defaults: a ship ticker has no per plan entry to
+		 * override, the group default and the per ticker entry of
+		 * {@link setShipTickerSource} are the whole configuration.
+		 *
+		 * The fleet flies for every plan, so every stored snapshot and every
+		 * chain result was costed with the old price: the whole store goes
+		 * stale, exactly like a shipping configuration change.
+		 * @author raukk
+		 *
+		 * @param {RAUKK_SHIP_SOURCE_GROUP} group Ship sourcing group
+		 * @param {IRaukkShipTickerSource | undefined} source Source, or clear
+		 */
+		function setShipSourcingDefault(
+			group: RAUKK_SHIP_SOURCE_GROUP,
+			source: IRaukkShipTickerSource | undefined
+		): void {
+			// cloned whole: the ref is written as one plain object, a
+			// reactive proxy nested in it would break the JSON export,
+			// whose `inertClone` only unwraps the top level
+			const next: IRaukkShipSourcing = inertClone(shipSourcing.value);
+
+			if (source === undefined) delete next.defaults[group];
+			else next.defaults[group] = inertClone(source);
+
+			shipSourcing.value = next;
+
+			markAllStale();
+		}
+
+		/**
+		 * Sets or clears the account wide source of ONE ship ticker.
+		 * `undefined` drops the entry and the ticker follows the default of
+		 * its group again.
+		 *
+		 * Stales the whole store for the reason
+		 * {@link setShipSourcingDefault} does.
+		 * @author raukk
+		 *
+		 * @param {string} ticker Material Ticker
+		 * @param {IRaukkShipTickerSource | undefined} source Source, or clear
+		 */
+		function setShipTickerSource(
+			ticker: string,
+			source: IRaukkShipTickerSource | undefined
+		): void {
+			// cloned whole, see {@link setShipSourcingDefault}
+			const next: IRaukkShipSourcing = inertClone(shipSourcing.value);
+
+			if (source === undefined) delete next.sources[ticker];
+			else next.sources[ticker] = inertClone(source);
+
+			shipSourcing.value = next;
+
+			markAllStale();
+		}
+
+		/**
 		 * Per plan source entries the default of one bucket would replace,
 		 * keyed by plan uuid. Reads the bucket classification frozen onto
 		 * the stored snapshots, so a plan that never computed one is not
@@ -1697,6 +1776,7 @@ export const useRaukkSourcingStore = defineStore(
 				depots: inertClone(depots.value),
 				plannedGates: inertClone(plannedGates.value),
 				sourcingDefaults: inertClone(sourcingDefaults.value),
+				shipSourcing: inertClone(shipSourcing.value),
 			};
 
 			return JSON.stringify(payload);
@@ -1756,6 +1836,9 @@ export const useRaukkSourcingStore = defineStore(
 			// raukk: absent in every payload written before the account
 			// wide bucket defaults existed, the schema defaults them empty
 			sourcingDefaults.value = validated.sourcingDefaults;
+			// raukk: absent in every payload written before the account wide
+			// ship sourcing existed, the schema defaults it empty
+			shipSourcing.value = validated.shipSourcing;
 		}
 
 		return {
@@ -1773,6 +1856,7 @@ export const useRaukkSourcingStore = defineStore(
 			depots,
 			plannedGates,
 			sourcingDefaults,
+			shipSourcing,
 			// reset
 			$reset,
 			// getters
@@ -1795,6 +1879,8 @@ export const useRaukkSourcingStore = defineStore(
 			setTickerSource,
 			clearTickerSource,
 			setSourcingDefault,
+			setShipSourcingDefault,
+			setShipTickerSource,
 			bucketOverrides,
 			clearBucketOverrides,
 			setLocalSale,
@@ -1848,6 +1934,7 @@ export const useRaukkSourcingStore = defineStore(
 				"depots",
 				"plannedGates",
 				"sourcingDefaults",
+				"shipSourcing",
 			],
 		},
 	}

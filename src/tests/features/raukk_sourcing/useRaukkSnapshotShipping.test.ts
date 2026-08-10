@@ -1292,12 +1292,12 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			withRefinery();
 		});
 
-		it("prices the profile from the plans FF source", async () => {
+		it("prices the profile from the account wide FF source", async () => {
 			const { snapshot: market } = await computePlanSnapshot(
 				context(planResult(1, 0))
 			);
 
-			store.setTickerSource("consumer", "FF", {
+			store.setShipTickerSource("FF", {
 				mode: "plan",
 				sourcePlanUuid: "refinery",
 			});
@@ -1313,8 +1313,51 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			);
 		});
 
-		it("draws the burnt fuel from the producing plan", async () => {
+		it("ignores a per base FF entry, fuel is a fleet cost", async () => {
+			const { snapshot: market } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			// the consuming base configuring FF for itself no longer
+			// prices a single parsec: refuelling is account wide
 			store.setTickerSource("consumer", "FF", {
+				mode: "plan",
+				sourcePlanUuid: "refinery",
+			});
+
+			const { snapshot: perBase } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(perBase.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				market.outputs.ALO.breakdown.shipping,
+				10
+			);
+			expect(perBase.draws.refinery?.FF).toBeUndefined();
+		});
+
+		it("takes the group default when the ticker has no entry", async () => {
+			const { snapshot: market } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			store.setShipSourcingDefault("fuel", {
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+
+			const { snapshot: sourced } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(sourced.outputs.ALO.breakdown.shipping).toBeGreaterThan(
+				market.outputs.ALO.breakdown.shipping
+			);
+			expect(sourced.draws.refinery?.FF).toBeGreaterThan(0);
+		});
+
+		it("draws the burnt fuel from the producing plan", async () => {
+			store.setShipTickerSource("FF", {
 				mode: "plan",
 				sourcePlanUuid: "refinery",
 			});
@@ -1333,9 +1376,20 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 			expect(snapshot.draws.refinery?.SF).toBeUndefined();
 		});
 
+		it("freezes the burn onto the snapshot", async () => {
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 0))
+			);
+
+			expect(snapshot.fuelUnitsPerDay?.FF).toBeCloseTo(
+				0.1 * 2 * CX_TO_CONSUMER * 2,
+				10
+			);
+		});
+
 		it("books no fuel draw while shipping is disabled", async () => {
 			store.setShippingConfig({ enabled: false });
-			store.setTickerSource("consumer", "FF", {
+			store.setShipTickerSource("FF", {
 				mode: "plan",
 				sourcePlanUuid: "refinery",
 			});

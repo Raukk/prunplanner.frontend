@@ -30,6 +30,7 @@ function recipeData(
 ): IProductionBuildingRecipe {
 	return {
 		recipeId: "SME#4xAL",
+		planIndex: 0,
 		amount: 1,
 		dailyShare: 1,
 		time: 32_280_000,

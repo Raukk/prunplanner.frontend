@@ -15,8 +15,26 @@
 // guess. `expected` is the mean over one orbital period, which is
 // what a lane flown repeatedly converges to.
 //
-// Measured against the 25 transcribed flights: 23 of 25 land inside
-// the bounds and the two that do not miss by 2.0% and 2.6%.
+// Measured against the 33 transcribed flights: see star-heat-damage.md
+// section 7.2 for the containment rate, which `shippingDamage.test.ts`
+// asserts so it cannot drift.
+//
+// `expected` averages a lane lying IN the anchor's orbital plane, which
+// sweeps the widest range of angles there is. A lane tilted out of that
+// plane never reaches the extremes, so it converges BELOW `expected` by
+// a fixed amount that flying more never erodes — orbital phase averages
+// away, inclination does not. The path integral is convex in the angle,
+// so `expected` bounds every tilt from above: it over-budgets damage,
+// never under-budgets it.
+//
+// For PLANNING, which is what this is for, `expected` is the number.
+// A plan prices a steady state months out, nobody knows where a planet
+// will sit on the day, and a lane flown regularly resamples its whole
+// orbit long before the horizon is up. Per-anchor residuals are wide
+// (17.7% sd) but centred (+0.66% mean, -0.70% median over 19 anchors),
+// so they read as phase draws rather than per-lane bias. Do NOT add the
+// band to a budget: it is volatility, useful for repair scheduling and
+// for spotting erratic lanes. See star-heat-damage.md section 7.6.
 //
 // Pure functions, no store and no Vue.
 
@@ -63,9 +81,9 @@ export const RAUKK_DAMAGE_STELLAR_C: number = 3.25e-6;
  *
  * Only binds on legs LONGER than that radius, which are the only ones
  * that can cross the star at all; shorter legs stop short of it and
- * their bounds are exact. Loosening it to 0.005 AU leaves the median
- * trip band at 2.1x but stretches the widest from 4.5x to 12.7x, so
- * this is the value that keeps the wide end useful.
+ * their bounds are exact. Replacing it with a flat 0.005 AU widens the
+ * median trip band from 2.0x to 2.4x and the widest from 8.4x to 32.1x,
+ * so this is the value that keeps the wide end useful.
  */
 export const RAUKK_DAMAGE_CLOSEST_FRACTION: number = 0.05;
 
@@ -116,8 +134,15 @@ const ZERO_BAND: IRaukkDamageBand = { low: 0, expected: 0, high: 0 };
  * Source: `docs/raukk_sourcing/repair_and_damage.json`. `general`
  * applies to the whole leg (hull plates, repair drones; LHP is
  * negative, it RAISES damage). `stellar` merges the heat and
- * radiation entries: the panel prints one damage figure per leg, so
- * the split between the two is not measurable from flight data.
+ * radiation entries, which the game shields SEPARATELY.
+ *
+ * KNOWN WRONG for shielded hulls, see star-heat-damage.md section 7.5.
+ * Merging is exact on a bare hull, which is what every constant here
+ * was fitted against, but `reliefOf` then adds a heat relief to a
+ * radiation one: APT alone reads as 1.0 and zeroes the whole term, on
+ * lanes the community sheet measures as 99% radiation. The sheet has
+ * the per-lane split for 36 lanes and it runs the full 0 to 1, so this
+ * needs a second term rather than a constant.
  *
  * @author raukk
  */
@@ -170,6 +195,28 @@ export function raukkSystemOf(planetNaturalId: string): string {
 }
 
 /**
+ * Orbit elements of a planet, from the shipped asset.
+ *
+ * The asset is keyed the way the game writes a natural id — system
+ * upper case, planet letter lower, `NL-534a` — while the other two
+ * lookups here normalise to upper case. Reading it raw made an
+ * upper-cased id miss, which silently zeroed the stellar term rather
+ * than failing, so the key is normalised to the asset's own casing.
+ *
+ * @param {string} planetNaturalId Planet natural id, any casing
+ * @returns {[number, number] | undefined} `[semiMajorMegameters,
+ *   eccentricity]`, undefined when the planet is unknown
+ * @author raukk
+ */
+function orbitElements(planetNaturalId: string): [number, number] | undefined {
+	const key: string = planetNaturalId
+		.toUpperCase()
+		.replace(/[A-Z]+$/, (letters) => letters.toLowerCase());
+
+	return (orbitsJson as unknown as Record<string, [number, number]>)[key];
+}
+
+/**
  * Orbit radius of a planet in AU.
  *
  * @param {string} planetNaturalId Planet natural id
@@ -177,9 +224,7 @@ export function raukkSystemOf(planetNaturalId: string): string {
  * @author raukk
  */
 export function raukkOrbitAu(planetNaturalId: string): number | null {
-	const raw: [number, number] | undefined = (
-		orbitsJson as unknown as Record<string, [number, number]>
-	)[planetNaturalId];
+	const raw: [number, number] | undefined = orbitElements(planetNaturalId);
 
 	if (raw === undefined) return null;
 
@@ -277,6 +322,51 @@ export function raukkStellarClosestApproach(
 }
 
 /**
+ * Most inward direction a leg is allowed to take.
+ *
+ * The dose rises monotonically as the leg turns towards the star, so
+ * the worst allowed case sits exactly ON the closest-approach floor and
+ * nowhere else. Scanning a grid of directions for it does not work: the
+ * integrand is steepest precisely there, so whichever sample lands
+ * nearest the boundary understates the maximum by whatever the grid
+ * spacing costs — 16% at 1,200 samples on the lanes where the floor
+ * binds at all.
+ *
+ * Closest approach is monotone in the direction cosine, so a bisection
+ * lands on the boundary to machine precision in 80 cheap steps, and
+ * returns the ALLOWED side of it.
+ *
+ * @param {number} orbitAu Orbit radius of the anchor planet, in AU
+ * @param {number} legAu Leg length in AU
+ * @returns {number} Direction cosine, -1 when nothing binds
+ * @author raukk
+ */
+export function raukkStellarMinimumCosine(
+	orbitAu: number,
+	legAu: number
+): number {
+	const floor: number = RAUKK_DAMAGE_CLOSEST_FRACTION * orbitAu;
+
+	// straight in already clears the floor: the leg stops short of it
+	if (raukkStellarClosestApproach(orbitAu, legAu, -1) >= floor) return -1;
+
+	let disallowed: number = -1;
+	let allowed: number = 1;
+
+	for (let i = 0; i < 80; i++) {
+		const middle: number = (disallowed + allowed) / 2;
+
+		if (raukkStellarClosestApproach(orbitAu, legAu, middle) >= floor) {
+			allowed = middle;
+		} else {
+			disallowed = middle;
+		}
+	}
+
+	return allowed;
+}
+
+/**
  * True bounds of the stellar path integral, with its orbital mean.
  *
  * The warp point sits a fixed distance from the planet in the
@@ -304,45 +394,33 @@ export function raukkStellarGeometry(
 	orbitAu: number,
 	legAu: number
 ): IRaukkDamageBand {
-	if (orbitAu <= 0 || legAu <= 0) return ZERO_BAND;
+	if (orbitAu <= 0 || legAu <= 0) return { ...ZERO_BAND };
 
 	const floor: number = RAUKK_DAMAGE_CLOSEST_FRACTION * orbitAu;
-	const allowed = (cosine: number): boolean =>
-		raukkStellarClosestApproach(orbitAu, legAu, cosine) >= floor;
+	const worstCosine: number = raukkStellarMinimumCosine(orbitAu, legAu);
 
-	let low: number = raukkStellarPathIntegral(orbitAu, legAu, 1);
-	let high: number = low;
+	// Both extremes are exact: the integral is monotone in the cosine,
+	// so they sit at the ends of the allowed range and nowhere else
+	const low: number = raukkStellarPathIntegral(orbitAu, legAu, 1);
+	const high: number = raukkStellarPathIntegral(orbitAu, legAu, worstCosine);
 
-	for (let i = 0; i <= STELLAR_DIRECTION_SAMPLES; i++) {
-		const cosine: number = -1 + (2 * i) / STELLAR_DIRECTION_SAMPLES;
-
-		if (!allowed(cosine)) continue;
-
-		const value: number = raukkStellarPathIntegral(orbitAu, legAu, cosine);
-
-		if (!Number.isFinite(value)) continue;
-
-		low = Math.min(low, value);
-		high = Math.max(high, value);
-	}
-
-	// Mean over one orbit: phase uniform in time, cosine = cos(phase)
+	// Mean over one orbit: phase uniform in time, cosine = cos(phase).
+	// Quadrature, not a bound — 1,200 samples converge to a 200,000
+	// sample reference to rounding.
 	let total: number = 0;
 	let counted: number = 0;
 
 	for (let i = 0; i < STELLAR_DIRECTION_SAMPLES; i++) {
 		const phase: number =
 			(2 * Math.PI * (i + 0.5)) / STELLAR_DIRECTION_SAMPLES;
-		let cosine: number = Math.cos(phase);
-
-		if (!allowed(cosine)) {
-			cosine =
-				orbitAu > floor
-					? -Math.sqrt(Math.max(0, 1 - (floor / orbitAu) ** 2))
-					: 0;
-		}
-
-		const value: number = raukkStellarPathIntegral(orbitAu, legAu, cosine);
+		const cosine: number = Math.cos(phase);
+		const allowed: boolean =
+			raukkStellarClosestApproach(orbitAu, legAu, cosine) >= floor;
+		const value: number = raukkStellarPathIntegral(
+			orbitAu,
+			legAu,
+			allowed ? cosine : worstCosine
+		);
 
 		if (!Number.isFinite(value)) continue;
 
@@ -353,7 +431,7 @@ export function raukkStellarGeometry(
 	return {
 		low,
 		expected: counted > 0 ? total / counted : low,
-		high,
+		high: Number.isFinite(high) ? high : low,
 	};
 }
 
@@ -418,11 +496,11 @@ export function raukkLegDamage(
 	const zero: IRaukkDamageBreakdown = {
 		wear: 0,
 		meteoroid: 0,
-		stellar: ZERO_BAND,
+		stellar: { ...ZERO_BAND },
 		jump: 0,
 		charge: 0,
 		landing: 0,
-		total: ZERO_BAND,
+		total: { ...ZERO_BAND },
 	};
 
 	if (leg.type === "TO") return zero;
@@ -757,9 +835,7 @@ export function raukkPlanetPosition(
 	planetNaturalId: string,
 	atEpochMs: number
 ): { xAu: number; yAu: number } | null {
-	const raw: [number, number] | undefined = (
-		orbitsJson as unknown as Record<string, [number, number]>
-	)[planetNaturalId];
+	const raw: [number, number] | undefined = orbitElements(planetNaturalId);
 	const periodDays: number | null = raukkOrbitalPeriodDays(planetNaturalId);
 
 	if (raw === undefined || periodDays === null) return null;

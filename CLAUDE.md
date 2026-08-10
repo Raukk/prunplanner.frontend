@@ -62,4 +62,5 @@ Test: the reader can act on the reply without a second pass, and cannot find a s
 - `src/lib/query_cache/queryStore.ts` — cache semantics (TTL, invalidation, dedupe)
 - `src/features/wrapper/` — view data-loading orchestration
 - `docs/raukk_sourcing/star-heat-damage.md` — hull damage model (stellar/meteoroid/jump/landing) + `shippingDamage.ts`
+- `docs/raukk_sourcing/ship-sourcing.md` — account-wide fleet sourcing (fuel + ship repair bill) + `shipSourcing.ts`
 - `CLAUDE.sidecar.md` — editing rules for this file + decision log

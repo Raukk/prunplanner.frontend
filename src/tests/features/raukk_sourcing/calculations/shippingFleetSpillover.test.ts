@@ -38,6 +38,7 @@ describe("Raukk Shipping: Fleet Spillover", () => {
 		expect(result).toStrictEqual([
 			{
 				shipTypeId: "LCB",
+				stlOnly: false,
 				capacityMinutes: MINUTES_PER_DAY,
 				ownMinutes: 720,
 				spilledInMinutes: 0,
@@ -46,6 +47,7 @@ describe("Raukk Shipping: Fleet Spillover", () => {
 			},
 			{
 				shipTypeId: "WCB",
+				stlOnly: false,
 				capacityMinutes: 2 * MINUTES_PER_DAY,
 				ownMinutes: 1440,
 				spilledInMinutes: 0,
@@ -136,11 +138,7 @@ describe("Raukk Shipping: Fleet Spillover", () => {
 	});
 
 	it("does not spill at exactly 100% nor within the epsilon", () => {
-		const exactly: IRaukkFleetUtilization = row(
-			"WCB",
-			1,
-			MINUTES_PER_DAY
-		);
+		const exactly: IRaukkFleetUtilization = row("WCB", 1, MINUTES_PER_DAY);
 		// over by less than the over flag epsilon: not over, no spill
 		const hairOver: IRaukkFleetUtilization = row(
 			"HCB",
@@ -183,5 +181,102 @@ describe("Raukk Shipping: Fleet Spillover", () => {
 		expect(wcb?.spilledOutMinutes).toBe(MINUTES_PER_DAY);
 		expect(wcb?.residualOverflowMinutes).toBe(0);
 		expect(lcb?.spilledInMinutes).toBe(MINUTES_PER_DAY);
+	});
+
+	describe("STL-only types", () => {
+		/** Every type whose id says STL is a hull without an FTL drive */
+		const stlOnlyOf = (shipTypeId: string): boolean =>
+			shipTypeId.endsWith("-STL");
+
+		it("never lets FTL overflow reach STL spare", () => {
+			// 500 FTL overflow against 720 STL spare, which is spare the
+			// FTL work cannot be flown on: it stays on the donor
+			const result = raukkFleetSpillover(
+				[row("WCB", 1, MINUTES_PER_DAY + 500), row("LCB-STL", 1, 720)],
+				stlOnlyOf
+			);
+
+			expect(result[0].spilledOutMinutes).toBe(0);
+			expect(result[0].residualOverflowMinutes).toBe(500);
+			expect(result[1].spilledInMinutes).toBe(0);
+		});
+
+		it("fills STL spare from an STL donor before the FTL spare", () => {
+			// 300 STL overflow, 200 STL spare and 720 FTL spare: the STL
+			// pool goes first and only the remaining 100 crosses over
+			const result = raukkFleetSpillover(
+				[
+					row("HCB-STL", 1, MINUTES_PER_DAY + 300),
+					row("SCB-STL", 1, MINUTES_PER_DAY - 200),
+					row("LCB", 1, 720),
+				],
+				stlOnlyOf
+			);
+
+			expect(result[0].spilledOutMinutes).toBeCloseTo(300, 10);
+			expect(result[0].residualOverflowMinutes).toBeCloseTo(0, 10);
+			expect(result[1].spilledInMinutes).toBeCloseTo(200, 10);
+			expect(result[2].spilledInMinutes).toBeCloseTo(100, 10);
+		});
+
+		it("spills an STL donor onto the FTL spare when no STL spare exists", () => {
+			const result = raukkFleetSpillover(
+				[row("HCB-STL", 1, MINUTES_PER_DAY + 200), row("LCB", 1, 720)],
+				stlOnlyOf
+			);
+
+			expect(result[0].spilledOutMinutes).toBe(200);
+			expect(result[0].residualOverflowMinutes).toBe(0);
+			expect(result[1].spilledInMinutes).toBe(200);
+		});
+
+		it("keeps the STL spare out of the FTL donors reach entirely", () => {
+			// FTL overflow 400 against 100 FTL spare and 1000 STL spare:
+			// only the FTL spare counts, the rest stays red
+			const result = raukkFleetSpillover(
+				[
+					row("WCB", 1, MINUTES_PER_DAY + 400),
+					row("LCB", 1, MINUTES_PER_DAY - 100),
+					row("SCB-STL", 1, MINUTES_PER_DAY - 1000),
+				],
+				stlOnlyOf
+			);
+
+			expect(result[0].spilledOutMinutes).toBe(100);
+			expect(result[0].residualOverflowMinutes).toBe(300);
+			expect(result[1].spilledInMinutes).toBe(100);
+			expect(result[2].spilledInMinutes).toBe(0);
+		});
+
+		it("splits the FTL spare between an STL remainder and an FTL donor", () => {
+			// STL donor 300 with no STL spare, FTL donor 100, 200 FTL
+			// spare: both compete for it 3:1
+			const result = raukkFleetSpillover(
+				[
+					row("HCB-STL", 1, MINUTES_PER_DAY + 300),
+					row("WCB", 1, MINUTES_PER_DAY + 100),
+					row("LCB", 1, MINUTES_PER_DAY - 200),
+				],
+				stlOnlyOf
+			);
+
+			expect(result[0].spilledOutMinutes).toBeCloseTo(150, 10);
+			expect(result[0].residualOverflowMinutes).toBeCloseTo(150, 10);
+			expect(result[1].spilledOutMinutes).toBeCloseTo(50, 10);
+			expect(result[1].residualOverflowMinutes).toBeCloseTo(50, 10);
+			expect(result[2].spilledInMinutes).toBeCloseTo(200, 10);
+		});
+
+		it("reports the class of every row", () => {
+			const result = raukkFleetSpillover(
+				[row("WCB", 1, 0), row("WCB-STL", 1, 0)],
+				stlOnlyOf
+			);
+
+			expect(result.map((entry) => entry.stlOnly)).toStrictEqual([
+				false,
+				true,
+			]);
+		});
 	});
 });

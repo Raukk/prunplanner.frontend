@@ -76,6 +76,41 @@ export const RaukkSourcingDefaultsSchema = z.object({
 	production: RaukkTickerSourceSchema.optional(),
 });
 
+/**
+ * raukk: source of one ship ticker. The local market is deliberately not
+ * part of it — an LM ad is priced on one planet and the account wide ship
+ * sourcing has none, see `IRaukkShipTickerSource`.
+ */
+export const RaukkShipTickerSourceSchema = z.discriminatedUnion("mode", [
+	z.object({
+		mode: z.literal("market"),
+		priceMode: RaukkPriceModeSchema,
+	}),
+	z.object({
+		mode: z.literal("plan"),
+		sourcePlanUuid: z.string().min(1),
+	}),
+	z.object({
+		mode: z.literal("cx"),
+	}),
+]);
+
+/**
+ * raukk: account wide sourcing of what the FLEET consumes. Both halves
+ * are defaulted empty: every payload written before the ship sourcing
+ * existed knows neither, and an empty configuration is exactly the old
+ * behaviour — fuel and repair bill priced at the exchange.
+ */
+export const RaukkShipSourcingSchema = z.object({
+	defaults: z
+		.object({
+			fuel: RaukkShipTickerSourceSchema.optional(),
+			shipRepair: RaukkShipTickerSourceSchema.optional(),
+		})
+		.prefault({}),
+	sources: z.record(z.string(), RaukkShipTickerSourceSchema).default({}),
+});
+
 export const RaukkFtlReactorSchema = z.enum(["standard", "quick-charge"]);
 
 export const RaukkRoutingModeSchema = z.enum(["direct", "cx-hub"]);
@@ -453,6 +488,9 @@ export const RaukkSnapshotSchema = z.object({
 	// written before the chain and fleet slices existed
 	flows: z.array(RaukkChainFlowSchema).optional(),
 	lanes: z.array(RaukkSnapshotLaneSchema).optional(),
+	// raukk: fuel burn of the plans own lanes, absent on every snapshot
+	// frozen before the account wide ship sourcing existed
+	fuelUnitsPerDay: z.record(z.string(), z.number()).optional(),
 	// cadence model: absent in every payload written before it
 	advisories: z.array(RaukkFleetAdvisorySchema).optional(),
 	// null: the profile of a pair claims no ship at all, so the fraction
@@ -498,6 +536,9 @@ export const RaukkSourcingExportSchema = z.object({
 	// raukk: account wide bucket defaults, absent in every payload written
 	// before they existed — an empty object is the pre defaults behaviour
 	sourcingDefaults: RaukkSourcingDefaultsSchema.prefault({}),
+	// raukk: account wide sourcing of fuel and the ship repair bill,
+	// absent in every payload written before it existed
+	shipSourcing: RaukkShipSourcingSchema.prefault({}),
 });
 
 export type RaukkSourcingExportType = z.infer<typeof RaukkSourcingExportSchema>;

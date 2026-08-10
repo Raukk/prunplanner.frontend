@@ -12,6 +12,7 @@ import {
 	IRaukkPlanConfig,
 	IRaukkPlannedGate,
 	IRaukkShipProfile,
+	IRaukkShipSourcing,
 	IRaukkShippingConfig,
 	IRaukkSnapshot,
 	IRaukkSourcingDefaults,
@@ -69,4 +70,7 @@ export interface IRaukkExportPayload {
 	/** raukk: account wide default source per input bucket, absent before
 	 * the defaults existed */
 	sourcingDefaults: IRaukkSourcingDefaults;
+	/** raukk: account wide sourcing of ship fuel and the ship repair bill,
+	 * absent before the ship sourcing existed */
+	shipSourcing: IRaukkShipSourcing;
 }

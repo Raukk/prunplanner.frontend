@@ -8,6 +8,15 @@
 	// Components
 	import RaukkShippingMapSection from "@/features/raukk_sourcing/components/RaukkShippingMapSection.vue";
 	import RaukkCapacityPlaneSection from "@/features/raukk_sourcing/components/RaukkCapacityPlaneSection.vue";
+	import RaukkOversubTooltip from "@/features/raukk_sourcing/components/oversub/RaukkOversubTooltip.vue";
+
+	// Composables
+	import { provideRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+
+	// the one hover host of both views — an SVG `<title>` cannot say
+	// which of two piled marks it belongs to and cannot be styled, and
+	// the oversubscription report already solved this
+	provideRaukkOversubTooltip();
 
 	// Calculations
 	import {
@@ -139,5 +148,7 @@
 				:stop-names="stopNames"
 				:default-cadence-days="defaultCadenceDays" />
 		</template>
+
+		<RaukkOversubTooltip />
 	</div>
 </template>

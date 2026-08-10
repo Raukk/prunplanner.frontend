@@ -427,7 +427,7 @@ export async function usePlanCalculation(
 				computedBuildingInformation[b.name].buildingRecipes;
 
 			// add currently active recipes
-			b.active_recipes.forEach((r) => {
+			b.active_recipes.forEach((r, planIndex) => {
 				// go raw to loose Proxy
 				const recipeInfo: IRecipe | undefined = toRaw(
 					buildingRecipes.find((ar) => ar.recipe_id == r.recipeid)
@@ -439,8 +439,8 @@ export async function usePlanCalculation(
 					);
 				} else {
 					// raukk: government fee of a single batch, charged on
-					// nominal recipe time and therefore independent of the
-					// buildings efficiency and of the queued amount.
+					// the batches real duration, so it shrinks with the
+					// buildings efficiency; independent of queued amount.
 					// Undefined while FIO never answered: the row then says
 					// the fee is unknown rather than showing a fake 0.
 					const productionFeeBatch: number | undefined =
@@ -449,11 +449,13 @@ export async function usePlanCalculation(
 							: calculateProductionFeeBatch(
 									buildingData,
 									planetFees.value,
-									recipeInfo.time_ms
+									recipeInfo.time_ms,
+									totalEfficiency
 								);
 
 					activeRecipes.push({
 						recipeId: r.recipeid,
+						planIndex,
 						amount: r.amount,
 						dailyShare: 1,
 						// time adjusted to efficiency and amount
@@ -508,8 +510,7 @@ export async function usePlanCalculation(
 			// raukk: government production fee, daily at full utilization
 			const productionFeeDaily: number = calculateProductionFeeDaily(
 				buildingData,
-				planetFees.value,
-				totalEfficiency
+				planetFees.value
 			);
 			// fees are charged per order, an idle building pays none
 			const productionFeeDailyCost: number =
@@ -601,8 +602,9 @@ export async function usePlanCalculation(
 				const degradationShare: number = degradation * runtimeShare;
 				const workforceCostTotal: number = workforceDailyCost * -1;
 				const workforceCost: number = workforceCostTotal * runtimeShare;
-				// raukk: fee per batch, charged on nominal recipe time and
-				// already computed with the row itself; unknown fees cost 0
+				// raukk: fee per batch, charged on the batches real runtime
+				// and already computed with the row itself; unknown fees
+				// cost 0
 				const productionFee: number = ar.productionFeeBatch ?? 0;
 
 				const inputCost: ICOGMMaterialCost[] = await Promise.all(

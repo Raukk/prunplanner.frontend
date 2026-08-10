@@ -280,7 +280,7 @@
 			"fee_batch": "{fee} ȼ / batch",
 			"fee_unit": "{fee} ȼ / unit",
 			"fee_unknown_tooltip": "This planet's fee rates could not be loaded — the FIO service is unreachable or blocked. Fees are counted as 0 in every cost on this page until it answers.",
-			"fee_tooltip": "Production fee the planet's government charges for one batch of this recipe, and that fee split evenly over the units the batch produces. It is charged when the order is started, on the recipe's nominal runtime, so it does not shrink with building efficiency.",
+			"fee_tooltip": "Production fee the planet's government charges for one batch of this recipe, and that fee split evenly over the units the batch produces. The rate is charged per building per 24h — a building mixing workforce tiers pays their workforce-weighted average, it does not pay per employee. It is charged on the batch's real runtime, so a more efficient building pays less per batch and a full day of production always costs one day of the building's fee rate.",
 			"cogm_error": "COGM Calculation not possible. Check your Management View if your Empire has a CX assigned.",
 			"buttons": {
 				"cogm": "@:terms.cogm"

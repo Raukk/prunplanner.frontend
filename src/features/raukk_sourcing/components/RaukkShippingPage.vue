@@ -28,6 +28,7 @@
 	import RaukkGateSection from "@/features/raukk_sourcing/components/RaukkGateSection.vue";
 	import RaukkShippingVisualsSection from "@/features/raukk_sourcing/components/RaukkShippingVisualsSection.vue";
 	import RaukkSourcingDefaultsSection from "@/features/raukk_sourcing/components/RaukkSourcingDefaultsSection.vue";
+	import RaukkShipSourcingSection from "@/features/raukk_sourcing/components/RaukkShipSourcingSection.vue";
 
 	// Calculations
 	import { calculateRepairBillCost } from "@/features/raukk_sourcing/calculations/shipping";
@@ -359,6 +360,8 @@
 		<RaukkShippingSettingsSection v-if="refSection === 'settings'" />
 
 		<RaukkSourcingDefaultsSection v-else-if="refSection === 'defaults'" />
+
+		<RaukkShipSourcingSection v-else-if="refSection === 'sourcing'" />
 
 		<RaukkFleetSection
 			v-else-if="refSection === 'fleet'"

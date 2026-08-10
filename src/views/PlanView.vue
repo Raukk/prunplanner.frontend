@@ -826,7 +826,7 @@
 		:planet-natural-id="planetData.planet_natural_id" />
 	<div class="@container">
 		<div
-			class="grid grid-cols-1 grid-rows-[repeat(6,auto)] md:grid-cols-[auto_1fr_auto] gap-x-3">
+			class="grid grid-cols-1 grid-rows-[repeat(6,auto)] md:grid-cols-[auto_1fr_auto]">
 			<!-- Plan Name & Selector (sticky once it shares the header row) -->
 			<div
 				ref="refPlanNameElement"
@@ -846,7 +846,7 @@
 			<!-- Status Bar (sticky) -->
 			<div
 				ref="refStatusBarElement"
-				class="row-3 md:row-2 md:col-span-full @6xl:row-1 @6xl:col-span-1 w-full md:w-auto justify-self-start md:justify-self-center my-auto p-3 sticky top-0 z-1000 bg-(--app-bg) md:rounded-b-lg">
+				class="row-3 md:row-2 md:col-span-full @6xl:row-1 @6xl:col-span-1 w-full md:w-auto @6xl:w-full justify-self-start md:justify-self-center @6xl:justify-self-stretch my-auto @6xl:my-0 p-3 sticky top-0 z-1000 bg-(--app-bg) md:rounded-b-lg @6xl:rounded-b-none flex flex-row items-center justify-center">
 				<PlanStatusBar
 					:area-data="result.area"
 					:corphq="result.corphq"

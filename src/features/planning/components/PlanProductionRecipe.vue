@@ -395,6 +395,7 @@
 		<PButton
 			size="sm"
 			type="error"
+			:disabled="disabled"
 			@click="
 				() => {
 					emit('delete:building:recipe', localRecipeIndex);

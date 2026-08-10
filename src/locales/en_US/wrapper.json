@@ -1,5 +1,8 @@
 {
 	"loading": "Loading Data...",
+	"error": "Data could not be loaded.",
+	"retry": "Retry",
+	"retrying": "retrying",
 	"gamedata": {
 		"material_data": "@:terms.materials Data",
 		"exchange_data": "@:terms.exchanges Data",
