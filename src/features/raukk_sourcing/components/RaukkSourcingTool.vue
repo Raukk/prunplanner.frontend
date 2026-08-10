@@ -9,6 +9,7 @@
 	const sourcingStore = useRaukkSourcingStore();
 
 	// Composables
+	import { useRaukkLease } from "@/features/raukk_sourcing/useRaukkLease";
 	import { useRaukkSnapshot } from "@/features/raukk_sourcing/useRaukkSnapshot";
 	import { useRaukkChainRecompute } from "@/features/raukk_sourcing/useRaukkChainRecompute";
 	import { useRaukkShippingOptions } from "@/features/raukk_sourcing/useRaukkShippingOptions";
@@ -102,9 +103,33 @@
 		planResult: computed(() => props.planResult),
 	});
 
+	/*
+	 * Lease link of the open plan. A LEASE plans no shipping of its own —
+	 * its ship time freezes as `null` and the host flies the site — while
+	 * a HOST reads numbers that are SITE totals, its own cargo plus the
+	 * folded cargo of every base leasing from it.
+	 */
+	const {
+		host: leaseHost,
+		leases,
+		isLease,
+		isHost,
+	} = useRaukkLease(toRef(props, "planUuid"));
+
 	/** Configuration is read only without a stored plan uuid as well */
 	const readOnly: ComputedRef<boolean> = computed(
 		() => props.disabled || props.planUuid === undefined
+	);
+
+	/**
+	 * Cadence is the SITE's, so a lease never edits its own: it plans no
+	 * shipping, and the host's caps decide when the site is flown. The
+	 * fields stay readable — the stored override applies again the moment
+	 * the link is cleared — but an edit here would change nothing, and a
+	 * control that silently discards input is worse than a disabled one.
+	 */
+	const cadenceReadOnly: ComputedRef<boolean> = computed(
+		() => readOnly.value || isLease.value
 	);
 
 	/**
@@ -424,11 +449,14 @@
 									: 'text-white/60'
 							">
 							{{
-								$t("raukk_sourcing.snapshot.shipping_fraction", {
-									value: shipTimeLabel(
-										snapshot.shippingFraction
-									),
-								})
+								$t(
+									"raukk_sourcing.snapshot.shipping_fraction",
+									{
+										value: shipTimeLabel(
+											snapshot.shippingFraction
+										),
+									}
+								)
 							}}
 						</span>
 					</RouterLink>
@@ -436,6 +464,26 @@
 				{{ $t("raukk_sourcing.snapshot.shipping_fraction_tooltip") }}
 				{{ $t("raukk_sourcing.snapshot.shipping_fraction_link_hint") }}
 			</PTooltip>
+
+			<!-- stated next to the ship time, which is the number a lease
+			link changes: a LEASE reads an em-dash because its host flies
+			the site, a HOST reads a SITE total -->
+			<span v-if="isLease" class="text-white/60">
+				{{
+					$t("raukk_sourcing.lease.delegated_note", {
+						host:
+							leaseHost?.planName ??
+							$t("raukk_sourcing.lease.unknown_plan"),
+					})
+				}}
+			</span>
+			<span v-else-if="isHost" class="text-white/60">
+				{{
+					$t("raukk_sourcing.lease.host_note", {
+						count: leases.length,
+					})
+				}}
+			</span>
 		</template>
 		<span v-else class="text-white/60">
 			{{ $t("raukk_sourcing.snapshot.never") }}
@@ -573,7 +621,7 @@
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
-				:disabled="readOnly"
+				:disabled="cadenceReadOnly"
 				:placeholder="String(caps.production)"
 				:value="config.cadence?.production ?? null"
 				@update:value="(v) => changeCadence('production', v ?? null)" />
@@ -589,7 +637,7 @@
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
-				:disabled="readOnly"
+				:disabled="cadenceReadOnly"
 				:placeholder="String(caps.workforce)"
 				:value="config.cadence?.workforce ?? null"
 				@update:value="(v) => changeCadence('workforce', v ?? null)" />
@@ -605,7 +653,7 @@
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
-				:disabled="readOnly"
+				:disabled="cadenceReadOnly"
 				:placeholder="String(caps.repair)"
 				:value="config.cadence?.repair ?? null"
 				@update:value="(v) => changeCadence('repair', v ?? null)" />
@@ -629,7 +677,9 @@
 				:value="planAnchor"
 				:options="anchorOptions"
 				:placeholder="anchorModeLabel"
-				@update:value="(v) => changePlanAnchor((v as string) ?? null)" />
+				@update:value="
+					(v) => changePlanAnchor((v as string) ?? null)
+				" />
 
 			<RouterLink to="/shipping" class="pl-3">
 				<PButton type="secondary">
@@ -660,7 +710,9 @@
 				v-model:value="refImportPayload"
 				type="textarea"
 				:rows="4"
-				:placeholder="$t('raukk_sourcing.controls.import_placeholder')" />
+				:placeholder="
+					$t('raukk_sourcing.controls.import_placeholder')
+				" />
 			<div class="flex flex-row gap-3">
 				<PButton
 					type="primary"

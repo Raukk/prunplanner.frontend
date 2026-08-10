@@ -267,6 +267,10 @@ export const RaukkPlannedGateSchema = z.object({
 	volumeUpgrades: z.number().int().min(0).max(3).default(0),
 	rangeUpgrades: z.number().int().min(0).max(3).default(0),
 	maxM3: z.number().nonnegative().optional(),
+	// raukk: ends of the link the ACCOUNT pays for. Absent in every payload
+	// written before one-sided bills existed, and absent means the pair,
+	// which is what those bills meant
+	buildEnds: z.union([z.literal(1), z.literal(2)]).default(2),
 	enabled: z.boolean().default(false),
 	status: z.enum(["construction", "proposed"]).default("proposed"),
 	note: z.string().optional(),
@@ -431,6 +435,25 @@ export const RaukkSnapshotLaneSchema = z.object({
 	unitsPerDay: z.number().optional(),
 });
 
+/** One row of daily cargo, ticker and cargo class with its dimensions */
+export const RaukkShippedTickerSchema = z.object({
+	ticker: z.string(),
+	bucket: RaukkCargoBucketSchema,
+	unitsPerDay: z.number(),
+	weightPerUnit: z.number(),
+	volumePerUnit: z.number(),
+});
+
+/**
+ * Residual cargo a LEASE plan delegates to its host. Both directions
+ * default to empty: a lease that buys nothing on the market and sells
+ * nothing at the exchange delegates no cargo, it still delegates.
+ */
+export const RaukkLeaseCargoSchema = z.object({
+	inbound: z.array(RaukkShippedTickerSchema).default([]),
+	outbound: z.array(RaukkShippedTickerSchema).default([]),
+});
+
 export const RaukkPlanConfigSchema = z.object({
 	repairDay: RaukkRepairDaySchema,
 	sources: z.record(z.string(), RaukkTickerSourceSchema),
@@ -441,6 +464,13 @@ export const RaukkPlanConfigSchema = z.object({
 	cadence: RaukkCadenceOverridesSchema.optional(),
 	// exchange this plan is anchored at, absent means the account mode
 	cxAnchor: z.string().min(1).optional(),
+	// plan this one leases its base from, absent in every payload written
+	// before the lease link and on every plan standing on its own. The
+	// same planet, no chain and no self link rules live in the store
+	// setter: an import of a hand edited payload must not lose the whole
+	// store over one broken link, and a link naming a plan the payload
+	// does not contain simply folds nothing
+	leaseHostPlanUuid: z.string().min(1).optional(),
 	// only ever set on the copy a snapshot embeds, and only while
 	// shipping is enabled
 	shipping: RaukkShippingConfigSchema.optional(),
@@ -499,6 +529,9 @@ export const RaukkSnapshotSchema = z.object({
 	// storage cross-check input of the shipping page; null when the plan
 	// result carried no storage block, absent in payloads predating it
 	storageFilledDays: z.number().nullable().optional(),
+	// lease delegation: written by a lease plan only, and only while
+	// shipping is enabled. Absent everywhere else, the link included
+	leaseCargo: RaukkLeaseCargoSchema.optional(),
 });
 
 /**

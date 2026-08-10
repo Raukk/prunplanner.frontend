@@ -9,8 +9,12 @@ import {
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import { raukkDefaultChainConfig } from "@/features/raukk_sourcing/calculations/shippingChains";
 import {
+	RAUKK_AUTO_CHAIN_DIRECT,
 	RAUKK_AUTO_CHAIN_MAX_STOPS,
 	raukkAutoChainCandidates,
+	raukkDirectFlowComponents,
+	raukkDirectLoopAnchors,
+	raukkOrderDirectLoop,
 	raukkAutoChainDemand,
 	raukkAutoChainId,
 	raukkBuildAutoChains,
@@ -19,6 +23,7 @@ import {
 	raukkAutoChainReason,
 	raukkFlowConcernsPlan,
 	raukkFlowPrecedence,
+	raukkHubSpokeLanes,
 	raukkHubSpokeRows,
 	raukkIsAutoChainId,
 	raukkOrderChainStops,
@@ -34,6 +39,7 @@ import {
 import {
 	IRaukkAutoChain,
 	IRaukkAutoChainCandidate,
+	IRaukkHubSpokeLaneRow,
 	IRaukkHubSpokeRow,
 	IRaukkOrderedLoop,
 } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
@@ -700,6 +706,116 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 		});
 	});
 
+	describe("loops with no exchange", () => {
+		function build(flows: IRaukkChainFlow[]): IRaukkAutoChain[] {
+			return raukkBuildAutoChains({
+				flows,
+				anchorOf,
+				capDaysOf: () => 14,
+				chainConfig,
+				routes,
+				cxSystems,
+			});
+		}
+
+		it("orders a direct loop from the stop the cargo is collected at", () => {
+			const loop: IRaukkOrderedLoop = raukkOrderDirectLoop(
+				["AA-002b", "AA-001a"],
+				routes,
+				cxSystems,
+				new Set(["AA-001a>AA-002b"])
+			) as IRaukkOrderedLoop;
+
+			// anchored at the consumer the lap would deliver ore it has
+			// not picked up yet, so the supplier opens it
+			expect(loop.stops).toStrictEqual(["AA-001a", "AA-002b"]);
+			expect(loop.parsecs).toBeCloseTo(2, 10);
+		});
+
+		it("names the suppliers of a loop first", () => {
+			expect(
+				raukkDirectLoopAnchors(
+					["AA-003c", "AA-002b", "AA-001a"],
+					new Set(["AA-001a>AA-002b", "AA-002b>AA-003c"])
+				)
+			).toStrictEqual(["AA-001a", "AA-002b", "AA-003c"]);
+		});
+
+		it("groups the bases that trade with one another", () => {
+			expect(
+				raukkDirectFlowComponents(
+					[
+						flow("ORE", "AA-001a", "AA-002b", 100),
+						flow("ALO", "AA-002b", "AA-003c", 100),
+						flow("H2O", "BB-100a", "ZZ-900a", 100),
+						flow("RAT", "CX1", "AA-004d", 100),
+					],
+					cxSystems
+				)
+			).toStrictEqual([
+				["AA-001a", "AA-002b", "AA-003c"],
+				["BB-100a", "ZZ-900a"],
+			]);
+		});
+
+		it("drops the exchange when nothing aboard is bought or sold", () => {
+			const chains: IRaukkAutoChain[] = build([
+				flow("ORE", "AA-001a", "AA-002b", 100),
+			]);
+
+			expect(chains).toHaveLength(1);
+			expect(chains[0].chainId).toBe(
+				"auto:production:direct:AA-001a+AA-002b"
+			);
+			expect(chains[0].cxCode).toBe(RAUKK_AUTO_CHAIN_DIRECT);
+			expect(chains[0].stops).toStrictEqual(["AA-001a", "AA-002b"]);
+			// the market stop was worth 4 pc of the anchored lap
+			expect(chains[0].parsecs).toBeCloseTo(2, 10);
+		});
+
+		it("keeps the exchange as soon as one ticker touches it", () => {
+			const chains: IRaukkAutoChain[] = build([
+				flow("ORE", "AA-001a", "AA-002b", 100),
+				flow("ALO", "AA-002b", "CX1", 100),
+			]);
+
+			expect(chains).toHaveLength(1);
+			expect(chains[0].cxCode).toBe("CX1");
+			expect(chains[0].stops[0]).toBe("CX1");
+		});
+
+		it("hauls between two regions, which no anchored loop may", () => {
+			// AA-001a anchors at CX1 and ZZ-900a at CX2: the anchor rule
+			// bars this lane from either region's loop
+			const chains: IRaukkAutoChain[] = build([
+				flow("ORE", "AA-001a", "ZZ-900a", 100),
+			]);
+
+			expect(chains.map((chain) => chain.chainId)).toStrictEqual([
+				"auto:production:direct:AA-001a+ZZ-900a",
+			]);
+			expect(chains[0].stops).toStrictEqual(["AA-001a", "ZZ-900a"]);
+			expect(chains[0].flows.map((entry) => entry.ticker)).toStrictEqual([
+				"ORE",
+			]);
+		});
+
+		it("reports a direct loop as the supply run it is", () => {
+			const flows: IRaukkChainFlow[] = [
+				flow("ORE", "AA-001a", "AA-002b", 100),
+			];
+
+			expect(raukkAutoChainReason(flows, 1, cxSystems)).toBe("supply");
+		});
+
+		it("leaves a cross region lane its own planets cannot reach", () => {
+			// nothing resolves for a planet outside the systems graph
+			expect(
+				build([flow("ORE", "AA-001a", "QQ-404z", 100)])
+			).toStrictEqual([]);
+		});
+	});
+
 	describe("unclaimed flows", () => {
 		it("keeps the remainder of a partially claimed lane", () => {
 			const flows: IRaukkChainFlow[] = [
@@ -875,6 +991,94 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 				"ORE",
 				"COF",
 			]);
+		});
+	});
+
+	describe("raukkHubSpokeLanes", () => {
+		/** Two outputs of one base leaving for the same neighbour, plus a
+		 * third lane and a workforce delivery on the very same pair */
+		const flows: IRaukkChainFlow[] = [
+			flow("HCP", "AA-001a", "AA-002b", 143, 0.8, 1),
+			flow("MAI", "AA-001a", "AA-002b", 82, 1.3, 1),
+			flow("ORE", "AA-003c", "AA-002b", 50, 1, 1),
+			flow("RAT", "AA-001a", "AA-002b", 20, 1, 1, "workforce"),
+		];
+
+		function lanes(
+			given: IRaukkChainFlow[] = flows
+		): IRaukkHubSpokeLaneRow[] {
+			return raukkHubSpokeLanes(raukkHubSpokeRows(given, true, cxSystems));
+		}
+
+		it("folds a base pair's materials onto one line", () => {
+			const production: IRaukkHubSpokeLaneRow[] = lanes().filter(
+				(lane) => lane.bucket === "production"
+			);
+
+			expect(
+				production.map((lane) => [
+					lane.fromStop,
+					lane.toStop,
+					lane.items.map((item) => item.ticker),
+					lane.unitsPerDay,
+				])
+			).toStrictEqual([
+				["AA-001a", "AA-002b", ["HCP", "MAI"], 225],
+				["AA-003c", "AA-002b", ["ORE"], 50],
+			]);
+		});
+
+		it("aggregates the shipping volume and weight of the line", () => {
+			const folded: IRaukkHubSpokeLaneRow = lanes()[0];
+
+			// 143 × 0.8 + 82 × 1.3 tonnes, 143 + 82 m³
+			expect(folded.weightPerDay).toBeCloseTo(221.0, 10);
+			expect(folded.volumePerDay).toBeCloseTo(225, 10);
+		});
+
+		it("never merges two cargo classes into one lane", () => {
+			// same base pair, two cadences: two visits, two lines
+			expect(
+				lanes()
+					.filter((lane) => lane.fromStop === "AA-001a")
+					.map((lane) => lane.bucket)
+			).toStrictEqual(["production", "workforce"]);
+		});
+
+		it("shares a lane against everything rerouted, maxima never summed", () => {
+			const folded: IRaukkHubSpokeLaneRow = lanes()[0];
+			const rows: IRaukkHubSpokeRow[] = raukkHubSpokeRows(
+				flows,
+				true,
+				cxSystems
+			);
+			const members: number = rows
+				.filter(
+					(row) =>
+						row.fromStop === "AA-001a" && row.bucket === "production"
+				)
+				.reduce((sum, row) => sum + row.share, 0);
+
+			// 221 t of 291 t, 225 m³ of 295 m³ — the larger of the two
+			expect(folded.share).toBeCloseTo(225 / 295, 10);
+			expect(folded.share).toBeLessThan(members);
+		});
+
+		it("orders lanes by share, heaviest first", () => {
+			expect(
+				lanes().map((lane) => [lane.fromStop, lane.bucket])
+			).toStrictEqual([
+				["AA-001a", "production"],
+				["AA-003c", "production"],
+				["AA-001a", "workforce"],
+			]);
+		});
+
+		it("drops rows that name no lane", () => {
+			// the ungrouped listing carries no base pair to fold on
+			expect(
+				raukkHubSpokeLanes(raukkHubSpokeRows(flows, false, cxSystems))
+			).toStrictEqual([]);
 		});
 	});
 });

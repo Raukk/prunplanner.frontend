@@ -28,6 +28,7 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 import { TOTALMSDAY } from "@/features/planning/calculations/buildingCalculations";
 import { raukkChainAssignmentKey } from "@/features/raukk_sourcing/calculations/shippingFleet";
 import { RAUKK_DEFAULT_SHIP_PROFILE_ID } from "@/features/raukk_sourcing/calculations/shippingProfiles";
+import { RAUKK_AUTO_CHAIN_DIRECT } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 
 // Types & Interfaces
 import {
@@ -840,17 +841,51 @@ describe("Raukk Sourcing: account level chain compute", () => {
 
 		it("keeps the regions apart by their exchange anchor", async () => {
 			// the consumer is pinned to another exchange: the two bases no
-			// longer share a region and no loop connects them
+			// longer share a region, so no ANCHORED loop connects them
 			store.setPlanCxAnchor("consumer", "NC1");
 
 			await computePlanSnapshot(context(planResult(1, 3)));
 			await computeChainResults(loadPrices);
 
 			expect(
-				Object.keys(store.chainResults).filter((chainId) =>
-					chainId.startsWith("auto:")
+				Object.keys(store.chainResults).filter(
+					(chainId) =>
+						chainId.startsWith("auto:") &&
+						!chainId.includes(`:${RAUKK_AUTO_CHAIN_DIRECT}:`)
 				)
 			).toStrictEqual([]);
+		});
+
+		it("hauls between the regions on a loop with no exchange", async () => {
+			// the ORE still travels from one base to the other, and only a
+			// lap that calls at no market at all may carry it: the anchor
+			// rule bars it from either region's loop
+			store.setPlanCxAnchor("consumer", "NC1");
+
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			const direct: IRaukkChainResult =
+				store.chainResults[
+					`auto:production:${RAUKK_AUTO_CHAIN_DIRECT}:${[
+						SOURCE_PLANET,
+						CONSUMER_PLANET,
+					]
+						.sort()
+						.join("+")}`
+				];
+
+			expect(direct).toBeDefined();
+			expect(direct.auto).toBe(true);
+			// the extractor opens the lap, the consumer closes it
+			expect(direct.unsplit.stops).toStrictEqual([
+				SOURCE_PLANET,
+				CONSUMER_PLANET,
+			]);
+			expect(direct.flows.map((flow) => flow.ticker)).toStrictEqual([
+				"ORE",
+			]);
+			expect(direct.tripsPerDay).toBeGreaterThan(0);
 		});
 	});
 

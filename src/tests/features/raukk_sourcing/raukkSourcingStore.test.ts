@@ -534,6 +534,41 @@ describe("Raukk Sourcing Store", () => {
 				"assigned",
 			]);
 		});
+
+		it("drops a flow to a planet no empire plan stands on", () => {
+			// an old snapshot froze this lane before flows named their
+			// plans: only its ENDPOINT can say the base is switched off
+			store.setSnapshot("assigned", {
+				...makeSnapshot("Assigned", { FE: 10 }),
+				flows: [
+					{
+						flowId: "legacy",
+						ticker: "ORE",
+						fromStop: "ZV-307c",
+						toStop: "OT-580b",
+						unitsPerDay: 10,
+						weightPerUnit: 1,
+						volumePerUnit: 1,
+					},
+				],
+			});
+
+			usePlanningStore().setEmpires([
+				{
+					uuid: "empire",
+					name: "My Empire",
+					plans: [
+						{
+							uuid: "assigned",
+							plan_name: "Assigned",
+							planet_natural_id: "OT-580b",
+						},
+					],
+				} as unknown as IPlanEmpireElement,
+			]);
+
+			expect(store.scopedSnapshots().assigned.flows).toStrictEqual([]);
+		});
 	});
 
 	describe("producersOf", () => {

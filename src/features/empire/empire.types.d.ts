@@ -11,6 +11,9 @@ interface IEmpirePlanListData {
 	permits: number;
 	cogc: PLAN_COGCPROGRAM_TYPE;
 	profit: number;
+	// days to earn back the construction cost, negative or non-finite
+	// when the plan does not turn a profit
+	roi: number;
 }
 
 interface IEmpireMaterialIOPlanet {

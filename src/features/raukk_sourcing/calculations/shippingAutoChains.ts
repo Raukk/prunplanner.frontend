@@ -1,7 +1,8 @@
 // AUTOMATIC chains: the loops nobody authored, derived from the flows
 // that are left once the user authored chains claimed theirs.
 // One loop per cadence class per exchange region, CX → A → … → CX, at
-// most five stops, ordered exactly.
+// most five stops, ordered exactly — or, when nothing the loop carries
+// touches an exchange, base → … → base with no exchange at all.
 //
 // Pure functions over plain data — no store, no Vue, no prices. The
 // anchor of a base, the cadence cap of a consuming plan and the flows
@@ -36,6 +37,7 @@ import {
 	IRaukkAutoChain,
 	IRaukkAutoChainCandidate,
 	IRaukkAutoChainInput,
+	IRaukkHubSpokeLaneRow,
 	IRaukkHubSpokeRow,
 	IRaukkOrderedLoop,
 	RAUKK_AUTO_CHAIN_REASON,
@@ -97,6 +99,32 @@ const CARGO_BUCKETS: RAUKK_CARGO_BUCKET[] = [
 ];
 
 /**
+ * Region token of a loop that never calls at an exchange.
+ *
+ * A chain does not have to open and close at a market: a lap between an
+ * extractor and the smelter it feeds delivers everything it carries
+ * without ever selling or buying a unit, and it is the very case that is
+ * likeliest to stay inside one system and fly without an FTL jump.
+ * Such a loop belongs to no exchange region, so this token stands where
+ * the anchor code stands on every other derived chain — in its id, in
+ * its label and in {@link IRaukkAutoChain.cxCode}.
+ *
+ * Two ways lead here, and only these two:
+ *
+ *  - a region loop whose claimed cargo turns out to touch no exchange
+ *    drops its anchor (see {@link raukkBuildAutoChains}). Conservative
+ *    on purpose: one exchange bound ticker aboard and the loop keeps the
+ *    market stop, because that lap has to call there anyway;
+ *  - two bases that trade with each other across REGION lines, which no
+ *    anchored loop may serve at all — the anchor rule sends such cargo
+ *    to the hub/spoke, and a lap with no anchor is the only loop that
+ *    can pick it up.
+ *
+ * @author raukk
+ */
+export const RAUKK_AUTO_CHAIN_DIRECT: string = "direct";
+
+/**
  * Separator between the base stops inside a derived chain id. Planet
  * natural ids carry digits, letters and a hyphen, never a plus.
  *
@@ -151,6 +179,30 @@ export function raukkAutoChainId(
  */
 export function raukkIsAutoChainId(chainId: string): boolean {
 	return chainId.startsWith(RAUKK_AUTO_CHAIN_PREFIX);
+}
+
+/**
+ * Cadence class a derived chain id names.
+ *
+ * Read off the id rather than carried alongside it: the id is content
+ * stable and states the class in its first field, so a stored RESULT —
+ * which is all a derived chain ever is — never has to be migrated to
+ * answer the question. `production` for anything else, the same reading
+ * a bucketless flow gets.
+ *
+ * @author raukk
+ *
+ * @param {string} chainId Chain Id
+ * @returns {RAUKK_CARGO_BUCKET} Cadence class of the loop
+ */
+export function raukkAutoChainBucket(chainId: string): RAUKK_CARGO_BUCKET {
+	const bucket: string = chainId
+		.replace(RAUKK_AUTO_CHAIN_PREFIX, "")
+		.split(":")[0];
+
+	return CARGO_BUCKETS.includes(bucket as RAUKK_CARGO_BUCKET)
+		? (bucket as RAUKK_CARGO_BUCKET)
+		: "production";
 }
 
 /**
@@ -428,6 +480,164 @@ export function raukkFlowPrecedence(
 	});
 
 	return result;
+}
+
+/**
+ * The bases of a loop in the order they are worth OPENING it at.
+ *
+ * An exchange loop has its anchor handed to it; an exchange-less one has
+ * to pick a stop to open at, and the pick is not free: the ordering
+ * treats the anchor as the point the lap starts from, so a stop that
+ * still has to RECEIVE cargo from another stop of the same loop cannot
+ * open it — put the smelter first and the loop delivers aluminium it has
+ * not collected yet. The suppliers therefore come first, everything with
+ * an inbound constraint after them, and the stop refs settle the order
+ * inside each group so the answer never follows object order.
+ *
+ * @author raukk
+ *
+ * @param {RAUKK_STOP_REF[]} bases Bases of the loop
+ * @param {Set<string>} precedence `from>to` pairs, from is visited first
+ * @returns {RAUKK_STOP_REF[]} Bases, the best anchor first
+ */
+export function raukkDirectLoopAnchors(
+	bases: RAUKK_STOP_REF[],
+	precedence: Set<string> = new Set()
+): RAUKK_STOP_REF[] {
+	const receives: Set<string> = new Set();
+
+	precedence.forEach((pair) => {
+		const [from, to] = pair.split(">");
+
+		if (bases.includes(from) && bases.includes(to)) receives.add(to);
+	});
+
+	const sorted: RAUKK_STOP_REF[] = [...bases].sort();
+
+	return [
+		...sorted.filter((stopRef) => !receives.has(stopRef)),
+		...sorted.filter((stopRef) => receives.has(stopRef)),
+	];
+}
+
+/**
+ * The cheapest loop through a set of bases, no exchange involved.
+ *
+ * {@link raukkOrderChainStops} with every base tried as the opening stop
+ * in the order {@link raukkDirectLoopAnchors} recommends, the first one
+ * that yields a flyable order winning. Trying several is not a detail:
+ * the cargo precedence is read from the opening stop onwards, so an
+ * anchor picked badly makes a perfectly flyable lap look impossible.
+ *
+ * The loop is a cycle, so the choice moves no parsec — it decides which
+ * stop the printed order starts at, and starting at the supplier is what
+ * makes the lap read the way it is flown.
+ *
+ * @author raukk
+ *
+ * @param {RAUKK_STOP_REF[]} bases Bases to visit, in any order
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @param {Set<string>} precedence `from>to` pairs, from is visited first
+ * @returns {(IRaukkOrderedLoop | null)} Cheapest flyable loop
+ */
+export function raukkOrderDirectLoop(
+	bases: RAUKK_STOP_REF[],
+	routes: IRaukkRouteDistance = RAUKK_DEFAULT_CHAIN_ROUTES,
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE,
+	precedence: Set<string> = new Set()
+): IRaukkOrderedLoop | null {
+	if (bases.length < RAUKK_AUTO_CHAIN_MIN_STOPS) return null;
+
+	let result: IRaukkOrderedLoop | null = null;
+
+	raukkDirectLoopAnchors(bases, precedence).forEach((anchor) => {
+		if (result !== null) return;
+
+		result = raukkOrderChainStops(
+			anchor,
+			bases.filter((stopRef) => stopRef !== anchor),
+			routes,
+			cxSystems,
+			precedence
+		);
+	});
+
+	return result;
+}
+
+/**
+ * Groups of bases that trade with one another, directly or through a
+ * third base.
+ *
+ * A loop carries a base to base flow only by visiting BOTH its ends, so
+ * the flows themselves state which bases have to share a lap. Everything
+ * one component holds can ride one loop; two components never can, and
+ * pairing them would only lengthen both.
+ *
+ * Bases and components alike come out sorted, so the same flows always
+ * produce the same groups.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkChainFlow[]} flows Base to base flows of one class
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @returns {RAUKK_STOP_REF[][]} Connected groups of bases
+ */
+export function raukkDirectFlowComponents(
+	flows: IRaukkChainFlow[],
+	cxSystems: Record<string, string> = RAUKK_CX_SYSTEM_ID_BY_CODE
+): RAUKK_STOP_REF[][] {
+	const neighbours: Map<string, Set<string>> = new Map();
+
+	function link(from: string, to: string): void {
+		if (!neighbours.has(from)) neighbours.set(from, new Set());
+
+		(neighbours.get(from) as Set<string>).add(to);
+	}
+
+	flows.forEach((flow) => {
+		const bases: RAUKK_STOP_REF[] = baseStopsOf(flow, cxSystems);
+
+		if (bases.length < 2 || bases[0] === bases[1]) return;
+		if (Math.max(flow.unitsPerDay, 0) <= 0) return;
+
+		link(bases[0], bases[1]);
+		link(bases[1], bases[0]);
+	});
+
+	const seen: Set<string> = new Set();
+	const components: RAUKK_STOP_REF[][] = [];
+
+	Array.from(neighbours.keys())
+		.sort()
+		.forEach((start) => {
+			if (seen.has(start)) return;
+
+			const members: RAUKK_STOP_REF[] = [];
+			const queue: RAUKK_STOP_REF[] = [start];
+
+			seen.add(start);
+
+			while (queue.length > 0) {
+				const stopRef: RAUKK_STOP_REF = queue.shift() as RAUKK_STOP_REF;
+
+				members.push(stopRef);
+
+				Array.from(neighbours.get(stopRef) ?? [])
+					.sort()
+					.forEach((next) => {
+						if (seen.has(next)) return;
+
+						seen.add(next);
+						queue.push(next);
+					});
+			}
+
+			components.push(members.sort());
+		});
+
+	return components;
 }
 
 /**
@@ -800,12 +1010,25 @@ function retryStrandedStops(
 	return [...placed, ...leftover];
 }
 
-/** Flows of one region and cadence class, keyed `<bucket>|<cxCode>` */
+/**
+ * Flows of one region and cadence class, keyed `<bucket>|<cxCode>`.
+ *
+ * The key `<bucket>|direct` ({@link RAUKK_AUTO_CHAIN_DIRECT}) holds what
+ * no region can serve: cargo travelling between two bases that anchor at
+ * DIFFERENT exchanges, or at an exchange the caller cannot name. An
+ * anchored loop may never carry it — its stops all belong to one region
+ * — but a loop with no exchange has no region to violate, and the two
+ * bases may well be neighbours whatever their markets are.
+ */
 function groupFlows(
 	input: IRaukkAutoChainInput,
 	cxSystems: Record<string, string>
 ): Map<string, IRaukkChainFlow[]> {
 	const groups: Map<string, IRaukkChainFlow[]> = new Map();
+
+	function add(key: string, flow: IRaukkChainFlow): void {
+		groups.set(key, [...(groups.get(key) ?? []), flow]);
+	}
 
 	input.flows.forEach((flow) => {
 		if (Math.max(flow.unitsPerDay, 0) <= 0) return;
@@ -813,28 +1036,221 @@ function groupFlows(
 		const bases: RAUKK_STOP_REF[] = baseStopsOf(flow, cxSystems);
 		if (bases.length === 0) return;
 
+		const bucket: RAUKK_CARGO_BUCKET = flow.bucket ?? "production";
+
 		const anchors: (string | undefined)[] = bases.map((stopRef) =>
 			input.anchorOf(stopRef)
 		);
 
 		const anchor: string | undefined = anchors[0];
-		if (anchor === undefined) return;
 
-		// a flow crossing two regions belongs to neither loop, it is
-		// exactly what the exchange hub/spoke exists for
-		if (anchors.some((entry) => entry !== anchor)) return;
+		// base to base cargo no single region holds: unknown anchors or
+		// two of them. Only a loop that calls at no exchange can carry it
+		if (anchor === undefined || anchors.some((entry) => entry !== anchor)) {
+			if (bases.length >= 2 && bases[0] !== bases[1])
+				add(`${bucket}|${RAUKK_AUTO_CHAIN_DIRECT}`, flow);
+
+			return;
+		}
 
 		// an exchange endpoint the region is not anchored at is another
 		// regions market lane and never rides this loop
 		if (cxStopsOf(flow, cxSystems).some((stopRef) => stopRef !== anchor))
 			return;
 
-		const key: string = `${flow.bucket ?? "production"}|${anchor}`;
-
-		groups.set(key, [...(groups.get(key) ?? []), flow]);
+		add(`${bucket}|${anchor}`, flow);
 	});
 
 	return groups;
+}
+
+/**
+ * One derived chain, its members and its cadence read off its cargo.
+ *
+ * @param {RAUKK_CARGO_BUCKET} bucket Cadence class of the loop
+ * @param {string} region Anchor code, or {@link RAUKK_AUTO_CHAIN_DIRECT}
+ * @param {IRaukkOrderedLoop} loop Ordered loop
+ * @param {IRaukkChainFlow[]} claimed Flows the loop claims
+ * @param {IRaukkAutoChainInput} input Flows, anchors, caps and knobs
+ * @returns {IRaukkAutoChain} Derived chain
+ */
+function autoChainOf(
+	bucket: RAUKK_CARGO_BUCKET,
+	region: string,
+	loop: IRaukkOrderedLoop,
+	claimed: IRaukkChainFlow[],
+	input: IRaukkAutoChainInput
+): IRaukkAutoChain {
+	const members: string[] = Array.from(
+		new Set(
+			claimed
+				.map((flow) => flow.ownerPlanUuid)
+				.filter(
+					(planUuid): planUuid is string => planUuid !== undefined
+				)
+		)
+	).sort();
+
+	const caps: number[] = (members.length > 0 ? members : [undefined]).map(
+		(planUuid) => input.capDaysOf(planUuid, bucket)
+	);
+
+	return {
+		chainId: raukkAutoChainId(bucket, region, loop.stops),
+		bucket,
+		cxCode: region,
+		stops: loop.stops,
+		parsecs: loop.parsecs,
+		flows: claimed,
+		capDays: caps.reduce((best, value) => Math.min(best, value), Infinity),
+		memberPlanUuids: members,
+	};
+}
+
+/**
+ * The same loop with its exchange dropped, when nothing aboard needs one.
+ *
+ * The rule is deliberately conservative: the anchor goes only when NOT
+ * ONE claimed flow touches an exchange. A lap that has to buy or sell a
+ * single ticker calls at the market anyway, and taking the stop out
+ * would strand that cargo rather than save the detour.
+ *
+ * Refused as well when the shorter loop would carry LESS than the
+ * anchored one did. The exchange opens and closes the anchored lap, so
+ * dropping it re-cuts the cycle, and a flow whose two ends end up on the
+ * wrong side of that cut would go unclaimed — better to keep a stop
+ * nobody loads at than to leave cargo standing.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkOrderedLoop} loop Exchange anchored loop
+ * @param {IRaukkChainFlow[]} claimed Flows that loop claimed
+ * @param {IRaukkChainFlow[]} open Flows still unclaimed in this class
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @param {Set<string>} precedence `from>to` pairs, from is visited first
+ * @returns {({ loop: IRaukkOrderedLoop; claim: IRaukkChainClaim } | null)}
+ */
+function exchangeLessLoop(
+	loop: IRaukkOrderedLoop,
+	claimed: IRaukkChainFlow[],
+	open: IRaukkChainFlow[],
+	routes: IRaukkRouteDistance,
+	cxSystems: Record<string, string>,
+	precedence: Set<string>
+): { loop: IRaukkOrderedLoop; claim: IRaukkChainClaim } | null {
+	if (claimed.some((flow) => cxStopsOf(flow, cxSystems).length > 0))
+		return null;
+
+	const bases: RAUKK_STOP_REF[] = loop.stops.filter(
+		(stopRef) => !(stopRef in cxSystems)
+	);
+
+	const direct: IRaukkOrderedLoop | null = raukkOrderDirectLoop(
+		bases,
+		routes,
+		cxSystems,
+		precedence
+	);
+	if (direct === null) return null;
+
+	const claim: IRaukkChainClaim = claimChainFlows(direct.stops, open);
+
+	if (claim.claimed.length < claimed.length) return null;
+
+	return { loop: direct, claim };
+}
+
+/**
+ * The loops of the cargo no exchange region may serve: base to base
+ * flows whose two ends anchor at different markets, or at none the
+ * caller can name.
+ *
+ * No share test runs here, and that is the point of the pass. The share
+ * test asks whether a base is worth a detour or is better left to the
+ * exchange lane it flies anyway — a question that presupposes a lane to
+ * fall back on. This cargo has none: the anchor rule keeps it off every
+ * regional loop, so either one lap picks it up or it is bought and sold
+ * twice across two markets. The detour budget of the class still bounds
+ * how far a lap may reach for a THIRD stop, and a group that will not fit
+ * one loop is clustered around its opening stop, which then rides every
+ * loop the group produces.
+ *
+ * @author raukk
+ *
+ * @param {RAUKK_CARGO_BUCKET} bucket Cadence class of the flows
+ * @param {IRaukkChainFlow[]} flows Cross region base to base flows
+ * @param {IRaukkAutoChainInput} input Flows, anchors, caps and knobs
+ * @param {IRaukkRouteDistance} routes Route lookups
+ * @param {Record<string, string>} cxSystems Exchange code to system id
+ * @returns {IRaukkAutoChain[]} Derived exchange-less chains
+ */
+function directChains(
+	bucket: RAUKK_CARGO_BUCKET,
+	flows: IRaukkChainFlow[],
+	input: IRaukkAutoChainInput,
+	routes: IRaukkRouteDistance,
+	cxSystems: Record<string, string>
+): IRaukkAutoChain[] {
+	if (flows.length === 0) return [];
+
+	const precedence: Set<string> = raukkFlowPrecedence(flows, cxSystems);
+	const budget: number = raukkClassDetourBudget(input.chainConfig, bucket);
+
+	const chains: IRaukkAutoChain[] = [];
+
+	let open: IRaukkChainFlow[] = flows;
+
+	raukkDirectFlowComponents(flows, cxSystems).forEach((component) => {
+		// an unroutable base is no stop at all, it stays hub/spoke
+		const bases: RAUKK_STOP_REF[] = component.filter(
+			(stopRef) => chainStopSystemId(stopRef, routes, cxSystems) !== null
+		);
+
+		if (bases.length < RAUKK_AUTO_CHAIN_MIN_STOPS) return;
+
+		/*
+		 * Clustered around the stop the cargo is collected from, exactly
+		 * as a region is clustered around its exchange: the first pair is
+		 * always formed — those two bases trade, and no other loop may
+		 * carry that cargo — and every further stop has to earn its place
+		 * inside the class detour budget.
+		 */
+		const anchor: RAUKK_STOP_REF = raukkDirectLoopAnchors(
+			bases,
+			precedence
+		)[0];
+
+		const loops: IRaukkOrderedLoop[] = raukkClusterChainStops(
+			anchor,
+			bases.filter((stopRef) => stopRef !== anchor),
+			budget,
+			routes,
+			cxSystems,
+			precedence
+		);
+
+		loops.forEach((loop) => {
+			if (loop.stops.length < RAUKK_AUTO_CHAIN_MIN_STOPS) return;
+
+			const claim: IRaukkChainClaim = claimChainFlows(loop.stops, open);
+			if (claim.claimed.length === 0) return;
+
+			open = claim.unclaimed;
+
+			chains.push(
+				autoChainOf(
+					bucket,
+					RAUKK_AUTO_CHAIN_DIRECT,
+					loop,
+					claim.claimed.map((entry: IRaukkClaimedFlow) => entry.flow),
+					input
+				)
+			);
+		});
+	});
+
+	return chains;
 }
 
 /**
@@ -847,6 +1263,12 @@ function groupFlows(
  * {@link raukkAutoChainCandidates}) and sits inside the class detour
  * budget (see {@link raukkClusterChainStops}); everything else stays with
  * the exchange hub/spoke.
+ *
+ * A loop is not bound to a market. One whose claimed cargo turns out to
+ * touch no exchange drops its anchor and is reported as a DIRECT loop
+ * ({@link RAUKK_AUTO_CHAIN_DIRECT}), and the cargo the anchor rule keeps
+ * off every regional loop — two bases trading across region lines —
+ * builds direct loops of its own (see {@link directChains}).
  *
  * The visit cadence of a loop is the MINIMUM effective cap of its member
  * consuming plans: a chain visiting every 30 days would starve a member
@@ -875,6 +1297,7 @@ export function raukkBuildAutoChains(
 		const codes: string[] = Array.from(groups.keys())
 			.filter((key) => key.startsWith(`${bucket}|`))
 			.map((key) => key.slice(bucket.length + 1))
+			.filter((code) => code !== RAUKK_AUTO_CHAIN_DIRECT)
 			.sort();
 
 		codes.forEach((cxCode) => {
@@ -897,14 +1320,19 @@ export function raukkBuildAutoChains(
 
 			if (qualified.length === 0) return;
 
+			// the cargo of this class decides which orders are flyable
+			const precedence: Set<string> = raukkFlowPrecedence(
+				flows,
+				cxSystems
+			);
+
 			const loops: IRaukkOrderedLoop[] = raukkClusterChainStops(
 				cxCode,
 				qualified,
 				raukkClassDetourBudget(input.chainConfig, bucket),
 				routes,
 				cxSystems,
-				// the cargo of this class decides which orders are flyable
-				raukkFlowPrecedence(flows, cxSystems)
+				precedence
 			);
 
 			let open: IRaukkChainFlow[] = flows;
@@ -927,48 +1355,52 @@ export function raukkBuildAutoChains(
 				)
 					return;
 
-				const claim: IRaukkChainClaim = claimChainFlows(
+				const anchored: IRaukkChainClaim = claimChainFlows(
 					loop.stops,
 					open
 				);
-				if (claim.claimed.length === 0) return;
+				if (anchored.claimed.length === 0) return;
 
-				const claimed: IRaukkChainFlow[] = claim.claimed.map(
-					(entry: IRaukkClaimedFlow) => entry.flow
+				// nothing aboard is bought or sold: the market stop goes
+				const stripped = exchangeLessLoop(
+					loop,
+					anchored.claimed.map(
+						(entry: IRaukkClaimedFlow) => entry.flow
+					),
+					open,
+					routes,
+					cxSystems,
+					precedence
 				);
+
+				const claim: IRaukkChainClaim = stripped?.claim ?? anchored;
+				const flown: IRaukkOrderedLoop = stripped?.loop ?? loop;
 
 				open = claim.unclaimed;
 
-				const members: string[] = Array.from(
-					new Set(
-						claimed
-							.map((flow) => flow.ownerPlanUuid)
-							.filter(
-								(planUuid): planUuid is string =>
-									planUuid !== undefined
-							)
+				chains.push(
+					autoChainOf(
+						bucket,
+						stripped === null ? cxCode : RAUKK_AUTO_CHAIN_DIRECT,
+						flown,
+						claim.claimed.map(
+							(entry: IRaukkClaimedFlow) => entry.flow
+						),
+						input
 					)
-				).sort();
-
-				const caps: number[] = (
-					members.length > 0 ? members : [undefined]
-				).map((planUuid) => input.capDaysOf(planUuid, bucket));
-
-				chains.push({
-					chainId: raukkAutoChainId(bucket, cxCode, loop.stops),
-					bucket,
-					cxCode,
-					stops: loop.stops,
-					parsecs: loop.parsecs,
-					flows: claimed,
-					capDays: caps.reduce(
-						(best, value) => Math.min(best, value),
-						Infinity
-					),
-					memberPlanUuids: members,
-				});
+				);
 			});
 		});
+
+		chains.push(
+			...directChains(
+				bucket,
+				groups.get(`${bucket}|${RAUKK_AUTO_CHAIN_DIRECT}`) ?? [],
+				input,
+				routes,
+				cxSystems
+			)
+		);
 	});
 
 	return chains;
@@ -1244,4 +1676,92 @@ export function raukkHubSpokeRows(
 			? left.ticker.localeCompare(right.ticker)
 			: right.share - left.share;
 	});
+}
+
+/**
+ * The grouped hub/spoke listing folded onto its LANES: one line per base
+ * pair and cargo class, whatever number of materials it carries.
+ *
+ * A base commonly hands several of its outputs to the same neighbour —
+ * HCP and MAI both leaving one hydroponics base for the same consumer —
+ * and they ride the same visit, so the listing states the lane and sums
+ * what it moves. The per-ticker rows are kept on `items`, which is where
+ * the display reads the material list and its breakdown from.
+ *
+ * Lanes never merge across cargo classes: a class is a cadence, and two
+ * cadences are two visits.
+ *
+ * The share is recomputed over the whole input, not summed from the
+ * member rows: a row's share is already the LARGER of its weight and its
+ * volume share, and adding maxima up would overstate the lane.
+ *
+ * Rows carrying no base pair — the ungrouped listing — name no lane and
+ * are dropped rather than folded into a nameless one.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkHubSpokeRow[]} rows Grouped rows, see
+ * {@link raukkHubSpokeRows}
+ * @returns {IRaukkHubSpokeLaneRow[]} Lanes, largest share first
+ */
+export function raukkHubSpokeLanes(
+	rows: IRaukkHubSpokeRow[]
+): IRaukkHubSpokeLaneRow[] {
+	const totalWeight: number = rows.reduce(
+		(sum, row) => sum + row.weightPerDay,
+		0
+	);
+	const totalVolume: number = rows.reduce(
+		(sum, row) => sum + row.volumePerDay,
+		0
+	);
+
+	const lanes: Map<string, IRaukkHubSpokeLaneRow> = new Map();
+
+	rows.forEach((row) => {
+		if (row.fromStop === undefined || row.toStop === undefined) return;
+
+		const key: string = `${row.bucket}|${row.fromStop}|${row.toStop}`;
+		const known: IRaukkHubSpokeLaneRow | undefined = lanes.get(key);
+
+		if (known !== undefined) {
+			known.items.push(row);
+			known.unitsPerDay += row.unitsPerDay;
+			known.weightPerDay += row.weightPerDay;
+			known.volumePerDay += row.volumePerDay;
+			return;
+		}
+
+		lanes.set(key, {
+			bucket: row.bucket,
+			fromStop: row.fromStop,
+			toStop: row.toStop,
+			items: [row],
+			unitsPerDay: row.unitsPerDay,
+			weightPerDay: row.weightPerDay,
+			volumePerDay: row.volumePerDay,
+			share: 0,
+		});
+	});
+
+	return Array.from(lanes.values())
+		.map((lane) => ({
+			...lane,
+			items: [...lane.items].sort((left, right) =>
+				left.share === right.share
+					? left.ticker.localeCompare(right.ticker)
+					: right.share - left.share
+			),
+			share: Math.max(
+				totalWeight > 0 ? lane.weightPerDay / totalWeight : 0,
+				totalVolume > 0 ? lane.volumePerDay / totalVolume : 0
+			),
+		}))
+		.sort((left, right) =>
+			left.share === right.share
+				? `${left.fromStop}|${left.toStop}`.localeCompare(
+						`${right.fromStop}|${right.toStop}`
+					)
+				: right.share - left.share
+		);
 }

@@ -372,6 +372,7 @@
 						dailyRepairMaterials[selectedDay]
 					"
 					:materials="dailyRepairMaterials[selectedDay]"
+					:repair-day="selectedDay"
 					:sourced-prices="raukkSourcedPrices"
 					:sourced-stale="raukkSnapshot?.stale === true" />
 			</div>

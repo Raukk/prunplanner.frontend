@@ -58,17 +58,22 @@ import { raukkDepotStopKey } from "@/features/raukk_sourcing/calculations/shippi
 // raukk: planned gates are edges of the route graph while switched on
 import {
 	RAUKK_PLANNED_GATE_DEFAULT_FEE,
+	raukkPlannedGateDuplicate,
+	raukkPlannedGateLabel,
 	raukkPlannedGateLinks,
 } from "@/features/raukk_sourcing/calculations/gatePlanning";
 import {
 	IRaukkGateUpgrades,
+	RAUKK_GATE_BUILD_ENDS,
 	RAUKK_GATE_UPGRADE,
+	raukkGateBuildEnds,
 	raukkGateUpgradesFit,
 } from "@/features/raukk_sourcing/calculations/gateCosts";
 import { setRaukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations/routeDistance";
 // raukk: only plans assigned to an empire take part account wide
 import {
 	raukkEmpirePlanUuids,
+	raukkEmpirePlanets,
 	raukkScopedSnapshots,
 } from "@/features/raukk_sourcing/calculations/shippingPlanScope";
 
@@ -101,6 +106,7 @@ import {
 	IRaukkSubscription,
 	IRaukkSubscriptionEntry,
 } from "@/features/raukk_sourcing/raukkSourcingStore.types";
+import { IPlanEmpireElement } from "@/stores/planningStore.types";
 
 /** Repair day used until a plan configures its own */
 const DEFAULT_REPAIR_DAY: RAUKK_REPAIR_DAY = 90;
@@ -270,9 +276,13 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {Record<string, IRaukkSnapshot>} Snapshots in scope
 		 */
 		function scopedSnapshots(): Record<string, IRaukkSnapshot> {
+			const empires: Record<string, IPlanEmpireElement> =
+				usePlanningStore().empires;
+
 			return raukkScopedSnapshots(
 				snapshots.value,
-				raukkEmpirePlanUuids(usePlanningStore().empires)
+				raukkEmpirePlanUuids(empires),
+				raukkEmpirePlanets(empires)
 			);
 		}
 
@@ -416,6 +426,40 @@ export const useRaukkSourcingStore = defineStore(
 						? totalDrawnPerDay / sourceUnitsPerDay
 						: 0,
 			};
+		}
+
+		/**
+		 * Plans leasing a base from the given HOST plan, the lease link
+		 * read backwards.
+		 *
+		 * Derived from the configs, never stored on the host: the link is
+		 * one field on the lease and one place to keep consistent. Sorted,
+		 * so the cargo a host folds arrives in a stable order.
+		 * @author raukk
+		 *
+		 * @param {string} hostPlanUuid Host Plan Uuid
+		 * @returns {string[]} Lease Plan Uuids
+		 */
+		function leasesOf(hostPlanUuid: string): string[] {
+			return Object.entries(configs.value)
+				.filter(
+					([, config]) => config.leaseHostPlanUuid === hostPlanUuid
+				)
+				.map(([planUuid]) => planUuid)
+				.sort();
+		}
+
+		/**
+		 * Planet a plan sits on, exactly as the snapshot pipeline resolves
+		 * it: its stored snapshot is the answer. A plan without one has no
+		 * planet the store knows of, the same rule chain membership follows.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Plan Uuid
+		 * @returns {(string | undefined)} Planet Natural Id
+		 */
+		function planetOf(planUuid: string): string | undefined {
+			return snapshots.value[planUuid]?.planetNaturalId;
 		}
 
 		// setters
@@ -1065,6 +1109,36 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * The planned gate that already links the same pair, `null` when
+		 * none does.
+		 *
+		 * A gate is BIDIRECTIONAL — the route graph carries both directions
+		 * of every link — so `A ⇄ B` and `B ⇄ A` are one edge, and two rows
+		 * for it double the build bill for nothing. Compared by system, so
+		 * a second link between two other planets of the same two systems
+		 * counts as well. Backs the gate editors refusal before
+		 * {@link setPlannedGate} throws.
+		 * @author raukk
+		 *
+		 * @param {string} gateId Gate asking, `""` for one not added yet
+		 * @param {string} planetA Planet Natural Id of the a side
+		 * @param {string} planetB Planet Natural Id of the b side
+		 * @returns {IRaukkPlannedGate | null} Gate already on that pair
+		 */
+		function plannedGateDuplicateOf(
+			gateId: string,
+			planetA: string,
+			planetB: string
+		): IRaukkPlannedGate | null {
+			return raukkPlannedGateDuplicate(
+				Object.values(plannedGates.value),
+				planetA,
+				planetB,
+				gateId
+			);
+		}
+
+		/**
 		 * Stores one PLANNED gate, or patches the one that id already is.
 		 *
 		 * A planned gate that is switched ON is an edge of the route
@@ -1076,9 +1150,15 @@ export const useRaukkSourcingStore = defineStore(
 		 * shipped (the rule {@link setShippingConfig} follows).
 		 *
 		 * A patch that touches nothing routable — the label, the note,
-		 * the status of a gate that stays switched off — stales NOTHING:
-		 * a knob that moves no stored number leaves the results alone,
-		 * the rule the depot rent and the ship count follow.
+		 * the status of a gate that stays switched off, the ends billed —
+		 * stales NOTHING: a knob that moves no stored number leaves the
+		 * results alone, the rule the depot rent and the ship count follow.
+		 * `buildEnds` is squarely such a knob: it says who pays for the far
+		 * gate, and a link flies the same whoever that is.
+		 *
+		 * A pair another gate already links THROWS, see
+		 * {@link plannedGateDuplicateOf} — the rule {@link setChain}
+		 * follows for overlapping chains.
 		 *
 		 * Non finite numbers are refused rather than stored, so the users
 		 * own JSON backup cannot be poisoned with a `null` fee.
@@ -1131,6 +1211,10 @@ export const useRaukkSourcingStore = defineStore(
 				raised
 			);
 
+			const buildEnds: RAUKK_GATE_BUILD_ENDS = raukkGateBuildEnds(
+				patch.buildEnds ?? known?.buildEnds
+			);
+
 			const next: IRaukkPlannedGate = {
 				id,
 				name: patch.name ?? known?.name,
@@ -1143,6 +1227,7 @@ export const useRaukkSourcingStore = defineStore(
 				capacityUpgrades: upgrades.capacity,
 				volumeUpgrades: upgrades.volume,
 				rangeUpgrades: upgrades.range,
+				buildEnds,
 				enabled: patch.enabled ?? known?.enabled ?? false,
 				status: patch.status ?? known?.status ?? "proposed",
 				note: patch.note ?? known?.note,
@@ -1150,6 +1235,28 @@ export const useRaukkSourcingStore = defineStore(
 
 			// a gate needs both ends to be a link at all
 			if (next.planetA === "" || next.planetB === "") return;
+
+			/*
+			 * A gate is bidirectional, so the same pair the other way round
+			 * is the same link: storing it would bill a second gate for an
+			 * edge the graph already has. Only checked when the ENDPOINTS
+			 * move — a payload imported with duplicates in it must stay
+			 * editable and removable rather than throwing on every keystroke.
+			 */
+			if (
+				known === undefined ||
+				known.planetA !== next.planetA ||
+				known.planetB !== next.planetB
+			) {
+				const duplicate: IRaukkPlannedGate | null =
+					plannedGateDuplicateOf(id, next.planetA, next.planetB);
+
+				if (duplicate !== null) {
+					throw new Error(
+						`'${raukkPlannedGateLabel(duplicate)}' already links ${duplicate.planetA} and ${duplicate.planetB}; a gate is bidirectional, so the same pair either way round is one gate.`
+					);
+				}
+			}
 
 			plannedGates.value[id] = next;
 
@@ -1585,6 +1692,93 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Links one plan to the HOST plan it leases its base from.
+		 *
+		 * Two bases on one planet share one physical docking site, so all
+		 * remaining shipping of the lease is planned and paid under the
+		 * host: the lease builds no pairs, and its residual cargo is folded
+		 * into the hosts lanes. Four rules are enforced here rather than in
+		 * the UI, because the store is what everything else reads, and all
+		 * four throw and leave the store untouched:
+		 *
+		 *  - no self link, a plan cannot dock at itself.
+		 *  - both plans must be KNOWN, which — exactly as chain membership
+		 *    and the pair construction read it — means holding a snapshot:
+		 *    the planet of a plan is what its snapshot says it is.
+		 *  - SAME PLANET, the whole premise of the delegation. A host in
+		 *    another system shares no site and no ship visit.
+		 *  - no CHAINS: a host may not itself be a lease, and a plan that
+		 *    already hosts leases may not become one. One fold, one level,
+		 *    one plan that flies the site.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Leasing Plan Uuid
+		 * @param {string} hostPlanUuid Host Plan Uuid
+		 */
+		function setLeaseHost(planUuid: string, hostPlanUuid: string): void {
+			if (planUuid === hostPlanUuid)
+				throw new Error("A plan cannot lease its base from itself.");
+
+			const ownPlanet: string | undefined = planetOf(planUuid);
+			const hostPlanet: string | undefined = planetOf(hostPlanUuid);
+
+			if (hostPlanet === undefined)
+				throw new Error(
+					`Host plan '${hostPlanUuid}' has no snapshot yet; compute it before leasing from it.`
+				);
+
+			if (ownPlanet === undefined)
+				throw new Error(
+					`Plan '${planUuid}' has no snapshot yet; compute it before leasing.`
+				);
+
+			if (ownPlanet !== hostPlanet)
+				throw new Error(
+					`A lease shares its hosts docking site: plan '${planUuid}' sits on ${ownPlanet}, host '${hostPlanUuid}' on ${hostPlanet}.`
+				);
+
+			if (configs.value[hostPlanUuid]?.leaseHostPlanUuid !== undefined)
+				throw new Error(
+					`Host plan '${hostPlanUuid}' is itself a lease; lease links are never chained.`
+				);
+
+			const ownLeases: string[] = leasesOf(planUuid);
+
+			if (ownLeases.length > 0)
+				throw new Error(
+					`Plan '${planUuid}' hosts ${ownLeases.length} lease(s) of its own; lease links are never chained.`
+				);
+
+			ensureConfig(planUuid).leaseHostPlanUuid = hostPlanUuid;
+
+			// both sides move: the lease loses its lanes, the host gains
+			// their cargo. The dependency edge cascades from here on
+			markStale(planUuid);
+			markStale(hostPlanUuid);
+		}
+
+		/**
+		 * Drops a plans lease link, it plans and pays its own shipping
+		 * again. Both plans go stale with their dependents, exactly as
+		 * {@link setLeaseHost} stales them.
+		 * @author raukk
+		 *
+		 * @param {string} planUuid Leasing Plan Uuid
+		 */
+		function clearLeaseHost(planUuid: string): void {
+			const config: IRaukkPlanConfig | undefined =
+				configs.value[planUuid];
+			const hostPlanUuid: string | undefined = config?.leaseHostPlanUuid;
+
+			if (!config || hostPlanUuid === undefined) return;
+
+			delete config.leaseHostPlanUuid;
+
+			markStale(planUuid);
+			markStale(hostPlanUuid);
+		}
+
+		/**
 		 * Sets the repair day of a plans cost model. Marks the plan and
 		 * all downstream plans stale.
 		 * @author raukk
@@ -1640,6 +1834,19 @@ export const useRaukkSourcingStore = defineStore(
 
 			// dependents derive from the new draws as well
 			if (!previous || snapshotMateriallyChanged(previous, snapshot))
+				cascadeStale(planUuid);
+
+			/*
+			 * The residual cargo of a LEASE is a value its host consumes and
+			 * `snapshotMateriallyChanged` — which weighs outputs and draws —
+			 * knows nothing of, the same blind spot the frozen flows have.
+			 * Changed lease cargo therefore stales the dependents itself, the
+			 * host being one of them through the lease edge of the graph.
+			 */
+			if (
+				JSON.stringify(previous?.leaseCargo ?? null) !==
+				JSON.stringify(snapshot.leaseCargo ?? null)
+			)
 				cascadeStale(planUuid);
 
 			if (
@@ -1741,6 +1948,17 @@ export const useRaukkSourcingStore = defineStore(
 				planUuid
 			);
 
+			/*
+			 * Leases of a deleted HOST lose their link: a dangling uuid would
+			 * keep them from ever building a pair again, their cargo waiting
+			 * for a host that no longer exists. They plan their own shipping
+			 * from here on and are stale below. The other direction needs no
+			 * cleanup — a deleted LEASE takes its config with it — and its
+			 * host is already among the dependents, the lease edge of the
+			 * graph having put it there.
+			 */
+			const orphanedLeases: string[] = leasesOf(planUuid);
+
 			// a chain the plan was a member of loses its flows and has to
 			// be recomputed; the chain itself stays, its stops are
 			// planets and outlive any single plan
@@ -1753,6 +1971,15 @@ export const useRaukkSourcingStore = defineStore(
 			delete snapshots.value[planUuid];
 
 			scrubShippingKeys(planUuid);
+
+			orphanedLeases.forEach((leaseUuid) => {
+				delete configs.value[leaseUuid]?.leaseHostPlanUuid;
+
+				const lease: IRaukkSnapshot | undefined =
+					snapshots.value[leaseUuid];
+
+				if (lease) lease.stale = true;
+			});
 
 			dependents.forEach((dependentUuid) => {
 				const dependent: IRaukkSnapshot | undefined =
@@ -1886,7 +2113,12 @@ export const useRaukkSourcingStore = defineStore(
 			assignedShipTypeId,
 			depotStopRefs,
 			listPlannedGates,
+			plannedGateDuplicateOf,
+			leasesOf,
+			planetOf,
 			// setters
+			setLeaseHost,
+			clearLeaseHost,
 			setTickerSource,
 			clearTickerSource,
 			setSourcingDefault,

@@ -5,11 +5,10 @@
 		next to the untouched vanilla numbers above it. Pure consumer of
 		the stored snapshot, it never computes or writes.
 	*/
-	import { computed, ComputedRef } from "vue";
-	import { useRoute } from "vue-router";
+	import { computed, ComputedRef, toRef } from "vue";
 
-	// Stores
-	import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+	// Composables
+	import { useRaukkOverviewSnapshot } from "@/features/raukk_sourcing/useRaukkOverviewSnapshot";
 
 	// Calculations
 	import {
@@ -25,12 +24,6 @@
 	// UI
 	import { PTooltip } from "@/ui";
 
-	// Types & Interfaces
-	import {
-		IRaukkOutputCost,
-		IRaukkSnapshot,
-	} from "@/features/raukk_sourcing/raukkSourcing.types";
-
 	const props = defineProps({
 		planUuid: {
 			type: String,
@@ -39,37 +32,11 @@
 		},
 	});
 
-	const raukkSourcingStore = useRaukkSourcingStore();
-	const route = useRoute();
-
-	/**
-	 * Plan uuid the note belongs to. Upstream components that already
-	 * know it pass it as a property, the others fall back to the plan
-	 * views route parameter to keep their diff at a single tag.
-	 * @author raukk
-	 */
-	const localPlanUuid: ComputedRef<string | undefined> = computed(() => {
-		if (props.planUuid) return props.planUuid;
-
-		const routeUuid: unknown = route?.params?.planUuid;
-
-		return typeof routeUuid === "string" && routeUuid !== ""
-			? routeUuid
-			: undefined;
-	});
-
-	// direct reactive store read, not getSnapshot: its inert clone drops
-	// the proxy, the in-place stale flag change would not invalidate this
-	const localSnapshot: ComputedRef<IRaukkSnapshot | undefined> = computed(
-		() =>
-			localPlanUuid.value
-				? raukkSourcingStore.snapshots[localPlanUuid.value]
-				: undefined
-	);
-
-	const localOutputs: ComputedRef<IRaukkOutputCost[]> = computed(() =>
-		localSnapshot.value ? Object.values(localSnapshot.value.outputs) : []
-	);
+	const {
+		snapshot: localSnapshot,
+		outputs: localOutputs,
+		isStale: localIsStale,
+	} = useRaukkOverviewSnapshot(toRef(props, "planUuid"));
 
 	/** Full true cost of all outputs per day */
 	const localCostPerDay: ComputedRef<number> = computed(() =>
@@ -142,10 +109,6 @@
 			: []
 	);
 
-	const localIsStale: ComputedRef<boolean> = computed(
-		() => localSnapshot.value?.stale === true
-	);
-
 	const localComputedAt: ComputedRef<string> = computed(() =>
 		localSnapshot.value
 			? formatDate(
@@ -190,9 +153,7 @@
 						})
 					}}
 				</div>
-				<div
-					v-for="entry in localShipTime"
-					:key="entry.shipTypeId">
+				<div v-for="entry in localShipTime" :key="entry.shipTypeId">
 					{{
 						$t("raukk_overview.line_ship_time", {
 							ship: raukkShipTypeLabel(entry.shipTypeId),

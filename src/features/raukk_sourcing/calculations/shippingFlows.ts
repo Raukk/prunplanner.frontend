@@ -291,6 +291,21 @@ export function buildPlanChainFlows(
 		);
 	});
 
+	/*
+	 * Delegated cargo of a LEASE plan is stated as flows of the HOST: the
+	 * lease authors none at all, so a chain calling at this planet sees the
+	 * whole sites market traffic in one place and claims it through the
+	 * plan that really flies it. Already resolved when it arrives, see
+	 * {@link IRaukkPairPlanFlows}, so neither flag is asked again.
+	 */
+	(flows.delegatedInputs ?? []).forEach((entry) =>
+		push(entry, cxCode, own, entry.unitsPerDay)
+	);
+
+	(flows.delegatedOutputs ?? []).forEach((entry) =>
+		push(entry, own, cxCode, entry.unitsPerDay)
+	);
+
 	return result;
 }
 

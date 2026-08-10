@@ -54,9 +54,12 @@ export interface IRaukkAutoChain {
 	chainId: string;
 	/** Cadence class the whole loop serves, chains are never split */
 	bucket: RAUKK_CARGO_BUCKET;
-	/** Exchange every stop of this chain is anchored at */
+	/** Exchange every stop of this chain is anchored at, or
+	 * `RAUKK_AUTO_CHAIN_DIRECT` when the loop calls at no exchange at
+	 * all — a lap that delivers everything it carries between bases */
 	cxCode: string;
-	/** Ordered loop, the exchange first */
+	/** Ordered loop, the exchange first; a direct loop opens at the stop
+	 * the cargo is collected from */
 	stops: RAUKK_STOP_REF[];
 	/** Round trip parsecs of that order */
 	parsecs: number;
@@ -116,6 +119,27 @@ export interface IRaukkHubSpokeRow {
 	fromStop?: RAUKK_STOP_REF;
 	/** Base the cargo goes to, undefined on a grouped total row */
 	toStop?: RAUKK_STOP_REF;
+	unitsPerDay: number;
+	weightPerDay: number;
+	volumePerDay: number;
+	/** Share of the whole hub/spoke cargo, the larger of both dimensions */
+	share: number;
+}
+
+/**
+ * One LANE of the grouped hub/spoke listing: everything one base hands
+ * to one other base in one cargo class, on a single line.
+ *
+ * Several outputs of a base commonly leave for the same neighbour and
+ * ride the same visit, so the lane is what the listing states and the
+ * per-ticker rows it aggregates survive on {@link items}.
+ */
+export interface IRaukkHubSpokeLaneRow {
+	bucket: RAUKK_CARGO_BUCKET;
+	fromStop: RAUKK_STOP_REF;
+	toStop: RAUKK_STOP_REF;
+	/** The aggregated per-ticker rows, share descending */
+	items: IRaukkHubSpokeRow[];
 	unitsPerDay: number;
 	weightPerDay: number;
 	volumePerDay: number;

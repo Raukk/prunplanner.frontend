@@ -115,6 +115,7 @@
 			"fleet": "Fleet",
 			"transport": "Transport",
 			"chains": "Chains",
+			"hubspoke": "Hub/Spoke",
 			"depots": "Depots",
 			"gates": "Gates",
 			"visuals": "Visuals",
@@ -124,7 +125,8 @@
 			"sourcing_tooltip": "Where the fleet gets its fuel and its repair materials from, account-wide. Refuelling and repairs happen at the exchange or the depot, so none of it is shipped.",
 			"fleet_tooltip": "Every ship the account commits, its wear and its share of the repair bill.",
 			"transport_tooltip": "Every stored lane, what your own fleet charges to fly it and what hiring an LM carrier would cost instead.",
-			"chains_tooltip": "Routes the cargo actually flies — authored chains, the automatic ones and the hub/spoke rollup.",
+			"chains_tooltip": "Routes the cargo actually flies — authored chains and the automatic ones.",
+			"hubspoke_tooltip": "Cargo no chain hauls: what each base still sells at its exchange and buys back at another, one grid per cargo class.",
 			"depots_tooltip": "Planets that act as ship homes and handover points.",
 			"gates_tooltip": "Gates you plan to build: what they cost, whether they are in range, and what the routes look like once they exist.",
 			"visuals_tooltip": "The account's freight drawn out: a star map of every lane, and weight against volume per trip versus a bay's hold.",
@@ -395,7 +397,7 @@
 	},
 	"auto_chains": {
 		"title": "Automatic Chains",
-		"info": "Loops nobody authored: one per cargo class per exchange region, CX → base → … → CX, at most five stops in the cheapest order the cargo allows — a base is always visited before the base it feeds, so one lap really delivers. Stops that would only fit by doubling back cost more than their detour budget and stay with the exchange hub/spoke. They are rebuilt on every chain recomputation from the flows the authored chains left, so they cannot be edited — widen a detour budget, pin a ship type, or author a chain of your own instead.",
+		"info": "Loops nobody authored, one per cargo class: CX → base → … → CX over the bases of one exchange region, at most five stops in the cheapest order the cargo allows — a base is always visited before the base it feeds, so one lap really delivers. A loop whose cargo is never bought or sold drops the exchange and runs base to base, which is also how two bases trading across region lines are served at all. Stops that would only fit by doubling back cost more than their detour budget and stay with the exchange hub/spoke. They are rebuilt on every chain recomputation from the flows the authored chains left, so they cannot be edited — widen a detour budget, pin a ship type, or author a chain of your own instead.",
 		"tag": "Auto",
 		"reason": {
 			"supply": "supplier → consumer",
@@ -416,14 +418,21 @@
 			"detour_in_out": "In/Out Detour (pc)",
 			"detour_loose": "Workforce & Repair Detour (pc)",
 			"detour_tooltip": "Parsecs a stop may add to the round trip. The in/out class flies every two weeks and pays every parsec often, the 30 and 90 day classes can afford a short extra jump."
+		},
+		"class_note": {
+			"production": "Inputs and outputs: the fortnightly runs that carry the tonnage and size the fleet.",
+			"workforce": "Consumables: a rare, thin run on the workforce cadence.",
+			"repair": "Repair materials: the rarest run of all, on the repair day of its bases."
 		}
 	},
 	"hub_spoke": {
 		"title": "Exchange Hub/Spoke",
-		"info": "Cargo of THIS base no chain hauls: it buys what it needs at its exchange and sells its excess at the same one. One row per resource, optionally split by the base pair it moves between; the share is of this base's exchange cargo.",
-		"info_account": "Cargo no chain hauls, account wide: the consumer buys it at its exchange and the producer sells its excess at its own. One row per resource, optionally split by the base pair it moves between; the share is of everything rerouted through the exchanges.",
+		"info": "Cargo of THIS base no chain hauls: it buys what it needs at its exchange and sells its excess at the same one. One grid per cargo class, since a class is a cadence of its own. Grouped, one line per base pair carries every material moving between the two; the share is of this base's exchange cargo.",
+		"info_account": "Cargo no chain hauls, account wide: the consumer buys it at its exchange and the producer sells its excess at its own. One grid per cargo class, since a class is a cadence of its own. Grouped, one line per base pair carries every material moving between the two; the share is of everything rerouted through the exchanges.",
 		"ticker": "Material",
-		"bucket": "Class",
+		"materials": "Materials",
+		"class_title": "{class} Cargo",
+		"item_line": "{ticker}: {units} u · {weight} t · {volume} m³",
 		"from": "From",
 		"to": "To",
 		"units": "Units / Day",
@@ -489,6 +498,9 @@
 		"remove": "Remove",
 		"add": "Add Gate",
 		"hcb": "HCB",
+		"duplicate": "Duplicate",
+		"duplicate_tooltip": "'{gate}' already links these two systems. A gate is bidirectional — the route graph carries both directions of every link — so this row plans nothing the other does not already plan, and its build ȼ are counted on top of it. Remove one of the two.",
+		"duplicate_warning": "{count} planned gate(s) repeat a link another row already plans, the same pair the other way round or between two other planets of the same two systems. Their build ȼ are counted twice in the total below. Remove the copies.",
 		"unrouted": "Unroutable",
 		"opens_route": "opens a route",
 		"name_placeholder": "Name, optional",
@@ -510,7 +522,12 @@
 			"empty": "Type both planet ids to enable Add Gate.",
 			"unknown": "One of those planets is unknown — the gate would route nothing.",
 			"same_system": "Both planets sit in one system — a gate between them bridges nothing.",
-			"unreachable_range": "Those planets are more than 25 parsecs apart — no gate can link them, however upgraded."
+			"unreachable_range": "Those planets are more than 25 parsecs apart — no gate can link them, however upgraded.",
+			"duplicate": "'{gate}' already links those two systems. A gate is bidirectional, so the same pair either way round is one gate — edit that row instead."
+		},
+		"ends": {
+			"both": "Build both ends",
+			"one": "Build one end"
 		},
 		"empty": "No planned gates yet. Add one you saw going up in-game, or one you wish someone would build, and see what it would save.",
 		"planning_warning": "{count} planned gate(s) are switched on: distances, lanes and chains are being routed over gates that do not exist yet. Switch them off for the numbers you can fly today.",
@@ -523,8 +540,8 @@
 		},
 		"budget_left": "{left} of {total} upgrade levels left",
 		"build_cost": "Build ȼ",
-		"build_cost_tooltip": "Both ends of the link at today's exchange prices — a gate is bought TWICE, one at each end, and this is the pair. The bill is dominated by a few enormous positions ({materials}), and those are thin markets: this is what the exchange says today, not what actually buying that much would cost.",
-		"cost_note": "Build ȼ counts BOTH ends of every link — a gate is two gates. A gate holds {budget} upgrade levels in total across uses, volume and range, so every level of range is a level of clearance not bought. Upgrade cost is triangular: the n-th level costs n times the first, so the third level of an upgrade costs three times what the first one did.",
+		"build_cost_tooltip": "{ends} gate(s) at today's exchange prices. A link is always two gates, one at each end — pick \"Build one end\" when the far one already stands or a partner is putting it up, and only your own is billed. It changes the bill and nothing else: the route, the fee and the clearance are the same either way. The bill is dominated by a few enormous positions ({materials}), and those are thin markets: this is what the exchange says today, not what actually buying that much would cost.",
+		"cost_note": "A link is two gates, one at each end, and Build ȼ counts both of them unless a row is set to \"Build one end\" — for a link whose far gate already stands or is somebody else's to build. That is a billing choice only: a gate is bidirectional and routes identically either way, which is also why the same pair reversed is not a second gate. A gate holds {budget} upgrade levels in total across uses, volume and range, so every level of range is a level of clearance not bought. Upgrade cost is triangular: the n-th level costs n times the first, so the third level of an upgrade costs three times what the first one did.",
 		"rollup_build": "Build ȼ, every planned link",
 		"out_of_range_tag": "Out of Range",
 		"not_routed": "Not Routed",
@@ -922,5 +939,20 @@
 		"info": "Default source of every base at once, per input group. A ticker without its own setting on a base follows the default of its group — rations, drinking water and the repair materials are configured once here instead of base by base. Changing a default marks every stored snapshot stale.",
 		"note": "Account defaults —",
 		"note_link": "manage"
+	},
+	"lease": {
+		"title": "Lease",
+		"info": "A base leased from another player sits on a planet you already ship to, so both bases share one docking site. Linking them plans and pays the whole site's shipping on the host base: one visit, one hull, combined tonnage.",
+		"select_label": "This base is leased — ships via",
+		"select_placeholder": "Host base on this planet",
+		"no_candidates": "No other base of yours on this planet holds a snapshot yet, so there is nothing to lease from.",
+		"linked": "Leased base — shipping delegated to {host}",
+		"unlink": "Unlink Lease",
+		"hosting": "This base hosts {count} leased base(s); their cargo ships with yours.",
+		"delegated_note": "Shipping is planned on {host}.",
+		"host_note": "Site totals — includes {count} leased base(s):",
+		"badge_lease": "Lease → {host}",
+		"badge_host": "+{count} leased",
+		"unknown_plan": "Unknown plan"
 	}
 }

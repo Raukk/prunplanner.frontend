@@ -39,6 +39,8 @@
 	// Components
 	import SharingButton from "@/features/sharing/components/SharingButton.vue";
 	import ManageAssignmentFilters from "@/features/manage/components/ManageAssignmentFilters.vue";
+	// raukk: lease link of a plan, shown next to its name
+	import RaukkLeaseBadge from "@/features/raukk_sourcing/components/RaukkLeaseBadge.vue";
 
 	// UI
 	import { PCheckbox, PButton, PIcon } from "@/ui";
@@ -350,12 +352,14 @@
 			sorter="default"
 			default-sort-order="ascend">
 			<template #render-cell="{ rowData }">
-				<div class="w-43.75 text-wrap">
+				<div
+					class="w-43.75 text-wrap flex flex-row flex-wrap gap-1 items-center">
 					<router-link
 						:to="`/plan/${rowData.planetId}/${rowData.planUuid}`"
 						class="text-link-primary font-bold hover:underline">
 						{{ rowData.planName }}
 					</router-link>
+					<RaukkLeaseBadge :plan-uuid="rowData.planUuid" />
 				</div>
 			</template>
 		</x-n-data-table-column>

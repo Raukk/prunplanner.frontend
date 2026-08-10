@@ -1,4 +1,8 @@
 import { IPreferenceDefault } from "@/features/preferences/userPreferences.types";
+import {
+	CX_VOLUME_RED_PERCENT,
+	CX_VOLUME_YELLOW_PERCENT,
+} from "@/features/cx/cxVolumeShare";
 
 /**
  * Defines default values for user preferences, contains generic tool
@@ -21,6 +25,9 @@ export const preferenceDefaults: IPreferenceDefault = {
 	// Habitation optimization is forced on account wide, the per plan
 	// checkbox only regains control when the user opts in here
 	habOptimizePerPlan: false,
+	// CX volume warning thresholds, see cxVolumeShare.ts
+	cxVolumeYellowPercent: CX_VOLUME_YELLOW_PERCENT,
+	cxVolumeRedPercent: CX_VOLUME_RED_PERCENT,
 
 	planOverrides: {},
 	planDefaults: {

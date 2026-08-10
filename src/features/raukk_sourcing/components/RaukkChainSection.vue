@@ -24,11 +24,6 @@
 		raukkAutoChainListRows,
 		raukkChainListRows,
 	} from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
-	import {
-		raukkFlowConcernsPlan,
-		raukkHubSpokeRows,
-		raukkUnclaimedFlows,
-	} from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 	import { raukkChainAssignmentKey } from "@/features/raukk_sourcing/calculations/shippingFleet";
 
 	// Util
@@ -50,29 +45,12 @@
 	import { IRaukkChainListRow } from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 	import {
 		IRaukkChainConfig,
-		IRaukkChainFlow,
-		IRaukkChainFlowCost,
-		IRaukkChainResult,
 		IRaukkSnapshot,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
-	import { IRaukkHubSpokeRow } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
 	import { RAUKK_SAME_SYSTEM_PRICING } from "@/features/raukk_sourcing/calculations/shippingChains.types";
+	import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
 
-	const props = defineProps({
-		/** Open plan, undefined on an unsaved one: the hub/spoke listing
-		 * is scoped to the base whose plan is open */
-		planUuid: {
-			type: String,
-			required: false,
-			default: undefined,
-		},
-		/** Planet of the open plan, the fallback identity of flows frozen
-		 * before they carried plan uuids */
-		planetNaturalId: {
-			type: String,
-			required: false,
-			default: undefined,
-		},
+	defineProps({
 		/** Unit price per fuel ticker, prices the display side costing */
 		fuelPrices: {
 			type: Object as PropType<Record<string, number>>,
@@ -149,64 +127,34 @@
 		)
 	);
 
-	/** Plan name of a stop, the bare id when no plan sits there */
-	function stopLabel(stopRef: string | undefined): string {
-		if (stopRef === undefined) return "—";
-
-		return stopNames.value[stopRef] ?? stopRef;
-	}
-
 	/** The loops the chain pass derived, read only by construction */
 	const autoRows: ComputedRef<IRaukkChainListRow[]> = computed(() =>
 		raukkAutoChainListRows(sourcingStore.chainResults, stopNames.value)
 	);
 
-	/** Every frozen flow of the account, the hub/spoke input */
-	const accountFlows: ComputedRef<IRaukkChainFlow[]> = computed(() =>
-		// scoped: a plan assigned to no empire ships nothing account wide
-		Object.values(sourcingStore.scopedSnapshots()).flatMap(
-			(snapshot: IRaukkSnapshot) => snapshot.flows ?? []
-		)
-	);
-
-	/** Everything every chain — authored and derived — already carries */
-	const claimedFlows: ComputedRef<IRaukkChainFlowCost[]> = computed(() =>
-		Object.values(sourcingStore.chainResults).flatMap(
-			(result: IRaukkChainResult) => result.flows
-		)
-	);
-
-	const refGroupHubSpoke: Ref<boolean> = ref(true);
+	/** One table of derived loops: the class it serves and its rows */
+	interface IRaukkAutoChainGroup {
+		bucket: RAUKK_CARGO_BUCKET;
+		rows: IRaukkChainListRow[];
+	}
 
 	/**
-	 * Whether the hub/spoke listing speaks for one base: with a plan
-	 * open it is scoped to that base, without one — the account level
-	 * shipping page — every flow passes and the copy says so.
-	 */
-	const hubSpokeScoped: ComputedRef<boolean> = computed(
-		() => props.planUuid !== undefined
-	);
-
-	/**
-	 * What the OPEN base still routes through the exchange — or the
-	 * whole account, when no plan scopes the listing.
+	 * The derived loops, one table per cadence class.
 	 *
-	 * Claims are subtracted account wide first and the scoping follows:
-	 * a claim is keyed per owning plan and lane, so dropping the other
-	 * bases' flows afterwards changes no remainder.
+	 * The three classes fly on rhythms an order of magnitude apart — a
+	 * fortnight, a month, a quarter — and carry cargo in the same
+	 * proportion. Read as one list the fortnightly production loops, which
+	 * are what the fleet is really sized for, sit between rare consumable
+	 * and repair runs that will never move a tonne worth arguing about.
+	 * Production comes first, and an empty class draws no table at all.
 	 */
-	const hubSpokeRows: ComputedRef<IRaukkHubSpokeRow[]> = computed(() =>
-		raukkHubSpokeRows(
-			raukkUnclaimedFlows(accountFlows.value, claimedFlows.value).filter(
-				(flow) =>
-					raukkFlowConcernsPlan(
-						flow,
-						props.planUuid,
-						props.planetNaturalId
-					)
-			),
-			refGroupHubSpoke.value
-		)
+	const autoGroups: ComputedRef<IRaukkAutoChainGroup[]> = computed(() =>
+		(["production", "workforce", "repair"] as RAUKK_CARGO_BUCKET[])
+			.map((bucket) => ({
+				bucket,
+				rows: autoRows.value.filter((row) => row.autoBucket === bucket),
+			}))
+			.filter((group) => group.rows.length > 0)
 	);
 
 	const chainConfig: ComputedRef<IRaukkChainConfig> = computed(
@@ -599,201 +547,136 @@
 			{{ $t("raukk_sourcing.auto_chains.info") }}
 		</div>
 
-		<PTable striped>
-			<thead>
-				<tr>
-					<th>{{ $t("raukk_sourcing.chains.name") }}</th>
-					<th>{{ $t("raukk_sourcing.chains.stops") }}</th>
-					<th>{{ $t("raukk_sourcing.chains.ship_type") }}</th>
-					<th class="text-right!">
-						{{ $t("raukk_sourcing.auto_chains.cap_days") }}
-					</th>
-					<th class="text-right!">
-						{{ $t("raukk_sourcing.chains.visits") }}
-					</th>
-					<th class="text-right!">
-						{{ $t("raukk_sourcing.chains.daily_cost") }}
-					</th>
-					<th class="text-right!">
-						{{ $t("raukk_sourcing.chains.shipping_fraction") }}
-					</th>
-				</tr>
-			</thead>
-			<tbody>
-				<tr
-					v-for="row in autoRows"
-					:key="`RAUKKAUTOCHAIN#${row.chainId}`">
-					<td>
-						<div class="flex flex-row gap-x-1 child:my-auto">
-							<span class="font-bold">{{ row.name }}</span>
-							<PTag size="sm" type="secondary">
-								{{ $t("raukk_sourcing.auto_chains.tag") }}
-							</PTag>
-							<!-- raukk: what the builder saw, nobody authored it -->
-							<PTooltip v-if="row.autoReason">
+		<!-- raukk: one table per cadence class, production first — the
+		 rhythms are a fortnight, a month and a quarter apart and reading
+		 them interleaved buries the loops that carry the tonnage -->
+		<div
+			v-for="group in autoGroups"
+			:key="`RAUKKAUTOCLASS#${group.bucket}`"
+			class="pb-3">
+			<div class="flex flex-row gap-x-2 pb-2 child:my-auto">
+				<h5 class="font-bold">
+					{{ $t(`raukk_sourcing.buckets.${group.bucket}`) }}
+				</h5>
+				<div class="text-white/50">
+					{{
+						$t(
+							`raukk_sourcing.auto_chains.class_note.${group.bucket}`
+						)
+					}}
+				</div>
+			</div>
+
+			<PTable striped>
+				<thead>
+					<tr>
+						<th>{{ $t("raukk_sourcing.chains.name") }}</th>
+						<th>{{ $t("raukk_sourcing.chains.stops") }}</th>
+						<th>{{ $t("raukk_sourcing.chains.ship_type") }}</th>
+						<th class="text-right!">
+							{{ $t("raukk_sourcing.auto_chains.cap_days") }}
+						</th>
+						<th class="text-right!">
+							{{ $t("raukk_sourcing.chains.visits") }}
+						</th>
+						<th class="text-right!">
+							{{ $t("raukk_sourcing.chains.daily_cost") }}
+						</th>
+						<th class="text-right!">
+							{{ $t("raukk_sourcing.chains.shipping_fraction") }}
+						</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr
+						v-for="row in group.rows"
+						:key="`RAUKKAUTOCHAIN#${row.chainId}`">
+						<td>
+							<div class="flex flex-row gap-x-1 child:my-auto">
+								<span class="font-bold">{{ row.name }}</span>
+								<PTag size="sm" type="secondary">
+									{{ $t("raukk_sourcing.auto_chains.tag") }}
+								</PTag>
+								<!-- raukk: what the builder saw, nobody authored it -->
+								<PTooltip v-if="row.autoReason">
+									<template #trigger>
+										<PTag size="sm" type="primary">
+											{{
+												$t(
+													`raukk_sourcing.auto_chains.reason.${row.autoReason}`
+												)
+											}}
+										</PTag>
+									</template>
+									{{
+										$t(
+											`raukk_sourcing.auto_chains.reason_tooltip.${row.autoReason}`
+										)
+									}}
+								</PTooltip>
+								<PTag v-if="row.stale" size="sm" type="error">
+									{{ $t("raukk_sourcing.chains.stale") }}
+								</PTag>
+							</div>
+						</td>
+						<td class="text-white/60">{{ row.stopsSummary }}</td>
+						<td>
+							<PSelect
+								class="w-50!"
+								clearable
+								:value="assignedShipType(row.chainId)"
+								:options="shipTypeOptions"
+								:placeholder="$t('raukk_sourcing.chains.auto')"
+								@update:value="
+									(v) =>
+										changeAssignment(
+											row.chainId,
+											v as string | null
+										)
+								" />
+						</td>
+						<td class="text-right">
+							<PTooltip v-if="row.capDays !== null">
 								<template #trigger>
-									<PTag size="sm" type="primary">
-										{{
-											$t(
-												`raukk_sourcing.auto_chains.reason.${row.autoReason}`
-											)
-										}}
-									</PTag>
+									<span class="hover:cursor-help">
+										{{ formatNumber(row.capDays) }}
+									</span>
 								</template>
 								{{
 									$t(
-										`raukk_sourcing.auto_chains.reason_tooltip.${row.autoReason}`
+										"raukk_sourcing.auto_chains.cap_days_tooltip"
 									)
 								}}
 							</PTooltip>
-							<PTag v-if="row.stale" size="sm" type="error">
-								{{ $t("raukk_sourcing.chains.stale") }}
-							</PTag>
-						</div>
-					</td>
-					<td class="text-white/60">{{ row.stopsSummary }}</td>
-					<td>
-						<PSelect
-							class="w-50!"
-							clearable
-							:value="assignedShipType(row.chainId)"
-							:options="shipTypeOptions"
-							:placeholder="$t('raukk_sourcing.chains.auto')"
-							@update:value="
-								(v) =>
-									changeAssignment(
-										row.chainId,
-										v as string | null
-									)
-							" />
-					</td>
-					<td class="text-right">
-						<PTooltip v-if="row.capDays !== null">
-							<template #trigger>
-								<span class="hover:cursor-help">
-									{{ formatNumber(row.capDays) }}
-								</span>
-							</template>
+							<span v-else>—</span>
+						</td>
+						<td class="text-right">
+							<RaukkVisitCadence
+								:trips-per-day="row.tripsPerDay" />
+						</td>
+						<td class="text-right">
 							{{
-								$t(
-									"raukk_sourcing.auto_chains.cap_days_tooltip"
-								)
+								row.dailyCost === null
+									? "—"
+									: formatNumber(row.dailyCost)
 							}}
-						</PTooltip>
-						<span v-else>—</span>
-					</td>
-					<td class="text-right">
-						<RaukkVisitCadence :trips-per-day="row.tripsPerDay" />
-					</td>
-					<td class="text-right">
-						{{
-							row.dailyCost === null
-								? "—"
-								: formatNumber(row.dailyCost)
-						}}
-					</td>
-					<td
-						class="text-right"
-						:class="row.over ? 'text-negative font-bold' : ''">
-						{{
-							row.shippingFractionPercent === null
-								? "—"
-								: `${formatNumber(row.shippingFractionPercent)} %`
-						}}
-					</td>
-				</tr>
-				<tr v-if="autoRows.length === 0">
-					<td colspan="7" class="text-center text-white/50">
-						{{ $t("raukk_sourcing.auto_chains.empty") }}
-					</td>
-				</tr>
-			</tbody>
-		</PTable>
-
-		<h4 class="font-bold py-3">
-			{{ $t("raukk_sourcing.hub_spoke.title") }}
-		</h4>
-		<div class="text-white/50 pb-3">
-			{{
-				hubSpokeScoped
-					? $t("raukk_sourcing.hub_spoke.info")
-					: $t("raukk_sourcing.hub_spoke.info_account")
-			}}
+						</td>
+						<td
+							class="text-right"
+							:class="row.over ? 'text-negative font-bold' : ''">
+							{{
+								row.shippingFractionPercent === null
+									? "—"
+									: `${formatNumber(row.shippingFractionPercent)} %`
+							}}
+						</td>
+					</tr>
+				</tbody>
+			</PTable>
 		</div>
 
-		<div class="flex flex-row gap-3 pb-3 child:my-auto">
-			<PCheckbox
-				:checked="refGroupHubSpoke"
-				@update:checked="(v) => (refGroupHubSpoke = v === true)" />
-			<div class="font-bold">
-				{{ $t("raukk_sourcing.hub_spoke.grouped") }}
-			</div>
+		<div v-if="autoRows.length === 0" class="text-white/50 pb-3">
+			{{ $t("raukk_sourcing.auto_chains.empty") }}
 		</div>
-
-		<PTable striped>
-			<thead>
-				<tr>
-					<th>{{ $t("raukk_sourcing.hub_spoke.ticker") }}</th>
-					<th>{{ $t("raukk_sourcing.hub_spoke.bucket") }}</th>
-					<template v-if="refGroupHubSpoke">
-						<th>{{ $t("raukk_sourcing.hub_spoke.from") }}</th>
-						<th>{{ $t("raukk_sourcing.hub_spoke.to") }}</th>
-					</template>
-					<th class="text-right!">
-						{{ $t("raukk_sourcing.hub_spoke.units") }}
-					</th>
-					<th class="text-right!">
-						{{ $t("raukk_sourcing.hub_spoke.weight") }}
-					</th>
-					<th class="text-right!">
-						{{ $t("raukk_sourcing.hub_spoke.volume") }}
-					</th>
-					<th class="text-right!">
-						{{ $t("raukk_sourcing.hub_spoke.share") }}
-					</th>
-				</tr>
-			</thead>
-			<tbody>
-				<tr
-					v-for="row in hubSpokeRows"
-					:key="`RAUKKHUB#${row.ticker}#${row.bucket}#${row.fromStop ?? ''}#${row.toStop ?? ''}`">
-					<td class="font-bold">{{ row.ticker }}</td>
-					<td class="text-white/60">
-						{{ $t(`raukk_sourcing.buckets.${row.bucket}`) }}
-					</td>
-					<template v-if="refGroupHubSpoke">
-						<td class="text-white/60">
-							{{ stopLabel(row.fromStop) }}
-						</td>
-						<td class="text-white/60">
-							{{ stopLabel(row.toStop) }}
-						</td>
-					</template>
-					<td class="text-right">
-						{{ formatNumber(row.unitsPerDay) }}
-					</td>
-					<td class="text-right">
-						{{ formatNumber(row.weightPerDay) }}
-					</td>
-					<td class="text-right">
-						{{ formatNumber(row.volumePerDay) }}
-					</td>
-					<td class="text-right">
-						{{ formatNumber(row.share * 100) }}%
-					</td>
-				</tr>
-				<tr v-if="hubSpokeRows.length === 0">
-					<td
-						:colspan="refGroupHubSpoke ? 8 : 6"
-						class="text-center text-white/50">
-						{{
-							hubSpokeScoped
-								? $t("raukk_sourcing.hub_spoke.empty")
-								: $t("raukk_sourcing.hub_spoke.empty_account")
-						}}
-					</td>
-				</tr>
-			</tbody>
-		</PTable>
 	</div>
 </template>

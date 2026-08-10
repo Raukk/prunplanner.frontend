@@ -1146,6 +1146,7 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 				capacityUpgrades: 0,
 				volumeUpgrades: 0,
 				rangeUpgrades: 0,
+				buildEnds: 2,
 				enabled: false,
 				status: "proposed",
 				note: undefined,
@@ -1192,6 +1193,101 @@ describe("Raukk Sourcing Store: chains and fleet", () => {
 
 			expect(store.plannedGates["g1"].fee).toBe(2500);
 			expect(store.plannedGates["g1"].volumeUpgrades).toBe(0);
+		});
+
+		it("refuses a link another gate already plans, either way round", () => {
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+				name: "Long Haul",
+			});
+
+			expect(() =>
+				store.setPlannedGate("g2", {
+					planetA: "OT-580b",
+					planetB: "ZV-307c",
+				})
+			).toThrowError(/Long Haul/);
+			// and the plain repeat of the same direction with it
+			expect(() =>
+				store.setPlannedGate("g3", {
+					planetA: "ZV-307c",
+					planetB: "OT-580b",
+				})
+			).toThrowError(/bidirectional/);
+
+			expect(store.listPlannedGates()).toHaveLength(1);
+		});
+
+		it("names the duplicate before the refusal", () => {
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "OT-580b",
+			});
+
+			expect(
+				store.plannedGateDuplicateOf("g2", "OT-580b", "ZV-307c")?.id
+			).toBe("g1");
+			// the gate itself is never its own duplicate
+			expect(
+				store.plannedGateDuplicateOf("g1", "ZV-307c", "OT-580b")
+			).toBeNull();
+			expect(
+				store.plannedGateDuplicateOf("g2", "ZV-307c", "IA-335b")
+			).toBeNull();
+		});
+
+		it("keeps patching a gate that was imported as a duplicate", () => {
+			// the schema does not dedupe, so a payload can carry two rows
+			// on one pair — and both have to stay editable and removable
+			store.plannedGates = {
+				g1: {
+					id: "g1",
+					planetA: "ZV-307c",
+					planetB: "OT-580b",
+					fee: 4000,
+					capacityUpgrades: 0,
+					volumeUpgrades: 0,
+					rangeUpgrades: 0,
+					buildEnds: 2,
+					enabled: false,
+					status: "proposed",
+				},
+				g2: {
+					id: "g2",
+					planetA: "OT-580b",
+					planetB: "ZV-307c",
+					fee: 4000,
+					capacityUpgrades: 0,
+					volumeUpgrades: 0,
+					rangeUpgrades: 0,
+					buildEnds: 2,
+					enabled: false,
+					status: "proposed",
+				},
+			};
+
+			store.setPlannedGate("g2", { fee: 1000 });
+
+			expect(store.plannedGates["g2"].fee).toBe(1000);
+		});
+
+		it("stores the ends billed and stales nothing for them", () => {
+			store.setChain({ chainId: "c1", stops: ["ZV-194a", "ZV-759b"] });
+			store.setPlannedGate("g1", {
+				planetA: "ZV-307c",
+				planetB: "IA-335b",
+				rangeUpgrades: 1,
+				enabled: true,
+			});
+			store.setChainResult("c1", makeChainResult("c1", []));
+
+			store.setPlannedGate("g1", { buildEnds: 1 });
+
+			expect(store.plannedGates["g1"].buildEnds).toBe(1);
+			expect(store.chainResults["c1"].stale).toBe(false);
+			// and it is no property of the edge either
+			expect(raukkPlannedGateLinks()).toHaveLength(1);
 		});
 
 		it("only an ENABLED gate reaches the route index", () => {
