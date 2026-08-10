@@ -466,7 +466,46 @@ property of their spreadsheet, not of the model.
 `raukkPlanetPosition` and `raukkPlanetSeparationAu` expose it, and
 `ki439_orbit_log.json` carries the series as a regression test.
 
-### 9.1 What this does and does not settle
+### 9.1 Both constants are pinned by the data, not borrowed
+
+The calibration was taken from a third-party page, so it is worth
+knowing how much weight it bears. Re-running the 74-flight fit while
+varying each constant:
+
+| assumed sim age at calibration | r |
+|---|---|
+| 230.0 game years | 0.296 |
+| 230.5 | -0.783 |
+| **231.0** | **0.974** |
+| 231.5 | -0.823 |
+| 232.0 | 0.381 |
+
+| assumed game/real time ratio | r |
+|---|---|
+| 19.0x | 0.766 |
+| 19.8x | -0.708 |
+| **20.0x** | **0.974** |
+| 20.2x | -0.730 |
+| 21.0x | 0.757 |
+
+Half a game year, or one percent on the ratio, destroys the fit. Both
+values are therefore measured by the community log rather than assumed
+from the visualiser — the page supplied them, the data confirms them.
+
+The epoch does alias: 200.0 game years also scores 0.970 and 115.0
+scores -0.970, because a 21-day window cannot separate epochs offset
+by a common multiple of both orbital periods. That is harmless. Any
+aliased value produces identical positions today, which is the only
+thing the model is asked for.
+
+**On the universe being ~5.5 real years old:** consistent, and not in
+conflict. Sim age today is 258.1 game years; 5.5 real years of live
+running at 20x is 110 game years, leaving ~148 game years of backstory
+baked in at initialisation. The sim clock was never "time since the
+servers came up". Reading it that way would demand a 47x ratio, which
+the data rejects outright (r = 0.06).
+
+### 9.2 What this does and does not settle
 
 Positions are returned in the SYSTEM's own orbital plane, which makes
 anything within a system exact — separations, conjunctions, transit
@@ -481,7 +520,8 @@ the stellar term stops needing bounds and becomes a point estimate for
 any lane at any date.
 
 So the answer to "could we identify the epoch from simultaneous
-observations" is that it is already identified, and no coordinated
+observations" is that it is already identified and independently
+confirmed, and no coordinated
 launch is needed. What IS still needed is timestamps on the flights we
 already fly: with a capture time recorded, every flight becomes a
 constraint on its system's plane orientation.
