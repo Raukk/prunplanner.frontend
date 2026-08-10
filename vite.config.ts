@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import fs from "fs";
 import path from "path";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
@@ -45,6 +46,43 @@ export function skipEmptyChunks(): Plugin {
 	};
 }
 
+/**
+ * `/env.js` is written at deploy time (netlify.toml, docker-compose.yaml) and
+ * is gitignored, so the dev server has nothing to serve for the script tag in
+ * index.html and the console shows a 404. Serve it here instead, seeded from
+ * the ambient POSTHOG_KEY (normally unset in dev, which keeps analytics off).
+ *
+ * Must run before Vite's internal middlewares: the SPA fallback answers
+ * /env.js with index.html, so a post hook would never be reached. Defer to a
+ * hand-written public/env.js explicitly instead.
+ */
+export function devEnvJs(): Plugin {
+	return {
+		name: "dev-env-js",
+		apply: "serve",
+		configureServer(server) {
+			const publicEnvJs = path.resolve(
+				server.config.publicDir || "",
+				"env.js"
+			);
+
+			server.middlewares.use((req, res, next) => {
+				if (req.url?.split("?")[0] !== "/env.js") return next();
+				if (server.config.publicDir && fs.existsSync(publicEnvJs))
+					return next();
+
+				res.setHeader("Content-Type", "text/javascript");
+				res.setHeader("Cache-Control", "no-store");
+				res.end(
+					`window.__APP_CONFIG__ = { POSTHOG_KEY: ${JSON.stringify(
+						process.env.POSTHOG_KEY ?? ""
+					)} };\n`
+				);
+			});
+		},
+	};
+}
+
 // https://vite.dev/config/
 export default defineConfig({
 	base: "/",
@@ -71,6 +109,7 @@ export default defineConfig({
 			resolvers: [NaiveUiResolver()],
 		}),
 		skipEmptyChunks(),
+		devEnvJs(),
 		compression({
 			algorithms: ["gzip", "brotliCompress"],
 		}),

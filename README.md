@@ -61,6 +61,15 @@ Install dependencies with `pnpm install` and run the vite development:
 pnpm run dev
 ```
 
+Out of the box the dev server talks to the **production** backend at `https://api.prunplanner.org`, so unauthenticated requests come back as 401. To point it somewhere else, copy `.env.example` to `.env.local` (gitignored) and set the endpoint:
+
+```shell
+cp .env.example .env.local
+# VITE_API_BASE_URL=http://localhost:8000
+```
+
+Vite reloads on `.env.local` changes. See [Environment Variables](#environment-variables) for the full list; only `VITE_`-prefixed keys reach the client.
+
 ## Testing and Coverage
 
 [![Codacy Badge](https://app.codacy.com/project/badge/Coverage/23225951d9584a80b51256487975453b)](https://app.codacy.com/gh/PRUNplanner/frontend/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_coverage)
@@ -81,11 +90,15 @@ pnpm run test:ui
 | VITE_APP_VERSION                  | string | "0.xx"                           |
 | VITE_API_BASE_URL                 | string | "https://api.prunplanner.org"    |
 | VITE_SHARE_BASE_URL               | string | "https://prunplanner.org/shared" |
+| VITE_FIO_BASE_URL                 | string | "https://rest.fnar.net"          |
+| VITE_INDEXEDDB_DBNANAME           | string | "prunplanner"                    |
 | VITE_GAME_DATA_STALE_MINUTES_BUILDINGS | int    | 1440                             |
 | VITE_GAME_DATA_STALE_MINUTES_RECIPES   | int    | 1440                             |
 | VITE_GAME_DATA_STALE_MINUTES_MATERIALS | int    | 1440                             |
-| VITE_GAME_DATA_STALE_MINUTES_EXCHANGES | int    | 30                               |
-| VITE_GAME_DATA_STALE_MINUTES_PLANETS   | int    | 180                              |
+| VITE_GAME_DATA_STALE_MINUTES_EXCHANGES | int    | 60                               |
+| VITE_GAME_DATA_STALE_MINUTES_PLANETS   | int    | 720                              |
+
+`POSTHOG_KEY` is not a `VITE_` variable: it is baked into `/env.js` at deploy time (`netlify.toml`, `docker-compose.yaml`). The dev server generates that file on the fly from the ambient `POSTHOG_KEY`, which is normally unset locally, so analytics stay off.
 
 # Build & Run Frontend
 
