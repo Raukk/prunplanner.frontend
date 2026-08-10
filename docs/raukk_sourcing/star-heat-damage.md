@@ -261,19 +261,86 @@ angle and a different apparent coefficient. Average several
 observations spread across an orbital period and the result converges
 on `expected`; a single one does not.
 
-## 8. What would close the gap
+## 8. Every flight was flown on one day
 
-Two flights, in this order:
+All 25 BTF panels were captured on 2026-08-09. That has a consequence
+worth stating plainly, because it changes what section 7.1's band is
+FOR.
 
-1. **UNCONFOUND THE SHIP.** In batch 11 each blueprint flew only one
-   direction, so ship and leg type are 100% confounded and the 11%
-   split between them cannot be attributed. Fly ONE blueprint both
-   ways on a single pair.
-2. **PIN THE GEOMETRY.** Same ship and lane, flown at several
-   different times so the planet's orbital phase moves against the
-   fixed warp point. The spread across those runs measures the
-   direction term directly, and its correlation with the leg's own km
-   would give a predictor the panel does have.
+On a single day each planet sits at ONE orbital position. So for a
+given anchor and a given lane, the angle to the star was fixed — the
+spread seen between an anchor's lanes is not orbital phase at all, it
+is the DIRECTION TO EACH TARGET SYSTEM, and that direction is not
+unknown. `fio_systemstars.json` carries `PositionX/Y/Z` for all 698
+systems, so the unit vector from any system to any other is
+computable. The only genuinely unknown quantity is one angle per
+planet per day: where it sits in its orbit.
+
+That makes the geometry solvable rather than merely boundable. For a
+fixed date, a planet's position is 2 degrees of freedom; every lane
+flown from it gives one equation. Fly five lanes off one anchor and
+the position is over-determined.
+
+A first pass supports it. The six ANT departures span three lanes
+(ZV-759, ZV-639, QJ-684) with direction cosines from -0.29 to +0.73,
+and a single planet position reproduces all six to under 1%:
+
+| flight | lane | cos | observed | fitted |
+|---|---|---|---|---|
+| b9-04/05/06 | ZV-759 | +0.12 | 0.0539 | 0.0540 |
+| b9-07 | ZV-639 | -0.29 | 0.0778 | 0.0775 |
+| b9-08/09 | QJ-684 | +0.73 | 0.0463 | 0.0463 |
+
+Three lanes against three free parameters (the coefficient plus two
+for the position) is EXACTLY determined, so this is consistency, not
+proof. It needs five or more lanes off one anchor to become a test.
+
+The approaches do not behave as well — a 14% residual on the same fit,
+and more tellingly the ANT approach legs vary in length on what
+resolves to the same inbound lane (21.0 to 27.4 Mkm). Departures out
+of one system all measure the same distance regardless of which planet
+they leave from, approaches do not. The warp-OUT point looks like a
+fixed offset from the planet; the warp-IN point does not, and that
+asymmetry is unexplained.
+
+### 8.1 How fast the geometry moves
+
+The community sheet's KI-439 tab logs 74 real flights between two
+planets of one system over 21 days. Fitting a sinusoid to the flown
+distance gives a period of **5.7 real days**, swinging between 31.5
+and 177.8 Mkm.
+
+Note that swing EXCEEDS what the two orbits allow — conjunction and
+opposition for KI-439b and d are 44.2 and 117.1 Mkm — so the panel's
+distance is the flown path, not the straight-line separation, and the
+sheet's own "Chasing/Intercept" and "Pro/Retrograde" columns say why.
+Per-planet orbital periods therefore cannot be read off it directly;
+what does survive is the TIMESCALE. Planet geometry moves over days,
+not hours.
+
+### 8.2 The reshoot
+
+Same ships, same lanes, same settings, on at least two further days
+spaced 2-3 days apart. That gives, in one campaign:
+
+1. **The orbital term, confirmed or killed.** Same lane, same ship,
+   different day: any change in the stellar excess is the planet
+   having moved, since nothing else did. If the excess is flat across
+   a week, the whole orbital-position reading is wrong.
+2. **The position solve, over-determined.** Five or more lanes off one
+   anchor per day beats the three-lane tie above.
+3. **The ship, unconfounded.** Fly ONE blueprint both directions on a
+   single pair. In batch 11 each flew only one direction, so ship and
+   leg type cannot be separated at all.
+4. **The warp-in asymmetry.** Record the APP leg length for repeated
+   arrivals on the same inbound lane. If it moves with the planet the
+   warp point is fixed in the system; if it does not, it is not.
+
+If the term does track orbital position, the band of section 7.1
+collapses to a point for any lane whose date is known, and the
+simulator stops needing bounds at all for planned routes.
+
+## 9. Downstream
 
 Section 6 of shipping-calibration.md can then retire "ANTARES I
 ANOMALY / not modeled; flag Antares-anchored lanes" outright. Until
