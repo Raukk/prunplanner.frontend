@@ -19,6 +19,7 @@ import {
 	raukkAutoChainReason,
 	raukkFlowConcernsPlan,
 	raukkFlowPrecedence,
+	raukkHubSpokeLanes,
 	raukkHubSpokeRows,
 	raukkIsAutoChainId,
 	raukkOrderChainStops,
@@ -34,6 +35,7 @@ import {
 import {
 	IRaukkAutoChain,
 	IRaukkAutoChainCandidate,
+	IRaukkHubSpokeLaneRow,
 	IRaukkHubSpokeRow,
 	IRaukkOrderedLoop,
 } from "@/features/raukk_sourcing/calculations/shippingAutoChains.types";
@@ -875,6 +877,94 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 				"ORE",
 				"COF",
 			]);
+		});
+	});
+
+	describe("raukkHubSpokeLanes", () => {
+		/** Two outputs of one base leaving for the same neighbour, plus a
+		 * third lane and a workforce delivery on the very same pair */
+		const flows: IRaukkChainFlow[] = [
+			flow("HCP", "AA-001a", "AA-002b", 143, 0.8, 1),
+			flow("MAI", "AA-001a", "AA-002b", 82, 1.3, 1),
+			flow("ORE", "AA-003c", "AA-002b", 50, 1, 1),
+			flow("RAT", "AA-001a", "AA-002b", 20, 1, 1, "workforce"),
+		];
+
+		function lanes(
+			given: IRaukkChainFlow[] = flows
+		): IRaukkHubSpokeLaneRow[] {
+			return raukkHubSpokeLanes(raukkHubSpokeRows(given, true, cxSystems));
+		}
+
+		it("folds a base pair's materials onto one line", () => {
+			const production: IRaukkHubSpokeLaneRow[] = lanes().filter(
+				(lane) => lane.bucket === "production"
+			);
+
+			expect(
+				production.map((lane) => [
+					lane.fromStop,
+					lane.toStop,
+					lane.items.map((item) => item.ticker),
+					lane.unitsPerDay,
+				])
+			).toStrictEqual([
+				["AA-001a", "AA-002b", ["HCP", "MAI"], 225],
+				["AA-003c", "AA-002b", ["ORE"], 50],
+			]);
+		});
+
+		it("aggregates the shipping volume and weight of the line", () => {
+			const folded: IRaukkHubSpokeLaneRow = lanes()[0];
+
+			// 143 × 0.8 + 82 × 1.3 tonnes, 143 + 82 m³
+			expect(folded.weightPerDay).toBeCloseTo(221.0, 10);
+			expect(folded.volumePerDay).toBeCloseTo(225, 10);
+		});
+
+		it("never merges two cargo classes into one lane", () => {
+			// same base pair, two cadences: two visits, two lines
+			expect(
+				lanes()
+					.filter((lane) => lane.fromStop === "AA-001a")
+					.map((lane) => lane.bucket)
+			).toStrictEqual(["production", "workforce"]);
+		});
+
+		it("shares a lane against everything rerouted, maxima never summed", () => {
+			const folded: IRaukkHubSpokeLaneRow = lanes()[0];
+			const rows: IRaukkHubSpokeRow[] = raukkHubSpokeRows(
+				flows,
+				true,
+				cxSystems
+			);
+			const members: number = rows
+				.filter(
+					(row) =>
+						row.fromStop === "AA-001a" && row.bucket === "production"
+				)
+				.reduce((sum, row) => sum + row.share, 0);
+
+			// 221 t of 291 t, 225 m³ of 295 m³ — the larger of the two
+			expect(folded.share).toBeCloseTo(225 / 295, 10);
+			expect(folded.share).toBeLessThan(members);
+		});
+
+		it("orders lanes by share, heaviest first", () => {
+			expect(
+				lanes().map((lane) => [lane.fromStop, lane.bucket])
+			).toStrictEqual([
+				["AA-001a", "production"],
+				["AA-003c", "production"],
+				["AA-001a", "workforce"],
+			]);
+		});
+
+		it("drops rows that name no lane", () => {
+			// the ungrouped listing carries no base pair to fold on
+			expect(
+				raukkHubSpokeLanes(raukkHubSpokeRows(flows, false, cxSystems))
+			).toStrictEqual([]);
 		});
 	});
 });
