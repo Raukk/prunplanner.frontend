@@ -1,4 +1,4 @@
-# Shipping — decision residue (28 rounds)
+# Shipping — decision residue (31 rounds)
 
 Implemented behaviour lives in `src/features/raukk_sourcing/calculations/{shipping,shippingPairs,shippingAutoChains,shippingProfiles,routeDistance,gatePlanning}.ts`; their JSDoc and `src/locales/en_US/raukk_sourcing.json` are authoritative for what the code does, `facts/shipping-decisions.json` for every constant, equation and measurement. This file keeps only the WHY neither records. Code cites round numbers (`shippingProfiles.ts:90` — "round 5 decision 2"), so the tables below are that index.
 
@@ -20,6 +20,10 @@ Implemented behaviour lives in `src/features/raukk_sourcing/calculations/{shippi
 | 15 | fleet, chains, depots, calibration moved to `/shipping` (PR #8) | the account page is the truth; the plan side keeps only its CX anchor and the inline LM ad prices |
 | 18 | grouped hub/spoke rows sort by pair first | pure ordering fix — no headers, rowspans or markup change |
 | 28 | unassigned plans dropped at BOTH ends of a flow; `allowUnassignedSources` default off | the flow filter stays unconditional: an unassigned base is not somewhere a hull actually flies |
+| 29 | a draw whose source sits on the consumer's OWN planet rides no pair — no sourcing lane, no hub/spoke detour | widens rd 7's self-sourcing exemption from "same plan" to "same planet": no ship flies. Freight only, and per ORIGIN — a mixed aggregate exempts its local producer and freights the rest |
+| 30 | two bases on one planet share one docking site; optional `leaseHostPlanUuid` names the host that flies it | the skip sits at the shipping INPUT, so freight, fuel and lanes fall out empty on their own rather than through a conditional per consumer. Never CHAINED: a host may not itself be a lease |
+| 30 | the lease freezes its residual cargo as `leaseCargo`; the host folds that frozen value in before pairs are built | sorting on the LEASE's side, over the shared `resolvePlanLaneCargo`, is what applies its own sources, LM flags and rd 29 where its configuration lives. Delegation is of shipping, not of sourcing |
+| 31 | empire material i/o site grouping is a DISPLAY step over a pure `groupMaterialIOSites` | `plan_details` are keyed by plan uuid and stored on the backend — a synthetic site entry there would change a persisted shape. Only LINKED plans fold; two unlinked plans on one planet stay two ship visits |
 
 ## Chains, cadence, depots
 
@@ -62,6 +66,7 @@ Implemented behaviour lives in `src/features/raukk_sourcing/calculations/{shippi
 - Re-costing spilled ship-minutes on the recipient hull: explicitly out of scope for v1, a candidate for a v2 (rd 17).
 - Per-plan chain / hub-spoke view: the base-scoped copy exists with no render site; restoring it is open, NOT decided (rd 13, 15).
 - Everything the two rd 26 reviews (a UI/UX pass and a player pass) raised beyond the one blocker and the add-form bug: untriaged, no ticket.
+- Billing a lease its share of the site freight: folding the host's frozen rate back is a second cross-plan read with its own convergence lag (rd 30, deliberate).
 
 ## Traceability (no repo hits)
 
@@ -90,3 +95,4 @@ Verdict and reasoning both survive in the code they produced; paths under `src/f
 | 25 | triangular upgrade cost, two gates per link, 5-level budget | `assets/raukk_gate_costs.json:2`, `calculations/gateCosts.ts:215` |
 | 26 | an unbuildable gate stops routing, `enabled` untouched | `calculations/gatePlanning.ts:363` |
 | 27 | a gate is adopted only when it wins with a gate hop in it | `calculations/shippingStl.ts:248` |
+| 31 | one composable answers every lease surface, and its candidate list is filtered by the very conditions the store setter throws on | `useRaukkLease.ts:1`, `raukkSourcingStore.ts` (`setLeaseHost`) |

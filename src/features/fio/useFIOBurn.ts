@@ -68,8 +68,51 @@ export function useFIOBurn(
 	);
 
 	/**
+	 * Total daily material need per planet ("site") over all calculated
+	 * plans located on that planet.
+	 *
+	 * Multiple plans can share a single planet, e.g. a host base and a
+	 * base leased on the same planet. FIO storage exists once per planet,
+	 * therefore the stored amount has to cover the combined consumption
+	 * of all plans on that planet instead of each plan claiming it fully.
+	 *
+	 * @author jplacht
+	 *
+	 * @type {ComputedRef<Record<string, Record<string, number>>>}
+	 */
+	const siteNeed: ComputedRef<Record<string, Record<string, number>>> =
+		computed(() => {
+			const need: Record<string, Record<string, number>> = {};
+
+			for (const [planUuid, plan] of Object.entries(data.value) as [
+				string,
+				IPlanResult,
+			][]) {
+				const planData: IPlan | undefined = planRecord.value[planUuid];
+				if (!planData) continue;
+
+				const planetId: string = planData.planet_natural_id;
+				need[planetId] ??= {};
+
+				plan.materialio.forEach((m) => {
+					if (m.delta < 0) {
+						need[planetId][m.ticker] =
+							(need[planetId][m.ticker] ?? 0) + m.delta * -1;
+					}
+				});
+			}
+
+			return need;
+		});
+
+	/**
 	 * Performs burn calculation on given plans and their production
 	 * material io data taking existing storage information into account
+	 *
+	 * Storage is attributed per planet: a materials planet stock is split
+	 * between all plans on that planet relative to their share of the
+	 * planets total daily need, resulting in identical, shared pool
+	 * exhaustion days for all plans consuming that material on the planet.
 	 *
 	 * @author jplacht
 	 *
@@ -116,7 +159,17 @@ export function useFIOBurn(
 				let exhaustion: number = Infinity;
 
 				if (m.delta < 0) {
-					exhaustion = stock / (m.delta * -1);
+					const planNeed: number = m.delta * -1;
+					const planetNeed: number =
+						siteNeed.value[planData.planet_natural_id]?.[
+							m.ticker
+						] ?? planNeed;
+
+					// shared pool: stock covers the planets total need
+					exhaustion = stock / planetNeed;
+
+					// stock share of this plan on the planets total need
+					if (planetNeed > planNeed) stock = exhaustion * planNeed;
 				}
 
 				if (exhaustion < minDays) minDays = exhaustion;
