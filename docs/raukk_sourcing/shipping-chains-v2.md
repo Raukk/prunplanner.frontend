@@ -6,6 +6,9 @@ Behaviour lives in `src/features/raukk_sourcing/calculations/{shippingChains.ts,
 
 - Open (non-loop) chain kind — rejected, loops only; an out-and-back path is expressed as a repeated stop.
 - Stop-order optimization for an AUTHORED loop — refused, the order is the user's decision. Only derived loops are ordered by the builder.
+- Ordering every derived loop both with and without its exchange and keeping whichever costs less — rejected as too eager. A loop drops the anchor only when NOT ONE claimed flow touches an exchange; one market-bound ticker aboard and the lap calls there anyway.
+- Base-to-base cargo claimed BEFORE the anchored loops are built — rejected for the same reason: it would split a smelter run that carries both its ore and its consumables into two laps where one served both.
+- Splitting the derived listing per class in the BUILDER (own min-share, own stop cap per class) — not built; the split is display-only, three tables over one build. The class already scopes a loop's flows and its detour budget.
 
 ## Constraints the code obeys but cannot explain
 

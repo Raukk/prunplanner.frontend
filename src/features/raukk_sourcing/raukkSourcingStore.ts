@@ -70,6 +70,7 @@ import { setRaukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations
 // raukk: only plans assigned to an empire take part account wide
 import {
 	raukkEmpirePlanUuids,
+	raukkEmpirePlanets,
 	raukkScopedSnapshots,
 } from "@/features/raukk_sourcing/calculations/shippingPlanScope";
 
@@ -102,6 +103,7 @@ import {
 	IRaukkSubscription,
 	IRaukkSubscriptionEntry,
 } from "@/features/raukk_sourcing/raukkSourcingStore.types";
+import { IPlanEmpireElement } from "@/stores/planningStore.types";
 
 /** Repair day used until a plan configures its own */
 const DEFAULT_REPAIR_DAY: RAUKK_REPAIR_DAY = 90;
@@ -271,9 +273,13 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {Record<string, IRaukkSnapshot>} Snapshots in scope
 		 */
 		function scopedSnapshots(): Record<string, IRaukkSnapshot> {
+			const empires: Record<string, IPlanEmpireElement> =
+				usePlanningStore().empires;
+
 			return raukkScopedSnapshots(
 				snapshots.value,
-				raukkEmpirePlanUuids(usePlanningStore().empires)
+				raukkEmpirePlanUuids(empires),
+				raukkEmpirePlanets(empires)
 			);
 		}
 

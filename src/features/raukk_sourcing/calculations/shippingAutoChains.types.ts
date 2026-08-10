@@ -54,9 +54,12 @@ export interface IRaukkAutoChain {
 	chainId: string;
 	/** Cadence class the whole loop serves, chains are never split */
 	bucket: RAUKK_CARGO_BUCKET;
-	/** Exchange every stop of this chain is anchored at */
+	/** Exchange every stop of this chain is anchored at, or
+	 * `RAUKK_AUTO_CHAIN_DIRECT` when the loop calls at no exchange at
+	 * all — a lap that delivers everything it carries between bases */
 	cxCode: string;
-	/** Ordered loop, the exchange first */
+	/** Ordered loop, the exchange first; a direct loop opens at the stop
+	 * the cargo is collected from */
 	stops: RAUKK_STOP_REF[];
 	/** Round trip parsecs of that order */
 	parsecs: number;

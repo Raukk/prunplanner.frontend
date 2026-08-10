@@ -9,8 +9,12 @@ import {
 } from "@/features/raukk_sourcing/calculations/routeDistance";
 import { raukkDefaultChainConfig } from "@/features/raukk_sourcing/calculations/shippingChains";
 import {
+	RAUKK_AUTO_CHAIN_DIRECT,
 	RAUKK_AUTO_CHAIN_MAX_STOPS,
 	raukkAutoChainCandidates,
+	raukkDirectFlowComponents,
+	raukkDirectLoopAnchors,
+	raukkOrderDirectLoop,
 	raukkAutoChainDemand,
 	raukkAutoChainId,
 	raukkBuildAutoChains,
@@ -697,6 +701,116 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			// the RAT leg is the bulkiest at 100 m³
 			expect(demand.volumeOutPerDay).toBe(100);
 			expect(demand.weightBackPerDay).toBe(0);
+		});
+	});
+
+	describe("loops with no exchange", () => {
+		function build(flows: IRaukkChainFlow[]): IRaukkAutoChain[] {
+			return raukkBuildAutoChains({
+				flows,
+				anchorOf,
+				capDaysOf: () => 14,
+				chainConfig,
+				routes,
+				cxSystems,
+			});
+		}
+
+		it("orders a direct loop from the stop the cargo is collected at", () => {
+			const loop: IRaukkOrderedLoop = raukkOrderDirectLoop(
+				["AA-002b", "AA-001a"],
+				routes,
+				cxSystems,
+				new Set(["AA-001a>AA-002b"])
+			) as IRaukkOrderedLoop;
+
+			// anchored at the consumer the lap would deliver ore it has
+			// not picked up yet, so the supplier opens it
+			expect(loop.stops).toStrictEqual(["AA-001a", "AA-002b"]);
+			expect(loop.parsecs).toBeCloseTo(2, 10);
+		});
+
+		it("names the suppliers of a loop first", () => {
+			expect(
+				raukkDirectLoopAnchors(
+					["AA-003c", "AA-002b", "AA-001a"],
+					new Set(["AA-001a>AA-002b", "AA-002b>AA-003c"])
+				)
+			).toStrictEqual(["AA-001a", "AA-002b", "AA-003c"]);
+		});
+
+		it("groups the bases that trade with one another", () => {
+			expect(
+				raukkDirectFlowComponents(
+					[
+						flow("ORE", "AA-001a", "AA-002b", 100),
+						flow("ALO", "AA-002b", "AA-003c", 100),
+						flow("H2O", "BB-100a", "ZZ-900a", 100),
+						flow("RAT", "CX1", "AA-004d", 100),
+					],
+					cxSystems
+				)
+			).toStrictEqual([
+				["AA-001a", "AA-002b", "AA-003c"],
+				["BB-100a", "ZZ-900a"],
+			]);
+		});
+
+		it("drops the exchange when nothing aboard is bought or sold", () => {
+			const chains: IRaukkAutoChain[] = build([
+				flow("ORE", "AA-001a", "AA-002b", 100),
+			]);
+
+			expect(chains).toHaveLength(1);
+			expect(chains[0].chainId).toBe(
+				"auto:production:direct:AA-001a+AA-002b"
+			);
+			expect(chains[0].cxCode).toBe(RAUKK_AUTO_CHAIN_DIRECT);
+			expect(chains[0].stops).toStrictEqual(["AA-001a", "AA-002b"]);
+			// the market stop was worth 4 pc of the anchored lap
+			expect(chains[0].parsecs).toBeCloseTo(2, 10);
+		});
+
+		it("keeps the exchange as soon as one ticker touches it", () => {
+			const chains: IRaukkAutoChain[] = build([
+				flow("ORE", "AA-001a", "AA-002b", 100),
+				flow("ALO", "AA-002b", "CX1", 100),
+			]);
+
+			expect(chains).toHaveLength(1);
+			expect(chains[0].cxCode).toBe("CX1");
+			expect(chains[0].stops[0]).toBe("CX1");
+		});
+
+		it("hauls between two regions, which no anchored loop may", () => {
+			// AA-001a anchors at CX1 and ZZ-900a at CX2: the anchor rule
+			// bars this lane from either region's loop
+			const chains: IRaukkAutoChain[] = build([
+				flow("ORE", "AA-001a", "ZZ-900a", 100),
+			]);
+
+			expect(chains.map((chain) => chain.chainId)).toStrictEqual([
+				"auto:production:direct:AA-001a+ZZ-900a",
+			]);
+			expect(chains[0].stops).toStrictEqual(["AA-001a", "ZZ-900a"]);
+			expect(chains[0].flows.map((entry) => entry.ticker)).toStrictEqual([
+				"ORE",
+			]);
+		});
+
+		it("reports a direct loop as the supply run it is", () => {
+			const flows: IRaukkChainFlow[] = [
+				flow("ORE", "AA-001a", "AA-002b", 100),
+			];
+
+			expect(raukkAutoChainReason(flows, 1, cxSystems)).toBe("supply");
+		});
+
+		it("leaves a cross region lane its own planets cannot reach", () => {
+			// nothing resolves for a planet outside the systems graph
+			expect(
+				build([flow("ORE", "AA-001a", "QQ-404z", 100)])
+			).toStrictEqual([]);
 		});
 	});
 

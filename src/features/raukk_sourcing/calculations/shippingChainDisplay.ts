@@ -11,6 +11,7 @@ import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/rauk
 import {
 	RAUKK_AUTO_CHAIN_PREFIX,
 	RAUKK_AUTO_CHAIN_STOP_SEPARATOR,
+	raukkAutoChainBucket,
 } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 import { RAUKK_FUEL_TICKERS } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
@@ -25,6 +26,7 @@ import {
 } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 import {
 	IRaukkShipProfile,
+	RAUKK_CARGO_BUCKET,
 	RAUKK_LOAD_DIMENSION,
 } from "@/features/raukk_sourcing/calculations/shipping.types";
 import { RAUKK_LEG_UNROUTABLE } from "@/features/raukk_sourcing/calculations/shippingStl";
@@ -65,6 +67,11 @@ export interface IRaukkChainListRow {
 	/** Why the builder derived the loop, null on authored chains and on
 	 * results written before the reason existed */
 	autoReason: RAUKK_AUTO_CHAIN_REASON | null;
+	/** Cadence class the derived loop serves, null on authored chains.
+	 * The derived listing is split by it: the in/out class is the one
+	 * that flies fortnightly and carries the tonnage, the other two are
+	 * rare runs and belong in their own, quieter tables */
+	autoBucket: RAUKK_CARGO_BUCKET | null;
 }
 
 /** One leg of a chain as the detail table renders it */
@@ -300,6 +307,7 @@ export function raukkChainListRows(
 				auto: false,
 				capDays: null,
 				autoReason: null,
+				autoBucket: null,
 			};
 		})
 		.sort((left, right) => left.name.localeCompare(right.name));
@@ -376,6 +384,7 @@ export function raukkAutoChainListRows(
 			auto: true,
 			capDays: result.capDays ?? null,
 			autoReason: result.autoReason ?? null,
+			autoBucket: raukkAutoChainBucket(result.chainId),
 		}))
 		.sort((left, right) => left.chainId.localeCompare(right.chainId));
 }
