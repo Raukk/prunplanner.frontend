@@ -30,9 +30,11 @@ export interface IRaukkStellarSystem {
 /**
  * A damage figure with the geometry band around it.
  *
- * `low` and `high` are the 10th and 90th percentiles over the warp
- * point's unknown direction; they collapse onto `expected` for terms
- * that carry no geometry.
+ * `low` and `high` are TRUE BOUNDS over the warp point's unknown
+ * direction — the exact extremes, not percentiles — and they collapse
+ * onto `expected` for terms that carry no geometry. `expected` is the
+ * mean over one orbital period, which is what a lane flown repeatedly
+ * converges to.
  */
 export interface IRaukkDamageBand {
 	low: number;

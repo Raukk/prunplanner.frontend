@@ -101,7 +101,7 @@ The two blueprints flown here separate cleanly by damage type. Against the six r
 
 — an 11% split consistent with a hull-plate difference. Yet XHBM takes MORE stellar damage than MSQS on four of the five anchors. The two terms shield separately, exactly as the component table of `repair_and_damage.json` says (BPT/APT for heat, BRP/ARP/SRP for radiation, BWH/AWH for meteoroid).
 
-Path geometry looked like the open item at first — fitted C by anchor ran 3.0e-6 at NL-534a, 8.0e-6 at LS-231a and up to 4e-5 at LE-137a, climbing exactly as the leg grew long against the anchor's orbit radius. Section 7.1 resolves it: the angle is not free, it is set by the planet's orbital position, and it is BOUNDED. Reading the term as a range rather than a point puts 23 of 25 flights inside, the other two within 2.6%.
+Path geometry looked like the open item at first — fitted C by anchor ran 3.0e-6 at NL-534a, 8.0e-6 at LS-231a and up to 4e-5 at LE-137a, climbing exactly as the leg grew long against the anchor's orbit radius. Section 7.1 resolves it: the angle is not free, it is set by the planet's orbital position, and it is BOUNDED. Reading the term as a range rather than a point puts 31 of 33 flights inside, the other two within 3.0%. It does NOT resolve the per-anchor spread of the point estimate, which section 7.3 measures and section 9.2 explains.
 
 The ship/leg-type confound raised here is RESOLVED by the reflight — see section 8.4. Batch 11 flew each blueprint in one direction only, so the two could not be separated from that data alone; batch 9 flew both leg types on the same ships and the reflight flew them on different ones, and the split comes out the same either way. It is the leg type, not the hull.
 
@@ -117,7 +117,7 @@ Their 'KI-439' tab logs ~70 real (not BTF) flights between two planets of one sy
 
 ## 7. The simulator
 
-`src/features/raukk_sourcing/calculations/shippingDamage.ts` prices a trip leg by leg. Five terms, all fitted against the 25 transcribed flights of `btf_star_damage.json` and `btf_flights.json`:
+`src/features/raukk_sourcing/calculations/shippingDamage.ts` prices a trip leg by leg. Five terms, fitted against the 25 transcribed flights of `btf_flights.json` and `btf_star_damage.json` and since replayed against all 33, the reflight of `btf_ant_reflight.json` included:
 
 | term | law | source |
 |---|---|---|
@@ -146,23 +146,144 @@ These are real bounds on what the lane can ever produce, not a tolerance wrapped
 
 ### 7.2 Accuracy, measured
 
-Replaying all 25 flights, with 10% allowed on the meteoroid law and 15% on the landing term (their own fitted errors):
+Replaying all 33 flights, with 10% allowed on the meteoroid law and 15% on the landing term (their own fitted errors):
 
 | | result |
 |---|---|
-| inside the true bounds | **29 of 33** |
-| worst escape | 2.6% |
-| band width, median | 2.2x |
-| band width, range | 1.4x to 8.4x |
-| point estimate (orbital mean) | median 12%, 19 of 25 within 20% |
+| inside the true bounds | **31 of 33** |
+| worst escape | 3.0% |
+| band width, median | 2.0x |
+| band width, range | 1.0x to 8.4x |
+| point estimate (orbital mean) | median 11%, 25 of 33 within 20% |
+| point estimate, pooled over all 33 | **+1.7%** |
 
-So nothing escapes the bounds by more than 5%, and most trips sit in a 1.4x-2.9x band. The two widest (5.8x and 8.4x) are the lanes whose legs run LONGER than the anchor's orbit radius — those are the only ones where the closest-approach floor does any work, and they are exactly the lanes worth flagging on their worst case.
+`shippingDamage.test.ts` asserts the containment rate and the pooled bias, so neither can drift unnoticed.
+
+So nothing escapes the bounds by more than 5%, and most trips sit inside a 2x band. The widest are the lanes whose legs run LONGER than the anchor's orbit radius — those are the only ones where the closest-approach floor does any work, and they are exactly the lanes worth flagging on their worst case.
+
+An earlier revision put containment at 29 of 33 with a 2.2x median band. That was a measurement artifact, not a model change: the upper bound was taken as the largest value over 1,200 evenly spaced directions, but the maximum sits exactly ON the floor where the integrand is steepest, and no evenly spaced grid lands there. It understated the bound by 16% wherever the floor binds. `raukkStellarMinimumCosine` now bisects to that boundary directly, which is both exact and cheaper.
 
 Where an individual trip falls inside its band is unknowable from static data, but it is not noise: it is the planet's position on the day, so it averages to `expected` over a run of trips. Price a route on `expected` and check `high` before committing a base to it.
 
-### 7.3 On calibrating an anchor
+### 7.3 What "accurate" means here, and what it does not
+
+The point estimate is an orbital MEAN. Pooled across all 33 flights it runs +1.7%, which is what a fleet-wide damage budget needs. Per anchor it does not hold, and refitting cannot make it:
+
+| variant | pooled bias | anchors within +-5% | worst anchor |
+|---|---|---|---|
+| shipped, `C = 3.25e-6` | +4.5% | 9 of 19 | YK-715a +47.3% |
+| refit `C = 2.956e-6` | 0.0% | 9 of 19 | +41.7% |
+| separate DEP and APP coefficients | 0.0% | 9 of 19 | +42% |
+
+(66 DEP/APP legs, the only ones carrying a stellar term. Anchor bias is the pooled residual of that anchor's legs.)
+
+Every global constant moves the pooled figure and leaves the spread alone, which is the signature of a residual that is not a scaling error. It is the per-system orbital plane orientation of section 9.2 plus the phase on the day, and neither is a scalar.
+
+Repeated flights on one lane DO converge — orbital phase sweeps the whole circle and averages out exactly as you would expect. But they converge to the lane's own number, not to `expected`, and the gap is a fixed geometric constant that no amount of flying erodes.
+
+The reason is that a lane's direction is fixed in the galactic frame while the planet orbits, so the direction cosine to the star runs `cos(theta) = rho x cos(phase)` where `rho` is the lane's IN-PLANE component. `rho = 1` is a lane lying in the orbital plane, which sweeps the full -1 to +1 and is what `raukkStellarGeometry` averages over. A lane inclined out of the plane never reaches the extremes at all: at 60 degrees `rho = 0.5` and the cosine only ever runs -0.5 to +0.5.
+
+Inclination is a property of the lane — the same two systems, forever. It is not phase and it does not average away. What it WOULD cost, per degree of tilt, as a shortfall against `expected`:
+
+| anchor | band width | 30 deg out | 60 deg out | 90 deg out |
+|---|---|---|---|---|
+| ANT (a = 0.225) | 91.4x | -60.5% | -70.9% | -73.3% |
+| YK-715a (a = 0.406) | 4.9x | -11.5% | -22.8% | -26.3% |
+| LS-231a (a = 0.988) | 2.4x | -3.3% | -8.4% | -10.5% |
+| NL-534a (a = 1.982) | 1.6x | -0.9% | -2.6% | -3.3% |
+| NL-534c (a = 6.125) | 1.2x | -0.1% | -0.3% | -0.4% |
+| NL-534g (a = 85.33) | 1.0x | ~0 | ~0 | ~0 |
+
+**And `rho` is not a free parameter — it is computable.** `fio_systemstars.json` carries `PositionX/Y/Z` for all 698 systems, so the lane vector is known exactly, and if the orbital plane is the galactic plane then `rho = sqrt(1 - (dz/|d|)^2)` falls straight out with no fitting and no timestamps.
+
+Doing that reveals the galaxy is flat but the LANES are not. The slab is 20:1 flattened — x spans 2,580 units and y 2,717 against z's 130 — so over all pairs of systems `rho` sits at a median of 1.000. That population is meaningless here: a ship cannot fly between two arbitrary systems. It flies the FTL graph, and `fio_systemstars.json` carries it in each system's `Connections` — 894 edges over 698 systems, degree 1 to 6, median hop length 81.8 units against a slab 130 thick. Over those actual edges:
+
+| quantile | p1 | p5 | p25 | median | p75 |
+|---|---|---|---|---|---|
+| `rho` | 0.439 | 0.626 | 0.872 | 0.956 | 0.991 |
+
+Only 25.6% of FTL edges clear `rho = 0.99` and 30.6% fall below 0.9. The campaign's own lanes run 14-16 degrees of tilt for most anchors and 36 degrees (`rho = 0.811`, a 72% grade) for ZV-759 to ANT. Tilt is real and it is routine.
+
+A route is also not one lane. Fifteen of the 33 flights jump two or three times, and the warp point is set by the NEXT hop, not the final destination — so a DEP leg points at the first jump target and an APP leg is entered from the last jump's source. All 50 hops in the flight records check out as real edges of the `Connections` graph, and using them moves `rho` on 24 of the 66 legs.
+
+What it costs at those tilts, by band width — the band is the driver, since both come from how much the dose varies with direction:
+
+| band | `rho` = 0.968 | 0.963 | 0.811 | 0.700 |
+|---|---|---|---|---|
+| 91.4x (leg 2x the orbit radius) | -45.5% | -47.1% | -63.6% | -67.4% |
+| 4.9x | -3.8% | -4.3% | -14.3% | -18.3% |
+| 2.4x | -0.9% | -1.0% | -4.3% | -6.1% |
+| 1.6x | -0.2% | -0.3% | -1.2% | -1.8% |
+| 1.2x | 0.0% | 0.0% | -0.1% | -0.2% |
+
+So a lane whose band is under about 2x is safe from tilt at any tilt the galaxy produces, and the extreme-band lanes are unusable without it.
+
+**But computing `rho` does not fix the residuals.** Pricing all 66 legs with each lane's true `rho` instead of 1:
+
+| | pooled bias | anchors within +-5% | worst anchor |
+|---|---|---|---|
+| `rho` assumed 1 | +4.49% | 9 of 19 | YK-715a +47.3% |
+| `rho` from origin to final destination | +3.00% | 8 of 19 | YK-715a +46.6% |
+| `rho` from the actual jump sequence | +3.44% | 7 of 19 | YK-715a +46.3% |
+
+ANT moves from +23.4% to +19.9% and nothing else moves at all, because the campaign's ANT legs run 21-27 Mkm against a 33.6 Mkm orbit radius — they do not overshoot, so their band is narrow and their tilt sensitivity is small. The anchors with the large residuals are all narrow-band ones, which is exactly where tilt CANNOT be the explanation.
+
+That is a real result: it rules tilt out. Whatever drives the -32% to +47% spread, it is not the orbital plane, and section 9.2's open item is worth less than it looked. The remaining candidates are a genuine per-anchor coefficient, an error in `Sunlight` for those systems, or simply phase — most of these anchors carry two legs from a single capture, which is one sample of phase, not a mean.
+
+**One assumption still carries the `rho` calculation**: that each system's orbital plane coincides with the galactic plane. Nothing published states it, and no source carries an inclination at all — `raukk_orbits.json` holds `[semiMajorAxis, eccentricity]` and nothing more, and both the community visualiser and `raukkPlanetPosition` model orbits as flat and coplanar. Since computing `rho` buys 1.5 points of pooled bias and no per-anchor accuracy, the assumption is not currently load-bearing either way.
+
+Two things fall out of the sensitivity, and both are useful.
+
+**The error is one-sided.** `rho = 1` sweeps the widest, and the path integral is convex in the cosine, so full sweep gives the LARGEST mean of any inclination. `expected` is therefore an upper bound on what a lane converges to — it over-budgets damage, never under-budgets it.
+
+**The band width already tells you when to care.** Both quantities are driven by the same thing: how much the dose varies with direction. Where the band is narrow the lane cannot be far off `expected` whatever its inclination; where the band is wide it can be off by most of its value. `high / low` needs no calibration and no new data — it is computed today, for every leg.
+
+That inverts the practical advice. `expected` is trustworthy per lane to within a percent on any anchor whose band is under roughly 5x, which is nearly all of them; it is unreliable only on the tight-orbit anchors flying legs that overshoot their orbit radius, which are also the ones the band already flags.
+
+It also explains the sign pattern in the residuals. Over-prediction (ANT +16%, NL-534a +25%, YK-715a +47%) is what inclination produces. Under-prediction (LS-231a -32%, LE-137a -26%) is NOT, so something else is in play there — a per-anchor coefficient error, or simply that those anchors carry two legs from one capture and are showing phase, not bias.
+
+### 7.6 What the spread means for a PLAN, which is the only thing this is for
+
+The scatter is real and it is also centred. Across the 19 anchors the residual has a mean of +0.66% and a median of -0.70%, 9 over against 10 under, a standard deviation of 17.7% and a standard error on the mean of 4.1%. That is symmetric noise around zero, not a set of lanes each wrong in its own fixed direction.
+
+Which settles the question that matters, because of WHEN this model is asked anything. A plan prices a steady state months out. Nobody knows where a planet will sit on the day, and a lane flown regularly through a 1.63 to 17.8 day orbital period samples its whole orbit many times before the plan's horizon is up. `expected` is defined as precisely that average. Being 30% out on one flight is not an error in it — it is the quantity behaving as specified.
+
+So the earlier sections' hand-wringing over per-anchor residuals is largely beside the point for planning. The band is not a correction to `expected` and should never be added to a budget; it is the volatility around it, which is worth having for repair scheduling and for spotting erratic lanes, and nothing else.
+
+Two caveats survive, and only two.
+
+**A per-lane bias could still hide under the noise.** 17.7% of scatter across 19 anchors leaves room for a systematic of a few percent either way; the data cannot exclude it. Separating them needs repeat flights on ONE lane spaced across its orbital period (section 7.4), which is worth doing only for a lane a base genuinely depends on.
+
+**Section 7.5 is not phase and does not average away.** Merging heat with radiation misprices any shielded hull by a fixed amount for as long as the shields are fitted. That is the one defect here that a planning horizon makes worse rather than better.
+
+### 7.4 On calibrating an anchor
 
 `raukkCalibrateStellar` back-solves an anchor's coefficient from one observed leg. It pins that lane AT THAT MOMENT — the planet keeps orbiting, so the same lane flown months later presents a different angle and a different apparent coefficient. Average several observations spread across an orbital period and the result converges on `expected`; a single one does not.
+
+This is the only route to per-lane accuracy that does not require solving section 9.2. Cost is one BTF panel per capture, about five captures spread across the anchor's orbital period — section 8.2 gives those: a week for ANT at 1.63 days, three months for NL-534a at 17.8. Worth doing for a lane a base depends on, not worth doing universally.
+
+### 7.5 Heat and radiation are merged, and the shielding is wrong because of it
+
+The model carries ONE stellar term. The game carries two, and `repair_and_damage.json` proves it: `damageModifiers` lists `heat` (BPT 0.5, APT 1.0) and `radiation` (BRP 0.15, ARP 0.35, SRP 0.7) as separate types with separate shields, and `damageTypeSplit` measures the split per lane by differencing in the BTF simulator — fly bare, re-fly with one shield type, attribute the drop.
+
+The header of `shippingDamage.ts` says the split "is not measurable from flight data". That is true of OUR flight data and false of the sheet's, which measured it 36 lanes deep. The two are not proportional and cannot be collapsed into a ratio:
+
+| lane | wear | meteoroid | heat | radiation | heat share of stellar |
+|---|---|---|---|---|---|
+| Ant -> Eos | 15% | 7% | 1% | 77% | **0.01** |
+| Ant -> Origo | 18% | 47% | 2% | 33% | 0.06 |
+| Ant -> Deimos | 29% | 12% | 34% | 25% | 0.58 |
+| Ant -> Ice Station | 7% | 26% | 48% | 19% | 0.71 |
+| Ben -> Giedi Prime | 8% | 3% | 89% | 1% | **0.99** |
+
+Across all 36 lanes the heat share of the stellar term runs the full 0.00 to 1.00. Same origin, opposite composition — these are two different physical laws, not one term with a constant mix.
+
+For an UNSHIELDED hull merging them costs nothing: the sum is the sum, and the sum is what every constant here was fitted against. It breaks as soon as a ship carries stellar shielding, because `reliefOf` adds the heat and radiation reliefs together and caps at 1:
+
+- APT alone reads as relief 1.0 and zeroes the WHOLE stellar term. On Ant -> Eos it should remove 1% of it.
+- SRP alone removes 70% of the whole term. On Ben -> Giedi Prime it should remove almost none.
+
+So the model is trustworthy on bare hulls and misleading on exactly the question a shield table exists to answer. Anything comparing shield fits should be treated as unsourced until the term is split.
 
 ## 8. Capture dates, and what the orbit does between them
 
