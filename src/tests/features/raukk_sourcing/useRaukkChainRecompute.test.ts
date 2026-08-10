@@ -6,6 +6,7 @@ import { createPinia, setActivePinia } from "pinia";
 const mockExecute = vi.fn();
 const mockCalculate = vi.fn();
 const mockComputePlanSnapshot = vi.fn();
+const mockPreparePlanSnapshot = vi.fn();
 
 vi.mock("@/lib/query_cache/queryStore", () => ({
 	useQueryStore: () => ({ execute: mockExecute }),
@@ -25,6 +26,8 @@ vi.mock("@/features/planning/usePlanCalculation", () => ({
 vi.mock("@/features/raukk_sourcing/useRaukkSnapshot", () => ({
 	computePlanSnapshot: (...args: unknown[]) =>
 		mockComputePlanSnapshot(...args),
+	preparePlanSnapshot: (...args: unknown[]) =>
+		mockPreparePlanSnapshot(...args),
 }));
 
 const mockComputeChainResults = vi.fn();
@@ -42,6 +45,19 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 
 // Types & Interfaces
 import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
+import { IRaukkProducerPriceOverride } from "@/features/raukk_sourcing/useRaukkSnapshot";
+
+/** One member of a hand written affine supply loop */
+interface ILoopMember {
+	uuid: string;
+	/** Own output ticker, the price the loop solves for */
+	ticker: string;
+	/** Producer and ticker this member draws from */
+	from: { uuid: string; ticker: string };
+	/** Own ȼ per unit = intercept + slope · drawn ȼ per unit */
+	intercept: number;
+	slope: number;
+}
 
 function makeSnapshot(
 	name: string,
@@ -83,6 +99,7 @@ describe("useRaukkChainRecompute", () => {
 		mockExecute.mockReset();
 		mockCalculate.mockReset();
 		mockComputePlanSnapshot.mockReset();
+		mockPreparePlanSnapshot.mockReset();
 
 		mockExecute.mockImplementation(
 			async (definition: string, params: { planUuid?: string }) => {
@@ -287,69 +304,234 @@ describe("useRaukkChainRecompute", () => {
 		expect(mockComputePlanSnapshot.mock.calls.length).toBe(3);
 	});
 
-	it("adds settling passes for loops and stops once settled", async () => {
-		// d and e draw from each other
-		sourcingStore.setSnapshot(
-			"d",
-			makeSnapshot("D", { ORE: 1 }, { e: { FUEL: 1 } })
-		);
-		sourcingStore.setSnapshot(
-			"e",
-			makeSnapshot("E", { FUEL: 1 }, { d: { ORE: 1 } })
+	/**
+	 * Stores a two plan supply loop and prepares its pipelines as HAND
+	 * WRITTEN affine maps: an own ȼ per unit that is an intercept plus a
+	 * slope times the ȼ the member draws at. That is exactly the shape the
+	 * real cost math has, and it makes the fixed point solvable by hand.
+	 *
+	 * A trial price of the block solve arrives as a producer price
+	 * override; without one the member reads the STORED value of its
+	 * producer, which is what a settling pass does.
+	 */
+	function installAffineLoop(members: ILoopMember[]): void {
+		members.forEach((member) =>
+			sourcingStore.setSnapshot(
+				member.uuid,
+				makeSnapshot(
+					member.uuid.toUpperCase(),
+					{ [member.ticker]: 1 },
+					{ [member.from.uuid]: { [member.from.ticker]: 1 } }
+				)
+			)
 		);
 
-		const { recomputeChain, total, done, errors } =
-			useRaukkChainRecompute();
+		mockPreparePlanSnapshot.mockImplementation(
+			async (context: { planUuid: string }) => {
+				const member: ILoopMember = members.find(
+					(candidate) => candidate.uuid === context.planUuid
+				) as ILoopMember;
+
+				return {
+					prices: {
+						defaultPrices: {},
+						sellPrices: {},
+						exchangePrices: {},
+						dimensions: {},
+					},
+					computeOnce: (
+						override?: IRaukkProducerPriceOverride
+					): IRaukkSnapshot => {
+						const drawn: number =
+							override?.[member.from.uuid]?.[
+								member.from.ticker
+							] ??
+							sourcingStore.snapshots[member.from.uuid]?.outputs[
+								member.from.ticker
+							]?.costPerUnit ??
+							0;
+
+						const snapshot: IRaukkSnapshot = makeSnapshot(
+							member.uuid.toUpperCase(),
+							{ [member.ticker]: 1 },
+							{
+								[member.from.uuid]: {
+									[member.from.ticker]: 1,
+								},
+							}
+						);
+
+						snapshot.outputs[member.ticker].costPerUnit =
+							member.intercept + member.slope * drawn;
+
+						return snapshot;
+					},
+					store: (snapshot: IRaukkSnapshot): void =>
+						sourcingStore.setSnapshot(member.uuid, snapshot),
+				};
+			}
+		);
+	}
+
+	/** c_D = 100 + 0.2 · c_E, c_E = 50 + 0.1 · c_D */
+	const solvableLoop: ILoopMember[] = [
+		{
+			uuid: "d",
+			ticker: "ORE",
+			from: { uuid: "e", ticker: "FUEL" },
+			intercept: 100,
+			slope: 0.2,
+		},
+		{
+			uuid: "e",
+			ticker: "FUEL",
+			from: { uuid: "d", ticker: "ORE" },
+			intercept: 50,
+			slope: 0.1,
+		},
+	];
+
+	it("solves a supply loop onto its analytic fixed point", async () => {
+		installAffineLoop(solvableLoop);
+
+		const { recomputeChain, errors } = useRaukkChainRecompute();
 		await recomputeChain("d");
 
-		// one full pass plus one settling pass finding no change; the
-		// mocked pipeline never writes, so the second pass settles.
-		// d and e share one loop block, within it the order is uuid sort
-		expect(
-			mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
-		).toStrictEqual(["d", "e", "d", "e"]);
-		expect(total.value).toBe(4);
-		expect(done.value).toBe(4);
+		// c_D = 110 / 0.98, c_E = 50 + 0.1 · c_D
+		const analyticD: number = 110 / 0.98;
+		const analyticE: number = 50 + 0.1 * analyticD;
+
+		expect(sourcingStore.snapshots.d.outputs.ORE.costPerUnit).toBeCloseTo(
+			analyticD,
+			10
+		);
+		expect(sourcingStore.snapshots.e.outputs.FUEL.costPerUnit).toBeCloseTo(
+			analyticE,
+			10
+		);
 		expect(errors.value).toStrictEqual([]);
 	});
 
-	it("caps the settling passes of a loop that keeps shifting", async () => {
-		sourcingStore.setSnapshot(
-			"d",
-			makeSnapshot("D", { ORE: 1 }, { e: { FUEL: 1 } })
-		);
-		sourcingStore.setSnapshot(
-			"e",
-			makeSnapshot("E", { FUEL: 1 }, { d: { ORE: 1 } })
+	it("settles a solved loop on the second pass", async () => {
+		installAffineLoop(solvableLoop);
+
+		const { recomputeChain, total, done } = useRaukkChainRecompute();
+		await recomputeChain("d");
+
+		// the solve nails the prices, so pass 2 reproduces them and the
+		// settled check exits right there: 2 passes, one chain pass each
+		expect(mockComputeChainResults.mock.calls.length).toBe(2);
+
+		// the loop members go through the prepared pipeline, never through
+		// the single plan path
+		expect(mockComputePlanSnapshot).not.toHaveBeenCalled();
+
+		// prepared ONCE per member and reused across the passes,
+		// `usePlanCalculation` being the expensive part
+		expect(
+			mockPreparePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+		).toStrictEqual(["d", "e"]);
+
+		// per pass: 2 provisional computations plus 2 final ones
+		expect(done.value).toBe(8);
+		expect(total.value).toBe(8);
+	});
+
+	it("falls back to bounded passes for a singular loop", async () => {
+		// the cycle consumes 100 % of its own output: no finite fixed
+		// point, so the solve declines and the passes take over
+		installAffineLoop(
+			solvableLoop.map((member) => ({ ...member, slope: 1 }))
 		);
 
-		// every recompute shifts the stored cost, the loop never settles
-		let cost: number = 10;
+		const { recomputeChain, done, total } = useRaukkChainRecompute();
+		await recomputeChain("d");
+
+		// capped at 5 passes over the 2 plan loop, no final computations
+		expect(mockComputeChainResults.mock.calls.length).toBe(5);
+		expect(done.value).toBe(10);
+		expect(total.value).toBe(10);
+	});
+
+	it("records a loop member that fails to prepare", async () => {
+		installAffineLoop(solvableLoop);
+
+		const prepare =
+			mockPreparePlanSnapshot.getMockImplementation() as (context: {
+				planUuid: string;
+			}) => Promise<unknown>;
+
+		mockPreparePlanSnapshot.mockImplementation(
+			async (context: { planUuid: string }) => {
+				if (context.planUuid === "e") throw new Error("broken");
+
+				return prepare(context);
+			}
+		);
+
+		const { recomputeChain, errors, done } = useRaukkChainRecompute();
+		await recomputeChain("d");
+
+		// d is still recomputed provisionally, only the block solve is off
+		expect(sourcingStore.snapshots.d.outputs.ORE.costPerUnit).toBe(102);
+		expect(errors.value.map((error) => error.planUuid)).toStrictEqual([
+			"e",
+			"e",
+		]);
+		expect(done.value).toBe(4);
+	});
+
+	it("walks a mixed scope in topological block order", async () => {
+		const trace: string[] = [];
+
+		installAffineLoop(solvableLoop);
+
+		// c draws from the loop as well, so the scope is a <- b <- c <- {d,e}
+		sourcingStore.setSnapshot(
+			"c",
+			makeSnapshot("C", { ALO: 10 }, { b: { MET: 20 }, d: { ORE: 1 } })
+		);
+
 		mockComputePlanSnapshot.mockImplementation(
 			async (context: { planUuid: string }) => {
-				cost += 1;
-
-				const snapshot: IRaukkSnapshot = makeSnapshot(
-					context.planUuid === "d" ? "D" : "E",
-					context.planUuid === "d" ? { ORE: 1 } : { FUEL: 1 },
-					context.planUuid === "d"
-						? { e: { FUEL: 1 } }
-						: { d: { ORE: 1 } }
-				);
-				const ticker: string =
-					context.planUuid === "d" ? "ORE" : "FUEL";
-				snapshot.outputs[ticker].costPerUnit = cost;
-
-				sourcingStore.setSnapshot(context.planUuid, snapshot);
+				trace.push(`plan:${context.planUuid}`);
 				return {};
 			}
 		);
 
-		const { recomputeChain, done } = useRaukkChainRecompute();
-		await recomputeChain("d");
+		const prepare =
+			mockPreparePlanSnapshot.getMockImplementation() as (context: {
+				planUuid: string;
+			}) => Promise<{ store: (snapshot: IRaukkSnapshot) => void }>;
 
-		// capped at 5 passes over the 2 plan loop
-		expect(mockComputePlanSnapshot.mock.calls.length).toBe(10);
-		expect(done.value).toBe(10);
+		mockPreparePlanSnapshot.mockImplementation(
+			async (context: { planUuid: string }) => {
+				const prepared = await prepare(context);
+
+				return {
+					...prepared,
+					store: (snapshot: IRaukkSnapshot): void => {
+						trace.push(`loop:${context.planUuid}`);
+						prepared.store(snapshot);
+					},
+				};
+			}
+		);
+
+		const { recomputeChain, errors } = useRaukkChainRecompute();
+		await recomputeChain("c");
+
+		// upstream first, the loop as ONE block: provisional pass over its
+		// members, then the solved values, then the consumer
+		expect(trace.slice(0, 7)).toStrictEqual([
+			"plan:a",
+			"plan:b",
+			"loop:d",
+			"loop:e",
+			"loop:d",
+			"loop:e",
+			"plan:c",
+		]);
+		expect(errors.value).toStrictEqual([]);
 	});
 });
