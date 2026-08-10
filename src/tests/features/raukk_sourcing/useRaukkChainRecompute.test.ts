@@ -44,8 +44,19 @@ import { useRaukkChainRecompute } from "@/features/raukk_sourcing/useRaukkChainR
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
 // Types & Interfaces
-import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
+import {
+	IRaukkPlanConfig,
+	IRaukkSnapshot,
+} from "@/features/raukk_sourcing/raukkSourcing.types";
 import { IRaukkProducerPriceOverride } from "@/features/raukk_sourcing/useRaukkSnapshot";
+
+/** The scoped graph inputs a sweep builds its dependency graph from */
+interface IScopedStore {
+	recomputeGraphInputs: (extraPlanUuid?: string) => {
+		configs: Record<string, IRaukkPlanConfig>;
+		snapshots: Record<string, IRaukkSnapshot>;
+	};
+}
 
 /** One member of a hand written affine supply loop */
 interface ILoopMember {
@@ -120,6 +131,8 @@ describe("useRaukkChainRecompute", () => {
 		mockComputeChainResults.mockReset();
 		mockComputeChainResults.mockResolvedValue([]);
 
+		installScope();
+
 		// a <- b <- c
 		sourcingStore.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
 		sourcingStore.setSnapshot(
@@ -131,6 +144,33 @@ describe("useRaukkChainRecompute", () => {
 			makeSnapshot("C", { ALO: 10 }, { b: { MET: 20 } })
 		);
 	});
+
+	/**
+	 * Installs the sweep scope the composable reads its graph inputs
+	 * from: every stored plan minus the excluded ones, with the started
+	 * plan unioned back in exactly as the store contract states.
+	 */
+	function installScope(exclude: string[] = []): void {
+		(sourcingStore as unknown as IScopedStore).recomputeGraphInputs = (
+			extraPlanUuid?: string
+		) => {
+			const inScope = (uuid: string): boolean =>
+				!exclude.includes(uuid) || uuid === extraPlanUuid;
+
+			return {
+				configs: Object.fromEntries(
+					Object.entries(sourcingStore.configs).filter(([uuid]) =>
+						inScope(uuid)
+					)
+				),
+				snapshots: Object.fromEntries(
+					Object.entries(sourcingStore.snapshots).filter(([uuid]) =>
+						inScope(uuid)
+					)
+				),
+			};
+		};
+	}
 
 	it("recomputes the whole chain upstream first", async () => {
 		const { recomputeChain, running, done, total, errors } =
@@ -533,5 +573,86 @@ describe("useRaukkChainRecompute", () => {
 			"plan:c",
 		]);
 		expect(errors.value).toStrictEqual([]);
+	});
+
+	describe("settling pass condition", () => {
+		it("stops after one pass when shipping is off and the loops solved", async () => {
+			// nothing claims chain freight with shipping off, and a solved
+			// block has no fixed point left to reach: a second pass would
+			// reproduce the same numbers at the cost of a full rerun
+			sourcingStore.shippingConfig.enabled = false;
+			installAffineLoop(solvableLoop);
+
+			const { recomputeChain, done, total } = useRaukkChainRecompute();
+			await recomputeChain("d");
+
+			expect(mockComputeChainResults.mock.calls.length).toBe(1);
+
+			// one pass: 2 provisional computations plus 2 final ones
+			expect(done.value).toBe(4);
+			expect(total.value).toBe(4);
+
+			// and it still lands on the analytic fixed point
+			expect(sourcingStore.snapshots.d.outputs.ORE.costPerUnit).toBeCloseTo(
+				110 / 0.98,
+				10
+			);
+		});
+
+		it("keeps the settling pass while shipping is enabled", async () => {
+			// the chain freight lags one round by design, so a cyclic scope
+			// with shipping on has something left to converge
+			sourcingStore.shippingConfig.enabled = true;
+			installAffineLoop(solvableLoop);
+
+			const { recomputeChain, done } = useRaukkChainRecompute();
+			await recomputeChain("d");
+
+			expect(mockComputeChainResults.mock.calls.length).toBe(2);
+			expect(done.value).toBe(8);
+		});
+
+		it("still iterates an unsolved block with shipping off", async () => {
+			// the block fell back, so the passes are the only thing that can
+			// settle it — the skip must never reach that case
+			sourcingStore.shippingConfig.enabled = false;
+			installAffineLoop(
+				solvableLoop.map((member) => ({ ...member, slope: 1 }))
+			);
+
+			const { recomputeChain, done, total } = useRaukkChainRecompute();
+			await recomputeChain("d");
+
+			expect(mockComputeChainResults.mock.calls.length).toBe(5);
+			expect(done.value).toBe(10);
+			expect(total.value).toBe(10);
+		});
+	});
+
+	describe("sweep scope", () => {
+		it("leaves an out of scope plan out of the run", async () => {
+			installScope(["c"]);
+
+			const { recomputeChain, total } = useRaukkChainRecompute();
+			await recomputeChain("b");
+
+			expect(
+				mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+			).toStrictEqual(["a", "b"]);
+			expect(total.value).toBe(2);
+		});
+
+		it("sweeps the started plan even when the scope excludes it", async () => {
+			installScope(["a", "c"]);
+
+			const { recomputeChain } = useRaukkChainRecompute();
+			await recomputeChain("a");
+
+			// the started plan is unioned into the scope, its out of scope
+			// dependent is not pulled back in with it
+			expect(
+				mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+			).toStrictEqual(["a", "b"]);
+		});
 	});
 });

@@ -5,14 +5,16 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 
 // Composables
 import {
+	createBlockRecomputer,
+	IRaukkBlockRecomputer,
+	IRaukkChainError,
 	loadEmpireList,
-	recomputePlanSnapshot,
-} from "@/features/raukk_sourcing/useRaukkChainRecompute";
+} from "@/features/raukk_sourcing/useRaukkBlockRecompute";
 
 // Graph
 import {
 	buildDependencyGraph,
-	orderUpstreamFirst,
+	orderUpstreamFirstBlocks,
 } from "@/features/raukk_sourcing/raukkSourcingGraph";
 
 // raukk: what the FLEET consumes is sourced account wide, not per base
@@ -20,6 +22,16 @@ import { raukkEffectiveShipSources } from "@/features/raukk_sourcing/calculation
 
 // Types & Interfaces
 import { IPlanEmpireElement } from "@/stores/planningStore.types";
+import {
+	IRaukkPlanConfig,
+	IRaukkSnapshot,
+} from "@/features/raukk_sourcing/raukkSourcing.types";
+
+/** Graph inputs one upkeep pass builds its dependency graph from */
+type IRaukkGraphInputs = {
+	configs: Record<string, IRaukkPlanConfig>;
+	snapshots: Record<string, IRaukkSnapshot>;
+};
 
 /** Reactive empire context the missing snapshot upkeep runs against */
 export interface IRaukkEmpireAutoSnapshotContext {
@@ -51,6 +63,22 @@ const RAUKK_EMPIRE_AUTO_SNAPSHOT_MAX_PASSES: number = 5;
  * first, each in its own empire and CX context through the same
  * pipeline a plan view computation uses. Current snapshots are never
  * touched.
+ *
+ * SCOPE, the mirror principle: the dependency graph and the snapshot
+ * predicate of the block ordering read
+ * {@link useRaukkSourcingStore.recomputeGraphInputs}, the very set the
+ * PRICING reads, so an out of scope producer named by a lingering config
+ * edge is never pulled into a pass — and a plan whose STORED snapshot the
+ * scope excludes is not refreshed here either. A plan without a snapshot
+ * cannot be judged that way and is taken on its empire membership alone,
+ * which is what this upkeep exists for. Staleness flags still cascade
+ * UNSCOPED, deliberately: an out of scope plan stays flagged and
+ * recomputes when it is opened, never during an account wide sweep.
+ *
+ * Plans are walked as SCC BLOCKS: a cross plan supply loop is solved as a
+ * unit, so the WHOLE loop is recomputed as soon as ANY member is pending
+ * — a refreshed source moves every price in the loop, its non pending
+ * members included.
  *
  * A recompute that materially changes a plans numbers re-flags its
  * dependents stale; the run keeps passing over the empire until
@@ -109,18 +137,27 @@ export function useRaukkEmpireAutoSnapshot(
 		/** Plans a recompute failed for, excluded from later passes */
 		const failed: Set<string> = new Set();
 
-		/** Empire plans whose snapshot is missing or flagged stale */
-		function pendingPlans(): string[] {
-			return context.planUuids.value.filter(
-				(uuid): uuid is string =>
-					uuid !== undefined &&
-					!failed.has(uuid) &&
-					(sourcingStore.snapshots[uuid] === undefined ||
-						sourcingStore.snapshots[uuid].stale)
-			);
+		/**
+		 * Empire plans whose snapshot is missing or flagged stale. A
+		 * stored snapshot the sweep scope does not hold is left alone, a
+		 * MISSING one is taken on empire membership — see the scope note
+		 * on the composable.
+		 */
+		function pendingPlans(scoped: Record<string, IRaukkSnapshot>): string[] {
+			return context.planUuids.value.filter((uuid): uuid is string => {
+				if (uuid === undefined || failed.has(uuid)) return false;
+
+				const snapshot: IRaukkSnapshot | undefined =
+					sourcingStore.snapshots[uuid];
+
+				if (snapshot === undefined) return true;
+
+				return snapshot.stale === true && scoped[uuid] !== undefined;
+			});
 		}
 
-		let pending: string[] = pendingPlans();
+		let inputs: IRaukkGraphInputs = sourcingStore.recomputeGraphInputs();
+		let pending: string[] = pendingPlans(inputs.snapshots);
 
 		if (pending.length === 0) return;
 
@@ -129,42 +166,67 @@ export function useRaukkEmpireAutoSnapshot(
 		try {
 			const empireList: IPlanEmpireElement[] = await loadEmpireList();
 
+			const runner: IRaukkBlockRecomputer = createBlockRecomputer({
+				empireList,
+				shipSources: raukkEffectiveShipSources(
+					sourcingStore.shipSourcing
+				),
+				planNameOf: (planUuid: string) =>
+					sourcingStore.snapshots[planUuid]?.planName ?? planUuid,
+				onError: (error: IRaukkChainError) => {
+					failed.add(error.planUuid);
+
+					console.warn(
+						`[raukk] snapshot upkeep of plan '${error.planUuid}' failed`,
+						error.message
+					);
+				},
+			});
+
 			for (
 				let pass = 1;
 				pass <= RAUKK_EMPIRE_AUTO_SNAPSHOT_MAX_PASSES &&
 				pending.length > 0;
 				pass++
 			) {
-				const order: string[] = orderUpstreamFirst(
+				/** Pending plans are emitted whether they computed or not */
+				const pendingSet: Set<string> = new Set(pending);
+
+				const blocks: string[][] = orderUpstreamFirstBlocks(
 					buildDependencyGraph(
-						sourcingStore.configs,
-						sourcingStore.snapshots,
+						inputs.configs,
+						inputs.snapshots,
 						raukkEffectiveShipSources(sourcingStore.shipSourcing)
 					),
-					pending
+					pending,
+					// the SCOPED snapshots decide which loop mates join a
+					// block, so an out of scope producer named by a lingering
+					// config edge is never pulled in. A pending plan without a
+					// snapshot is the whole point of this upkeep and passes
+					// regardless — it is a given plan, never an expansion
+					(planUuid: string) =>
+						pendingSet.has(planUuid) ||
+						inputs.snapshots[planUuid] !== undefined
 				);
 
-				for (const planUuid of order) {
-					// settled while the pass progressed
-					if (!pendingPlans().includes(planUuid)) continue;
-
-					try {
-						await recomputePlanSnapshot(planUuid, empireList);
-					} catch (error) {
-						failed.add(planUuid);
-
-						console.warn(
-							`[raukk] snapshot upkeep of plan '${planUuid}' failed`,
-							error
-						);
+				for (const block of blocks) {
+					// a loop is recomputed as a unit, its non pending members
+					// included — a refreshed source moves every price in it
+					if (block.length > 1) {
+						await runner.runLoopBlock(block);
+						continue;
 					}
 
-					// yield back to vue between the heavy calculations
-					await new Promise((resolve) => setTimeout(resolve, 0));
+					// settled while the pass progressed
+					if (!pendingPlans(inputs.snapshots).includes(block[0]))
+						continue;
+
+					await runner.runSingleton(block[0]);
 				}
 
 				// a materially changed recompute re-flags its dependents
-				pending = pendingPlans();
+				inputs = sourcingStore.recomputeGraphInputs();
+				pending = pendingPlans(inputs.snapshots);
 			}
 		} finally {
 			running.value = false;

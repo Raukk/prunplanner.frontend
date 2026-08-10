@@ -7,6 +7,7 @@ import { effectScope, EffectScope, nextTick, ref, Ref } from "vue";
 const mockExecute = vi.fn();
 const mockCalculate = vi.fn();
 const mockComputePlanSnapshot = vi.fn();
+const mockPreparePlanSnapshot = vi.fn();
 
 vi.mock("@/lib/query_cache/queryStore", () => ({
 	useQueryStore: () => ({ execute: mockExecute }),
@@ -26,6 +27,8 @@ vi.mock("@/features/planning/usePlanCalculation", () => ({
 vi.mock("@/features/raukk_sourcing/useRaukkSnapshot", () => ({
 	computePlanSnapshot: (...args: unknown[]) =>
 		mockComputePlanSnapshot(...args),
+	preparePlanSnapshot: (...args: unknown[]) =>
+		mockPreparePlanSnapshot(...args),
 }));
 
 // Composables
@@ -35,7 +38,19 @@ import { useRaukkEmpireAutoSnapshot } from "@/features/raukk_sourcing/useRaukkEm
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
 // Types & Interfaces
-import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
+import {
+	IRaukkPlanConfig,
+	IRaukkSnapshot,
+} from "@/features/raukk_sourcing/raukkSourcing.types";
+import { IRaukkProducerPriceOverride } from "@/features/raukk_sourcing/useRaukkSnapshot";
+
+/** The scoped graph inputs a sweep builds its dependency graph from */
+interface IScopedStore {
+	recomputeGraphInputs: (extraPlanUuid?: string) => {
+		configs: Record<string, IRaukkPlanConfig>;
+		snapshots: Record<string, IRaukkSnapshot>;
+	};
+}
 
 function makeSnapshot(
 	name: string,
@@ -73,6 +88,7 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 		mockExecute.mockReset();
 		mockCalculate.mockReset();
 		mockComputePlanSnapshot.mockReset();
+		mockPreparePlanSnapshot.mockReset();
 
 		mockExecute.mockImplementation(
 			async (definition: string, params: { planUuid?: string }) => {
@@ -103,7 +119,88 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 
 		planUuids = ref<(string | undefined)[]>(["a", "b"]);
 		calculating = ref(true);
+
+		installScope();
 	});
+
+	/**
+	 * Installs the sweep scope the upkeep reads its graph inputs from:
+	 * every stored plan minus the excluded ones.
+	 */
+	function installScope(exclude: string[] = []): void {
+		(sourcingStore as unknown as IScopedStore).recomputeGraphInputs = () => {
+			const inScope = (uuid: string): boolean => !exclude.includes(uuid);
+
+			return {
+				configs: Object.fromEntries(
+					Object.entries(sourcingStore.configs).filter(([uuid]) =>
+						inScope(uuid)
+					)
+				),
+				snapshots: Object.fromEntries(
+					Object.entries(sourcingStore.snapshots).filter(([uuid]) =>
+						inScope(uuid)
+					)
+				),
+			};
+		};
+	}
+
+	/**
+	 * Stores a and b as a two plan RAT supply loop and prepares their
+	 * pipelines as HAND WRITTEN affine maps: an own ȼ per unit that is an
+	 * intercept plus a slope times the ȼ the member draws at, the shape
+	 * the real cost math has. A trial price of the block solve arrives as
+	 * a producer price override.
+	 */
+	function installAffineLoop(
+		slopeA: number = 0.2,
+		slopeB: number = 0.1
+	): void {
+		const intercepts: Record<string, number> = { a: 100, b: 50 };
+		const slopes: Record<string, number> = { a: slopeA, b: slopeB };
+		const partner: Record<string, string> = { a: "b", b: "a" };
+
+		sourcingStore.setSnapshot("a", makeSnapshot("A", { b: { RAT: 1 } }));
+		sourcingStore.setSnapshot("b", makeSnapshot("B", { a: { RAT: 1 } }));
+
+		mockPreparePlanSnapshot.mockImplementation(
+			async (context: { planUuid: string }) => {
+				const uuid: string = context.planUuid;
+				const from: string = partner[uuid];
+
+				return {
+					prices: {
+						defaultPrices: {},
+						sellPrices: {},
+						exchangePrices: {},
+						dimensions: {},
+					},
+					computeOnce: (
+						override?: IRaukkProducerPriceOverride
+					): IRaukkSnapshot => {
+						const drawn: number =
+							override?.[from]?.RAT ??
+							sourcingStore.snapshots[from]?.outputs.RAT
+								?.costPerUnit ??
+							0;
+
+						const snapshot: IRaukkSnapshot = makeSnapshot(
+							uuid.toUpperCase(),
+							{ [from]: { RAT: 1 } }
+						);
+
+						snapshot.outputs.RAT.costPerUnit =
+							intercepts[uuid] + slopes[uuid] * drawn;
+
+						return snapshot;
+					},
+					store: (snapshot: IRaukkSnapshot): void =>
+						sourcingStore.setSnapshot(uuid, snapshot),
+				};
+			}
+		);
+	}
 
 	afterEach(() => {
 		scope?.stop();
@@ -211,28 +308,96 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 		).toStrictEqual(["a", "b"]);
 	});
 
+	it("solves a supply loop as a unit, non pending members included", async () => {
+		installAffineLoop();
+		// only ONE member of the loop is flagged
+		sourcingStore.markStale("a");
+
+		mount();
+		await finishCalculation();
+
+		// a refreshed source moves every price in the loop, so the whole
+		// block is recomputed and it lands on the analytic fixed point
+		const analyticA: number = 110 / 0.98;
+
+		expect(sourcingStore.snapshots.a.outputs.RAT.costPerUnit).toBeCloseTo(
+			analyticA,
+			10
+		);
+		expect(sourcingStore.snapshots.b.outputs.RAT.costPerUnit).toBeCloseTo(
+			50 + 0.1 * analyticA,
+			10
+		);
+
+		// both members went through the prepared block pipeline, never the
+		// single plan path, and each was prepared exactly once for the run
+		expect(mockComputePlanSnapshot).not.toHaveBeenCalled();
+		expect(
+			mockPreparePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+		).toStrictEqual(["a", "b"]);
+	});
+
 	it("caps the passes of a loop that keeps shifting", async () => {
-		// a and b draw from each other, every recompute shifts the cost:
-		// each stored snapshot re-flags the other plan, forever
-		sourcingStore.setSnapshot("a", makeSnapshot("A", { b: { RAT: 1 } }));
-		sourcingStore.setSnapshot("b", makeSnapshot("B", { a: { RAT: 1 } }));
+		// the cycle consumes 100 % of its own output: the block solve has
+		// no finite fixed point to hand back, so every pass only stores the
+		// provisional values and each one re-flags the other member
+		installAffineLoop(1, 1);
 		sourcingStore.markStale("a");
 		sourcingStore.markStale("b");
 
-		let cost: number = 10;
+		mount();
+		await finishCalculation();
+
+		// both members of the block per pass, cap 5
+		expect(mockPreparePlanSnapshot).toHaveBeenCalledTimes(2);
+		expect(sourcingStore.snapshots.a.stale).toBe(true);
+	});
+
+	it("never sweeps a plan the scope excludes", async () => {
+		planUuids.value = ["a", "c"];
+		sourcingStore.setSnapshot("a", makeSnapshot("A"));
+		sourcingStore.setSnapshot("c", makeSnapshot("C"));
+		sourcingStore.markStale("a");
+		sourcingStore.markStale("c");
+
+		installScope(["c"]);
+
+		mount();
+		await finishCalculation();
+
+		// c stays flagged: staleness cascades unscoped, it recomputes when
+		// the plan is opened and never during this account wide sweep
+		expect(
+			mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+		).toStrictEqual(["a"]);
+		expect(sourcingStore.snapshots.c.stale).toBe(true);
+	});
+
+	it("computes a missing snapshot the scope cannot hold yet", async () => {
+		// a plan without a snapshot is in no scoped snapshot record by
+		// definition; empire membership is what puts it in this sweep
+		installScope(["a", "b"]);
+
+		mount();
+		await finishCalculation();
+
+		expect(
+			mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+		).toStrictEqual(["a", "b"]);
+	});
+
+	it("skips a plan that settled while the pass progressed", async () => {
 		mockComputePlanSnapshot.mockImplementation(
 			async (context: { planUuid: string; planName: string }) => {
-				cost += 1;
-
-				const snapshot: IRaukkSnapshot = makeSnapshot(
-					context.planName,
-					context.planUuid === "a"
-						? { b: { RAT: 1 } }
-						: { a: { RAT: 1 } }
+				sourcingStore.setSnapshot(
+					context.planUuid,
+					makeSnapshot(context.planName)
 				);
-				snapshot.outputs.RAT.costPerUnit = cost;
 
-				sourcingStore.setSnapshot(context.planUuid, snapshot);
+				// computing a happens to produce b's snapshot as well
+				if (context.planUuid === "a")
+					sourcingStore.setSnapshot("b", makeSnapshot("B"));
+
 				return {};
 			}
 		);
@@ -240,8 +405,9 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 		mount();
 		await finishCalculation();
 
-		// pass 1 covers both, then one re-flagged plan per pass, cap 5
-		expect(mockComputePlanSnapshot).toHaveBeenCalledTimes(6);
+		expect(
+			mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+		).toStrictEqual(["a"]);
 	});
 
 	it("skips unsaved plans without a uuid", async () => {
