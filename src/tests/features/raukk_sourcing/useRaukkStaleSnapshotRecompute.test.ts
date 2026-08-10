@@ -322,6 +322,30 @@ describe("useRaukkStaleSnapshotRecompute", () => {
 		expect(errors.value).toStrictEqual([]);
 	});
 
+	it("drops an unsolved loop out of the later cascade passes", async () => {
+		// the cycle consumes 100 % of its own output: no finite fixed point,
+		// so the block is reported and its members leave the sweep — the
+		// cascade passes exist for staleness, not for crawling at a system
+		// that has no answer
+		installAffineLoop(
+			solvableLoop.map((member) => ({ ...member, slope: 1 }))
+		);
+		sourcingStore.markStale("d");
+		sourcingStore.markStale("e");
+
+		const { recomputeStaleSnapshots, errors } =
+			useRaukkStaleSnapshotRecompute();
+		await recomputeStaleSnapshots();
+
+		// prepared once per member in pass 1 and never worked again
+		expect(
+			mockPreparePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+		).toStrictEqual(["d", "e"]);
+
+		expect(errors.value.length).toBe(1);
+		expect(errors.value[0].blockMembers).toStrictEqual(["d", "e"]);
+	});
+
 	it("keeps the progress total at or above the done count", async () => {
 		installAffineLoop(solvableLoop);
 		sourcingStore.markStale("d");

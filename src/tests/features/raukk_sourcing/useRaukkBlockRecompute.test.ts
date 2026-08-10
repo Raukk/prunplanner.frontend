@@ -294,7 +294,7 @@ describe("useRaukkBlockRecompute", () => {
 
 		it("reports unsolved for a singular loop", async () => {
 			// the cycle consumes 100 % of its own output: no finite fixed
-			// point, so the solve declines and the caller has to iterate
+			// point, so the solve declines and the block is surfaced
 			installAffineLoop(
 				solvableLoop.map((member) => ({ ...member, slope: 1 }))
 			);
@@ -305,6 +305,48 @@ describe("useRaukkBlockRecompute", () => {
 			// the provisional values are kept all the same
 			expect(stored.d.outputs.ORE.costPerUnit).toBe(110);
 			expect(totalAdded).toBe(0);
+		});
+
+		it("names the whole loop in one error when it does not solve", async () => {
+			installAffineLoop(
+				solvableLoop.map((member) => ({ ...member, slope: 1 }))
+			);
+
+			await makeRunner().runLoopBlock(["d", "e"]);
+
+			// once for the block, never once per member: the members
+			// computed fine, their shared system has no answer
+			expect(errors.length).toBe(1);
+			expect(errors[0].planUuid).toBe("d");
+			expect(errors[0].planName).toBe("D");
+			expect(errors[0].blockMembers).toStrictEqual(["d", "e"]);
+			expect(errors[0].message).toBe(
+				"supply loop of 2 plans (D, E) could not be solved (no finite fixed point or a discrete decision flip); single-pass numbers kept"
+			);
+		});
+
+		it("leaves a failed member to its own error, the block unnamed", async () => {
+			installAffineLoop(solvableLoop);
+
+			const prepare =
+				mockPreparePlanSnapshot.getMockImplementation() as (context: {
+					planUuid: string;
+				}) => Promise<unknown>;
+
+			mockPreparePlanSnapshot.mockImplementation(
+				async (context: { planUuid: string }) => {
+					if (context.planUuid === "e") throw new Error("broken");
+
+					return prepare(context);
+				}
+			);
+
+			await makeRunner().runLoopBlock(["d", "e"]);
+
+			// a partial system never reached the solve, so there is nothing
+			// to report about the loop itself
+			expect(errors.length).toBe(1);
+			expect(errors[0].blockMembers).toBeUndefined();
 		});
 
 		it("reports unsolved and records a member that fails to prepare", async () => {

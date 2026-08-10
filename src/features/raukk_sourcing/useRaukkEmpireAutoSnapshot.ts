@@ -46,8 +46,10 @@ const RAUKK_EMPIRE_AUTO_SNAPSHOT_DEBOUNCE_MS: number = 1000;
 
 /** Total pass cap of one processing run, first pass included. A
  * recompute whose numbers materially changed re-flags its dependents
- * stale; follow up passes carry that cascade — and the settling of a
- * supply loop — through the empire without ever running away. */
+ * stale; follow up passes carry that staleness CASCADE through the empire
+ * without ever running away. They are not loop settling — a supply loop is
+ * solved in one shot or reported — and an unsolved block leaves the run so
+ * no pass re-attempts it. */
 const RAUKK_EMPIRE_AUTO_SNAPSHOT_MAX_PASSES: number = 5;
 
 /**
@@ -83,8 +85,8 @@ const RAUKK_EMPIRE_AUTO_SNAPSHOT_MAX_PASSES: number = 5;
  * A recompute that materially changes a plans numbers re-flags its
  * dependents stale; the run keeps passing over the empire until
  * nothing is left to do or {@link RAUKK_EMPIRE_AUTO_SNAPSHOT_MAX_PASSES}
- * is reached, so a cascade — or a supply loop settling towards its
- * fixed point — resolves within one empire load where possible.
+ * is reached, so a staleness cascade resolves within one empire load
+ * where possible.
  * Dependents outside the loaded empire stay stale until their own
  * empire loads or their page is visited. Failures are logged and
  * swallowed per plan and not retried within the run, background
@@ -183,6 +185,9 @@ export function useRaukkEmpireAutoSnapshot(
 				},
 			});
 
+			// the passes carry the staleness CASCADE over the dependency DAG:
+			// a materially changed recompute re-flags its dependents, and
+			// they are worked in the next pass. Nothing here settles a loop
 			for (
 				let pass = 1;
 				pass <= RAUKK_EMPIRE_AUTO_SNAPSHOT_MAX_PASSES &&
@@ -211,9 +216,14 @@ export function useRaukkEmpireAutoSnapshot(
 
 				for (const block of blocks) {
 					// a loop is recomputed as a unit, its non pending members
-					// included — a refreshed source moves every price in it
+					// included — a refreshed source moves every price in it.
+					// An UNSOLVED one leaves the run whole: the runner
+					// already warned, and a later cascade pass would only
+					// re-attempt a system that has no answer
 					if (block.length > 1) {
-						await runner.runLoopBlock(block);
+						if (!(await runner.runLoopBlock(block)))
+							block.forEach((planUuid) => failed.add(planUuid));
+
 						continue;
 					}
 

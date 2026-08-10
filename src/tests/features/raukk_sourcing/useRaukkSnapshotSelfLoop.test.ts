@@ -202,15 +202,15 @@ describe("Raukk Sourcing: Snapshot Self Supply Loop", () => {
 			expect(snapshot.draws).toStrictEqual({ [PLAN_UUID]: { ALO: 10 } });
 		});
 
-		it("is exact where ten iterations would still be far off", async () => {
+		it("is exact on a loop no bounded iteration would have reached", async () => {
 			sourceFromSelf();
 			seedSnapshot(1);
 
 			/*
 			 * 80 ALO a day of repair demand: c = 100 + 0.8 c, so c = 500.
-			 * The iteration starts at the seeded ȼ 1 and shrinks the
-			 * remaining gap by 0.8 a pass — after the ten pass cap it would
-			 * still sit around ȼ 457.
+			 * A rerun-against-the-stored-value scheme would start at the
+			 * seeded ȼ 1 and shrink the remaining gap by 0.8 a pass — ten of
+			 * them would still sit around ȼ 457. The solve is exact.
 			 */
 			const { snapshot } = await computePlanSnapshot(
 				context(constructionFor(80))
@@ -304,25 +304,37 @@ describe("Raukk Sourcing: Snapshot Self Supply Loop", () => {
 		});
 	});
 
-	describe("iteration fallback", () => {
-		it("iterates a loop that consumes its whole output", async () => {
+	describe("a loop with no finite fixed point", () => {
+		it("keeps the seed and reports it instead of iterating", async () => {
 			sourceFromSelf();
 			seedSnapshot(1);
+
+			const warn = vi
+				.spyOn(console, "warn")
+				.mockImplementation(() => undefined);
+			const setSnapshot = vi.spyOn(store, "setSnapshot");
 
 			/*
 			 * 100 ALO a day of repair demand against 100 ALO a day of
 			 * output: `c = 100 + c` has NO fixed point, `I - A` is exactly
-			 * singular and the solve returns null. The iteration takes
-			 * over and runs its ten passes, each adding ȼ 100 onto the
-			 * ȼ 101 the seed produced — the same divergence it produced
-			 * before the solve existed.
+			 * singular and the solve returns null. Nothing crawls towards a
+			 * point that does not exist — the SEED stands, one honest
+			 * computation at the stored ȼ 1, and the failure is surfaced.
 			 */
 			const { snapshot } = await computePlanSnapshot(
 				context(constructionFor(100))
 			);
 
-			expect(snapshot.outputs.ALO.costPerUnit).toBeCloseTo(1001, 6);
+			expect(snapshot.outputs.ALO.costPerUnit).toBeCloseTo(101, 9);
 			expect(snapshot.draws).toStrictEqual({ [PLAN_UUID]: { ALO: 100 } });
+
+			// the seed, and nothing after it
+			expect(setSnapshot).toHaveBeenCalledTimes(1);
+			expect(warn).toHaveBeenCalledTimes(1);
+			expect(warn.mock.calls[0][0]).toContain(PLAN_UUID);
+			expect(warn.mock.calls[0][0]).toContain("could not be solved");
+
+			warn.mockRestore();
 		});
 	});
 });

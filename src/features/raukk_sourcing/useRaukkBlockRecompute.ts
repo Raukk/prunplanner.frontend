@@ -48,6 +48,13 @@ export interface IRaukkChainError {
 	planUuid: string;
 	planName: string;
 	message: string;
+	/**
+	 * Member uuids when the failure is a WHOLE unsolved supply loop rather
+	 * than one plan. The `planUuid` above is then a representative member,
+	 * so a display keyed by plan still has one to name. Absent on every per
+	 * plan failure.
+	 */
+	blockMembers?: string[];
 }
 
 /**
@@ -215,6 +222,38 @@ export function createBlockRecomputer(
 		});
 	}
 
+	/**
+	 * Records a whole supply loop whose fixed point was not delivered.
+	 *
+	 * Once per block and never per member: the members computed fine, it is
+	 * their shared system that has no answer the pipeline can stand behind.
+	 * The provisional single pass numbers stay stored — they are the honest
+	 * computation at the operating point the block was entered at — and the
+	 * error says so rather than letting later passes crawl at it.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string[]} members Member Plan Uuids of the block
+	 * @returns {void}
+	 */
+	function recordBlockUnsolved(members: string[]): void {
+		const representative: string = members[0];
+
+		const names: string = members
+			.map((uuid) => options.planNameOf(uuid))
+			.join(", ");
+
+		options.onError?.({
+			planUuid: representative,
+			planName: options.planNameOf(representative),
+			message:
+				`supply loop of ${members.length} plans (${names}) could ` +
+				"not be solved (no finite fixed point or a discrete " +
+				"decision flip); single-pass numbers kept",
+			blockMembers: [...members],
+		});
+	}
+
 	/** Yields back to vue so the progress display can update */
 	const yieldToVue = (): Promise<unknown> =>
 		new Promise((resolve) => setTimeout(resolve, 0));
@@ -252,14 +291,17 @@ export function createBlockRecomputer(
 	 * solution is stored only after it verified.
 	 *
 	 * A member that fails to prepare or to compute disqualifies its block
-	 * from the solve — a partial system is not the system — and the block
-	 * falls back to the settling passes like any other unsolved one.
+	 * from the solve — a partial system is not the system — and its own per
+	 * member error is what the run reports; the block is not named twice.
+	 * Every OTHER way of not solving is reported once for the block, see
+	 * {@link recordBlockUnsolved}: an unsolved loop is an error the run
+	 * surfaces, never something later passes converge.
 	 *
 	 * @author raukk
 	 *
 	 * @param {string[]} members Member Plan Uuids of the block
 	 * @returns {Promise<boolean>} The blocks fixed point was solved AND
-	 * verified; false means the block still has to settle by iterating
+	 * verified; false means the provisional single pass numbers stand
 	 */
 	async function runLoopBlock(members: string[]): Promise<boolean> {
 		const failed: Set<string> = new Set();
@@ -319,11 +361,15 @@ export function createBlockRecomputer(
 			});
 		} catch {
 			// a probe that threw is no worse than one that produced no
-			// finite number: the block stays unsolved and settles
+			// finite number: the block stays unsolved either way
 			solved = null;
 		}
 
-		if (solved === null) return false;
+		if (solved === null) {
+			recordBlockUnsolved(members);
+
+			return false;
+		}
 
 		const finals: Record<string, IRaukkSnapshot> = solved;
 
@@ -346,17 +392,16 @@ export function createBlockRecomputer(
 	/**
 	 * Runs one block of a sweep, whatever shape it has.
 	 *
-	 * The boolean answers "is there anything left for a settling pass to
-	 * converge in this block". A singleton is an acyclic plan with no
-	 * fixed point to miss — one computation is exact — so it always
-	 * reports solved, a failure included: another pass would not fix it
-	 * either, and only supply loops are what the settling passes exist
-	 * for.
+	 * The boolean answers "did this block reach its fixed point". A
+	 * singleton is an acyclic plan with no fixed point to miss — one
+	 * computation is exact — so it always reports solved, a failure
+	 * included: its error is recorded per plan and only supply loops have a
+	 * system to solve at all.
 	 *
 	 * @author raukk
 	 *
 	 * @param {string[]} block Member Plan Uuids, one for an acyclic plan
-	 * @returns {Promise<boolean>} The block needs no settling pass
+	 * @returns {Promise<boolean>} The block reached its fixed point
 	 */
 	async function runBlock(block: string[]): Promise<boolean> {
 		if (block.length === 1) {

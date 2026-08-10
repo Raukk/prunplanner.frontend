@@ -25,13 +25,9 @@ import {
 // raukk: what the FLEET consumes is sourced account wide, not per base
 import { raukkEffectiveShipSources } from "@/features/raukk_sourcing/calculations/shipSourcing";
 
-// Pricing
-import { outputsSettled } from "@/features/raukk_sourcing/raukkSourcingPricing";
-
 // Types & Interfaces
 import { IPlanEmpireElement } from "@/stores/planningStore.types";
 import {
-	IRaukkOutputCost,
 	IRaukkPlanConfig,
 	IRaukkSnapshot,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -45,15 +41,6 @@ export {
 	recomputePlanSnapshot,
 } from "@/features/raukk_sourcing/useRaukkBlockRecompute";
 export type { IRaukkChainError } from "@/features/raukk_sourcing/useRaukkBlockRecompute";
-
-/** Total pass cap of a cyclic chain run, first pass included */
-const RAUKK_CHAIN_MAX_PASSES: number = 5;
-
-// The supply loop passes settle within the hybrid tolerance of
-// {@link outputsSettled}, over the `RAUKK_EPSILON_SETTLE` floor. It is
-// deliberately looser than the staleness cascade of `setSnapshot` — a
-// settled pass must also count as materially unchanged, otherwise it
-// would re-flag the rest of the loop stale.
 
 /**
  * Recomputes a whole sourcing chain instead of a single plan.
@@ -92,28 +79,6 @@ export function useRaukkChainRecompute() {
 	const errors: Ref<IRaukkChainError[]> = ref([]);
 
 	/**
-	 * Snapshot output costs of the given plans, the comparison base of
-	 * the loop settling passes.
-	 *
-	 * @author raukk
-	 *
-	 * @param {string[]} order Plan Uuids
-	 * @returns {Record<string, Record<string, IRaukkOutputCost>>} Outputs
-	 * by plan uuid
-	 */
-	function captureOutputs(
-		order: string[]
-	): Record<string, Record<string, IRaukkOutputCost>> {
-		const captured: Record<string, Record<string, IRaukkOutputCost>> = {};
-
-		order.forEach((uuid) => {
-			captured[uuid] = sourcingStore.snapshots[uuid]?.outputs ?? {};
-		});
-
-		return captured;
-	}
-
-	/**
 	 * Recomputes the sourcing chain the given plan is part of.
 	 *
 	 * SCOPE, and why it is not the whole store: the graph is built from
@@ -137,11 +102,11 @@ export function useRaukkChainRecompute() {
 	 * that writes nothing until the affine map of the loop is recovered
 	 * and inverted — see {@link solveLoopBlock}.
 	 *
-	 * The settling passes remain, with a narrower job and a condition on
-	 * them, see the comment at the pass loop. Passes stop once every
-	 * output cost settled within the tolerance of {@link outputsSettled} or
-	 * {@link RAUKK_CHAIN_MAX_PASSES} is reached. Acyclic chains keep their
-	 * single upstream first pass.
+	 * A cyclic scope gets exactly ONE further pass, and only while account
+	 * shipping is on: the documented one round chain freight lag, see the
+	 * comment at it. Nothing else iterates — an unsolved block is an error,
+	 * not a starting point. Acyclic chains keep their single upstream first
+	 * pass.
 	 *
 	 * @author raukk
 	 *
@@ -190,85 +155,69 @@ export function useRaukkChainRecompute() {
 				onCurrent: (planName: string) => (current.value = planName),
 				onDone: () => done.value++,
 				onTotalAdd: (count: number) => (total.value += count),
-				onError: (error: IRaukkChainError) => errors.value.push(error),
+				/*
+				 * DEDUPE of the block errors, and only of those: the freight
+				 * pass re-runs an unsolved block at the fresher operating
+				 * point, so the same loop would otherwise be listed twice.
+				 * The later verdict replaces the earlier one — if the retry
+				 * fails again the error of the LAST pass stands, and if it
+				 * solves no error is raised at all. Per plan failures are
+				 * untouched, they are one plans own story per pass.
+				 */
+				onError: (error: IRaukkChainError) => {
+					if (error.blockMembers !== undefined)
+						errors.value = errors.value.filter(
+							(existing) =>
+								existing.blockMembers === undefined ||
+								existing.planUuid !== error.planUuid
+						);
+
+					errors.value.push(error);
+				},
 			});
 
-			/**
-			 * One recompute pass over the whole ordered scope, block by
-			 * block. Reports whether every LOOP block of the pass solved; a
-			 * scope without one reports true, it has nothing to settle.
-			 */
-			async function runPass(): Promise<boolean> {
-				let solvedAll: boolean = true;
-
+			/** One recompute pass over the whole ordered scope, block by
+			 * block */
+			async function runPass(): Promise<void> {
 				for (const block of planning.blocks)
-					solvedAll = (await runner.runBlock(block)) && solvedAll;
-
-				return solvedAll;
+					await runner.runBlock(block);
 			}
 
-			/** Every loop block of the last pass solved AND verified */
-			let allBlocksSolved: boolean = await runPass();
+			await runPass();
 
 			let chainErrors: IRaukkChainComputeError[] =
 				await recomputeShippingChains();
 
 			/*
-			 * Settling passes, and what is left for them to settle.
+			 * The chain FREIGHT pass, and there is exactly one of it.
 			 *
-			 * Exactly two things still move between passes:
+			 * This is the documented one round chain freight lag, NOT loop
+			 * iteration: the plans of pass 1 priced their claimed flows from
+			 * the PREVIOUS rounds chain results, and the results written
+			 * after it are what a re-pricing pass consumes. Chain flows are
+			 * UNITS, and units are price independent — the freight per unit
+			 * is fixed once pass 1 has written the flows, so one re-pricing
+			 * pass consumes it whole. There is nothing a third pass could
+			 * move that the block solve did not already nail, and an
+			 * unsolved block is an ERROR now rather than something passes
+			 * crawl towards.
 			 *
-			 * (a) the chain FREIGHT — the plans of a pass priced their
-			 *     claimed flows from the PREVIOUS rounds chain results, the
-			 *     documented one round lag the block solve holds fixed. This
-			 *     exists only while account shipping is ENABLED; with it off
-			 *     no plan claims freight and there is nothing to converge.
+			 * With shipping off no plan claims chain freight at all and the
+			 * pass has nothing to do; an acyclic scope has no loop whose
+			 * prices the fresher freight could move.
 			 *
-			 * (b) an UNSOLVED block, which still has to reach its fixed
-			 *     point by iterating.
+			 * A block re-runs here as before — the prepared pipelines are
+			 * reused — so an unsolved one gets its one retry at the fresher
+			 * operating point, deduped by the error handler above.
 			 *
-			 * So with shipping off and every loop block solved and verified,
-			 * a further pass has nothing to converge and is skipped. What it
-			 * would still touch are the unit level cross reads — the
-			 * subscription rollup, aggregate coverage — and those are
-			 * PRICE INDEPENDENT: draws and units do not move when a price
-			 * does, so a solved blocks finals cannot shift them. They lag
-			 * one pass, exactly as they always have on ACYCLIC scopes, which
-			 * never ran a settling pass at all. The skip therefore holds a
-			 * cyclic scope to the same accepted standard, no worse.
-			 *
-			 * A solved block is rerun all the same whenever the loop does
-			 * run: the chain results changed underneath it. In the normal
-			 * shipping case the outputs reproduce themselves on pass 2 and
-			 * the settled check exits right there.
-			 *
-			 * Progress stays consistent because the skip only avoids ADDING
-			 * to the total — `total` is never lowered below `done`.
+			 * Progress stays consistent: the pass ADDS its work to the
+			 * total, `total` is never lowered below `done`.
 			 */
-			for (
-				let pass = 2;
-				planning.cyclic &&
-				(shippingEnabled || !allBlocksSolved) &&
-				pass <= RAUKK_CHAIN_MAX_PASSES;
-				pass++
-			) {
-				const before: Record<
-					string,
-					Record<string, IRaukkOutputCost>
-				> = captureOutputs(order);
-
+			if (planning.cyclic && shippingEnabled) {
 				total.value += order.length;
-				allBlocksSolved = await runPass();
+
+				await runPass();
 				chainErrors = await recomputeShippingChains();
-
-				const settled: boolean = order.every((uuid) =>
-					outputsSettled(
-						before[uuid],
-						sourcingStore.snapshots[uuid]?.outputs ?? {}
-					)
-				);
-
-				if (settled) break;
 			}
 
 			// only the LAST chain pass reports: an earlier pass may well
@@ -300,10 +249,10 @@ export function useRaukkChainRecompute() {
 	 * pass priced their claimed flows from the PREVIOUS chain results,
 	 * and the results written here are what the next pass will use. The
 	 * numbers settle on the following pass, exactly like the v1
-	 * subscription data — which is why a cyclic scopes settling passes
-	 * run this after EVERY pass, they converge the chain freight along
-	 * with the loops output costs. Errors are returned per chain, never
-	 * thrown — the plan snapshots of the run stay valid.
+	 * subscription data — which is why a cyclic scope with shipping on runs
+	 * ONE more pass and this after it, consuming that lag. Errors are
+	 * returned per chain, never thrown — the plan snapshots of the run stay
+	 * valid.
 	 *
 	 * @author raukk
 	 *

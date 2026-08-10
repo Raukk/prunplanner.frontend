@@ -337,10 +337,15 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 		).toStrictEqual(["a", "b"]);
 	});
 
-	it("caps the passes of a loop that keeps shifting", async () => {
+	it("drops an unsolved loop out of the later cascade passes", async () => {
 		// the cycle consumes 100 % of its own output: the block solve has
-		// no finite fixed point to hand back, so every pass only stores the
-		// provisional values and each one re-flags the other member
+		// no finite fixed point to hand back, so the provisional values
+		// stand and the members leave the run — the cascade passes carry
+		// staleness, they do not crawl at a system that has no answer
+		const warn = vi
+			.spyOn(console, "warn")
+			.mockImplementation(() => undefined);
+
 		installAffineLoop(1, 1);
 		sourcingStore.markStale("a");
 		sourcingStore.markStale("b");
@@ -348,9 +353,17 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 		mount();
 		await finishCalculation();
 
-		// both members of the block per pass, cap 5
-		expect(mockPreparePlanSnapshot).toHaveBeenCalledTimes(2);
+		// prepared once per member in pass 1 and never worked again
+		expect(
+			mockPreparePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+		).toStrictEqual(["a", "b"]);
 		expect(sourcingStore.snapshots.a.stale).toBe(true);
+
+		// the loop is surfaced, once, naming both members
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][1]).toContain("supply loop of 2 plans (A, B)");
+
+		warn.mockRestore();
 	});
 
 	it("never sweeps a plan the scope excludes", async () => {

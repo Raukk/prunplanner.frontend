@@ -35,8 +35,10 @@ type IRaukkGraphInputs = {
 
 /** Total pass cap of one run, first pass included. A recompute whose
  * numbers materially changed re-flags its dependents stale; follow up
- * passes carry that cascade — and a settling supply loop — without
- * ever running away. The cap of the empire wide upkeep. */
+ * passes carry that staleness CASCADE down the dependency DAG. They are
+ * not loop settling — a supply loop is solved in one shot or reported —
+ * and an unsolved block leaves the sweep so no pass re-attempts it. The
+ * cap of the empire wide upkeep. */
 const RAUKK_STALE_SNAPSHOT_MAX_PASSES: number = 5;
 
 /**
@@ -152,6 +154,9 @@ export function useRaukkStaleSnapshotRecompute() {
 				},
 			});
 
+			// the passes carry the staleness CASCADE over the dependency DAG:
+			// a materially changed recompute re-flags its dependents, and
+			// they are worked in the next pass. Nothing here settles a loop
 			for (
 				let pass = 1;
 				pass <= RAUKK_STALE_SNAPSHOT_MAX_PASSES && pending.length > 0;
@@ -177,9 +182,14 @@ export function useRaukkStaleSnapshotRecompute() {
 
 				for (const block of blocks) {
 					// a loop is recomputed as a unit, its non stale members
-					// included — a refreshed source moves every price in it
+					// included — a refreshed source moves every price in it.
+					// An UNSOLVED one leaves the sweep whole: the runner
+					// already surfaced the error, and a later cascade pass
+					// would only re-attempt a system that has no answer
 					if (block.length > 1) {
-						await runner.runLoopBlock(block);
+						if (!(await runner.runLoopBlock(block)))
+							block.forEach((planUuid) => failed.add(planUuid));
+
 						continue;
 					}
 

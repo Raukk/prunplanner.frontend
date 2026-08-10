@@ -452,14 +452,14 @@ describe("useRaukkChainRecompute", () => {
 		expect(errors.value).toStrictEqual([]);
 	});
 
-	it("settles a solved loop on the second pass", async () => {
+	it("re-prices a solved loop in the one freight pass", async () => {
 		installAffineLoop(solvableLoop);
 
 		const { recomputeChain, total, done } = useRaukkChainRecompute();
 		await recomputeChain("d");
 
-		// the solve nails the prices, so pass 2 reproduces them and the
-		// settled check exits right there: 2 passes, one chain pass each
+		// cyclic with shipping on: pass 1 plus the one chain freight pass,
+		// one chain pass after each and no third
 		expect(mockComputeChainResults.mock.calls.length).toBe(2);
 
 		// the loop members go through the prepared pipeline, never through
@@ -477,20 +477,28 @@ describe("useRaukkChainRecompute", () => {
 		expect(total.value).toBe(8);
 	});
 
-	it("falls back to bounded passes for a singular loop", async () => {
+	it("reports a singular loop once instead of iterating it", async () => {
 		// the cycle consumes 100 % of its own output: no finite fixed
-		// point, so the solve declines and the passes take over
+		// point, so the solve declines and the run says so
 		installAffineLoop(
 			solvableLoop.map((member) => ({ ...member, slope: 1 }))
 		);
 
-		const { recomputeChain, done, total } = useRaukkChainRecompute();
+		const { recomputeChain, done, total, errors } = useRaukkChainRecompute();
 		await recomputeChain("d");
 
-		// capped at 5 passes over the 2 plan loop, no final computations
-		expect(mockComputeChainResults.mock.calls.length).toBe(5);
-		expect(done.value).toBe(10);
-		expect(total.value).toBe(10);
+		// the two passes are pass 1 and the freight pass, nothing more: the
+		// block gets its one retry at the fresher operating point
+		expect(mockComputeChainResults.mock.calls.length).toBe(2);
+		expect(done.value).toBe(4);
+		expect(total.value).toBe(4);
+
+		// and the loop is named ONCE, the last passes verdict
+		expect(errors.value.length).toBe(1);
+		expect(errors.value[0].blockMembers).toStrictEqual(["d", "e"]);
+		expect(errors.value[0].message).toContain(
+			"supply loop of 2 plans (D, E) could not be solved"
+		);
 	});
 
 	it("records a loop member that fails to prepare", async () => {
@@ -575,11 +583,10 @@ describe("useRaukkChainRecompute", () => {
 		expect(errors.value).toStrictEqual([]);
 	});
 
-	describe("settling pass condition", () => {
-		it("stops after one pass when shipping is off and the loops solved", async () => {
-			// nothing claims chain freight with shipping off, and a solved
-			// block has no fixed point left to reach: a second pass would
-			// reproduce the same numbers at the cost of a full rerun
+	describe("the one chain freight pass", () => {
+		it("runs a single pass when shipping is off", async () => {
+			// nothing claims chain freight with shipping off, so there is no
+			// lag to consume and the solve already nailed the prices
 			sourcingStore.shippingConfig.enabled = false;
 			installAffineLoop(solvableLoop);
 
@@ -599,9 +606,9 @@ describe("useRaukkChainRecompute", () => {
 			);
 		});
 
-		it("keeps the settling pass while shipping is enabled", async () => {
-			// the chain freight lags one round by design, so a cyclic scope
-			// with shipping on has something left to converge
+		it("runs exactly two passes with shipping enabled", async () => {
+			// the chain freight lags one round by design; flows are units and
+			// units are price independent, so ONE re-pricing pass consumes it
 			sourcingStore.shippingConfig.enabled = true;
 			installAffineLoop(solvableLoop);
 
@@ -612,20 +619,42 @@ describe("useRaukkChainRecompute", () => {
 			expect(done.value).toBe(8);
 		});
 
-		it("still iterates an unsolved block with shipping off", async () => {
-			// the block fell back, so the passes are the only thing that can
-			// settle it — the skip must never reach that case
+		it("records an unsolved block once with shipping off", async () => {
+			// one pass, and the loop is an ERROR rather than something the
+			// passes crawl towards
 			sourcingStore.shippingConfig.enabled = false;
 			installAffineLoop(
 				solvableLoop.map((member) => ({ ...member, slope: 1 }))
 			);
 
-			const { recomputeChain, done, total } = useRaukkChainRecompute();
+			const { recomputeChain, done, total, errors } =
+				useRaukkChainRecompute();
 			await recomputeChain("d");
 
-			expect(mockComputeChainResults.mock.calls.length).toBe(5);
-			expect(done.value).toBe(10);
-			expect(total.value).toBe(10);
+			expect(mockComputeChainResults.mock.calls.length).toBe(1);
+			expect(done.value).toBe(2);
+			expect(total.value).toBe(2);
+
+			expect(errors.value.length).toBe(1);
+			expect(errors.value[0].blockMembers).toStrictEqual(["d", "e"]);
+		});
+
+		it("records an unsolved block once across both passes", async () => {
+			// the freight pass retries the block at the fresher operating
+			// point; it fails again and the LAST verdict stands, alone
+			sourcingStore.shippingConfig.enabled = true;
+			installAffineLoop(
+				solvableLoop.map((member) => ({ ...member, slope: 1 }))
+			);
+
+			const { recomputeChain, errors } = useRaukkChainRecompute();
+			await recomputeChain("d");
+
+			expect(mockComputeChainResults.mock.calls.length).toBe(2);
+			expect(
+				errors.value.filter((error) => error.blockMembers !== undefined)
+					.length
+			).toBe(1);
 		});
 	});
 
