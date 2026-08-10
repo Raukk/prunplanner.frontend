@@ -7,11 +7,14 @@ import {
 	IRaukkMapLane,
 	IRaukkMapStop,
 	IRaukkMapSystemSource,
+	RAUKK_MAP_MAX_SHIFT,
+	raukkMapFanRadius,
 	raukkMapFlowBucket,
 	raukkMapGates,
 	raukkMapLabelPlacement,
 	raukkMapLaneMetric,
 	raukkMapLanes,
+	raukkMapSpacedPlacement,
 	raukkMapStopRole,
 	raukkMapStopSystem,
 	raukkMapStops,
@@ -20,6 +23,7 @@ import { RAUKK_CX_SYSTEM_ID_BY_CODE } from "@/features/raukk_sourcing/calculatio
 
 // Types & Interfaces
 import { IRaukkChainFlow } from "@/features/raukk_sourcing/calculations/shippingChains.types";
+import { IRaukkStarPlacement } from "@/features/raukk_sourcing/calculations/oversubStarMap";
 
 /** One flow, everything but the overridden fields defaulted */
 function flow(patch: Partial<IRaukkChainFlow> = {}): IRaukkChainFlow {
@@ -365,5 +369,191 @@ describe("raukkMapGates", () => {
 
 		expect(gates[0].hcbCapable).toBe(true);
 		expect(gates[0].maxTraversalM3).toBe(6000);
+	});
+});
+
+describe("raukkMapFanRadius", () => {
+	it("keeps a lone member at the system point", () => {
+		expect(raukkMapFanRadius([12], 7)).toBe(0);
+		expect(raukkMapFanRadius([], 7)).toBe(0);
+	});
+
+	it("fans two members far enough apart to clear both", () => {
+		// opposite each other, so the chord is the diameter
+		const radius: number = raukkMapFanRadius([10, 14], 6);
+
+		expect(radius * 2).toBeGreaterThanOrEqual(10 + 14 + 6);
+	});
+
+	it("grows with the member count at equal sizes", () => {
+		const three: number = raukkMapFanRadius([10, 10, 10], 6);
+		const six: number = raukkMapFanRadius(Array(6).fill(10), 6);
+
+		expect(six).toBeGreaterThan(three);
+	});
+
+	it("sizes on the largest adjacent pair, not the average", () => {
+		const even: number = raukkMapFanRadius([10, 10, 10, 10], 6);
+		const oneBig: number = raukkMapFanRadius([10, 30, 10, 10], 6);
+
+		expect(oneBig).toBeGreaterThan(even);
+	});
+});
+
+describe("raukkMapSpacedPlacement", () => {
+	/** Two systems projected onto nearly the same point */
+	function piled(): IRaukkStarPlacement {
+		return {
+			positionByKey: {
+				a: { x: 500, y: 300 },
+				b: { x: 504, y: 302 },
+			},
+			systems: [
+				{ name: "A", x: 500, y: 300, radius: 22, entityKeys: ["a"] },
+				{ name: "B", x: 504, y: 302, radius: 22, entityKeys: ["b"] },
+			],
+			unmappedKeys: [],
+			unmappedAnchor: null,
+			externalAnchor: { x: 948, y: 330 },
+		};
+	}
+
+	function distance(
+		first: { x: number; y: number },
+		second: { x: number; y: number }
+	): number {
+		return Math.hypot(second.x - first.x, second.y - first.y);
+	}
+
+	it("pushes two piled systems apart", () => {
+		const spaced = raukkMapSpacedPlacement(piled(), { a: 20, b: 20 });
+
+		expect(
+			distance(spaced.positionByKey.a, spaced.positionByKey.b)
+		).toBeGreaterThan(40);
+	});
+
+	it("never moves a system further than the cap", () => {
+		const spaced = raukkMapSpacedPlacement(piled(), { a: 20, b: 20 });
+
+		expect(
+			distance(spaced.positionByKey.a, { x: 500, y: 300 })
+		).toBeLessThanOrEqual(RAUKK_MAP_MAX_SHIFT + 1e-6);
+	});
+
+	it("leaves systems that already clear each other where they are", () => {
+		const placement: IRaukkStarPlacement = piled();
+		placement.systems[1] = {
+			name: "B",
+			x: 900,
+			y: 300,
+			radius: 22,
+			entityKeys: ["b"],
+		};
+		placement.positionByKey.b = { x: 900, y: 300 };
+
+		const spaced = raukkMapSpacedPlacement(placement, { a: 20, b: 20 });
+
+		expect(spaced.positionByKey.a).toStrictEqual({ x: 500, y: 300 });
+		expect(spaced.positionByKey.b).toStrictEqual({ x: 900, y: 300 });
+	});
+
+	it("fans co-located stops on the sizes they are drawn at", () => {
+		const placement: IRaukkStarPlacement = {
+			positionByKey: {},
+			systems: [
+				{
+					name: "A",
+					x: 500,
+					y: 300,
+					radius: 48,
+					entityKeys: ["big", "small"],
+				},
+			],
+			unmappedKeys: [],
+			unmappedAnchor: null,
+			externalAnchor: { x: 948, y: 330 },
+		};
+
+		const spaced = raukkMapSpacedPlacement(placement, {
+			big: 26,
+			small: 9,
+		});
+
+		// the fixed 26 px fan of the projection would overlap these two
+		expect(
+			distance(spaced.positionByKey.big, spaced.positionByKey.small)
+		).toBeGreaterThan(26 + 9);
+	});
+
+	it("keeps the ring around its own members", () => {
+		const placement: IRaukkStarPlacement = {
+			positionByKey: {},
+			systems: [
+				{
+					name: "A",
+					x: 500,
+					y: 300,
+					radius: 48,
+					entityKeys: ["one", "two", "three"],
+				},
+			],
+			unmappedKeys: [],
+			unmappedAnchor: null,
+			externalAnchor: { x: 948, y: 330 },
+		};
+
+		const spaced = raukkMapSpacedPlacement(placement, {
+			one: 20,
+			two: 20,
+			three: 20,
+		});
+
+		spaced.systems[0].entityKeys.forEach((key) => {
+			expect(
+				distance(spaced.positionByKey[key], spaced.systems[0]) + 20
+			).toBeLessThanOrEqual(spaced.systems[0].radius + 1e-6);
+		});
+	});
+
+	it("draws no ring for the unmapped cluster but still places it", () => {
+		const placement: IRaukkStarPlacement = {
+			positionByKey: {},
+			systems: [],
+			unmappedKeys: ["lost"],
+			unmappedAnchor: { x: 110, y: 590 },
+			externalAnchor: { x: 948, y: 330 },
+		};
+
+		const spaced = raukkMapSpacedPlacement(placement, { lost: 12 });
+
+		expect(spaced.systems).toStrictEqual([]);
+		expect(spaced.positionByKey.lost).toStrictEqual({ x: 110, y: 590 });
+	});
+
+	it("separates exactly co-incident systems the same way every run", () => {
+		const placement: IRaukkStarPlacement = piled();
+		placement.systems[1] = {
+			name: "B",
+			x: 500,
+			y: 300,
+			radius: 22,
+			entityKeys: ["b"],
+		};
+
+		const first = raukkMapSpacedPlacement(placement, { a: 20, b: 20 });
+		const second = raukkMapSpacedPlacement(placement, { a: 20, b: 20 });
+
+		expect(first.positionByKey).toStrictEqual(second.positionByKey);
+		expect(
+			distance(first.positionByKey.a, first.positionByKey.b)
+		).toBeGreaterThan(40);
+	});
+
+	it("defaults a mark the caller sized nothing for", () => {
+		const spaced = raukkMapSpacedPlacement(piled(), {});
+
+		expect(spaced.positionByKey.a).toBeDefined();
+		expect(spaced.positionByKey.b).toBeDefined();
 	});
 });

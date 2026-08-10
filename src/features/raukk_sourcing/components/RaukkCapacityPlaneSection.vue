@@ -11,6 +11,7 @@
 		IRaukkCapacityPoint,
 		RAUKK_CAPACITY_MAX_DAYS,
 		RAUKK_CAPACITY_MIN_DAYS,
+		raukkCapacityDrivingPoint,
 		raukkCapacityFits,
 		raukkCapacityHulls,
 		raukkCapacityMaxCadenceDays,
@@ -28,6 +29,13 @@
 		RAUKK_VIZ_INK,
 		RAUKK_VIZ_SURFACE,
 	} from "@/features/raukk_sourcing/calculations/raukkVizPalette";
+
+	// Composables
+	import {
+		raukkTooltipFromText,
+		useRaukkOversubTooltip,
+	} from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
+	const tooltip = useRaukkOversubTooltip();
 
 	// UI
 	import { PButton, PButtonGroup, PInputNumber } from "@/ui";
@@ -123,6 +131,15 @@
 
 			return fitting === undefined ? null : fitting.hull;
 		}
+	);
+
+	/**
+	 * The lane the recommendation is about. "Smallest bay fitting all:
+	 * HCB" is a verdict driven by exactly one run, and the plane is the
+	 * only place that can name it — so it does, and rings its dot.
+	 */
+	const drivingPoint: ComputedRef<IRaukkCapacityPoint | null> = computed(() =>
+		raukkCapacityDrivingPoint(points.value, hulls)
 	);
 
 	/*
@@ -251,6 +268,33 @@
 		return props.stopNames[stopRef] ?? stopRef;
 	}
 
+	/** A lane clamped to the axis edge, its dot no longer at its figure */
+	function clamped(point: IRaukkCapacityPoint): boolean {
+		return (
+			point.weightPerTrip > maxWeight.value ||
+			point.volumePerTrip > maxVolume.value
+		);
+	}
+
+	/** Hover target radius, so a 5.5 px dot is still easy to hit */
+	function hitRadius(point: IRaukkCapacityPoint): number {
+		return pointRadius(point) + 6;
+	}
+
+	function showPointTooltip(
+		event: PointerEvent,
+		point: IRaukkCapacityPoint
+	): void {
+		tooltip.show(
+			raukkTooltipFromText(pointTooltip(point)),
+			event.currentTarget as Element
+		);
+	}
+
+	function hideTooltip(): void {
+		tooltip.hide();
+	}
+
 	function pointTooltip(point: IRaukkCapacityPoint): string {
 		const smallest: IRaukkCapacityHull | null = raukkCapacitySmallestFit(
 			hulls,
@@ -258,28 +302,40 @@
 			point.volumePerTrip
 		);
 
-		return t("raukk_sourcing.capacity_plane.point_tooltip", {
-			from: stopLabel(point.fromStop),
-			to: stopLabel(point.toStop),
-			weight: formatNumber(point.weightPerTrip, 0),
-			volume: formatNumber(point.volumePerTrip, 0),
-			binding: t(
-				`raukk_sourcing.capacity_plane.binding_${point.binding}`
-			),
-			share: formatNumber(
-				raukkCapacityShare(
-					selectedHull.value,
-					point.weightPerTrip,
-					point.volumePerTrip
-				) * 100,
-				0
-			),
-			smallest:
-				smallest === null
-					? t("raukk_sourcing.capacity_plane.no_hull_fits")
-					: (smallest.bayCode ?? smallest.shipTypeId),
-			tickers: point.tickers.slice(0, 6).join(", "),
-		});
+		const reading: string = t(
+			"raukk_sourcing.capacity_plane.point_tooltip",
+			{
+				from: stopLabel(point.fromStop),
+				to: stopLabel(point.toStop),
+				weight: formatNumber(point.weightPerTrip, 0),
+				volume: formatNumber(point.volumePerTrip, 0),
+				binding: t(
+					`raukk_sourcing.capacity_plane.binding_${point.binding}`
+				),
+				share: formatNumber(
+					raukkCapacityShare(
+						selectedHull.value,
+						point.weightPerTrip,
+						point.volumePerTrip
+					) * 100,
+					0
+				),
+				smallest:
+					smallest === null
+						? t("raukk_sourcing.capacity_plane.no_hull_fits")
+						: (smallest.bayCode ?? smallest.shipTypeId),
+				tickers: point.tickers.slice(0, 6).join(", "),
+			}
+		);
+
+		if (!clamped(point)) return reading;
+
+		return `${reading}\n${t("raukk_sourcing.capacity_plane.tooltip_clamped")}`;
+	}
+
+	/** Lane name of the driving point, for the verdict strip */
+	function laneLabel(point: IRaukkCapacityPoint): string {
+		return `${stopLabel(point.fromStop)} → ${stopLabel(point.toStop)}`;
 	}
 
 	function hullLabel(hull: IRaukkCapacityHull): string {
@@ -390,6 +446,16 @@
 						}}
 					</span>
 				</div>
+				<div v-if="drivingPoint !== null">
+					<span class="text-white/50">
+						{{ $t("raukk_sourcing.capacity_plane.driven_by") }}
+					</span>
+					<span
+						class="pl-2 font-bold"
+						:style="{ color: RAUKK_VIZ_ACCENT.solid }">
+						{{ laneLabel(drivingPoint) }}
+					</span>
+				</div>
 			</div>
 
 			<div
@@ -468,22 +534,69 @@
 
 					<!-- lanes -->
 					<g>
-						<circle
+						<g
 							v-for="point in points"
 							:key="`RAUKKPLANEPOINT#${point.key}`"
-							:cx="xOf(Math.min(point.weightPerTrip, maxWeight))"
-							:cy="yOf(Math.min(point.volumePerTrip, maxVolume))"
-							:r="pointRadius(point)"
-							:fill="pointColor(point.bucket)"
-							:fill-opacity="overflows(point) ? 0.95 : 0.6"
-							:stroke="
-								overflows(point)
-									? RAUKK_VIZ_ALERT.text
-									: RAUKK_VIZ_SURFACE.plot
-							"
-							stroke-width="2">
-							<title>{{ pointTooltip(point) }}</title>
-						</circle>
+							class="lane"
+							@pointerenter="showPointTooltip($event, point)"
+							@pointerleave="hideTooltip">
+							<!-- the dot is 5.5 px across and lanes of one
+							 cadence sit almost on top of each other, so the
+							 hover target is deliberately bigger than the mark -->
+							<circle
+								:cx="
+									xOf(
+										Math.min(point.weightPerTrip, maxWeight)
+									)
+								"
+								:cy="
+									yOf(
+										Math.min(point.volumePerTrip, maxVolume)
+									)
+								"
+								:r="hitRadius(point)"
+								fill="transparent" />
+							<!-- the one lane the recommendation is about,
+							 called out so the verdict names something -->
+							<circle
+								v-if="point.key === drivingPoint?.key"
+								:cx="
+									xOf(
+										Math.min(point.weightPerTrip, maxWeight)
+									)
+								"
+								:cy="
+									yOf(
+										Math.min(point.volumePerTrip, maxVolume)
+									)
+								"
+								:r="pointRadius(point) + 4.5"
+								fill="none"
+								:stroke="RAUKK_VIZ_ACCENT.solid"
+								stroke-width="1.6"
+								pointer-events="none" />
+							<circle
+								:cx="
+									xOf(
+										Math.min(point.weightPerTrip, maxWeight)
+									)
+								"
+								:cy="
+									yOf(
+										Math.min(point.volumePerTrip, maxVolume)
+									)
+								"
+								:r="pointRadius(point)"
+								:fill="pointColor(point.bucket)"
+								:fill-opacity="overflows(point) ? 0.95 : 0.6"
+								:stroke="
+									overflows(point)
+										? RAUKK_VIZ_ALERT.text
+										: RAUKK_VIZ_SURFACE.plot
+								"
+								stroke-width="2"
+								pointer-events="none" />
+						</g>
 					</g>
 
 					<!-- bay labels last, so a lane never buries one -->
@@ -574,6 +687,9 @@
 				</span>
 				<span>
 					{{ $t("raukk_sourcing.capacity_plane.legend_clamped") }}
+				</span>
+				<span>
+					{{ $t("raukk_sourcing.capacity_plane.legend_driving") }}
 				</span>
 			</div>
 		</template>

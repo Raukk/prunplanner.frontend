@@ -885,14 +885,17 @@
 		"max_cadence": "Longest cadence",
 		"max_cadence_value": "{hull} serves every lane up to every {days} days",
 		"recommended": "Smallest bay fitting all",
+		"driven_by": "Driven by",
 		"no_hull_fits": "none — the lane needs more than one trip",
 		"binding_weight": "weight",
 		"binding_volume": "volume",
 		"point_tooltip": "{from} → {to}\n{weight} t · {volume} m³ per trip, {binding} bound\n{share} % of the selected bay · smallest fitting bay: {smallest}\n{tickers}",
+		"tooltip_clamped": "Drawn on the plot edge — the figures above are the real ones.",
 		"legend_inside": "A point inside the highlighted box fits one trip of that bay",
 		"legend_outside": "A ringed point overflows it and needs a bigger bay or a shorter cadence",
 		"legend_diagonal": "Above the diagonal the cargo is volume bound, below it weight bound",
-		"legend_clamped": "A point pinned to the plot edge reaches beyond the axis — its tooltip carries the real figure"
+		"legend_clamped": "A point pinned to the plot edge reaches beyond the axis — its tooltip carries the real figure",
+		"legend_driving": "A lime ring marks the lane the recommended bay is sized for"
 	},
 	"ship_sourcing": {
 		"title": "Fleet Sourcing",

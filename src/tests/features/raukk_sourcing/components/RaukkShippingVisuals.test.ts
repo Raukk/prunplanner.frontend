@@ -1,10 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { mount, VueWrapper } from "@vue/test-utils";
+import { Component, defineComponent, h } from "vue";
 import { createI18n } from "vue-i18n";
 
 // Components
 import RaukkShippingMapSection from "@/features/raukk_sourcing/components/RaukkShippingMapSection.vue";
 import RaukkCapacityPlaneSection from "@/features/raukk_sourcing/components/RaukkCapacityPlaneSection.vue";
+import RaukkOversubTooltip from "@/features/raukk_sourcing/components/oversub/RaukkOversubTooltip.vue";
+
+// Composables
+import { provideRaukkOversubTooltip } from "@/features/raukk_sourcing/components/oversub/useRaukkOversubTooltip";
 
 // UI
 import { PButton } from "@/ui";
@@ -54,17 +59,42 @@ const STOP_NAMES: Record<string, string> = {
 	"ZV-307c": "Hephaestus",
 };
 
+/**
+ * Both views drive the hover host their section provides, exactly as
+ * `RaukkShippingVisualsSection` does — mounting one on its own would
+ * inject nothing and throw.
+ */
+function mountInSection(
+	component: Component,
+	props: Record<string, unknown>
+): VueWrapper {
+	const host = defineComponent({
+		setup() {
+			provideRaukkOversubTooltip();
+
+			return () =>
+				h("div", [h(component, props), h(RaukkOversubTooltip)]);
+		},
+	});
+
+	return mount(host, {
+		global: { plugins: [i18n], stubs: { teleport: true } },
+	});
+}
+
 function mountMap(lanes: IRaukkMapLane[] = LANES): VueWrapper {
-	return mount(RaukkShippingMapSection, {
-		props: { lanes, stopNames: STOP_NAMES, depotPlanets: [] },
-		global: { plugins: [i18n] },
+	return mountInSection(RaukkShippingMapSection, {
+		lanes,
+		stopNames: STOP_NAMES,
+		depotPlanets: [],
 	});
 }
 
 function mountPlane(lanes: IRaukkMapLane[] = LANES): VueWrapper {
-	return mount(RaukkCapacityPlaneSection, {
-		props: { lanes, stopNames: STOP_NAMES, defaultCadenceDays: 14 },
-		global: { plugins: [i18n] },
+	return mountInSection(RaukkCapacityPlaneSection, {
+		lanes,
+		stopNames: STOP_NAMES,
+		defaultCadenceDays: 14,
 	});
 }
 
@@ -73,10 +103,47 @@ describe("RaukkShippingMapSection", () => {
 	// checkbox components render icon <svg> of their own
 	const PLOT: string = "svg.touch-none";
 
-	it("draws one curve and one arrowhead per lane", () => {
+	// hover target, drawn curve and arrowhead
+	it("draws three paths per lane", () => {
 		const wrapper: VueWrapper = mountMap();
 
-		expect(wrapper.findAll(`${PLOT} path`)).toHaveLength(LANES.length * 2);
+		expect(wrapper.findAll(`${PLOT} path`)).toHaveLength(LANES.length * 3);
+	});
+
+	// the reading used to hang off a `<title>` nested in the shared
+	// group, which browsers show for the WHOLE group — one tooltip for
+	// every stop on the map
+	it("gives every stop its own hover target", () => {
+		// NC1, OT-580b and ZV-307c
+		expect(mountMap().findAll(`${PLOT} g.stop`)).toHaveLength(3);
+	});
+
+	it("shows the hovered stop's own reading", async () => {
+		const map: VueWrapper = mountMap();
+
+		await map.findAll(`${PLOT} g.stop`)[0].trigger("pointerenter");
+
+		// the busiest stop first, and the wording no label carries
+		expect(map.text()).toContain("Arriving");
+		expect(map.text()).toContain("Moria Steel (OT-580b)");
+	});
+
+	it("shows the hovered lane's reading", async () => {
+		const map: VueWrapper = mountMap();
+
+		await map.findAll(`${PLOT} g.lane`)[0].trigger("pointerenter");
+
+		expect(map.text()).toContain("Weight");
+	});
+
+	it("drops the reading again when the pointer leaves", async () => {
+		const map: VueWrapper = mountMap();
+		const target = map.findAll(`${PLOT} g.stop`)[0];
+
+		await target.trigger("pointerenter");
+		await target.trigger("pointerleave");
+
+		expect(map.text()).not.toContain("Arriving");
 	});
 
 	it("draws a marker for every stop the lanes touch", () => {
@@ -117,7 +184,35 @@ describe("RaukkShippingMapSection", () => {
 
 describe("RaukkCapacityPlaneSection", () => {
 	it("plots one point per lane", () => {
-		expect(mountPlane().findAll("svg circle")).toHaveLength(LANES.length);
+		expect(mountPlane().findAll("svg g.lane")).toHaveLength(LANES.length);
+	});
+
+	it("shows the hovered lane's figures on hover", async () => {
+		const plane: VueWrapper = mountPlane();
+
+		await plane.findAll("svg g.lane")[0].trigger("pointerenter");
+
+		expect(plane.text()).toContain("smallest fitting bay");
+		expect(plane.text()).toContain("per trip");
+	});
+
+	it("drops the reading again when the pointer leaves", async () => {
+		const plane: VueWrapper = mountPlane();
+		const target = plane.findAll("svg g.lane")[0];
+
+		await target.trigger("pointerenter");
+		await target.trigger("pointerleave");
+
+		expect(plane.text()).not.toContain("smallest fitting bay");
+	});
+
+	// the verdict names a bay, and without naming the lane behind it the
+	// reader cannot act on it
+	it("names the lane the recommended bay is sized for", () => {
+		const text: string = mountPlane().text();
+
+		expect(text).toContain("Driven by");
+		expect(text).toContain("Moria Steel");
 	});
 
 	it("draws a box per cargo bay", () => {
@@ -152,7 +247,7 @@ describe("RaukkCapacityPlaneSection", () => {
 	it("says so rather than drawing an empty plane without lanes", () => {
 		const wrapper: VueWrapper = mountPlane([]);
 
-		expect(wrapper.findAll("svg circle")).toHaveLength(0);
+		expect(wrapper.findAll("svg g.lane")).toHaveLength(0);
 		expect(wrapper.text()).toContain("No lanes carry anything yet");
 	});
 });
