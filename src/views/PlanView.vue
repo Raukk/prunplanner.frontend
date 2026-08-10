@@ -70,6 +70,7 @@
 	import PlanWorkforce from "@/features/planning/components/PlanWorkforce.vue";
 	import PlanInfrastructure from "@/features/planning/components/PlanInfrastructure.vue";
 	import PlanExperts from "@/features/planning/components/PlanExperts.vue";
+	import PlanToolErrorBoundary from "@/features/planning/components/tools/PlanToolErrorBoundary.vue";
 	import PlanProduction from "@/features/planning/components/PlanProduction.vue";
 	import PlanMaterialIO from "@/features/planning/components/PlanMaterialIO.vue";
 	import PlanConfiguration from "@/features/planning/components/PlanConfiguration.vue";
@@ -1095,19 +1096,23 @@
 						</div>
 					</div>
 				</div>
-				<Suspense v-else-if="refShowTool && compViewToolMeta">
-					<template #default>
-						<component
-							:is="compViewToolComponent"
-							v-bind="compViewToolMeta.props"
-							v-on="compViewToolMeta.listeners" />
-					</template>
-					<template #fallback>
-						<div class="w-full text-center py-5">
-							<PSpin />
-						</div>
-					</template>
-				</Suspense>
+				<PlanToolErrorBoundary
+					v-else-if="refShowTool && compViewToolMeta"
+					:reset-key="refShowTool">
+					<Suspense>
+						<template #default>
+							<component
+								:is="compViewToolComponent"
+								v-bind="compViewToolMeta.props"
+								v-on="compViewToolMeta.listeners" />
+						</template>
+						<template #fallback>
+							<div class="w-full text-center py-5">
+								<PSpin />
+							</div>
+						</template>
+					</Suspense>
+				</PlanToolErrorBoundary>
 			</div>
 			<!-- Main Plan View -->
 			<div

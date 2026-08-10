@@ -148,6 +148,11 @@
 				"production_buildings": "Production @:terms.buildings_plural",
 				"recipes": "@:terms.recipes_plural"
 			}
+		},
+		"error_boundary": {
+			"title": "This tool failed to open",
+			"hint": "The error below is the reason it kept spinning — please include it when reporting.",
+			"retry": "Retry"
 		}
 	},
 	"components": {
