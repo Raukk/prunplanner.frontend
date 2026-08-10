@@ -31,6 +31,19 @@
 		sourcingStore.setShippingConfig({ enabled });
 	}
 
+	/**
+	 * Stores whether plans belonging to no empire may still price the
+	 * plans that do. Stales the whole store either way, the numbers of
+	 * every consumer of such a plan change with it.
+	 *
+	 * @author raukk
+	 *
+	 * @param {boolean} allowed Unassigned plans may act as sources
+	 */
+	function toggleUnassignedSources(allowed: boolean): void {
+		sourcingStore.setShippingConfig({ allowUnassignedSources: allowed });
+	}
+
 	function changeDefaultProfile(profileId: string): void {
 		sourcingStore.setShippingConfig({ defaultProfileId: profileId });
 	}
@@ -95,6 +108,22 @@
 			<div class="font-bold">
 				{{ $t("raukk_sourcing.shipping.enabled") }}
 			</div>
+
+			<!-- a sourcing rule, not a shipping one: it decides which
+			 plans may price each other and stays reachable with
+			 shipping off -->
+			<PCheckbox
+				class="pl-3"
+				:checked="config.allowUnassignedSources === true"
+				@update:checked="(v) => toggleUnassignedSources(v === true)" />
+			<PTooltip>
+				<template #trigger>
+					<div class="font-bold hover:cursor-help">
+						{{ $t("raukk_sourcing.shipping.unassigned_sources") }}
+					</div>
+				</template>
+				{{ $t("raukk_sourcing.shipping.unassigned_sources_tooltip") }}
+			</PTooltip>
 
 			<template v-if="config.enabled">
 				<div class="font-bold pl-3">

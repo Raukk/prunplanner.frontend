@@ -592,5 +592,6 @@ export function raukkDefaultShippingConfig(): IRaukkShippingConfig {
 		cadenceInOutDays: RAUKK_DEFAULT_CADENCE_IN_OUT_DAYS,
 		cadenceWorkforceDays: RAUKK_DEFAULT_CADENCE_WORKFORCE_DAYS,
 		cxAnchorMode: RAUKK_CX_ANCHOR_NEAREST,
+		allowUnassignedSources: false,
 	};
 }

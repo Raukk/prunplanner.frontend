@@ -170,6 +170,8 @@
 		"title": "Shipping",
 		"enabled": "Charge Shipping",
 		"disabled_info": "Shipping is off: freight costs nothing and no snapshot changes. Turning it on marks every stored snapshot stale — the fleet is account-global, so it moves the numbers of every plan.",
+		"unassigned_sources": "Source From Unassigned Plans",
+		"unassigned_sources_tooltip": "Off by default: a plan assigned to no empire on the Management screen produces nothing for the plans that are. A configuration still naming one falls back to the market price and books no draw. Switched on, such a plan is offered as a source again and its cost per unit is charged — its lanes are ignored by chains, the fleet and hub/spoke either way. Flipping this marks every stored snapshot stale.",
 		"default_profile": "Default Profile",
 		"same_system_cost": "Same-System ȼ/Trip",
 		"cadence_in_out": "Days/Visit In-Out",

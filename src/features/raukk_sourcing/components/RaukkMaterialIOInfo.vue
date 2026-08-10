@@ -98,6 +98,12 @@
 	 * market. Aggregates carry their producer count instead of a name,
 	 * an aggregate without any producer prices at market and stays
 	 * unannotated.
+	 *
+	 * The name is read off the PRODUCER POOL, not off the stored
+	 * snapshots: a configuration naming a plan the pool no longer holds
+	 * — one unassigned from every empire, one whose snapshot vanished —
+	 * is priced at market, and the row has to say so by staying
+	 * unannotated rather than by naming a base nothing is drawn from.
 	 * @author raukk
 	 */
 	const localSourceLabel: ComputedRef<string | undefined> = computed(() => {
@@ -107,10 +113,11 @@
 			return undefined;
 
 		if (!isAggregateSource(source.sourcePlanUuid))
-			return (
-				raukkSourcingStore.getSnapshot(source.sourcePlanUuid)
-					?.planName ?? source.sourcePlanUuid
-			);
+			return raukkSourcingStore
+				.producersOf(props.ticker)
+				.find(
+					(producer) => producer.planUuid === source.sourcePlanUuid
+				)?.planName;
 
 		const count: number = raukkSourcingStore
 			.producersOf(props.ticker)
