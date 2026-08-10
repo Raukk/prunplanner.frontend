@@ -83,6 +83,18 @@ export const RAUKK_DAMAGE_GRAVITATIONAL_G: number = 6.6743e-11;
  */
 export const RAUKK_DAMAGE_GAME_TIME_RATIO: number = 20;
 
+/**
+ * Real-time anchor of the simulation clock, in epoch milliseconds.
+ *
+ * At this instant the universe stood at
+ * `RAUKK_DAMAGE_SIM_EPOCH_YEARS`. Both constants come from the
+ * community orbit visualiser at https://orbit.em32.site/.
+ */
+export const RAUKK_DAMAGE_SIM_CALIBRATION_MS: number = 1743599009468;
+
+/** Simulation age in game years at the calibration instant */
+export const RAUKK_DAMAGE_SIM_CALIBRATION_YEARS: number = 231.0;
+
 /** Landing term scale, percent per sqrt(km) at saturating pressure */
 export const RAUKK_DAMAGE_LANDING_SCALE: number = 0.01192;
 
@@ -686,4 +698,124 @@ export function raukkSynodicPeriodDays(
 	const difference: number = Math.abs(1 / a - 1 / b);
 
 	return difference > 0 ? 1 / difference : null;
+}
+
+/**
+ * Mean anomaly of every body at the simulation epoch.
+ *
+ * The universe places all planets at zero: position is
+ * `meanMotion x t` with no per-planet offset, so the whole geometry is
+ * a closed-form function of real time carrying no free parameters at
+ * all. Verified against 74 timestamped community flights (r = 0.974,
+ * see `star-heat-damage.md` section 9).
+ */
+const MEAN_ANOMALY_AT_EPOCH: number = 0;
+
+/**
+ * Solves Kepler's equation `M = E - e sin E` for the eccentric anomaly.
+ *
+ * @param {number} meanAnomaly Mean anomaly in radians
+ * @param {number} eccentricity Orbit eccentricity
+ * @returns {number} Eccentric anomaly in radians
+ * @author raukk
+ */
+export function raukkEccentricAnomaly(
+	meanAnomaly: number,
+	eccentricity: number
+): number {
+	let e: number = meanAnomaly;
+
+	for (let i = 0; i < 40; i++) {
+		const delta: number =
+			(e - eccentricity * Math.sin(e) - meanAnomaly) /
+			(1 - eccentricity * Math.cos(e));
+
+		e -= delta;
+
+		if (Math.abs(delta) < 1e-12) break;
+	}
+
+	return e;
+}
+
+/**
+ * Position of a planet in its own orbital plane, at a real instant.
+ *
+ * Returns AU in the system's own frame — exact for anything WITHIN a
+ * system (separations, conjunctions). Pointing it at another system
+ * additionally needs that orbital plane's orientation in the galactic
+ * frame, which no data source carries; see `star-heat-damage.md`
+ * section 9.
+ *
+ * @param {string} planetNaturalId Planet natural id
+ * @param {number} atEpochMs Real time, in epoch milliseconds
+ * @returns {{ xAu: number; yAu: number } | null} Position, null when
+ *   the planet or its star is unknown
+ * @author raukk
+ */
+export function raukkPlanetPosition(
+	planetNaturalId: string,
+	atEpochMs: number
+): { xAu: number; yAu: number } | null {
+	const raw: [number, number] | undefined = (
+		orbitsJson as unknown as Record<string, [number, number]>
+	)[planetNaturalId];
+	const periodDays: number | null = raukkOrbitalPeriodDays(planetNaturalId);
+
+	if (raw === undefined || periodDays === null) return null;
+
+	const semiMajorAu: number = (raw[0] * 1e3) / RAUKK_DAMAGE_AU_KM;
+	const eccentricity: number = raw[1];
+
+	// game years elapsed since the simulation epoch
+	const yearSeconds: number = 365.25 * 86400;
+	const gameYears: number =
+		RAUKK_DAMAGE_SIM_CALIBRATION_YEARS +
+		((atEpochMs - RAUKK_DAMAGE_SIM_CALIBRATION_MS) *
+			RAUKK_DAMAGE_GAME_TIME_RATIO) /
+			(1000 * yearSeconds);
+
+	// the period is in REAL days, so scale it back into game years
+	const periodGameYears: number =
+		(periodDays * RAUKK_DAMAGE_GAME_TIME_RATIO * 86400) / yearSeconds;
+	const meanAnomaly: number =
+		(MEAN_ANOMALY_AT_EPOCH + (2 * Math.PI * gameYears) / periodGameYears) %
+		(2 * Math.PI);
+	const eccentric: number = raukkEccentricAnomaly(
+		meanAnomaly < 0 ? meanAnomaly + 2 * Math.PI : meanAnomaly,
+		eccentricity
+	);
+
+	return {
+		xAu: semiMajorAu * (Math.cos(eccentric) - eccentricity),
+		yAu:
+			semiMajorAu *
+			Math.sqrt(1 - eccentricity * eccentricity) *
+			Math.sin(eccentric),
+	};
+}
+
+/**
+ * Straight-line separation of two planets of one system, in AU.
+ *
+ * @param {string} planetA First planet natural id
+ * @param {string} planetB Second planet natural id
+ * @param {number} atEpochMs Real time, in epoch milliseconds
+ * @returns {number | null} Separation in AU, null when either is
+ *   unknown or they sit in different systems
+ * @author raukk
+ */
+export function raukkPlanetSeparationAu(
+	planetA: string,
+	planetB: string,
+	atEpochMs: number
+): number | null {
+	if (raukkSystemOf(planetA) !== raukkSystemOf(planetB)) return null;
+
+	const a = raukkPlanetPosition(planetA, atEpochMs);
+	const b = raukkPlanetPosition(planetB, atEpochMs);
+
+	if (a === null || b === null) return null;
+
+	return Math.hypot(a.xAu - b.xAu, a.yAu - b.yAu);
 }

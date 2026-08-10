@@ -10,6 +10,8 @@ import {
 	raukkLegDamage,
 	raukkOrbitAu,
 	raukkOrbitalPeriodDays,
+	raukkPlanetPosition,
+	raukkPlanetSeparationAu,
 	raukkStellarClosestApproach,
 	raukkStellarGeometry,
 	raukkStellarPathIntegral,
@@ -31,6 +33,7 @@ import {
 import batch9 from "@/tests/test_data/btf_flights.json";
 import batch11 from "@/tests/test_data/btf_star_damage.json";
 import batch12 from "@/tests/test_data/btf_ant_reflight.json";
+import ki439 from "@/tests/test_data/ki439_orbit_log.json";
 
 /** Antares Station is not a planet; its orbit comes from the panel */
 const ANT_ORBIT_AU: number = (33603 * 1e3) / RAUKK_DAMAGE_AU_KM;
@@ -114,6 +117,102 @@ describe("shippingDamage — static lookups", () => {
 		expect(
 			Math.abs(l / raukkOrbitAu("NL-534g")! ** 2 - 307.37) / 307.37
 		).toBeLessThan(1e-3);
+	});
+});
+
+describe("shippingDamage — the simulation clock", () => {
+	// KI-439b/d separations at the timestamps of the community log,
+	// which the model must reproduce with no free parameters at all
+	const AU_MKM: number = RAUKK_DAMAGE_AU_KM / 1e6;
+	const at = (iso: string): number => Date.parse(iso);
+
+	it("keeps a planet on its own ellipse", () => {
+		const p = raukkPlanetPosition("KI-439b", at("2026-03-11T22:32:00Z"))!;
+		const r: number = Math.hypot(p.xAu, p.yAu);
+		const a: number = raukkOrbitAu("KI-439b")!;
+
+		// eccentricity 0.05, so the radius stays within 5% of a
+		expect(r).toBeGreaterThan(a * 0.94);
+		expect(r).toBeLessThan(a * 1.06);
+	});
+
+	it("returns to the same place after one orbital period", () => {
+		const t: number = at("2026-03-11T22:32:00Z");
+		const period: number =
+			raukkOrbitalPeriodDays("KI-439b")! * 86400 * 1000;
+		const now = raukkPlanetPosition("KI-439b", t)!;
+		const later = raukkPlanetPosition("KI-439b", t + period)!;
+
+		expect(later.xAu).toBeCloseTo(now.xAu, 4);
+		expect(later.yAu).toBeCloseTo(now.yAu, 4);
+	});
+
+	it("sweeps the separation between conjunction and opposition", () => {
+		const a: number = raukkOrbitAu("KI-439b")!;
+		const b: number = raukkOrbitAu("KI-439d")!;
+		const samples: number[] = [];
+
+		for (let hour = 0; hour < 24 * 20; hour += 6) {
+			samples.push(
+				raukkPlanetSeparationAu(
+					"KI-439b",
+					"KI-439d",
+					at("2026-03-11T22:32:00Z") + hour * 3600 * 1000
+				)!
+			);
+		}
+
+		// nothing may escape what the two orbits physically allow
+		expect(Math.min(...samples) * AU_MKM).toBeGreaterThan(
+			(b - a) * AU_MKM * 0.9
+		);
+		expect(Math.max(...samples) * AU_MKM).toBeLessThan(
+			(a + b) * AU_MKM * 1.02
+		);
+		// and it must actually sweep, not sit still
+		expect(Math.max(...samples) / Math.min(...samples)).toBeGreaterThan(2);
+	});
+
+	it("tracks all 74 timestamped community flights", () => {
+		// zero free parameters: the calibration instant and mean anomaly
+		// zero are both fixed, so this either works or it does not
+		const modelled: number[] = [];
+		const flown: number[] = [];
+
+		for (const row of ki439.flights) {
+			const sep: number | null = raukkPlanetSeparationAu(
+				"KI-439b",
+				"KI-439d",
+				at(row.atUtc)
+			);
+
+			expect(sep).not.toBeNull();
+			modelled.push(sep! * AU_MKM);
+			flown.push(row.flownMkm);
+		}
+
+		expect(modelled).toHaveLength(74);
+
+		const mean = (v: number[]): number =>
+			v.reduce((s, x) => s + x, 0) / v.length;
+		const mm: number = mean(modelled);
+		const mf: number = mean(flown);
+		const cov: number = modelled.reduce(
+			(s, x, i) => s + (x - mm) * (flown[i] - mf),
+			0
+		);
+		const sd = (v: number[], m: number): number =>
+			Math.sqrt(v.reduce((s, x) => s + (x - m) ** 2, 0));
+		const correlation: number = cov / (sd(modelled, mm) * sd(flown, mf));
+
+		expect(correlation).toBeGreaterThan(0.95);
+	});
+
+	it("returns null off-system and for unknown planets", () => {
+		expect(
+			raukkPlanetSeparationAu("KI-439b", "NL-534a", Date.now())
+		).toBeNull();
+		expect(raukkPlanetPosition("ZZ-999a", Date.now())).toBeNull();
 	});
 });
 

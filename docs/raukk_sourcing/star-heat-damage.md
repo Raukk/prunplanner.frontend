@@ -435,7 +435,58 @@ their coefficient absorbs whatever the geometry gets wrong. One
 3. **One blueprint both ways** on a single pair, to close section 8.4
    by direct measurement rather than by cross-batch inference.
 
-## 9. Downstream
+## 9. The simulation clock — geometry with no free parameters
+
+The universe's orbital phase does not have to be measured. It is
+already pinned, and the whole geometry is a closed-form function of
+real time.
+
+The community orbit visualiser at `https://orbit.em32.site/` carries
+two constants:
+
+```
+CALIBRATION_POINT = 1743599009468      // 2025-04-02T13:03:29Z
+sim age at that instant = 231.000 game years
+```
+
+and computes each planet's mean anomaly as `meanMotion x t` — with NO
+per-planet offset. Every body sits at mean anomaly ZERO at the
+simulation epoch. Combined with Kepler on the FIO star mass that
+leaves nothing to fit: semi-major axis, eccentricity and star mass are
+all published, so position is determined for every planet at every
+instant.
+
+**Verified against the 74 timestamped community flights: r = 0.974.**
+The model's separations span 44.3 to 117.3 Mkm against the 44.2 to
+117.1 the two orbits physically allow, and its shape tracks their
+flown distance across 21 days with zero parameters fitted. The one
+free choice was the log's clock offset, which came out at UTC-4 — a
+property of their spreadsheet, not of the model.
+
+`raukkPlanetPosition` and `raukkPlanetSeparationAu` expose it, and
+`ki439_orbit_log.json` carries the series as a regression test.
+
+### 9.1 What this does and does not settle
+
+Positions are returned in the SYSTEM's own orbital plane, which makes
+anything within a system exact — separations, conjunctions, transit
+windows. Pointing a leg at ANOTHER system needs one more thing: the
+orientation of that orbital plane in the galactic frame, which no
+source publishes.
+
+That is a much smaller unknown than it sounds. It is two fixed angles
+per system that never change. Fit them once from a handful of
+timestamped flights and that system's geometry is solved permanently —
+the stellar term stops needing bounds and becomes a point estimate for
+any lane at any date.
+
+So the answer to "could we identify the epoch from simultaneous
+observations" is that it is already identified, and no coordinated
+launch is needed. What IS still needed is timestamps on the flights we
+already fly: with a capture time recorded, every flight becomes a
+constraint on its system's plane orientation.
+
+## 10. Downstream
 
 Section 6 of shipping-calibration.md can then retire "ANTARES I
 ANOMALY / not modeled; flag Antares-anchored lanes" outright. Until
