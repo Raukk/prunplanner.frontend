@@ -69,6 +69,20 @@ export const RAUKK_DAMAGE_STELLAR_C: number = 3.25e-6;
  */
 export const RAUKK_DAMAGE_CLOSEST_FRACTION: number = 0.05;
 
+/** Gravitational constant, m^3 kg^-1 s^-2 */
+export const RAUKK_DAMAGE_GRAVITATIONAL_G: number = 6.6743e-11;
+
+/**
+ * Game seconds per real second.
+ *
+ * The universe runs 20x faster than real time, so an orbit of one
+ * in-game year comes round every 365.25 / 20 = 18.26 real days.
+ * Confirmed to 0.1% against a 74-flight community log: Kepler puts the
+ * KI-439b/d synodic period at 5.72 real days and their series fits
+ * 5.71.
+ */
+export const RAUKK_DAMAGE_GAME_TIME_RATIO: number = 20;
+
 /** Landing term scale, percent per sqrt(km) at saturating pressure */
 export const RAUKK_DAMAGE_LANDING_SCALE: number = 0.01192;
 
@@ -119,13 +133,17 @@ export const RAUKK_DAMAGE_SHIELD_RELIEF = {
 export function raukkStellarSystem(
 	systemNaturalId: string
 ): IRaukkStellarSystem | null {
-	const raw: [number, number] | undefined = (
+	const raw: [number, number, number] | undefined = (
 		stellarJson as unknown as RAUKK_STELLAR_JSON
 	)[systemNaturalId.toUpperCase()];
 
 	if (raw === undefined) return null;
 
-	return { luminosity: raw[0], meteoroidDensity: raw[1] };
+	return {
+		luminosity: raw[0],
+		meteoroidDensity: raw[1],
+		starMassKg: raw[2],
+	};
 }
 
 /**
@@ -607,4 +625,65 @@ export function raukkCalibrateStellar(
 	if (!Number.isFinite(excess) || bare.stellar.expected <= 0) return null;
 
 	return Math.max(0, excess / bare.stellar.expected);
+}
+
+/**
+ * Orbital period of a planet, in REAL days.
+ *
+ * Kepler's third law on the FIO star mass, converted out of game time.
+ * This is how long the anchor takes to present every angle to a given
+ * lane, and therefore how far apart repeat observations have to be
+ * spaced to sample the geometry rather than resample one point of it.
+ *
+ * @param {string} planetNaturalId Planet natural id
+ * @param {number} [orbitAuOverride] Orbit radius for anchors absent
+ *   from the asset, i.e. stations
+ * @param {string} [systemNaturalIdOverride] System for the same
+ * @returns {number | null} Period in real days, null when unknown
+ * @author raukk
+ */
+export function raukkOrbitalPeriodDays(
+	planetNaturalId: string,
+	orbitAuOverride?: number,
+	systemNaturalIdOverride?: string
+): number | null {
+	const system: IRaukkStellarSystem | null = raukkStellarSystem(
+		systemNaturalIdOverride ?? raukkSystemOf(planetNaturalId)
+	);
+	const orbitAu: number | null =
+		orbitAuOverride ?? raukkOrbitAu(planetNaturalId);
+
+	if (system === null || orbitAu === null || orbitAu <= 0) return null;
+	if (!system.starMassKg || system.starMassKg <= 0) return null;
+
+	const metres: number = orbitAu * RAUKK_DAMAGE_AU_KM * 1e3;
+	const gameSeconds: number = Math.sqrt(
+		((2 * Math.PI) ** 2 * metres ** 3) /
+			(RAUKK_DAMAGE_GRAVITATIONAL_G * system.starMassKg)
+	);
+
+	return gameSeconds / 86400 / RAUKK_DAMAGE_GAME_TIME_RATIO;
+}
+
+/**
+ * Time for two bodies of one system to return to the same relative
+ * angle, in REAL days.
+ *
+ * @param {string} planetA First planet natural id
+ * @param {string} planetB Second planet natural id
+ * @returns {number | null} Synodic period, null when unknown or equal
+ * @author raukk
+ */
+export function raukkSynodicPeriodDays(
+	planetA: string,
+	planetB: string
+): number | null {
+	const a: number | null = raukkOrbitalPeriodDays(planetA);
+	const b: number | null = raukkOrbitalPeriodDays(planetB);
+
+	if (a === null || b === null) return null;
+
+	const difference: number = Math.abs(1 / a - 1 / b);
+
+	return difference > 0 ? 1 / difference : null;
 }

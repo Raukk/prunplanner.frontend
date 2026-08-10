@@ -261,13 +261,18 @@ angle and a different apparent coefficient. Average several
 observations spread across an orbital period and the result converges
 on `expected`; a single one does not.
 
-## 8. Every flight was flown on one day
+## 8. Capture dates, and what the orbit does between them
 
-All 25 BTF panels were captured on 2026-08-09. That has a consequence
-worth stating plainly, because it changes what section 7.1's band is
-FOR.
+The panels in any ONE screenshot batch were captured minutes apart, so
+within a batch each planet sits at a single orbital position. Across
+batches the dates are NOT established — batch 9 and batch 11 may be
+days apart, and the earlier history probably spans several days. Treat
+same-batch flights as sharing a geometry and cross-batch ones as not.
 
-On a single day each planet sits at ONE orbital position. So for a
+Within a batch that has a consequence worth stating plainly, because
+it changes what section 7.1's band is FOR.
+
+Each planet sits at ONE orbital position for the whole batch. So for a
 given anchor and a given lane, the angle to the star was fixed — the
 spread seen between an anchor's lanes is not orbital phase at all, it
 is the DIRECTION TO EACH TARGET SYSTEM, and that direction is not
@@ -303,25 +308,66 @@ they leave from, approaches do not. The warp-OUT point looks like a
 fixed offset from the planet; the warp-IN point does not, and that
 asymmetry is unexplained.
 
-### 8.1 How fast the geometry moves
+### 8.1 Orbital periods are computable, and now shipped
 
-The community sheet's KI-439 tab logs 74 real flights between two
-planets of one system over 21 days. Fitting a sinusoid to the flown
-distance gives a period of **5.7 real days**, swinging between 31.5
-and 177.8 Mkm.
+`https://orbit.em32.site/` derives them from Kepler on FIO's star
+mass, which `rest.fnar.net/systemstars/star/{systemId}` serves and
+`raukk_stellar.json` now carries for all 698 systems:
 
-Note that swing EXCEEDS what the two orbits allow — conjunction and
-opposition for KI-439b and d are 44.2 and 117.1 Mkm — so the panel's
-distance is the flown path, not the straight-line separation, and the
-sheet's own "Chasing/Intercept" and "Pro/Retrograde" columns say why.
-Per-planet orbital periods therefore cannot be read off it directly;
-what does survive is the TIMESCALE. Planet geometry moves over days,
-not hours.
+```
+T_game_seconds = sqrt( (2*pi)^2 * a^3 / (G * starMassKg) )
+T_real_days    = T_game_seconds / 86400 / 20
+```
 
-### 8.2 The reshoot
+The divisor is the universe running 20x faster than real time, so a
+one-game-year orbit comes round every 18.26 real days.
+`raukkOrbitalPeriodDays` and `raukkSynodicPeriodDays` expose it.
 
-Same ships, same lanes, same settings, on at least two further days
-spaced 2-3 days apart. That gives, in one campaign:
+**This validates against the community log to 0.1%.** Fitting a
+sinusoid to the 74 KI-439b/d flights gives a 5.71 real-day cycle;
+Kepler on the FIO masses puts their synodic period at 5.72.
+
+That also corrects the previous revision's caution. The log's flown
+distance swings 31.5 to 177.8 Mkm while the orbits only allow 44.2 to
+117.1, so its AMPLITUDE is inflated — but its PERIOD is exact, and the
+period is the part that matters. The inflation is not the planet
+moving during the flight: both endpoints sit on their orbits whatever
+the flight time, so a straight line between them can never exceed
+`a_b + a_d`. It takes a CURVED path, which is what the sheet's own
+"Chasing/Intercept" and "Pro/Retrograde" columns describe. The log
+carries durations too, and the implied speeds run 1,441 to 26,752 km/s
+— an 18x spread that tracks the cargo column (3,875 t loaded one way,
+1,118 t empty back), not the geometry.
+
+### 8.2 How long each anchor takes to come round
+
+| anchor | a (AU) | star mass | period (real days) |
+|---|---|---|---|
+| ANT | 0.225 | 1.42 | **1.63** |
+| ZV-194a | 0.159 | 0.27 | 2.23 |
+| AW-006a | 0.281 | 0.83 | 2.99 |
+| QJ-684a | 0.304 | 0.88 | 3.27 |
+| YK-715a | 0.406 | 1.42 | 3.96 |
+| LE-137a | 0.456 | 1.53 | 4.55 |
+| ZV-759b | 0.417 | 0.80 | 5.51 |
+| LS-231a | 0.988 | 3.78 | 9.22 |
+| LS-300c | 0.988 | 1.06 | 17.47 |
+| NL-534a | 1.982 | 8.17 | 17.83 |
+| NL-534c | 6.125 | 8.17 | 96.82 |
+| NL-534g | 85.330 | 8.17 | 5,035 |
+
+ANT turns over in **1.63 real days**, so the batch-9 lanes are the
+fastest-moving anchors in the campaign and any two of those captures
+more than a few hours apart already saw different geometry. NL-534g at
+14 years is effectively fixed — which is why it works so well as the
+null.
+
+### 8.3 The reshoot
+
+Same ships, same lanes, same settings, spaced by the anchor's own
+period rather than a flat interval — a quarter period apart samples
+the cycle without aliasing. For ANT that is ~10 hours; for NL-534a
+~4.5 days. That gives, in one campaign:
 
 1. **The orbital term, confirmed or killed.** Same lane, same ship,
    different day: any change in the stellar excess is the planet

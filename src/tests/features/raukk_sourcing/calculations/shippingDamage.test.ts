@@ -9,11 +9,13 @@ import {
 	raukkLandingDamage,
 	raukkLegDamage,
 	raukkOrbitAu,
+	raukkOrbitalPeriodDays,
 	raukkStellarClosestApproach,
 	raukkStellarGeometry,
 	raukkStellarPathIntegral,
 	raukkCalibrateStellar,
 	raukkStellarSystem,
+	raukkSynodicPeriodDays,
 	raukkSystemOf,
 	raukkTripDamage,
 } from "@/features/raukk_sourcing/calculations/shippingDamage";
@@ -109,6 +111,55 @@ describe("shippingDamage — static lookups", () => {
 		expect(
 			Math.abs(l / raukkOrbitAu("NL-534g")! ** 2 - 307.37) / 307.37
 		).toBeLessThan(1e-3);
+	});
+});
+
+describe("shippingDamage — orbital periods", () => {
+	it("reproduces the community KI-439 log's fitted cycle", () => {
+		// 74 real flights over 21 days fit a 5.71 real-day cycle in the
+		// flown distance; Kepler on the FIO star mass must agree
+		const synodic: number | null = raukkSynodicPeriodDays(
+			"KI-439b",
+			"KI-439d"
+		);
+
+		expect(synodic).not.toBeNull();
+		expect(Math.abs(synodic! - 5.71) / 5.71).toBeLessThan(0.01);
+	});
+
+	it("puts the campaign anchors on the expected timescales", () => {
+		// inner planets of dim stars turn over in days, outer planets of
+		// bright ones take years
+		expect(raukkOrbitalPeriodDays("AW-006a")!).toBeCloseTo(2.99, 1);
+		expect(raukkOrbitalPeriodDays("YK-715a")!).toBeCloseTo(3.96, 1);
+		expect(raukkOrbitalPeriodDays("NL-534a")!).toBeCloseTo(17.83, 1);
+		expect(raukkOrbitalPeriodDays("NL-534g")!).toBeGreaterThan(5000);
+	});
+
+	it("follows Kepler's third law across one system", () => {
+		// same star: T^2 / a^3 is constant
+		const k = (planet: string): number =>
+			raukkOrbitalPeriodDays(planet)! ** 2 / raukkOrbitAu(planet)! ** 3;
+
+		expect(k("NL-534c") / k("NL-534a")).toBeCloseTo(1, 6);
+		expect(k("NL-534g") / k("NL-534a")).toBeCloseTo(1, 6);
+	});
+
+	it("accepts an override for a station with no planet row", () => {
+		const ant: number | null = raukkOrbitalPeriodDays(
+			"ANT",
+			ANT_ORBIT_AU,
+			"ZV-307"
+		);
+
+		expect(ant).not.toBeNull();
+		expect(ant!).toBeCloseTo(1.63, 1);
+	});
+
+	it("returns null for unknown planets and equal periods", () => {
+		expect(raukkOrbitalPeriodDays("ZZ-999a")).toBeNull();
+		expect(raukkSynodicPeriodDays("NL-534a", "NL-534a")).toBeNull();
+		expect(raukkSynodicPeriodDays("NL-534a", "ZZ-999a")).toBeNull();
 	});
 });
 

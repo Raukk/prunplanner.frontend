@@ -11,8 +11,11 @@ export type RAUKK_DAMAGE_LEG_TYPE =
 	| "APP"
 	| "LND";
 
-/** Raw asset shape: system natural id to `[luminosity, density]` */
-export type RAUKK_STELLAR_JSON = Record<string, [number, number]>;
+/**
+ * Raw asset shape: system natural id to
+ * `[luminosity, meteoroidDensity, starMassKg]`
+ */
+export type RAUKK_STELLAR_JSON = Record<string, [number, number, number]>;
 
 /** Stellar and meteoroid properties of one system */
 export interface IRaukkStellarSystem {
@@ -20,6 +23,8 @@ export interface IRaukkStellarSystem {
 	luminosity: number;
 	/** FIO meteoroid density */
 	meteoroidDensity: number;
+	/** Star mass in kg, from FIO `systemstars/star` */
+	starMassKg: number;
 }
 
 /**
