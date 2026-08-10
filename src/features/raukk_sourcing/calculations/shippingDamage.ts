@@ -27,12 +27,14 @@
 // so `expected` bounds every tilt from above: it over-budgets damage,
 // never under-budgets it.
 //
-// `high / low` is the trust signal, and it costs nothing. Both it and
-// the tilt sensitivity come from the same place — how much the dose
-// varies with direction — so a lane whose band is under about 2x sits
-// within a few percent of `expected` whatever its tilt, and a lane with
-// a wide band can be off by most of its value. See star-heat-damage.md
-// section 7.3 for the measured table.
+// For PLANNING, which is what this is for, `expected` is the number.
+// A plan prices a steady state months out, nobody knows where a planet
+// will sit on the day, and a lane flown regularly resamples its whole
+// orbit long before the horizon is up. Per-anchor residuals are wide
+// (17.7% sd) but centred (+0.66% mean, -0.70% median over 19 anchors),
+// so they read as phase draws rather than per-lane bias. Do NOT add the
+// band to a budget: it is volatility, useful for repair scheduling and
+// for spotting erratic lanes. See star-heat-damage.md section 7.6.
 //
 // Pure functions, no store and no Vue.
 

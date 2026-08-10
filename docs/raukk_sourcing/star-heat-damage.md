@@ -242,6 +242,20 @@ That inverts the practical advice. `expected` is trustworthy per lane to within 
 
 It also explains the sign pattern in the residuals. Over-prediction (ANT +16%, NL-534a +25%, YK-715a +47%) is what inclination produces. Under-prediction (LS-231a -32%, LE-137a -26%) is NOT, so something else is in play there — a per-anchor coefficient error, or simply that those anchors carry two legs from one capture and are showing phase, not bias.
 
+### 7.6 What the spread means for a PLAN, which is the only thing this is for
+
+The scatter is real and it is also centred. Across the 19 anchors the residual has a mean of +0.66% and a median of -0.70%, 9 over against 10 under, a standard deviation of 17.7% and a standard error on the mean of 4.1%. That is symmetric noise around zero, not a set of lanes each wrong in its own fixed direction.
+
+Which settles the question that matters, because of WHEN this model is asked anything. A plan prices a steady state months out. Nobody knows where a planet will sit on the day, and a lane flown regularly through a 1.63 to 17.8 day orbital period samples its whole orbit many times before the plan's horizon is up. `expected` is defined as precisely that average. Being 30% out on one flight is not an error in it — it is the quantity behaving as specified.
+
+So the earlier sections' hand-wringing over per-anchor residuals is largely beside the point for planning. The band is not a correction to `expected` and should never be added to a budget; it is the volatility around it, which is worth having for repair scheduling and for spotting erratic lanes, and nothing else.
+
+Two caveats survive, and only two.
+
+**A per-lane bias could still hide under the noise.** 17.7% of scatter across 19 anchors leaves room for a systematic of a few percent either way; the data cannot exclude it. Separating them needs repeat flights on ONE lane spaced across its orbital period (section 7.4), which is worth doing only for a lane a base genuinely depends on.
+
+**Section 7.5 is not phase and does not average away.** Merging heat with radiation misprices any shielded hull by a fixed amount for as long as the shields are fitted. That is the one defect here that a planning horizon makes worse rather than better.
+
 ### 7.4 On calibrating an anchor
 
 `raukkCalibrateStellar` back-solves an anchor's coefficient from one observed leg. It pins that lane AT THAT MOMENT — the planet keeps orbiting, so the same lane flown months later presents a different angle and a different apparent coefficient. Average several observations spread across an orbital period and the result converges on `expected`; a single one does not.
