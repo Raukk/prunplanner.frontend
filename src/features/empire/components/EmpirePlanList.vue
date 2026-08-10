@@ -35,6 +35,73 @@
 		},
 	});
 
+	/** Permit pips shown per plan, a planet allows three */
+	const PERMIT_PIPS: number = 3;
+
+	/** ROI day thresholds the value is colored by */
+	const ROI_FAST_DAYS: number = 100;
+	const ROI_SLOW_DAYS: number = 365;
+
+	/**
+	 * Whether a plan's ROI is a real payback time. A plan at or below
+	 * break-even never pays its construction cost back and calculates as
+	 * a negative or non-finite ROI.
+	 *
+	 * @author raukk
+	 *
+	 * @param {number} roi Plan ROI in days
+	 * @returns {boolean} ROI is a payback time
+	 */
+	function hasROI(roi: number): boolean {
+		return Number.isFinite(roi) && roi > 0;
+	}
+
+	/**
+	 * Sort value of a plan's ROI, plans that never pay back sort as the
+	 * slowest so they end up last on an ascending sort.
+	 *
+	 * @author raukk
+	 *
+	 * @param {number} roi Plan ROI in days
+	 * @returns {number} Sortable ROI
+	 */
+	function roiSortValue(roi: number): number {
+		return hasROI(roi) ? roi : Number.MAX_VALUE;
+	}
+
+	/**
+	 * Table sorter of the ROI column
+	 *
+	 * @author raukk
+	 *
+	 * @param {Record<string, unknown>} row1 Plan list row
+	 * @param {Record<string, unknown>} row2 Plan list row
+	 * @returns {number} Sort comparison
+	 */
+	function roiSorter(
+		row1: Record<string, unknown>,
+		row2: Record<string, unknown>
+	): number {
+		return (
+			roiSortValue(row1.roi as number) - roiSortValue(row2.roi as number)
+		);
+	}
+
+	/**
+	 * Color class of a plan's ROI value
+	 *
+	 * @author raukk
+	 *
+	 * @param {number} roi Plan ROI in days
+	 * @returns {string} Tailwind text color class
+	 */
+	function roiClass(roi: number): string {
+		if (!hasROI(roi)) return "text-negative";
+		if (roi <= ROI_FAST_DAYS) return "text-positive";
+		if (roi > ROI_SLOW_DAYS) return "text-negative";
+		return "text-white/80";
+	}
+
 	watch(
 		() => props.planListData,
 		() => loadPlanetNames(props.planListData.map((p) => p.planet)),
@@ -92,7 +159,25 @@
 				<div class="text-nowrap">#</div>
 			</template>
 			<template #render-cell="{ rowData }">
-				<div class="text-center">{{ rowData.permits }}</div>
+				<div
+					class="flex flex-row gap-x-1 justify-center items-center"
+					:title="
+						t(
+							'empire.plan_list.permits_tooltip',
+							{ count: rowData.permits },
+							rowData.permits
+						)
+					">
+					<span
+						v-for="pip in Math.max(PERMIT_PIPS, rowData.permits)"
+						:key="pip"
+						:class="[
+							'size-2 rounded-full',
+							pip <= rowData.permits
+								? 'bg-prunplanner'
+								: 'bg-white/15',
+						]" />
+				</div>
 			</template>
 		</XNDataTableColumn>
 		<XNDataTableColumn
@@ -110,6 +195,33 @@
 						{{ formatNumber(rowData.profit) }}
 					</span>
 					<span class="pl-1 font-light text-white/50">ȼ</span>
+				</div>
+			</template>
+		</XNDataTableColumn>
+		<XNDataTableColumn
+			key="roi"
+			:title="t('terms.roi')"
+			:sorter="roiSorter">
+			<template #render-cell="{ rowData }">
+				<div
+					class="text-nowrap text-end"
+					:title="
+						hasROI(rowData.roi)
+							? t('empire.plan_list.roi_tooltip')
+							: t('empire.plan_list.roi_never')
+					">
+					<span :class="roiClass(rowData.roi)">
+						{{
+							hasROI(rowData.roi)
+								? formatNumber(rowData.roi)
+								: "—"
+						}}
+					</span>
+					<span
+						v-if="hasROI(rowData.roi)"
+						class="pl-1 font-light text-white/50">
+						d
+					</span>
 				</div>
 			</template>
 		</XNDataTableColumn>
@@ -141,7 +253,7 @@
 		</template>
 		<template #summary>
 			<XNDataTableSummaryRow>
-				<XNDataTableSummaryCell key="name" :col-span="5">
+				<XNDataTableSummaryCell key="name" :col-span="6">
 					<template #default>
 						<strong class="text-white/80">
 							{{

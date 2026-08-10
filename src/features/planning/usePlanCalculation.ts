@@ -885,6 +885,10 @@ export async function usePlanCalculation(
 				infrastructureResult,
 				productionResult.buildings
 			),
+			// carried on the result so consumers that only get the result
+			// back — the empire view calculates plans in a loop and drops
+			// the composable — still have construction cost and ROI
+			overview: overviewData.value,
 		};
 	}
 

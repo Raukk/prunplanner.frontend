@@ -193,6 +193,7 @@ export interface IPlanResult {
 	revenue: number;
 	infrastructureCosts: IInfrastructureCosts;
 	constructionMaterials: IBuildingConstruction[];
+	overview: IOverviewData;
 }
 
 export const planEmptyResult = {
@@ -286,6 +287,15 @@ export const planEmptyResult = {
 		STW: 0,
 	},
 	constructionMaterials: [],
+	overview: {
+		dailyCost: 0,
+		dailyProfit: 0,
+		totalConstructionCost: 0,
+		dailyDegradationCost: 0,
+		dailyProductionFeeCost: 0,
+		profit: 0,
+		roi: 0,
+	},
 };
 
 // Procomputational values

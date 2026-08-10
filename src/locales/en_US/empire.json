@@ -26,7 +26,10 @@
 			"management": "@:common.navigation.management",
 			"planet_search": "@:common.navigation.planet_search"
 		},
-		"permits_planned": "Total @:terms.permits planned: {permits}"
+		"permits_planned": "Total @:terms.permits_plural planned: {permits}",
+		"permits_tooltip": "{count} permit | {count} permits",
+		"roi_tooltip": "Days until the plan's profit has paid back its construction cost",
+		"roi_never": "Plan is not profitable, construction cost is never paid back"
 	},
 	"material_io": {
 		"production_planets": "Production Planets",

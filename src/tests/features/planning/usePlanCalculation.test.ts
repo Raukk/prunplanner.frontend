@@ -128,6 +128,10 @@ describe("usePlanCalculation", async () => {
 
 		expect(overviewData.dailyCost).toBe(35893.31692202096);
 		expect(overviewData.roi).toBe(23.63675760327964);
+
+		// the result carries the overview so consumers that only hold the
+		// result — the empire plan list — get construction cost and ROI
+		expect(result.overview).toStrictEqual(overviewData);
 	});
 
 	it("validate visitationData", async () => {
