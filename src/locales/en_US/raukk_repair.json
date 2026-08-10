@@ -10,6 +10,8 @@
 		"sourced_tooltip": "Repair capital cost per day at the sourcing snapshot's configured prices and repair cycle. The market priced numbers above stay untouched."
 	},
 	"day_table": {
+		"per_day": "Per Day",
+		"per_day_unit": "/ day",
 		"sourced": "sourced",
 		"total_sourced": "Total at Sourced Prices"
 	},
