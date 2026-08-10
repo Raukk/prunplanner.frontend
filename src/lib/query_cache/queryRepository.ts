@@ -8,6 +8,9 @@ import config from "@/lib/config";
 
 import { trackEvent } from "@/lib/analytics/useAnalytics";
 
+// util
+import { inertClone } from "@/util/data";
+
 // stores
 import { useQueryStore } from "@/lib/query_cache/queryStore";
 import { usePlanningStore } from "@/stores/planningStore";
@@ -570,7 +573,11 @@ export function useQueryRepository() {
 				return data;
 			},
 			hydrateFn: async () => {
-				const data = Object.values(planningStore.empires);
+				// inertClone: the record holds reactive proxies, a cached
+				// payload must be detached from the store
+				const data = Object.values(planningStore.empires).map((e) =>
+					inertClone(e)
+				);
 				return data.length > 0 ? data : null;
 			},
 			autoRefetch: false,
@@ -610,8 +617,9 @@ export function useQueryRepository() {
 				const empire = planningStore.empires[params.empireUuid];
 				if (!empire) return null;
 
-				const plans = empire.plans.map(
-					(p) => planningStore.plans[p.uuid]
+				// see GetAllEmpires
+				const plans = empire.plans.map((p) =>
+					inertClone(planningStore.plans[p.uuid])
 				);
 
 				// a plan of the empire was never stored individually =>
@@ -787,7 +795,10 @@ export function useQueryRepository() {
 				return data;
 			},
 			hydrateFn: async () => {
-				const data = Object.values(planningStore.plans);
+				// see GetAllEmpires
+				const data = Object.values(planningStore.plans).map((p) =>
+					inertClone(p)
+				);
 				return data.length > 0 ? data : null;
 			},
 			autoRefetch: false,

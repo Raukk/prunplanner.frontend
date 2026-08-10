@@ -65,6 +65,55 @@ describe("inertClone (structuredClone available)", () => {
 		expect(Array.isArray(clone.nested)).toBe(true);
 	});
 
+	it("clones a plain array holding reactive members", () => {
+		/*
+			Object.values of a store record: the array itself is plain,
+			so toRaw cannot reach the proxies it holds and a naive
+			structuredClone throws "#<Object> could not be cloned".
+		*/
+		const record = ref({
+			a: { plan: "a", nested: { x: 1 } },
+			b: { plan: "b", nested: { x: 2 } },
+		});
+		const list = Object.values(record.value);
+
+		expect(isReactive(list[0])).toBe(true);
+
+		const clone = inertClone(list);
+
+		expect(clone).toEqual([
+			{ plan: "a", nested: { x: 1 } },
+			{ plan: "b", nested: { x: 2 } },
+		]);
+		expect(isReactive(clone[0])).toBe(false);
+		expect(isReactive(clone[0].nested)).toBe(false);
+		expect(clone[0]).not.toBe(list[0]);
+	});
+
+	it("clones a cyclic structure holding reactive members", () => {
+		const inner = reactive({ name: "inner" }) as Record<string, unknown>;
+		const outer: Record<string, unknown> = { inner };
+		inner.parent = outer;
+
+		const clone = inertClone([outer]) as Record<string, any>[];
+
+		expect(clone[0].inner.name).toBe("inner");
+		expect(clone[0].inner.parent).toBe(clone[0]);
+		expect(isReactive(clone[0].inner)).toBe(false);
+	});
+
+	it("keeps non plain objects cloneable next to a reactive member", () => {
+		const stamp = new Date(1_700_000_000_000);
+		const list = [reactive({ x: 1 }), { stamp }];
+
+		const clone = inertClone(list) as [{ x: number }, { stamp: Date }];
+
+		expect(clone[0]).toEqual({ x: 1 });
+		expect(clone[1].stamp).toBeInstanceOf(Date);
+		expect(clone[1].stamp.getTime()).toBe(stamp.getTime());
+		expect(clone[1].stamp).not.toBe(stamp);
+	});
+
 	it("clones Date, Map, Set, ArrayBuffer, TypedArray correctly", () => {
 		const originalDate = new Date();
 		const originalMap = new Map([["a", 1]]);
@@ -223,6 +272,14 @@ describe("deepClone: structured clone available", () => {
 		expect(clone).toEqual({ a: 1, nested: { b: 2 } });
 		expect(clone).not.toBe(source);
 		expect(clone.nested).not.toBe(source.nested);
+	});
+
+	it("clones a plain array holding reactive members", () => {
+		const record = ref({ a: { x: 1 }, b: { x: 2 } });
+		const clone = deepClone(Object.values(record.value));
+
+		expect(clone).toEqual([{ x: 1 }, { x: 2 }]);
+		expect(isReactive(clone[0])).toBe(false);
 	});
 
 	it("does not mutate the original", () => {
