@@ -30,12 +30,14 @@ import {
 // Test Data — the two transcribed BTF campaigns
 import batch9 from "@/tests/test_data/btf_flights.json";
 import batch11 from "@/tests/test_data/btf_star_damage.json";
+import batch12 from "@/tests/test_data/btf_ant_reflight.json";
 
 /** Antares Station is not a planet; its orbit comes from the panel */
 const ANT_ORBIT_AU: number = (33603 * 1e3) / RAUKK_DAMAGE_AU_KM;
 
 interface ITestLeg {
 	type: string;
+	to?: string;
 	km?: number | null;
 	parsecsShown?: number | null;
 	damagePercent?: number | null;
@@ -72,6 +74,7 @@ function toLegs(flight: ITestFlight): IRaukkDamageLeg[] {
 const ALL_FLIGHTS: ITestFlight[] = [
 	...flightsOf(batch9),
 	...flightsOf(batch11),
+	...flightsOf(batch12),
 ];
 
 describe("shippingDamage — static lookups", () => {
@@ -111,6 +114,98 @@ describe("shippingDamage — static lookups", () => {
 		expect(
 			Math.abs(l / raukkOrbitAu("NL-534g")! ** 2 - 307.37) / 307.37
 		).toBeLessThan(1e-3);
+	});
+});
+
+describe("shippingDamage — the reflight control", () => {
+	// batch 12 reflew three ANT lanes hours after batch 9, plus the
+	// NL-534g pair as a control. Leg distance is pure geometry, so it
+	// isolates orbital motion from ship, settings and damage model.
+	const legKm = (
+		doc: unknown,
+		flightId: string,
+		type: string,
+		toContains: string
+	): number =>
+		flightsOf(doc)
+			.find((f) => f.id === flightId)!
+			.legs.find((l) => l.type === type && l.to!.includes(toContains))!
+			.km!;
+
+	it("leaves the slow anchor's legs untouched", () => {
+		// NL-534g orbits in 5,035 real days: it cannot have moved
+		expect(raukkOrbitalPeriodDays("NL-534g")!).toBeGreaterThan(5000);
+
+		expect(legKm(batch12, "b12-08", "DEP", "NL-534")).toBe(
+			legKm(batch11, "b11-06", "DEP", "NL-534")
+		);
+		expect(legKm(batch12, "b12-08", "TO", "NL-534g")).toBe(
+			legKm(batch11, "b11-06", "TO", "NL-534g")
+		);
+
+		const appBefore: number = legKm(batch11, "b11-05", "APP", "NL-534g");
+		const appAfter: number = legKm(batch12, "b12-07", "APP", "NL-534g");
+
+		expect(Math.abs(appAfter - appBefore) / appBefore).toBeLessThan(0.001);
+	});
+
+	it("moves the fast anchor's legs by orders more", () => {
+		// ANT orbits in 1.63 real days and shifted by up to a quarter
+		expect(
+			raukkOrbitalPeriodDays("ANT", ANT_ORBIT_AU, "ZV-307")!
+		).toBeLessThan(2);
+
+		const shifts: number[] = [
+			Math.abs(
+				legKm(batch12, "b12-05", "APP", "Antares Station") /
+					legKm(batch9, "b9-11", "APP", "Antares Station") -
+					1
+			),
+			Math.abs(
+				legKm(batch12, "b12-01", "APP", "Antares Station") /
+					legKm(batch9, "b9-03", "APP", "Antares Station") -
+					1
+			),
+		];
+
+		expect(Math.max(...shifts)).toBeGreaterThan(0.1);
+	});
+
+	it("orders the shift by each anchor's orbital period", () => {
+		// slow anchors barely move, fast ones move a lot
+		expect(raukkOrbitalPeriodDays("ZV-639d")!).toBeGreaterThan(
+			raukkOrbitalPeriodDays("ZV-759c")!
+		);
+		expect(raukkOrbitalPeriodDays("ZV-759c")!).toBeGreaterThan(
+			raukkOrbitalPeriodDays("QJ-684b")!
+		);
+
+		// and the far end of a long lane is effectively static
+		const before: number = legKm(batch9, "b9-10", "DEP", "Roshar");
+		const after: number = legKm(batch12, "b12-03", "DEP", "Roshar");
+
+		expect(Math.abs(after - before) / before).toBeLessThan(0.001);
+	});
+
+	it("prices the three new landings within 15%", () => {
+		const observed: [string, number, number][] = [
+			["ZV-759c", 3519, 0.014],
+			["ZV-639d", 28114, 0.044],
+			["NL-534g", 45295, 0.038],
+			["AW-006e", 13299, 0.017],
+		];
+
+		for (const [planet, km, damage] of observed) {
+			expect(
+				Math.abs(raukkLandingDamage(planet, km) - damage) / damage,
+				planet
+			).toBeLessThan(0.15);
+		}
+	});
+
+	it("reads a near-vacuum landing as costing nothing", () => {
+		// QJ-684b sits at 0.03 pressure and the panel printed 0.000%
+		expect(raukkLandingDamage("QJ-684b", 2152)).toBeLessThan(0.0005);
 	});
 });
 
@@ -410,7 +505,7 @@ describe("shippingDamage — replay of the 25 transcribed flights", () => {
 	});
 
 	it("covers every transcribed flight", () => {
-		expect(results).toHaveLength(25);
+		expect(results).toHaveLength(33);
 	});
 
 	it("stays close wherever the stellar term is a minor share", () => {

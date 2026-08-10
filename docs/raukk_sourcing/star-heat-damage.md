@@ -153,13 +153,12 @@ the planet's orbital position, and it is BOUNDED. Reading the term as
 a range rather than a point puts 23 of 25 flights inside, the other
 two within 2.6%.
 
-What remains genuinely open is the ship. In batch 11 each blueprint
-flew only one direction, so ship and leg type are 100% confounded:
-backing out an implied angle at a fixed C puts nearly every APP leg at
-the outbound extreme and nearly every DEP leg at the inbound one,
-which is a systematic split no orbital geometry produces. Either the
-two hulls differ in stellar shielding or departures and approaches are
-priced differently, and this dataset cannot say which.
+The ship/leg-type confound raised here is RESOLVED by the reflight —
+see section 8.4. Batch 11 flew each blueprint in one direction only,
+so the two could not be separated from that data alone; batch 9 flew
+both leg types on the same ships and the reflight flew them on
+different ones, and the split comes out the same either way. It is the
+leg type, not the hull.
 
 ## 6. Also in the community sheet
 
@@ -235,8 +234,8 @@ Replaying all 25 flights, with 10% allowed on the meteoroid law and
 
 | | result |
 |---|---|
-| inside the true bounds | **23 of 25** |
-| the two that are not | b11-02 by 2.0%, b11-07 by 2.6% |
+| inside the true bounds | **29 of 33** |
+| worst escape | 2.6% |
 | band width, median | 2.2x |
 | band width, range | 1.4x to 8.4x |
 | point estimate (orbital mean) | median 12%, 19 of 25 within 20% |
@@ -362,29 +361,79 @@ more than a few hours apart already saw different geometry. NL-534g at
 14 years is effectively fixed — which is why it works so well as the
 null.
 
-### 8.3 The reshoot
+### 8.3 The reflight — orbital motion confirmed
 
-Same ships, same lanes, same settings, spaced by the anchor's own
-period rather than a flat interval — a quarter period apart samples
-the cycle without aliasing. For ANT that is ~10 hours; for NL-534a
-~4.5 days. That gives, in one campaign:
+Eight further BTF runs (`btf_ant_reflight.json`): the three batch-9
+ANT lanes reflown both directions a few hours later, plus the NL-534g
+pair as a control.
 
-1. **The orbital term, confirmed or killed.** Same lane, same ship,
-   different day: any change in the stellar excess is the planet
-   having moved, since nothing else did. If the excess is flat across
-   a week, the whole orbital-position reading is wrong.
-2. **The position solve, over-determined.** Five or more lanes off one
-   anchor per day beats the three-lane tie above.
-3. **The ship, unconfounded.** Fly ONE blueprint both directions on a
-   single pair. In batch 11 each flew only one direction, so ship and
-   leg type cannot be separated at all.
-4. **The warp-in asymmetry.** Record the APP leg length for repeated
-   arrivals on the same inbound lane. If it moves with the planet the
-   warp point is fixed in the system; if it does not, it is not.
+**Leg distance is pure geometry** — ship, cargo and settings cannot
+touch it — so it isolates orbital motion by itself, with no damage
+model involved. Sorting the change by each anchor's period:
 
-If the term does track orbital position, the band of section 7.1
-collapses to a point for any lane whose date is known, and the
-simulator stops needing bounds at all for planned routes.
+| anchor | period (real days) | leg | distance change |
+|---|---|---|---|
+| ANT | 1.63 | APP from QJ-684b | **+25.44%** |
+| ANT | 1.63 | APP from ZV-759c | **-14.64%** |
+| ANT | 1.63 | DEP to ZV-639d | -4.67% |
+| QJ-684b | 6.44 | APP from ANT | +6.77% |
+| ZV-759c | 13.70 | DEP to ANT | +1.29% |
+| ZV-639d | 675.28 | DEP to ANT | **-0.0002%** |
+| NL-534g | 5,035 | DEP to NL-881 | **0.000%** |
+| NL-534g | 5,035 | TO surface->orbit | **0.000%** |
+
+The ordering is monotonic in orbital period across four decades. The
+NL-534g departure is bit-identical between batches — 66,911,979 km
+and 0.098% damage, twice — while ANT's legs moved by a quarter. That
+is the control doing exactly its job: whatever moved ANT did not move
+NL-534g, and the only thing that distinguishes them is how fast they
+orbit.
+
+**Solving ANT's position independently at each epoch** from its three
+lanes gives a coefficient that barely moves, across different ships:
+
+| leg type | batch 9 | reflight | implied elapsed |
+|---|---|---|---|
+| DEP | C = 4.41e-6 | C = 4.48e-6 | 58 deg = 6.3 hours |
+| APP | C = 2.86e-6 | C = 2.96e-6 | 69 deg = 7.5 hours |
+
+Two independent leg types put the gap between the batches at 6.3 and
+7.5 real hours (modulo the 39-hour period), which matches the reported
+"a few hours". Each solve is exactly determined — three lanes against
+three parameters — so this is consistency rather than proof, but the
+coefficient holding to 2-3% across a ship change and a quarter-turn of
+the orbit is not something a wrong model does easily.
+
+The three new landings also land: ZV-759c 0.014 observed against 0.013
+modelled, ZV-639d 0.044 against 0.041, AW-006e 0.017 against 0.016,
+and QJ-684b — pressure 0.031, essentially vacuum — printed 0.000% with
+the model at 0.000%. NL-534g's landing length itself differed between
+batches (40,184 then 45,295 km) and the damage tracked it as
+`sqrt(km)`: 0.036 then 0.038, the ratio matching to 0.6%.
+
+### 8.4 The DEP/APP split is real, and is NOT the ship
+
+Batch 9 flew both leg types on the same ships, and the reflight flew
+them on different ones, yet the coefficient splits the same way in
+both: departures around 4.4e-6, approaches around 2.9e-6, a factor of
+1.5. That retires the confound flagged in section 5 — it is not the
+hulls, it is the leg type, and it is consistent with the warp-OUT and
+warp-IN points being different places.
+
+The shipped model does NOT split the coefficient. Trying it makes the
+BOUNDS worse — the worst escape goes from 2.6% to 28.9% across the 33
+flights — because the per-epoch solves are exactly determined and
+their coefficient absorbs whatever the geometry gets wrong. One
+`C = 3.25e-6` plus honest bounds beats two tuned constants.
+
+### 8.5 What is left
+
+1. **Over-determine the position.** Five or more lanes off one anchor
+   in a single sitting, instead of three.
+2. **Timestamp the captures.** The elapsed time is currently inferred
+   from the fit rather than known, so it cannot be used as a check.
+3. **One blueprint both ways** on a single pair, to close section 8.4
+   by direct measurement rather than by cross-batch inference.
 
 ## 9. Downstream
 
