@@ -363,4 +363,35 @@ describe("usePlanCalculation", async () => {
 			},
 		});
 	});
+
+	it("recipe rows carry their index in the plan data", async () => {
+		/*
+		 * A recipe id the game data cannot resolve produces no row, so
+		 * the row position runs ahead of the plan data index the row
+		 * handlers address. The row has to state that index itself.
+		 */
+		const plan = JSON.parse(JSON.stringify(plan_etherwind));
+		plan.plan_data.buildings = [plan.plan_data.buildings[1]];
+		plan.plan_data.buildings[0].active_recipes.unshift({
+			recipeid: "FP#GONE_FROM_GAME",
+			amount: 1,
+		});
+
+		const { calculate } = await usePlanCalculation(
+			ref(plan),
+			ref(undefined),
+			ref(undefined),
+			ref(undefined)
+		);
+
+		const result = await calculate();
+		const rows = result.production.buildings[0].activeRecipes;
+
+		expect(rows.map((r) => r.recipeId)).toStrictEqual([
+			"FP#10xH2O=>7xDW",
+			"FP#1xCAF 3xDW=>3xCOF",
+			"FP#1xMUS 1xVEG 1xMAI=>10xRAT",
+		]);
+		expect(rows.map((r) => r.planIndex)).toStrictEqual([1, 2, 3]);
+	});
 });

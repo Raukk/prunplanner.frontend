@@ -83,7 +83,8 @@ describe("useROIOverview", async () => {
 		await calculate();
 
 		expect(resultData.value.length).toBe(370);
-	});
+		// 370 plan calculations, ~2s alone and more under a loaded suite
+	}, 30000);
 
 	it("formatOptimal", async () => {
 		const { formatOptimal } = await useROIOverview(

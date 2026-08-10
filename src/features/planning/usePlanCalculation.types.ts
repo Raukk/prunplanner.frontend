@@ -115,6 +115,14 @@ export interface IProductionBuildingRecipeCOGM {
 
 export interface IProductionBuildingRecipe {
 	recipeId: string;
+	/**
+	 * Index of this recipe in the buildings `active_recipes` of the plan
+	 * data, which is what every handler mutating a recipe addresses.
+	 *
+	 * @remark Not the row position: a recipe whose id no longer resolves
+	 * is dropped from the result, so the two run apart from each other.
+	 */
+	planIndex: number;
 	amount: number;
 	recipe: IRecipeBuildingOption;
 	dailyShare: number;
