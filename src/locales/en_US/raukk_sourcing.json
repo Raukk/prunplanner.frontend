@@ -103,7 +103,8 @@
 		"self": "Own output",
 		"stale": "stale snapshot",
 		"agg_avg_mkt": "All producers (weighted avg + market top-up)",
-		"pooled": "from own bases"
+		"pooled": "from own bases",
+		"unavailable": "source no longer available"
 	},
 	"shipping_page": {
 		"view_title": "Shipping",

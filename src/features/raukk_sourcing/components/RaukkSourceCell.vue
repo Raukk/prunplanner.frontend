@@ -105,7 +105,23 @@
 	 * oversubscription and a stale marker.
 	 */
 	function renderLabel(raw: SelectOption): VNode {
-		const option: IRaukkSourceOption = (raw as IRaukkSelectOption).raukk;
+		const option: IRaukkSourceOption | undefined = (
+			raw as IRaukkSelectOption
+		).raukk;
+
+		/*
+		 * A stored source pointing at a producer that is no longer an
+		 * option — plan deleted, left the empire — reaches this hook too:
+		 * naive-ui fabricates a bare { value, label } for the selected
+		 * value when no option matches, and that one carries no payload.
+		 */
+		if (!option) {
+			return h(
+				"span",
+				{ class: "text-white/40 text-nowrap" },
+				t("raukk_sourcing.source_option.unavailable")
+			);
+		}
 
 		const oversubscribed: boolean = option.ownPct + option.othersPct > 1;
 

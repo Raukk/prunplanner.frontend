@@ -112,4 +112,18 @@ describe("RaukkSourceCell", () => {
 			{ mode: "plan", sourcePlanUuid: "a" },
 		]);
 	});
+
+	it("renders a stored source that is no longer an option", () => {
+		// naive-ui fabricates a payload-free option for a selected value
+		// with no match — the label hook must survive it, not crash the
+		// whole plan view
+		const wrapper: VueWrapper = render({
+			mode: "plan",
+			sourcePlanUuid: "deleted-plan-uuid",
+		});
+
+		expect(wrapper.text()).toContain(
+			raukk_sourcing.source_option.unavailable
+		);
+	});
 });
