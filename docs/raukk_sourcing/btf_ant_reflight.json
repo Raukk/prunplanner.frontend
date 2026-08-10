@@ -1,0 +1,523 @@
+{
+ "source": "In-game BLUEPRINT TEST FLIGHT panels, user screenshots (batch 12: the three batch-9 ANT lanes reflown a few hours later, both directions, to test whether the stellar term tracks the anchor's orbital position)",
+ "retrieved": "2026-08-10",
+ "description": "Eight BTF runs: six on the ANT lanes, plus the NL-534g control pair (b12-07/08). The same two SCB starter blueprints as batch 11 \u2014 BP-MSQS-7525 inbound to ANT, BP-XHBM-5641 outbound \u2014 over the ZV-759c, ZV-639d and QJ-684b lanes. Captured minutes apart, hours after the batch-9 set. Distances in km, durations in seconds, damage in PERCENT, fuel in units.",
+ "settings": {
+  "fuelUsage": "game default",
+  "reactorUsage": "65%",
+  "inventory": "0t",
+  "condition": "100%",
+  "ftlPreferences": "least jumps, gateways off"
+ },
+ "purpose": "ANT orbits at 0.225 AU with a 1.63 real-day period; NL-534g sits at 85.3 AU with a 5,035-day one. Reflying both against the earlier batches separates orbital motion from everything else: the fast anchor's legs must move and the slow one's must not.",
+ "flights": [
+  {
+   "id": "b12-01",
+   "blueprint": "BP-MSQS-7525",
+   "origin": "ZV-759c",
+   "destination": "ANT",
+   "totals": {
+    "seconds": 18477,
+    "km": 78296445,
+    "parsecsShown": 4,
+    "damagePercent": 0.11,
+    "stlFuel": 125,
+    "ftlFuel": 18
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "Antares II - Deimos (orbit)",
+     "seconds": 323,
+     "km": 4085,
+     "damagePercent": null,
+     "stlFuel": 37,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "Antares II (orbit)",
+     "seconds": 10560,
+     "km": 61054182,
+     "damagePercent": 0.04,
+     "stlFuel": 37,
+     "ftlFuel": 18
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "Antares I (orbit)",
+     "seconds": 5280,
+     "km": null,
+     "damagePercent": 0.004,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "APP",
+     "to": "Antares Station",
+     "seconds": 2255,
+     "km": 17238178,
+     "damagePercent": 0.066,
+     "stlFuel": 51,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b12-02",
+   "blueprint": "BP-XHBM-5641",
+   "origin": "ANT",
+   "destination": "ZV-759c",
+   "totals": {
+    "seconds": 17499,
+    "km": 74849076,
+    "parsecsShown": 4,
+    "damagePercent": 0.126,
+    "stlFuel": 113,
+    "ftlFuel": 18
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "DEP",
+     "to": "Antares I (orbit)",
+     "seconds": 3226,
+     "km": 18308657,
+     "damagePercent": 0.087,
+     "stlFuel": 37,
+     "ftlFuel": 18
+    },
+    {
+     "i": 1,
+     "type": "JMP",
+     "to": "Antares II (orbit)",
+     "seconds": 5280,
+     "km": null,
+     "damagePercent": 0.004,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 2,
+     "type": "APP",
+     "to": "Antares II - Deimos (orbit)",
+     "seconds": 8640,
+     "km": 56536899,
+     "damagePercent": 0.021,
+     "stlFuel": 42,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "LND",
+     "to": "Antares II - Deimos",
+     "seconds": 300,
+     "km": 3519,
+     "damagePercent": 0.014,
+     "stlFuel": 34,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b12-03",
+   "blueprint": "BP-MSQS-7525",
+   "origin": "ZV-639d",
+   "destination": "ANT",
+   "totals": {
+    "seconds": 24933,
+    "km": 91537103,
+    "parsecsShown": 6,
+    "damagePercent": 0.136,
+    "stlFuel": 189,
+    "ftlFuel": 28
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "Roshar - Ashyn (orbit)",
+     "seconds": 932,
+     "km": 34044,
+     "damagePercent": null,
+     "stlFuel": 105,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "Roshar (orbit)",
+     "seconds": 13200,
+     "km": 72326662,
+     "damagePercent": 0.098,
+     "stlFuel": 35,
+     "ftlFuel": 28
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "Antares I (orbit)",
+     "seconds": 8160,
+     "km": null,
+     "damagePercent": 0.006,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "APP",
+     "to": "Antares Station",
+     "seconds": 2591,
+     "km": 19176396,
+     "damagePercent": 0.032,
+     "stlFuel": 49,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b12-04",
+   "blueprint": "BP-XHBM-5641",
+   "origin": "ANT",
+   "destination": "ZV-639d",
+   "totals": {
+    "seconds": 25105,
+    "km": 92016670,
+    "parsecsShown": 6,
+    "damagePercent": 0.187,
+    "stlFuel": 170,
+    "ftlFuel": 28
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "DEP",
+     "to": "Antares I (orbit)",
+     "seconds": 3720,
+     "km": 20753657,
+     "damagePercent": 0.057,
+     "stlFuel": 37,
+     "ftlFuel": 28
+    },
+    {
+     "i": 1,
+     "type": "JMP",
+     "to": "Roshar (orbit)",
+     "seconds": 8160,
+     "km": null,
+     "damagePercent": 0.006,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 2,
+     "type": "APP",
+     "to": "Roshar - Ashyn (orbit)",
+     "seconds": 12300,
+     "km": 71234898,
+     "damagePercent": 0.079,
+     "stlFuel": 37,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "LND",
+     "to": "Roshar - Ashyn",
+     "seconds": 847,
+     "km": 28114,
+     "damagePercent": 0.044,
+     "stlFuel": 96,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b12-05",
+   "blueprint": "BP-MSQS-7525",
+   "origin": "QJ-684b",
+   "destination": "ANT",
+   "totals": {
+    "seconds": 29515,
+    "km": 109741027,
+    "parsecsShown": 9,
+    "damagePercent": 0.227,
+    "stlFuel": 103,
+    "ftlFuel": 40
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "Acetares - Aceland (orbit)",
+     "seconds": 132,
+     "km": 679,
+     "damagePercent": null,
+     "stlFuel": 15,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "Acetares (orbit)",
+     "seconds": 14100,
+     "km": 81771924,
+     "damagePercent": 0.158,
+     "stlFuel": 37,
+     "ftlFuel": 40
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "Antares I (orbit)",
+     "seconds": 11580,
+     "km": null,
+     "damagePercent": 0.009,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "APP",
+     "to": "Antares Station",
+     "seconds": 3595,
+     "km": 27968424,
+     "damagePercent": 0.061,
+     "stlFuel": 51,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b12-06",
+   "blueprint": "BP-XHBM-5641",
+   "origin": "ANT",
+   "destination": "QJ-684b",
+   "totals": {
+    "seconds": 27763,
+    "km": 104407474,
+    "parsecsShown": 9,
+    "damagePercent": 0.246,
+    "stlFuel": 108,
+    "ftlFuel": 40
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "DEP",
+     "to": "Antares I (orbit)",
+     "seconds": 3900,
+     "km": 22452821,
+     "damagePercent": 0.056,
+     "stlFuel": 37,
+     "ftlFuel": 40
+    },
+    {
+     "i": 1,
+     "type": "JMP",
+     "to": "Acetares (orbit)",
+     "seconds": 11580,
+     "km": null,
+     "damagePercent": 0.009,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 2,
+     "type": "APP",
+     "to": "Acetares - Aceland (orbit)",
+     "seconds": 11940,
+     "km": 81952501,
+     "damagePercent": 0.181,
+     "stlFuel": 44,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "LND",
+     "to": "Acetares - Aceland",
+     "seconds": 235,
+     "km": 2152,
+     "damagePercent": 0.0,
+     "stlFuel": 27,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b12-07",
+   "blueprint": "BP-MSQS-7525",
+   "origin": "AW-006e",
+   "destination": "NL-534g",
+   "totals": {
+    "seconds": 48988,
+    "km": 139361170,
+    "parsecsShown": 15,
+    "damagePercent": 0.301,
+    "stlFuel": 252,
+    "ftlFuel": 69
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "AW-006 - Zephyrus (orbit)",
+     "seconds": 564,
+     "km": 12455,
+     "damagePercent": null,
+     "stlFuel": 64,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "AW-006 (orbit)",
+     "seconds": 14340,
+     "km": 74235970,
+     "damagePercent": 0.151,
+     "stlFuel": 33,
+     "ftlFuel": 36
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "NL-881 (orbit)",
+     "seconds": 10620,
+     "km": null,
+     "damagePercent": 0.008,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "CHRG",
+     "to": "NL-881 (orbit)",
+     "seconds": 293,
+     "km": null,
+     "damagePercent": 0.017,
+     "stlFuel": null,
+     "ftlFuel": 33
+    },
+    {
+     "i": 4,
+     "type": "JMP",
+     "to": "NL-534 (orbit)",
+     "seconds": 9720,
+     "km": null,
+     "damagePercent": 0.007,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 5,
+     "type": "APP",
+     "to": "NL-534g (orbit)",
+     "seconds": 12240,
+     "km": 65067450,
+     "damagePercent": 0.079,
+     "stlFuel": 34,
+     "ftlFuel": null
+    },
+    {
+     "i": 6,
+     "type": "LND",
+     "to": "NL-534g",
+     "seconds": 1075,
+     "km": 45295,
+     "damagePercent": 0.038,
+     "stlFuel": 121,
+     "ftlFuel": null
+    }
+   ]
+  },
+  {
+   "id": "b12-08",
+   "blueprint": "BP-XHBM-5641",
+   "origin": "NL-534g",
+   "destination": "AW-006e",
+   "totals": {
+    "seconds": 48763,
+    "km": 140732305,
+    "parsecsShown": 15,
+    "damagePercent": 0.281,
+    "stlFuel": 248,
+    "ftlFuel": 69
+   },
+   "legs": [
+    {
+     "i": 0,
+     "type": "TO",
+     "to": "NL-534g (orbit)",
+     "seconds": 1008,
+     "km": 39823,
+     "damagePercent": null,
+     "stlFuel": 114,
+     "ftlFuel": null
+    },
+    {
+     "i": 1,
+     "type": "DEP",
+     "to": "NL-534 (orbit)",
+     "seconds": 12960,
+     "km": 66911979,
+     "damagePercent": 0.098,
+     "stlFuel": 33,
+     "ftlFuel": 33
+    },
+    {
+     "i": 2,
+     "type": "JMP",
+     "to": "NL-881 (orbit)",
+     "seconds": 9720,
+     "km": null,
+     "damagePercent": 0.007,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 3,
+     "type": "CHRG",
+     "to": "NL-881 (orbit)",
+     "seconds": 293,
+     "km": null,
+     "damagePercent": 0.017,
+     "stlFuel": null,
+     "ftlFuel": 36
+    },
+    {
+     "i": 4,
+     "type": "JMP",
+     "to": "AW-006 (orbit)",
+     "seconds": 10620,
+     "km": null,
+     "damagePercent": 0.008,
+     "stlFuel": null,
+     "ftlFuel": null
+    },
+    {
+     "i": 5,
+     "type": "APP",
+     "to": "AW-006 - Zephyrus (orbit)",
+     "seconds": 13440,
+     "km": 73767204,
+     "damagePercent": 0.133,
+     "stlFuel": 35,
+     "ftlFuel": null
+    },
+    {
+     "i": 6,
+     "type": "LND",
+     "to": "AW-006 - Zephyrus",
+     "seconds": 583,
+     "km": 13299,
+     "damagePercent": 0.017,
+     "stlFuel": 66,
+     "ftlFuel": null
+    }
+   ]
+  }
+ ]
+}
