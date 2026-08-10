@@ -501,3 +501,36 @@ anywhere in the repo. Not retroactive.
   problem with no broadcast at all. Mitigation available today is the
   sidebar refresh, or PlanView's reload button which reads
   planningStore directly.
+- 2026-08-10: Save-time conflict check (user request — the backend
+  cannot be changed, so the guard has to live in the UI). Before a
+  `PatchPlan`, PlanView re-reads the plan with `forceRefetch` and
+  compares `planContentFingerprint` against the version the backend
+  last handed it (`refSavedBaseline`, advanced after every successful
+  save so a second save does not compare against the version it already
+  replaced). Differing means somebody else saved it — another tab or
+  another machine — and the user is asked before their copy replaces
+  it. Both sides of the comparison are backend responses so formatting
+  matches; `uuid` and `empires` are excluded because those differ
+  between the plan, plan-list and empire-plan endpoints without the
+  plan having changed. Costs one GET per save, which is a deliberate
+  user action. It narrows the overwrite window from hours to
+  milliseconds but cannot close it — that needs `updated_at`/409 on the
+  backend. A failing check never blocks saving: being unable to reach
+  the backend is what the save itself will report.
+  User decision: rejected the proposed "version table in the local DB
+  polled on read". Cross-tab is already detected instantly by the
+  BroadcastChannel with no polling and no table, cross-machine cannot
+  be detected by anything local no matter what is stored, and the cache
+  read path is not where the loss happens — by then the editor already
+  holds its mount-time clone. Asking the backend at save time is the
+  only moment that covers both.
+  Also fixed here: PlanView cleared `modified` unconditionally after a
+  save, so a failed save (offline) looked successful and dropped both
+  the route guard and the remount guard protecting the unsaved work.
+- 2026-08-10: `queryStore` closes its BroadcastChannel on scope
+  dispose. An open channel is a live handle: in the app it leaked one
+  per store, and in the test suite every torn down environment left one
+  behind, which surfaced as intermittent
+  `EnvironmentTeardownError: Closing rpc while "onUserConsoleLog" was
+  pending` unhandled rejections attributed to whichever unrelated test
+  file happened to be running. Three clean full runs after the fix.

@@ -1,4 +1,12 @@
-import { reactive, computed, ComputedRef, Reactive, ref, Ref } from "vue";
+import {
+	reactive,
+	computed,
+	ComputedRef,
+	Reactive,
+	ref,
+	Ref,
+	onScopeDispose,
+} from "vue";
 import { defineStore } from "pinia";
 import pLimit from "p-limit";
 
@@ -249,6 +257,18 @@ export const useQueryStore = defineStore(
 		}
 
 		if (channel) channel.onmessage = onChannelMessage;
+
+		// an open channel is a live handle; leaving it dangling keeps the
+		// store's scope reachable and, in tests, every torn down
+		// environment behind
+		onScopeDispose(() => {
+			try {
+				channel?.close();
+			} catch {
+				/* already closed */
+			}
+			channel = null;
+		});
 
 		/**
 		 * Clears the whole cache, e.g. on logout.

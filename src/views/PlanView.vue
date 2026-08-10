@@ -55,7 +55,10 @@
 		saveExistingPlan,
 		reloadExistingPlan,
 		cloneSharedPlan,
+		detectRemotePlanChange,
 	} = usePlan();
+	import { usePlanningStore } from "@/stores/planningStore";
+	const planningStore = usePlanningStore();
 	import { trackEvent } from "@/lib/analytics/useAnalytics";
 
 	// Util
@@ -544,19 +547,65 @@
 
 	const refIsSaving: Ref<boolean> = ref(false);
 
+	/**
+	 * The plan as the backend last handed it to us, which is what a
+	 * remote change is measured against. Advanced after every successful
+	 * save, so a second save in the same session does not compare
+	 * against the version we already replaced.
+	 */
+	const refSavedBaseline: Ref<IPlan> = ref(inertClone(props.planData));
+
 	async function save(): Promise<void> {
 		refIsSaving.value = true;
 
 		// plan exists, trigger a save
 		if (existing.value) {
-			await saveExistingPlan(refPlanData.value.uuid!, backendData.value);
+			const planUuid: string = refPlanData.value.uuid!;
 
-			// reset modified state
-			handleResetModified();
+			/*
+				Saving is a full PUT with no etag, so check first whether
+				somebody else moved the plan under us. A failing check
+				must not block saving — being unable to reach the backend
+				is what the save itself will report.
+			*/
+			try {
+				const changedElsewhere: boolean = await detectRemotePlanChange(
+					planUuid,
+					refSavedBaseline.value
+				);
 
-			trackEvent("plan_save", {
-				planetNaturalId: planetData.planet_natural_id,
-			});
+				if (
+					changedElsewhere &&
+					!confirm(t("plan.conflict.overwrite"))
+				) {
+					refIsSaving.value = false;
+					return;
+				}
+			} catch (error) {
+				console.error("Plan conflict check failed", error);
+			}
+
+			const savedUuid: string | undefined = await saveExistingPlan(
+				planUuid,
+				backendData.value
+			);
+
+			// a failed save must keep the plan flagged as modified, the
+			// unsaved work is still only in this tab
+			if (savedUuid) {
+				handleResetModified();
+
+				try {
+					refSavedBaseline.value =
+						await planningStore.getPlan(planUuid);
+				} catch (error) {
+					console.error("Could not refresh save baseline", error);
+				}
+
+				trackEvent("plan_save", {
+					planetNaturalId: planetData.planet_natural_id,
+				});
+			}
 
 			refIsSaving.value = false;
 		} else {
