@@ -29,11 +29,13 @@ import {
 	RAUKK_DAMAGE_LEG_TYPE,
 } from "@/features/raukk_sourcing/calculations/shippingDamage.types";
 
-// Test Data — the two transcribed BTF campaigns
-import batch9 from "@/tests/test_data/btf_flights.json";
-import batch11 from "@/tests/test_data/btf_star_damage.json";
-import batch12 from "@/tests/test_data/btf_ant_reflight.json";
-import ki439 from "@/tests/test_data/ki439_orbit_log.json";
+// Test Data — the transcribed flight records live with the model they
+// document, in docs/raukk_sourcing/, and are read from there rather
+// than copied into test_data so the two cannot drift apart
+import batch9 from "../../../../../docs/raukk_sourcing/btf_flights.json";
+import batch11 from "../../../../../docs/raukk_sourcing/btf_star_damage.json";
+import batch12 from "../../../../../docs/raukk_sourcing/btf_ant_reflight.json";
+import ki439 from "../../../../../docs/raukk_sourcing/ki439_orbit_log.json";
 
 /** Antares Station is not a planet; its orbit comes from the panel */
 const ANT_ORBIT_AU: number = (33603 * 1e3) / RAUKK_DAMAGE_AU_KM;
