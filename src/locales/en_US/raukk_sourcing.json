@@ -489,6 +489,9 @@
 		"remove": "Remove",
 		"add": "Add Gate",
 		"hcb": "HCB",
+		"duplicate": "Duplicate",
+		"duplicate_tooltip": "'{gate}' already links these two systems. A gate is bidirectional — the route graph carries both directions of every link — so this row plans nothing the other does not already plan, and its build ȼ are counted on top of it. Remove one of the two.",
+		"duplicate_warning": "{count} planned gate(s) repeat a link another row already plans, the same pair the other way round or between two other planets of the same two systems. Their build ȼ are counted twice in the total below. Remove the copies.",
 		"unrouted": "Unroutable",
 		"opens_route": "opens a route",
 		"name_placeholder": "Name, optional",
@@ -510,7 +513,12 @@
 			"empty": "Type both planet ids to enable Add Gate.",
 			"unknown": "One of those planets is unknown — the gate would route nothing.",
 			"same_system": "Both planets sit in one system — a gate between them bridges nothing.",
-			"unreachable_range": "Those planets are more than 25 parsecs apart — no gate can link them, however upgraded."
+			"unreachable_range": "Those planets are more than 25 parsecs apart — no gate can link them, however upgraded.",
+			"duplicate": "'{gate}' already links those two systems. A gate is bidirectional, so the same pair either way round is one gate — edit that row instead."
+		},
+		"ends": {
+			"both": "Build both ends",
+			"one": "Build one end"
 		},
 		"empty": "No planned gates yet. Add one you saw going up in-game, or one you wish someone would build, and see what it would save.",
 		"planning_warning": "{count} planned gate(s) are switched on: distances, lanes and chains are being routed over gates that do not exist yet. Switch them off for the numbers you can fly today.",
@@ -523,8 +531,8 @@
 		},
 		"budget_left": "{left} of {total} upgrade levels left",
 		"build_cost": "Build ȼ",
-		"build_cost_tooltip": "Both ends of the link at today's exchange prices — a gate is bought TWICE, one at each end, and this is the pair. The bill is dominated by a few enormous positions ({materials}), and those are thin markets: this is what the exchange says today, not what actually buying that much would cost.",
-		"cost_note": "Build ȼ counts BOTH ends of every link — a gate is two gates. A gate holds {budget} upgrade levels in total across uses, volume and range, so every level of range is a level of clearance not bought. Upgrade cost is triangular: the n-th level costs n times the first, so the third level of an upgrade costs three times what the first one did.",
+		"build_cost_tooltip": "{ends} gate(s) at today's exchange prices. A link is always two gates, one at each end — pick \"Build one end\" when the far one already stands or a partner is putting it up, and only your own is billed. It changes the bill and nothing else: the route, the fee and the clearance are the same either way. The bill is dominated by a few enormous positions ({materials}), and those are thin markets: this is what the exchange says today, not what actually buying that much would cost.",
+		"cost_note": "A link is two gates, one at each end, and Build ȼ counts both of them unless a row is set to \"Build one end\" — for a link whose far gate already stands or is somebody else's to build. That is a billing choice only: a gate is bidirectional and routes identically either way, which is also why the same pair reversed is not a second gate. A gate holds {budget} upgrade levels in total across uses, volume and range, so every level of range is a level of clearance not bought. Upgrade cost is triangular: the n-th level costs n times the first, so the third level of an upgrade costs three times what the first one did.",
 		"rollup_build": "Build ȼ, every planned link",
 		"out_of_range_tag": "Out of Range",
 		"not_routed": "Not Routed",

@@ -6,8 +6,11 @@ import {
 	IRaukkPlannedGateValue,
 	RAUKK_HCB_HULL_M3,
 	RAUKK_PLANNED_GATE_DEFAULT_FEE,
+	raukkPlannedGateBuildEnds,
 	raukkPlannedGateBuildable,
+	raukkPlannedGateDuplicate,
 	raukkPlannedGateLabel,
+	raukkPlannedGatePairKey,
 	raukkPlannedGateLink,
 	raukkPlannedGateLinks,
 	raukkPlannedGateRangeUpgrades,
@@ -179,6 +182,94 @@ describe("Raukk Sourcing: gate planning", () => {
 			expect(
 				raukkPlannedGateBuildable(gate({ planetA: " " }), routes())
 			).toBe(false);
+		});
+	});
+
+	describe("duplicates", () => {
+		it("keys a link direction blind", () => {
+			expect(
+				raukkPlannedGatePairKey("PG-001a", "PG-004b", routes())
+			).toBe(raukkPlannedGatePairKey("PG-004b", "PG-001a", routes()));
+		});
+
+		it("keys by SYSTEM, so another planet of it is the same link", () => {
+			expect(
+				raukkPlannedGatePairKey("PG-001a", "PG-004b", routes())
+			).toBe(raukkPlannedGatePairKey("PG-001c", "PG-004a", routes()));
+		});
+
+		it("falls back to the planet id when a side is unplaceable", () => {
+			// still direction blind, and still case blind
+			expect(
+				raukkPlannedGatePairKey("XX-999a", "PG-004b", routes())
+			).toBe(raukkPlannedGatePairKey("PG-004b", "xx-999a", routes()));
+			// but an unknown planet is not the same link as another one
+			expect(
+				raukkPlannedGatePairKey("XX-999a", "PG-004b", routes())
+			).not.toBe(raukkPlannedGatePairKey("XX-998a", "PG-004b", routes()));
+		});
+
+		it("has no key for a gate missing an end", () => {
+			expect(raukkPlannedGatePairKey("", "PG-004b", routes())).toBe("");
+			expect(raukkPlannedGatePairKey("PG-001a", "  ", routes())).toBe("");
+		});
+
+		it("finds the gate a reversed pair repeats", () => {
+			const stored: IRaukkPlannedGate[] = [
+				gate({ id: "first", name: "Long Haul" }),
+			];
+
+			expect(
+				raukkPlannedGateDuplicate(
+					stored,
+					"PG-004b",
+					"PG-001a",
+					"second",
+					routes()
+				)?.id
+			).toBe("first");
+		});
+
+		it("is never its own duplicate", () => {
+			const stored: IRaukkPlannedGate[] = [gate({ id: "first" })];
+
+			expect(
+				raukkPlannedGateDuplicate(
+					stored,
+					"PG-001a",
+					"PG-004b",
+					"first",
+					routes()
+				)
+			).toBeNull();
+		});
+
+		it("leaves a genuinely different pair alone", () => {
+			const stored: IRaukkPlannedGate[] = [gate({ id: "first" })];
+
+			expect(
+				raukkPlannedGateDuplicate(
+					stored,
+					"PG-001a",
+					"PG-006a",
+					"second",
+					routes()
+				)
+			).toBeNull();
+		});
+	});
+
+	describe("ends billed", () => {
+		it("takes a gate stored before the field for the whole link", () => {
+			expect(raukkPlannedGateBuildEnds(gate())).toBe(2);
+			expect(raukkPlannedGateBuildEnds(gate({ buildEnds: 1 }))).toBe(1);
+			expect(raukkPlannedGateBuildEnds(gate({ buildEnds: 2 }))).toBe(2);
+		});
+
+		it("changes NOTHING about the edge the gate becomes", () => {
+			expect(raukkPlannedGateLink(gate({ buildEnds: 1 }))).toStrictEqual(
+				raukkPlannedGateLink(gate({ buildEnds: 2 }))
+			);
 		});
 	});
 

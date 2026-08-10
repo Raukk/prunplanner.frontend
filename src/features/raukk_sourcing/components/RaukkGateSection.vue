@@ -14,6 +14,7 @@
 	// Calculations
 	import {
 		RAUKK_PLANNED_GATE_DEFAULT_FEE,
+		raukkPlannedGateBuildEnds,
 		raukkPlannedGateLabel,
 		raukkPlannedGateRangeUpgrades,
 		raukkPlannedGateUpgrades,
@@ -21,6 +22,7 @@
 	import {
 		IRaukkGateSpecs,
 		IRaukkGateUpgrades,
+		RAUKK_GATE_BUILD_ENDS,
 		RAUKK_GATE_NO_UPGRADES,
 		RAUKK_GATE_UPGRADE,
 		RAUKK_GATE_UPGRADE_BUDGET,
@@ -97,6 +99,27 @@
 		return raukkGateUpgradeBudgetLeft(raukkPlannedGateUpgrades(gate));
 	}
 
+	/**
+	 * Ends of the link this account pays for.
+	 *
+	 * A billing choice only: both ends of a link have to exist for it to
+	 * be a link at all, and the routing, the fee and the clearance are the
+	 * same whoever put the far gate up.
+	 */
+	const endsOptions: ComputedRef<
+		{ label: string; value: RAUKK_GATE_BUILD_ENDS }[]
+	> = computed(() => [
+		{ label: t("raukk_sourcing.gates.ends.both"), value: 2 },
+		{ label: t("raukk_sourcing.gates.ends.one"), value: 1 },
+	]);
+
+	/** Stores the ends billed; the calculation owns the 1-or-2 clamping */
+	function patchEnds(gateId: string, value: unknown): void {
+		patchGate(gateId, {
+			buildEnds: Number(value) === 1 ? 1 : 2,
+		});
+	}
+
 	const statusOptions: ComputedRef<
 		{ label: string; value: RAUKK_PLANNED_GATE_STATUS }[]
 	> = computed(() => [
@@ -133,9 +156,32 @@
 		() => enteredA.value !== "" && enteredB.value !== ""
 	);
 
+	/**
+	 * The gate the entry would DUPLICATE, null when the pair is free.
+	 *
+	 * A gate is bidirectional, so a pair already planned the other way
+	 * round is the same link — and, since the graph links systems, so is
+	 * one between two other planets of the same two systems.
+	 */
+	const duplicateGate: ComputedRef<IRaukkPlannedGate | null> = computed(() =>
+		bothEntered.value
+			? sourcingStore.plannedGateDuplicateOf(
+					"",
+					enteredA.value,
+					enteredB.value
+				)
+			: null
+	);
+
+	/** Label of that gate, for the refusal message */
+	const duplicateLabel: ComputedRef<string> = computed(() =>
+		duplicateGate.value === null ? "" : label(duplicateGate.value)
+	);
+
 	/** Why the add button is off, or what the entry will not do */
 	const addHint: ComputedRef<string> = computed(() => {
 		if (!bothEntered.value) return "empty";
+		if (duplicateGate.value !== null) return "duplicate";
 
 		const systemA: string | null = resolveSystemId(enteredA.value);
 		const systemB: string | null = resolveSystemId(enteredB.value);
@@ -154,20 +200,23 @@
 	});
 
 	/*
-	 * Two of the hints REFUSE the add, the rest only warn.
+	 * Three of the hints REFUSE the add, the rest only warn.
 	 *
 	 * A gap past 25 parsecs and two planets of one system are not gates
 	 * anyone could build, so a row for one would sit in the table
-	 * permanently red, waiting to be noticed and deleted. An unknown
-	 * planet id still adds: the bundled systems JSON may simply not know
-	 * a planet the user does, which is the same call the depot table
-	 * makes.
+	 * permanently red, waiting to be noticed and deleted. A pair another
+	 * row already links is refused for the opposite reason — it WOULD
+	 * work, twice, and the second row would silently double the build
+	 * bill of an edge the graph already has. An unknown planet id still
+	 * adds: the bundled systems JSON may simply not know a planet the
+	 * user does, which is the same call the depot table makes.
 	 */
 	const canAdd: ComputedRef<boolean> = computed(
 		() =>
 			bothEntered.value &&
 			addHint.value !== "unreachable_range" &&
-			addHint.value !== "same_system"
+			addHint.value !== "same_system" &&
+			addHint.value !== "duplicate"
 	);
 
 	function addGate(): void {
@@ -402,6 +451,21 @@
 							type="secondary">
 							{{ $t("raukk_sourcing.gates.hcb") }}
 						</PTag>
+						<PTooltip v-if="row.duplicateOf !== null">
+							<template #trigger>
+								<PTag
+									size="sm"
+									type="warning"
+									class="hover:cursor-help">
+									{{ $t("raukk_sourcing.gates.duplicate") }}
+								</PTag>
+							</template>
+							{{
+								$t("raukk_sourcing.gates.duplicate_tooltip", {
+									gate: row.duplicateOf,
+								})
+							}}
+						</PTooltip>
 					</div>
 				</td>
 				<td class="text-right">
@@ -464,22 +528,30 @@
 					{{ savedLabel(row) }}
 				</td>
 				<td class="text-right">
-					<PTooltip>
-						<template #trigger>
-							<span class="hover:cursor-help">
-								{{
-									pricesLoaded
-										? formatNumber(row.buildCostAic)
-										: "…"
-								}}
-							</span>
-						</template>
-						{{
-							$t("raukk_sourcing.gates.build_cost_tooltip", {
-								materials: materialsLabel(row),
-							})
-						}}
-					</PTooltip>
+					<div class="flex flex-col gap-y-1 items-end">
+						<PTooltip>
+							<template #trigger>
+								<span class="hover:cursor-help">
+									{{
+										pricesLoaded
+											? formatNumber(row.buildCostAic)
+											: "…"
+									}}
+								</span>
+							</template>
+							{{
+								$t("raukk_sourcing.gates.build_cost_tooltip", {
+									ends: raukkPlannedGateBuildEnds(row.gate),
+									materials: materialsLabel(row),
+								})
+							}}
+						</PTooltip>
+						<PSelect
+							class="w-33!"
+							:value="raukkPlannedGateBuildEnds(row.gate)"
+							:options="endsOptions"
+							@update:value="(v) => patchEnds(row.gate.id, v)" />
+					</div>
 				</td>
 				<td class="text-center">
 					<div class="flex flex-col gap-y-1 items-center">
@@ -570,7 +642,11 @@
 									? 'text-white/50'
 									: 'text-red-400'
 							">
-							{{ $t(`raukk_sourcing.gates.hint.${addHint}`) }}
+							{{
+								$t(`raukk_sourcing.gates.hint.${addHint}`, {
+									gate: duplicateLabel,
+								})
+							}}
 						</span>
 					</div>
 				</td>
@@ -595,6 +671,14 @@
 		<span>
 			{{ pricesLoaded ? formatNumber(totals.buildCostAic) : "…" }}
 		</span>
+	</div>
+
+	<div v-if="totals.duplicates > 0" class="pt-3 text-amber-400">
+		{{
+			$t("raukk_sourcing.gates.duplicate_warning", {
+				count: totals.duplicates,
+			})
+		}}
 	</div>
 
 	<div v-if="totals.enabled > 0" class="pt-3 text-amber-400">

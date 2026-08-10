@@ -267,6 +267,10 @@ export const RaukkPlannedGateSchema = z.object({
 	volumeUpgrades: z.number().int().min(0).max(3).default(0),
 	rangeUpgrades: z.number().int().min(0).max(3).default(0),
 	maxM3: z.number().nonnegative().optional(),
+	// raukk: ends of the link the ACCOUNT pays for. Absent in every payload
+	// written before one-sided bills existed, and absent means the pair,
+	// which is what those bills meant
+	buildEnds: z.union([z.literal(1), z.literal(2)]).default(2),
 	enabled: z.boolean().default(false),
 	status: z.enum(["construction", "proposed"]).default("proposed"),
 	note: z.string().optional(),
