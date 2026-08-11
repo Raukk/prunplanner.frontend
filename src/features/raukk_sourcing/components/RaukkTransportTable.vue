@@ -248,6 +248,12 @@
 					{{ $t("raukk_sourcing.transport.units_per_day") }}
 				</th>
 				<th class="text-right!">
+					{{ $t("raukk_sourcing.transport.weight_per_day") }}
+				</th>
+				<th class="text-right!">
+					{{ $t("raukk_sourcing.transport.volume_per_day") }}
+				</th>
+				<th class="text-right!">
 					{{ $t("raukk_sourcing.transport.round_trip") }}
 				</th>
 				<th class="text-right!">
@@ -360,6 +366,44 @@
 					<span v-if="row.legs.length === 0">—</span>
 				</td>
 				<td class="text-right">{{ figure(row.unitsPerDay) }}</td>
+				<!-- the two dimensions per direction, never summed across
+				them: the hull a lane is flown with answers to the heavier
+				direction of the more demanding dimension, and a total is
+				exactly the number that hides which one that was -->
+				<td class="text-right align-top">
+					<div
+						class="inline-grid grid-cols-[auto_auto] gap-x-2 items-center">
+						<span class="text-white/50 text-xs">
+							{{ $t("raukk_sourcing.transport.direction_out") }}
+						</span>
+						<span class="justify-self-end">
+							{{ figure(row.weightOutPerDay) }}
+						</span>
+						<span class="text-white/50 text-xs">
+							{{ $t("raukk_sourcing.transport.direction_in") }}
+						</span>
+						<span class="justify-self-end">
+							{{ figure(row.weightBackPerDay) }}
+						</span>
+					</div>
+				</td>
+				<td class="text-right align-top">
+					<div
+						class="inline-grid grid-cols-[auto_auto] gap-x-2 items-center">
+						<span class="text-white/50 text-xs">
+							{{ $t("raukk_sourcing.transport.direction_out") }}
+						</span>
+						<span class="justify-self-end">
+							{{ figure(row.volumeOutPerDay) }}
+						</span>
+						<span class="text-white/50 text-xs">
+							{{ $t("raukk_sourcing.transport.direction_in") }}
+						</span>
+						<span class="justify-self-end">
+							{{ figure(row.volumeBackPerDay) }}
+						</span>
+					</div>
+				</td>
 				<td class="text-right text-white/60">
 					{{
 						$t("raukk_sourcing.transport.round_trip_minutes", {
@@ -402,7 +446,7 @@
 				</td>
 			</tr>
 			<tr v-if="rows.length === 0">
-				<td colspan="12" class="text-center text-white/50">
+				<td colspan="14" class="text-center text-white/50">
 					{{
 						props.emptyLabel === ""
 							? $t("raukk_sourcing.transport.empty")

@@ -816,6 +816,10 @@ function buildPlanLanes(shipping: IRaukkShippingResult): IRaukkSnapshotLane[] {
 			ownCostPerTrip: leg.ownCostPerTrip,
 			ownDamagePerTrip: leg.ownDamagePerTrip,
 			unitsPerDay: leg.unitsPerDay,
+			weightOutPerDay: leg.weightOutPerDay,
+			volumeOutPerDay: leg.volumeOutPerDay,
+			weightBackPerDay: leg.weightBackPerDay,
+			volumeBackPerDay: leg.volumeBackPerDay,
 		}))
 	);
 }

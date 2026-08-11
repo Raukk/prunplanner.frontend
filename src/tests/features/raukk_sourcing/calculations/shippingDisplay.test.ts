@@ -41,6 +41,10 @@ function lane(patch: Partial<IRaukkSnapshotLane> = {}): IRaukkSnapshotLane {
 		ownCostPerTrip: 200,
 		ownDamagePerTrip: 0.1,
 		unitsPerDay: 500,
+		weightOutPerDay: 20,
+		volumeOutPerDay: 10,
+		weightBackPerDay: 60,
+		volumeBackPerDay: 90,
 		...patch,
 	};
 }
@@ -199,6 +203,63 @@ describe("raukk shipping display helpers", () => {
 				"workforce",
 			]);
 			expect(rows[0].legs[1].shipTypeId).toBe("big");
+		});
+
+		it("sums the daily load per direction and per dimension", () => {
+			// never across the two directions: the hull answers to the
+			// heavier one, a total would hide which that is
+			const [row] = buildTransportRows(
+				{
+					consumer: snapshot([
+						lane({
+							weightOutPerDay: 20,
+							volumeOutPerDay: 10,
+							weightBackPerDay: 60,
+							volumeBackPerDay: 90,
+						}),
+						lane({
+							bucket: "workforce",
+							weightOutPerDay: 5,
+							volumeOutPerDay: 4,
+							weightBackPerDay: 15,
+							volumeBackPerDay: 30,
+						}),
+					]),
+				},
+				config,
+				0
+			);
+
+			expect(row.weightOutPerDay).toBeCloseTo(25, 10);
+			expect(row.volumeOutPerDay).toBeCloseTo(14, 10);
+			expect(row.weightBackPerDay).toBeCloseTo(75, 10);
+			expect(row.volumeBackPerDay).toBeCloseTo(120, 10);
+		});
+
+		it("holds the daily load unknown when one leg predates it", () => {
+			const [row] = buildTransportRows(
+				{
+					consumer: snapshot([
+						lane(),
+						lane({
+							bucket: "workforce",
+							weightOutPerDay: undefined,
+							volumeOutPerDay: undefined,
+							weightBackPerDay: undefined,
+							volumeBackPerDay: undefined,
+						}),
+					]),
+				},
+				config,
+				0
+			);
+
+			expect(row.weightOutPerDay).toBeUndefined();
+			expect(row.volumeOutPerDay).toBeUndefined();
+			expect(row.weightBackPerDay).toBeUndefined();
+			expect(row.volumeBackPerDay).toBeUndefined();
+			// the rest of the lane is unaffected
+			expect(row.unitsPerDay).toBe(1000);
 		});
 
 		it("reports a figure the snapshot never froze as unknown", () => {

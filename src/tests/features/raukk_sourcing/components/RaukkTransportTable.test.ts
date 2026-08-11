@@ -39,6 +39,10 @@ function row(patch: Partial<IRaukkTransportRow> = {}): IRaukkTransportRow {
 		roundTripMinutes: 600,
 		hired: false,
 		unitsPerDay: 500,
+		weightOutPerDay: 20,
+		volumeOutPerDay: 10,
+		weightBackPerDay: 60,
+		volumeBackPerDay: 90,
 		ownCostPerTrip: 200,
 		ownCostPerUnit: 0.2,
 		lmRatePerTrip: undefined,
@@ -85,9 +89,11 @@ function render(
 	});
 }
 
-/** Cells of the single body row */
+/** Cells of the single body row, indentation collapsed to one space */
 function cells(wrapper: VueWrapper): string[] {
-	return wrapper.findAll("tbody tr td").map((td) => td.text());
+	return wrapper
+		.findAll("tbody tr td")
+		.map((td) => td.text().replace(/\s+/g, " ").trim());
 }
 
 describe("RaukkTransportTable", () => {
@@ -143,11 +149,24 @@ describe("RaukkTransportTable", () => {
 		expect(wrapper.text()).toContain("unknown-uuid");
 	});
 
+	it("states the daily load per direction, in its own column", () => {
+		const text: string[] = cells(render([row()]));
+
+		// tonnage and volume each keep both directions in one cell, the
+		// grid spacing them — the text nodes carry no separator of their own
+		expect(text).toContain("out20.00in60.00");
+		expect(text).toContain("out10.00in90.00");
+	});
+
 	it("prints an em-dash for a figure the snapshot never froze", () => {
 		// a zero would read as free freight
 		const wrapper: VueWrapper = render([
 			row({
 				unitsPerDay: undefined,
+				weightOutPerDay: undefined,
+				volumeOutPerDay: undefined,
+				weightBackPerDay: undefined,
+				volumeBackPerDay: undefined,
 				ownCostPerTrip: undefined,
 				ownCostPerUnit: undefined,
 				ownWear: undefined,

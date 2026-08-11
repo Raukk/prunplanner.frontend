@@ -75,6 +75,18 @@ export interface IRaukkTransportRow {
 	/** Units per day riding this lane, both directions summed.
 	 * `undefined` on lanes frozen before the figure was stored */
 	unitsPerDay: number | undefined;
+	/**
+	 * Daily tonnage and volume of the lane, kept per DIRECTION and never
+	 * summed across the two: what forces a hull onto a lane is the
+	 * heavier direction of the more demanding dimension, and a total
+	 * would hide exactly that. `out` leaves the owning plan, `back`
+	 * arrives at it. `undefined` on lanes frozen before the figures were
+	 * stored — a zero would read as an empty direction.
+	 */
+	weightOutPerDay: number | undefined;
+	volumeOutPerDay: number | undefined;
+	weightBackPerDay: number | undefined;
+	volumeBackPerDay: number | undefined;
 	/** ȼ per trip with the own fleet, `undefined` where never frozen */
 	ownCostPerTrip: number | undefined;
 	/** Own fleet ȼ per unit shipped, averaged over the whole lane */
@@ -251,12 +263,24 @@ export function buildTransportRows(
 				0
 			);
 
-			/** Unknown as soon as one leg predates the frozen figure */
-			const unitsPerDay: number | undefined = lanes.some(
-				(lane) => lane.unitsPerDay === undefined
-			)
-				? undefined
-				: lanes.reduce((sum, lane) => sum + (lane.unitsPerDay ?? 0), 0);
+			/**
+			 * One frozen per leg figure summed over the lane, unknown as
+			 * soon as a single leg predates it: the legs of a lane are
+			 * disjoint freight, so the sum of a partially known lane is
+			 * not a smaller number but an unstated one.
+			 */
+			function summed(
+				pick: (lane: IRaukkSnapshotLane) => number | undefined
+			): number | undefined {
+				if (lanes.some((lane) => pick(lane) === undefined))
+					return undefined;
+
+				return lanes.reduce((sum, lane) => sum + (pick(lane) ?? 0), 0);
+			}
+
+			const unitsPerDay: number | undefined = summed(
+				(lane) => lane.unitsPerDay
+			);
 
 			const ownCostPerTrip: number | undefined = tripWeighted(
 				lanes,
@@ -310,6 +334,10 @@ export function buildTransportRows(
 				roundTripMinutes,
 				hired: lanes.some((lane) => lane.hired),
 				unitsPerDay,
+				weightOutPerDay: summed((lane) => lane.weightOutPerDay),
+				volumeOutPerDay: summed((lane) => lane.volumeOutPerDay),
+				weightBackPerDay: summed((lane) => lane.weightBackPerDay),
+				volumeBackPerDay: summed((lane) => lane.volumeBackPerDay),
 				ownCostPerTrip,
 				ownCostPerUnit,
 				lmRatePerTrip,

@@ -419,6 +419,19 @@ export interface IRaukkLegShipping {
 	ownDamagePerTrip: number;
 	/** Units this leg moves per day, both directions summed */
 	unitsPerDay: number;
+	/**
+	 * Daily tonnage and volume of the leg, kept per DIRECTION.
+	 *
+	 * The two are not interchangeable and neither is their sum: a hull is
+	 * picked against the heavier of the two directions and against the
+	 * more demanding of the two dimensions, so a lane flying an HCB for
+	 * 30 m³ of returning cargo is only explicable with all four figures
+	 * side by side. `out` leaves the owning plan, `back` arrives at it.
+	 */
+	weightOutPerDay: number;
+	volumeOutPerDay: number;
+	weightBackPerDay: number;
+	volumeBackPerDay: number;
 	dailyCost: number;
 	roundTripMinutes: number;
 	/** Ship time share of this leg, `null` without a ship count */
