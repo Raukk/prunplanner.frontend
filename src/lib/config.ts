@@ -26,8 +26,15 @@ class Config {
 			import.meta.env.VITE_GAME_DATA_STALE_MINUTES_RECIPES || 24 * 60;
 		this.GAME_DATA_STALE_MINUTES_MATERIALS =
 			import.meta.env.VITE_GAME_DATA_STALE_MINUTES_MATERIALS || 24 * 60;
+		/*
+			raukk: exchange data is a daily close — every row of the
+			payload carries the same calendar_date — so it is expired at
+			the rollover rather than an hour after whenever it was loaded,
+			and this is only the upper bound on that. Was 60 minutes,
+			which refetched 719 KB up to 24 times to observe one change.
+		*/
 		this.GAME_DATA_STALE_MINUTES_EXCHANGES =
-			import.meta.env.VITE_GAME_DATA_STALE_MINUTES_EXCHANGES || 60;
+			import.meta.env.VITE_GAME_DATA_STALE_MINUTES_EXCHANGES || 24 * 60;
 		this.GAME_DATA_STALE_MINUTES_PLANETS =
 			import.meta.env.VITE_GAME_DATA_STALE_MINUTES_PLANETS || 12 * 60;
 		this.INDEXEDDB_DBNAME =

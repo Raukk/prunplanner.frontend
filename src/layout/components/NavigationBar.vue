@@ -101,6 +101,28 @@
 		await queryStore.refreshAll();
 	}
 
+	/**
+	 * Refreshes one slice of the cache rather than all of it.
+	 *
+	 * The two live on very different clocks: prices turn over once a day
+	 * and are what a user actually wants back, while the rest of game
+	 * data only moves on a game update. Refreshing everything to get the
+	 * former also refetches every planet, recipe and building the
+	 * session has touched, which for a large empire is megabytes behind
+	 * one click.
+	 *
+	 * @author raukk
+	 *
+	 * @async
+	 * @param {string[]} scope Cache key prefix to refresh
+	 * @returns {Promise<void>}
+	 */
+	async function refreshScope(scope: string[]): Promise<void> {
+		if (queryStore.refreshing) return;
+
+		await queryStore.refreshAll(scope);
+	}
+
 	const menuItems: ComputedRef<IMenuSection[]> = computed(() => [
 		{
 			label: t("common.navigation.planning"),
@@ -654,6 +676,24 @@
 											),
 										})
 							}}
+						</div>
+						<div
+							v-if="!queryStore.refreshing"
+							class="flex flex-col mt-2 pt-2 gap-y-0.5 border-t border-white/20">
+							<div
+								class="px-1 cursor-pointer hover:bg-white/20 hover:rounded-sm"
+								@click="refreshScope(['gamedata', 'exchanges'])">
+								{{
+									t("common.navigation.data.refresh_prices")
+								}}
+							</div>
+							<div
+								class="px-1 cursor-pointer hover:bg-white/20 hover:rounded-sm"
+								@click="refreshScope(['gamedata'])">
+								{{
+									t("common.navigation.data.refresh_gamedata")
+								}}
+							</div>
 						</div>
 					</PTooltip>
 				</div>

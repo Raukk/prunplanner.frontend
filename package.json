@@ -6,7 +6,8 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build && node scripts/write-version.js",
+		"build": "node scripts/fetch-static-gamedata.mjs && vite build && node scripts/write-version.js",
+		"gamedata:snapshot": "node scripts/fetch-static-gamedata.mjs",
 		"tsc": "vue-tsc --project tsconfig.typecheck.json",
 		"tsc:watch": "vue-tsc --project tsconfig.typecheck.json --watch",
 		"preview": "vite preview",

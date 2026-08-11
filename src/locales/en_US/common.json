@@ -34,7 +34,9 @@
 			"refresh": "Refresh Data",
 			"refreshing": "Refreshing...",
 			"as_of": "Data as of {when}",
-			"age_unknown": "Data age unknown, refresh to be sure"
+			"age_unknown": "Data age unknown, refresh to be sure",
+			"refresh_prices": "Refresh prices only",
+			"refresh_gamedata": "Reload game data (after a game update)"
 		}
 	},
 	"buttons": {
