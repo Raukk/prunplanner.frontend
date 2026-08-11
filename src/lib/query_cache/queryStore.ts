@@ -212,6 +212,38 @@ export const useQueryStore = defineStore(
 		const refreshGeneration: Ref<number> = ref(0);
 
 		/**
+		 * Remounts the views against the current cache, unless a view
+		 * holding unsaved work blocks it.
+		 *
+		 * A view reads its query results ONCE, when it mounts, and keeps
+		 * that copy: a manual refresh and a background revalidation that
+		 * really changed something are equally invisible to it without
+		 * this. Both therefore end here rather than bumping the generation
+		 * themselves, and both respect the same guards — the cache stays
+		 * refreshed either way, a view with unsaved edits just keeps its
+		 * own state until the user navigates.
+		 *
+		 * A refresh in flight owns the remount: it re-reads every entry and
+		 * calls this once at the end, so a fetch of its own asking here
+		 * would re-key the views while the rest is still loading.
+		 *
+		 * @author raukk
+		 */
+		function requestRemount(): void {
+			if (refreshing.value) return;
+
+			for (const guard of remountGuards) {
+				try {
+					if (guard()) return;
+				} catch (err) {
+					console.error("Remount guard failed", err);
+				}
+			}
+
+			refreshGeneration.value += 1;
+		}
+
+		/**
 		 * Incremented by `$reset`, i.e. on logout. A fetch that started
 		 * for the previous user seeds sibling entries from inside its
 		 * fetchFn, which the per key epoch cannot cover because those
@@ -1354,24 +1386,9 @@ export const useQueryStore = defineStore(
 				releaseBypass();
 				refreshing.value = false;
 
-				/*
-					Views hold snapshots of their query results taken when
-					they mounted, bumping the generation lets the app
-					remount them against the now current cache. A view
-					carrying unsaved work blocks that: the cache is still
-					refreshed, it just keeps its own state until the user
-					navigates.
-				*/
-				let blocked = false;
-				for (const guard of remountGuards) {
-					try {
-						if (guard()) blocked = true;
-					} catch (err) {
-						console.error("Remount guard failed", err);
-					}
-				}
-
-				if (!blocked) refreshGeneration.value += 1;
+				// views hold the query results they mounted with, see
+				// `requestRemount`
+				requestRemount();
 			}
 		}
 
@@ -1483,6 +1500,7 @@ export const useQueryStore = defineStore(
 			refreshGeneration,
 			sessionGeneration,
 			registerRemountGuard,
+			requestRemount,
 			isAnythingLoading,
 			isAnythingRevalidating,
 			oldestDataTimestamp,

@@ -44,10 +44,14 @@ import {
 // Latch
 import { resetRaukkBlockSolveLatches } from "@/features/raukk_sourcing/raukkBlockSolveLatch";
 
+// Composables
+import { planContentFingerprint } from "@/features/planning_data/usePlan";
+
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
 // Types & Interfaces
+import { IPlan } from "@/stores/planningStore.types";
 import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
 import { IRaukkProducerPriceOverride } from "@/features/raukk_sourcing/useRaukkSnapshot";
 
@@ -249,6 +253,11 @@ describe("useRaukkBlockRecompute", () => {
 				planetNaturalId: "PL-a",
 				cxUuid: "cx-empire-a",
 				planResult: { profit: 1 },
+				// the version these numbers were calculated from
+				planFingerprint: planContentFingerprint({
+					plan_name: "Plan a",
+					planet_natural_id: "PL-a",
+				} as IPlan),
 			});
 
 			expect(currents).toStrictEqual(["A"]);

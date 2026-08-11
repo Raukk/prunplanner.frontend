@@ -18,6 +18,7 @@ import { useQueryStore } from "@/lib/query_cache/queryStore";
 
 // Composables
 import { useCXData } from "@/features/cx/useCXData";
+import { planContentFingerprint } from "@/features/planning_data/usePlan";
 import { usePlanCalculation } from "@/features/planning/usePlanCalculation";
 import {
 	computePlanSnapshot,
@@ -124,6 +125,8 @@ export async function buildPlanSnapshotContext(
 		planetNaturalId: plan.planet_natural_id,
 		cxUuid,
 		planResult,
+		// exactly the version these numbers were calculated from
+		planFingerprint: planContentFingerprint(plan),
 	};
 }
 

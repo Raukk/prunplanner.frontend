@@ -3,6 +3,12 @@ import { createPinia, setActivePinia } from "pinia";
 
 // Latch
 import { resetRaukkBlockSolveLatches } from "@/features/raukk_sourcing/raukkBlockSolveLatch";
+import {
+	beginRaukkSnapshotUpkeep,
+	endRaukkSnapshotUpkeep,
+	raukkSnapshotUpkeepBusy,
+	resetRaukkSnapshotUpkeep,
+} from "@/features/raukk_sourcing/raukkSnapshotUpkeepLatch";
 
 // the composable orchestrates loading, calculation and the snapshot
 // pipeline, all three are mocked: this tests the orchestration itself
@@ -103,6 +109,7 @@ describe("useRaukkStaleSnapshotRecompute", () => {
 		setActivePinia(createPinia());
 		// the unsolved block latch is module state and outlives one test
 		resetRaukkBlockSolveLatches();
+		resetRaukkSnapshotUpkeep();
 		sourcingStore = useRaukkSourcingStore();
 
 		mockExecute.mockReset();
@@ -387,6 +394,63 @@ describe("useRaukkStaleSnapshotRecompute", () => {
 			mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
 		).toStrictEqual(["a"]);
 		expect(sourcingStore.snapshots.c.stale).toBe(true);
+	});
+
+	it("waits for the upkeep latch instead of skipping the run", async () => {
+		sourcingStore.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+		sourcingStore.markStale("a");
+
+		// e.g. the open plans own upkeep is computing right now
+		beginRaukkSnapshotUpkeep();
+
+		const { recomputeStaleSnapshots } = useRaukkStaleSnapshotRecompute();
+		const run: Promise<boolean> = recomputeStaleSnapshots();
+
+		await Promise.resolve();
+		expect(mockComputePlanSnapshot).not.toHaveBeenCalled();
+
+		endRaukkSnapshotUpkeep();
+		expect(await run).toBe(true);
+
+		// the manual button never silently does nothing
+		expect(mockComputePlanSnapshot).toHaveBeenCalledTimes(1);
+		expect(raukkSnapshotUpkeepBusy()).toBe(false);
+	});
+
+	it("holds the upkeep latch while it runs", async () => {
+		sourcingStore.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+		sourcingStore.markStale("a");
+
+		let heldDuringRun: boolean = false;
+
+		mockComputePlanSnapshot.mockImplementation(
+			async (context: { planUuid: string; planName: string }) => {
+				heldDuringRun = raukkSnapshotUpkeepBusy();
+				sourcingStore.setSnapshot(
+					context.planUuid,
+					makeSnapshot(context.planName, { RAT: 10 })
+				);
+				return {};
+			}
+		);
+
+		const { recomputeStaleSnapshots } = useRaukkStaleSnapshotRecompute();
+		await recomputeStaleSnapshots();
+
+		expect(heldDuringRun).toBe(true);
+		expect(raukkSnapshotUpkeepBusy()).toBe(false);
+	});
+
+	it("reports whether a run happened", async () => {
+		const { recomputeStaleSnapshots } = useRaukkStaleSnapshotRecompute();
+
+		// nothing stale
+		expect(await recomputeStaleSnapshots()).toBe(false);
+
+		sourcingStore.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+		sourcingStore.markStale("a");
+
+		expect(await recomputeStaleSnapshots()).toBe(true);
 	});
 
 	it("refuses a second, concurrent run", async () => {

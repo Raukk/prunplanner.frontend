@@ -46,10 +46,14 @@ vi.mock("@/features/raukk_sourcing/useRaukkChainCompute", () => ({
 // Composables
 import { useRaukkChainRecompute } from "@/features/raukk_sourcing/useRaukkChainRecompute";
 
+// Composables
+import { planContentFingerprint } from "@/features/planning_data/usePlan";
+
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
 // Types & Interfaces
+import { IPlan } from "@/stores/planningStore.types";
 import {
 	IRaukkPlanConfig,
 	IRaukkSnapshot,
@@ -212,6 +216,11 @@ describe("useRaukkChainRecompute", () => {
 			planetNaturalId: "PL-a",
 			cxUuid: "cx-empire-a",
 			planResult: { profit: 1 },
+			// the version these numbers were calculated from
+			planFingerprint: planContentFingerprint({
+				plan_name: "Plan a",
+				planet_natural_id: "PL-a",
+			} as IPlan),
 		});
 	});
 

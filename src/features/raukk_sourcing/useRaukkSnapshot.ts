@@ -118,6 +118,13 @@ export interface IRaukkPlanSnapshotContext {
 	planetNaturalId: string;
 	cxUuid: string | undefined;
 	planResult: IPlanResult;
+	/**
+	 * Fingerprint of the plan version `planResult` was calculated from,
+	 * stamped onto the stored snapshot. Omitted, the store falls back to
+	 * the plan it currently holds — which is only the same thing while
+	 * nothing has moved under the computing view.
+	 */
+	planFingerprint?: string;
 }
 
 /** Outcome of one snapshot computation */
@@ -519,7 +526,11 @@ export async function preparePlanSnapshot(
 		): IRaukkSnapshot =>
 			raukkComputeSnapshotOnce(coreInput, env, priceOverride),
 		store: (snapshot: IRaukkSnapshot): void =>
-			sourcingStore.setSnapshot(context.planUuid, snapshot),
+			sourcingStore.setSnapshot(
+				context.planUuid,
+				snapshot,
+				context.planFingerprint
+			),
 	};
 }
 
