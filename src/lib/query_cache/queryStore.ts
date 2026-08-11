@@ -13,6 +13,7 @@ import pLimit from "p-limit";
 import { userActivity } from "@/features/user_activity/userActivityStore";
 import { useQueryRepository } from "@/lib/query_cache/queryRepository";
 import { isSubset, toCacheKey } from "@/lib/query_cache/cacheKeys";
+import { beginHttpCacheBypass } from "@/lib/httpCacheBypass";
 
 import {
 	IQueryCacheMeta,
@@ -68,11 +69,19 @@ export const REVALIDATE_RETRY_MS: number = 60_000;
  */
 export const CACHE_CHANNEL_NAME: string = "prunplanner_query_cache";
 
-/** Message a tab publishes after a mutation invalidated cache keys. */
+/**
+ * Message a tab publishes after a mutation invalidated cache keys, or
+ * after a fetch refreshed durable local storage the other tabs read
+ * from too.
+ */
 export interface IQueryCacheMessage {
-	type: "invalidate" | "reset";
+	type: "invalidate" | "reset" | "refreshed";
 	key?: JSONValue;
 	exact?: boolean;
+	/** `refreshed` only: when the publishing tab fetched the payload. */
+	timestamp?: number;
+	/** `refreshed` only: the ttl that fetch resolved to. */
+	expireTime?: number;
 }
 
 export const useQueryStore = defineStore(
@@ -254,6 +263,56 @@ export const useQueryStore = defineStore(
 					fromRemote: true,
 				});
 			}
+
+			if (message.type === "refreshed" && message.key !== undefined) {
+				adoptRemoteRefresh(message);
+			}
+		}
+
+		/**
+		 * Adopts a refresh another tab already performed.
+		 *
+		 * Game data lands in IndexedDB, which every tab of this browser
+		 * shares, so by the time this message arrives the new payload is
+		 * readable here too — only this tab's memory and its idea of how
+		 * old the data is are behind. Taking the other tab's fetch time
+		 * and dropping the in-memory copy makes the next read rebuild
+		 * from local storage, which is the whole point: N tabs then cost
+		 * one fetch between them rather than one each.
+		 *
+		 * Deliberately does not refetch and does not touch an entry that
+		 * is mid-flight here, which would race the fetch this tab is
+		 * already running.
+		 *
+		 * @author raukk
+		 *
+		 * @param {IQueryCacheMessage} message Channel message
+		 */
+		function adoptRemoteRefresh(message: IQueryCacheMessage): void {
+			const keyHash: string = toCacheKey(message.key as JSONValue);
+
+			const state = cacheState[keyHash];
+			const meta = cacheMeta[keyHash];
+
+			// nothing known about this key here, there is no entry whose
+			// age could be corrected and nothing to drop
+			const definitionName: string | undefined =
+				state?.definitionName || meta?.definitionName;
+			if (!definitionName) return;
+
+			if (state?.loading || state?.revalidating) return;
+
+			const params = state?.params ?? meta?.params ?? null;
+
+			// deleteState clears the meta too, so record it afterwards
+			if (state) deleteState(keyHash);
+
+			cacheMeta[keyHash] = {
+				definitionName,
+				params,
+				timestamp: message.timestamp ?? 0,
+				expireTime: message.expireTime,
+			};
 		}
 
 		if (channel) channel.onmessage = onChannelMessage;
@@ -415,6 +474,56 @@ export const useQueryStore = defineStore(
 		}
 
 		/**
+		 * Resolves a definitions expiry to a concrete duration.
+		 *
+		 * A derived expiry is a function of the payload, so before the
+		 * first fetch there is nothing to resolve it against: the value
+		 * this key last resolved to, persisted in the meta, is the best
+		 * guess available and keeps a hydrated entry from looking like it
+		 * carries no ttl at all.
+		 *
+		 * @author raukk
+		 *
+		 * @template TParams Query Params Type
+		 * @template TData Query Data Type
+		 * @param {IQueryDefinition<TParams, TData>} definition Definition
+		 * @param {string} keyHash Cache Key hash
+		 * @param {?TData} [data] Payload, when one is at hand
+		 * @param {?number} [since] Timestamp the ttl is measured from
+		 * @returns {(number | undefined)} Ttl in ms, undefined if endless
+		 */
+		function resolveExpireTime<TParams, TData>(
+			definition: IQueryDefinition<TParams, TData> | undefined,
+			keyHash: string,
+			data?: TData,
+			since?: number
+		): number | undefined {
+			const expire = definition?.expireTime;
+
+			if (typeof expire === "number") return expire;
+			if (typeof expire !== "function") return undefined;
+
+			if (data === undefined || data === null) {
+				return (
+					cacheState[keyHash]?.expireTime ??
+					cacheMeta[keyHash]?.expireTime
+				);
+			}
+
+			try {
+				const resolved: number = expire(data, since ?? Date.now());
+				return Number.isFinite(resolved) ? resolved : undefined;
+			} catch (err) {
+				console.error(
+					"Query cache expiry resolution failed",
+					keyHash,
+					err
+				);
+				return undefined;
+			}
+		}
+
+		/**
 		 * Attempts to rebuild a queries payload from local durable
 		 * storage instead of the network. Silently gives up on any
 		 * failure, the caller then falls back to fetching.
@@ -465,6 +574,7 @@ export const useQueryStore = defineStore(
 				// remainder of its ttl, an unknown one marks it stale so
 				// it renders instantly and revalidates in background
 				const meta = cacheMeta[keyHash];
+				const timestamp: number = meta?.timestamp ?? 0;
 
 				updateState(keyHash, {
 					definitionName,
@@ -473,8 +583,16 @@ export const useQueryStore = defineStore(
 					hasData: true,
 					hydrated: true,
 					error: null,
-					timestamp: meta?.timestamp ?? 0,
-					expireTime: definition.expireTime,
+					timestamp,
+					// resolved against the payload just restored, so a
+					// derived expiry lands on the same boundary it would
+					// have had when it was fetched
+					expireTime: resolveExpireTime(
+						definition,
+						keyHash,
+						data,
+						timestamp
+					),
 					autoRefetch: definition.autoRefetch,
 				});
 
@@ -553,7 +671,7 @@ export const useQueryStore = defineStore(
 				revalidating: background,
 				error: background ? (cacheState[keyHash]?.error ?? null) : null,
 				autoRefetch: definition.autoRefetch,
-				expireTime: definition.expireTime,
+				expireTime: resolveExpireTime(definition, keyHash),
 			});
 
 			/*
@@ -584,6 +702,13 @@ export const useQueryStore = defineStore(
 
 					if (shouldCache) {
 						const timestamp = Date.now();
+						const expireTime: number | undefined =
+							resolveExpireTime(
+								definition,
+								keyHash,
+								result,
+								timestamp
+							);
 
 						updateState(keyHash, {
 							data: result,
@@ -591,6 +716,7 @@ export const useQueryStore = defineStore(
 							hydrated: false,
 							error: null,
 							timestamp,
+							expireTime,
 							// the backend answered, drop any backoff
 							revalidateFailedAt: undefined,
 						});
@@ -600,8 +726,27 @@ export const useQueryStore = defineStore(
 							definitionName as string,
 							params,
 							timestamp,
-							definition.expireTime
+							expireTime
 						);
+
+						/*
+							The payload also went into IndexedDB, which the
+							other tabs share. Tell them, so they adopt this
+							fetch time and rebuild from local storage on
+							their next read instead of each fetching the
+							same megabyte for themselves. Only for
+							definitions that can rebuild that way: dropping
+							an entry the other tab cannot hydrate would
+							force exactly the fetch this avoids.
+						*/
+						if (definition.hydrateFn) {
+							publish({
+								type: "refreshed",
+								key: definition.key(params),
+								timestamp,
+								expireTime,
+							});
+						}
 					}
 
 					return result as DataOfDefinition<IQueryRepository[K]>;
@@ -740,7 +885,9 @@ export const useQueryStore = defineStore(
 				updateState(keyHash, { definitionName });
 			}
 
-			updateState(keyHash, { expireTime: definition.expireTime });
+			updateState(keyHash, {
+				expireTime: resolveExpireTime(definition, keyHash),
+			});
 
 			const startEpoch = epochOf(keyHash);
 
@@ -764,14 +911,16 @@ export const useQueryStore = defineStore(
 			if (!cacheState[keyHash]) {
 				updateState(keyHash, {
 					definitionName,
-					expireTime: definition.expireTime,
+					expireTime: resolveExpireTime(definition, keyHash),
 				});
 			}
 
 			const state = cacheState[keyHash]!;
 
 			const now = Date.now();
-			const ttl = definition.expireTime;
+			// the entry's own resolved ttl, not the definitions: a derived
+			// expiry only has a value once a payload has been seen
+			const ttl = state.expireTime;
 			const expired = ttl !== undefined && now - state.timestamp > ttl;
 
 			/*
@@ -803,7 +952,20 @@ export const useQueryStore = defineStore(
 				>;
 			}
 
-			return runFetch(keyHash, definitionName, params, false);
+			if (!options?.forceRefetch) {
+				return runFetch(keyHash, definitionName, params, false);
+			}
+
+			// forced means the caller wants the backend, not whatever the
+			// browser happens to be holding for an endpoint that opted
+			// into the HTTP cache
+			const releaseBypass = beginHttpCacheBypass();
+
+			try {
+				return await runFetch(keyHash, definitionName, params, false);
+			} finally {
+				releaseBypass();
+			}
 		}
 
 		/**
@@ -1021,6 +1183,12 @@ export const useQueryStore = defineStore(
 			// do not overwrite existing state for key
 			if (!cacheState[keyHash]) {
 				const timestamp = Date.now();
+				const expireTime: number | undefined = resolveExpireTime(
+					definition as IQueryDefinition<TParams, TData>,
+					keyHash,
+					data,
+					timestamp
+				);
 
 				updateState(keyHash, {
 					definitionName,
@@ -1031,7 +1199,7 @@ export const useQueryStore = defineStore(
 					loading: false,
 					error: null,
 					timestamp,
-					expireTime: definition.expireTime,
+					expireTime,
 				});
 
 				if (definition.persist !== false) {
@@ -1040,7 +1208,7 @@ export const useQueryStore = defineStore(
 						definitionName as string,
 						params,
 						timestamp,
-						definition.expireTime
+						expireTime
 					);
 				}
 			}
@@ -1167,6 +1335,11 @@ export const useQueryStore = defineStore(
 			// burst off the backends throat
 			const limit = pLimit(REFRESH_CONCURRENCY);
 
+			// held across the whole run rather than per request: the
+			// point of the button is that nothing in it comes from a
+			// cache, and each `execute` opens its own window anyway
+			const releaseBypass = beginHttpCacheBypass();
+
 			try {
 				await Promise.allSettled(
 					targets.map((t) =>
@@ -1178,6 +1351,7 @@ export const useQueryStore = defineStore(
 					)
 				);
 			} finally {
+				releaseBypass();
 				refreshing.value = false;
 
 				/*

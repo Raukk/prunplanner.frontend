@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, isAxiosError } from "axios";
 import { ZodError, ZodType } from "zod";
 import config from "@/lib/config";
+import { withHttpCacheBypass } from "@/lib/httpCacheBypass";
 
 /**
  * Service making calls to PRUNplanner backend
@@ -27,11 +28,46 @@ class ApiService {
 		// its own timeout in fioData.api.ts.)
 		this.client.defaults.timeout = 30_000;
 
-		// Set default headers to disable cache
+		/*
+			GETs default to bypassing the browser cache. The backend
+			answers everything with `public, max-age=86400`, which is
+			right for game data and wrong for a plan the user just saved,
+			so the safe default is to ask every time and let the handful
+			of endpoints that benefit opt in per call.
+		*/
 		this.client.defaults.headers.get["Cache-Control"] =
 			"no-cache, no-store, must-revalidate";
 		this.client.defaults.headers.get["Pragma"] = "no-cache";
 		this.client.defaults.headers.get["Expires"] = "0";
+	}
+
+	/**
+	 * Per request header override that lets a GET be answered from the
+	 * browser cache, undoing the no-store default for that call only.
+	 *
+	 * Only for endpoints where a stale answer is harmless and bounded:
+	 * the backend's `max-age` runs on its own clock, unrelated to the
+	 * query cache's ttl, so anything whose freshness actually matters —
+	 * or whose expiry is derived from the payload's own date, which
+	 * would keep re-reading the same cached copy and never advance —
+	 * must keep the default.
+	 *
+	 * @author raukk
+	 *
+	 * @private
+	 * @param {boolean} [allowHttpCache] Permit a cached response
+	 * @returns {object} Axios request config
+	 */
+	private cacheConfig(allowHttpCache?: boolean) {
+		if (!allowHttpCache) return {};
+
+		return {
+			headers: {
+				"Cache-Control": undefined,
+				Pragma: undefined,
+				Expires: undefined,
+			},
+		};
 	}
 
 	/**
@@ -47,10 +83,16 @@ class ApiService {
 	 */
 	public async get<Response>(
 		path: string,
-		responseSchema: ZodType<Response>
+		responseSchema: ZodType<Response>,
+		options?: { allowHttpCache?: boolean }
 	): Promise<Response> {
 		try {
-			const { data } = await this.client.get(path);
+			const { data } = await this.client.get(
+				// a user triggered refresh must reach the backend even
+				// where the browser holds a still valid copy
+				options?.allowHttpCache ? withHttpCacheBypass(path) : path,
+				this.cacheConfig(options?.allowHttpCache)
+			);
 			return responseSchema.parse(data);
 		} catch (e) {
 			throw this.normalizeError(e);

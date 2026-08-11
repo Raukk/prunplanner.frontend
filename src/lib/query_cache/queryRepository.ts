@@ -1,4 +1,9 @@
 import { IQueryDefinition } from "@/lib/query_cache/queryCache.types";
+import {
+	untilEarliestBoundary,
+	untilNextUtcMidnight,
+	untilRolloverAfter,
+} from "@/lib/query_cache/expiry";
 
 // i18n
 import { i18n } from "@/lib/i18n";
@@ -54,6 +59,161 @@ async function hydrateFromStore<T extends object, K extends keyof T & string>(
 	return data;
 }
 
+/**
+ * Expiry for game data that changes once a day.
+ *
+ * Anchors to the rollover the payload itself names where it names one,
+ * falling back to the next midnight UTC. The configured staleness stays
+ * an upper bound, so the `VITE_GAME_DATA_STALE_MINUTES_*` overrides keep
+ * meaning "never older than this" and a shorter one still wins.
+ *
+ * @author raukk
+ *
+ * @param {number} capMinutes Configured maximum staleness in minutes
+ * @param {number} since Timestamp the ttl is measured from
+ * @param {?(Date | number | null)} [anchor] Day the payload describes
+ * @returns {number} Ttl in ms
+ */
+function dailyGameDataExpiry(
+	capMinutes: number,
+	since: number,
+	anchor?: Date | number | null
+): number {
+	const rollover: number =
+		untilRolloverAfter(anchor, since) ?? untilNextUtcMidnight(since);
+
+	return Math.min(60_000 * capMinutes, rollover);
+}
+
+/**
+ * Fallback expiry for a planet whose COGC schedule has run out.
+ *
+ * Every program in the payload having already ended does not mean the
+ * planet is idle — on a populated planet the programs run back to back,
+ * so it means the backend has not re-ingested this planet since the last
+ * one lapsed and its copy is behind. Asking again reasonably soon is the
+ * right response; asking every twelve hours is also as fast as it is
+ * worth going, since nothing here makes the backend ingest any sooner.
+ */
+const PLANET_UNSCHEDULED_MS: number = 12 * 60 * 60_000;
+
+/**
+ * Expiry for planet data, anchored to its COGC schedule.
+ *
+ * Everything else the payload carries is fixed: geology, resources, the
+ * system it sits in. Habitation buildings only ever get added and only
+ * rarely. The COGC program is the one field that turns over on a clock,
+ * and the payload states when — programs run in seven day windows and a
+ * populated planet carries the next one already scheduled, so the
+ * earliest end still ahead is precisely when this copy stops being
+ * current. Refetching before then learns nothing; refetching on a fixed
+ * twelve hour timer both wastes most of those requests and still lands
+ * up to twelve hours late on the one change that matters.
+ *
+ * Each path keeps its own configured upper bound.
+ *
+ * @author raukk
+ *
+ * @param {IPlanet[]} planets Planets in this payload
+ * @param {number} since Timestamp the ttl is measured from
+ * @returns {number} Ttl in ms
+ */
+function planetExpiry(planets: IPlanet[], since: number): number {
+	// the earliest across a multi planet payload: the whole entry stops
+	// being current as soon as any one of its planets does
+	const boundaries: number[] = planets.flatMap((planet) =>
+		(planet?.cogc_programs ?? []).map((program) => program.end_epochms)
+	);
+
+	const scheduled: number | undefined = untilEarliestBoundary(
+		boundaries,
+		since
+	);
+
+	return scheduled !== undefined
+		? Math.min(
+				60_000 * config.GAME_DATA_STALE_MINUTES_PLANET_SCHEDULED,
+				scheduled
+			)
+		: Math.min(
+				60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
+				PLANET_UNSCHEDULED_MS
+			);
+}
+
+/**
+ * Writes a fetched game data payload to its IndexedDB store and reloads
+ * the in-memory read cache, skipping both when the payload is byte for
+ * byte the one already stored.
+ *
+ * @author raukk
+ *
+ * @async
+ * @template T Record type
+ * @template K Key path
+ * @param {ReturnType<typeof useIndexedDBStore<T, K>>} store IndexedDB store
+ * @param {T[]} data Fetched records
+ * @returns {Promise<void>}
+ */
+async function writeThroughStore<T extends object, K extends keyof T & string>(
+	store: ReturnType<typeof useIndexedDBStore<T, K>>,
+	data: T[]
+): Promise<void> {
+	const changed: boolean = await store.setManyIfChanged(data, true);
+
+	// an unchanged payload leaves the loaded map correct as it stands,
+	// and forcing a reload would swap it for an equal one — invalidating
+	// every computed that reads through it for nothing. The unforced
+	// call still covers the case where nothing loaded the map yet, where
+	// skipping outright would leave every reader looking at an empty one
+	await useDB(store).preload(changed);
+}
+
+/**
+ * Rebuilds a payload from IndexedDB, falling back to the snapshot
+ * bundled at build time when nothing is stored yet.
+ *
+ * Only materials, recipes and buildings ship a snapshot: they change on
+ * a game update, so they change between deploys, and a build is exactly
+ * when a fresh copy is available. A first visit then paints from the
+ * bundle instead of blocking on the network, and the cache still
+ * confirms it against the backend in the background — the entry carries
+ * no known fetch time, which marks it stale on arrival.
+ *
+ * The import is dynamic so returning visitors, whose data is already in
+ * IndexedDB, never download the chunk at all.
+ *
+ * @author raukk
+ *
+ * @async
+ * @template T Record type
+ * @template K Key path
+ * @param {ReturnType<typeof useIndexedDBStore<T, K>>} store IndexedDB store
+ * @param {() => Promise<unknown>} loadSnapshot Bundled snapshot loader
+ * @returns {Promise<T[] | null>} Records, or null if neither source has any
+ */
+async function hydrateFromStoreOrSnapshot<
+	T extends object,
+	K extends keyof T & string,
+>(
+	store: ReturnType<typeof useIndexedDBStore<T, K>>,
+	loadSnapshot: () => Promise<unknown>
+): Promise<T[] | null> {
+	const stored = await hydrateFromStore(store);
+	if (stored) return stored;
+
+	try {
+		const snapshot = (await loadSnapshot()) as T[];
+		if (!Array.isArray(snapshot) || snapshot.length === 0) return null;
+
+		await writeThroughStore(store, snapshot);
+		return snapshot;
+	} catch (err) {
+		console.error("Bundled game data snapshot unavailable", err);
+		return null;
+	}
+}
+
 // API Calls
 import {
 	callDataBuildings,
@@ -105,6 +265,17 @@ import {
 
 // Types & Interfaces
 import { IQueryRepository } from "@/lib/query_cache/queryRepository.types";
+
+// raukk: the build time snapshots are raw endpoint JSON and have never
+// been through zod, so they are parsed on the same schemas the network
+// path uses — both to reject a drifted shape and so the records match
+// field for field, which is what lets the store fingerprint recognise
+// the fetched payload as unchanged
+import {
+	BuildingPayloadSchema,
+	MaterialPayloadSchema,
+	RecipePayloadSchema,
+} from "@/features/api/schemas/gameData.schemas";
 
 import {
 	IBuilding,
@@ -216,55 +387,104 @@ export function useQueryRepository() {
 			key: () => ["gamedata", "materials"],
 			fetchFn: async () => {
 				const data: IMaterial[] = await callDataMaterials();
-				await materialsStore.setMany(data, true);
-				await useDB(materialsStore).preload(true);
+				await writeThroughStore(materialsStore, data);
 
 				return data;
 			},
-			hydrateFn: () => hydrateFromStore(materialsStore),
+			hydrateFn: () =>
+				hydrateFromStoreOrSnapshot(materialsStore, async () =>
+					MaterialPayloadSchema.parse(
+						(
+							await import(
+								"@/assets/static/gamedata/materials.json"
+							)
+						).default
+					)
+				),
 			autoRefetch: true,
-			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_MATERIALS,
+			expireTime: (_data: IMaterial[], since: number) =>
+				dailyGameDataExpiry(
+					config.GAME_DATA_STALE_MINUTES_MATERIALS,
+					since
+				),
 			persist: true,
 		} as IQueryDefinition<undefined, IMaterial[]>,
 		GetExchanges: {
 			key: () => ["gamedata", "exchanges"],
 			fetchFn: async () => {
 				const data: IExchange[] = await callDataExchanges();
-				await exchangesStore.setMany(data, true);
-				await useDB(exchangesStore).preload(true);
+				await writeThroughStore(exchangesStore, data);
 
 				return data;
 			},
 			hydrateFn: () => hydrateFromStore(exchangesStore),
 			autoRefetch: true,
-			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_EXCHANGES,
+			/*
+				Every row of this payload is a daily close of the same
+				calendar day — the ask and bid columns are the only part
+				that moves intraday, and the live market view reads those
+				off the SSE stream, not from here. So it expires on the
+				day it describes rolling over, not an hour after whenever
+				the tab happened to load it.
+			*/
+			expireTime: (data: IExchange[], since: number) =>
+				dailyGameDataExpiry(
+					config.GAME_DATA_STALE_MINUTES_EXCHANGES,
+					since,
+					data[0]?.calendar_date
+				),
 			persist: true,
 		} as IQueryDefinition<undefined, IExchange[]>,
 		GetRecipes: {
 			key: () => ["gamedata", "recipes"],
 			fetchFn: async () => {
 				const data: IRecipe[] = await callDataRecipes();
-				await recipesStore.setMany(data, true);
-				await useDB(recipesStore).preload(true);
+				await writeThroughStore(recipesStore, data);
 
 				return data;
 			},
-			hydrateFn: () => hydrateFromStore(recipesStore),
+			hydrateFn: () =>
+				hydrateFromStoreOrSnapshot(recipesStore, async () =>
+					RecipePayloadSchema.parse(
+						(
+							await import(
+								"@/assets/static/gamedata/recipes.json"
+							)
+						).default
+					)
+				),
 			autoRefetch: true,
-			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_RECIPES,
+			expireTime: (_data: IRecipe[], since: number) =>
+				dailyGameDataExpiry(
+					config.GAME_DATA_STALE_MINUTES_RECIPES,
+					since
+				),
 			persist: true,
 		} as IQueryDefinition<undefined, IRecipe[]>,
 		GetBuildings: {
 			key: () => ["gamedata", "buildings"],
 			fetchFn: async () => {
 				const data: IBuilding[] = await callDataBuildings();
-				await buildingsStore.setMany(data, true);
-				await useDB(buildingsStore).preload(true);
+				await writeThroughStore(buildingsStore, data);
+
 				return data;
 			},
-			hydrateFn: () => hydrateFromStore(buildingsStore),
+			hydrateFn: () =>
+				hydrateFromStoreOrSnapshot(buildingsStore, async () =>
+					BuildingPayloadSchema.parse(
+						(
+							await import(
+								"@/assets/static/gamedata/buildings.json"
+							)
+						).default
+					)
+				),
 			autoRefetch: true,
-			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_BUILDINGS,
+			expireTime: (_data: IBuilding[], since: number) =>
+				dailyGameDataExpiry(
+					config.GAME_DATA_STALE_MINUTES_BUILDINGS,
+					since
+				),
 			persist: true,
 		} as IQueryDefinition<undefined, IBuilding[]>,
 		GetPlanet: {
@@ -288,7 +508,8 @@ export function useQueryRepository() {
 
 				return (await db.get(params.planetNaturalId)) ?? null;
 			},
-			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
+			expireTime: (data: IPlanet, since: number) =>
+				planetExpiry([data], since),
 			autoRefetch: true,
 			persist: true,
 		} as IQueryDefinition<{ planetNaturalId: string }, IPlanet>,
@@ -343,7 +564,8 @@ export function useQueryRepository() {
 
 				return planets as IPlanet[];
 			},
-			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
+			expireTime: (data: IPlanet[], since: number) =>
+				planetExpiry(data, since),
 			autoRefetch: true,
 			persist: true,
 		} as IQueryDefinition<{ planetNaturalIds: string[] }, IPlanet[]>,

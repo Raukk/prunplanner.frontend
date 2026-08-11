@@ -11,6 +11,58 @@ export type IStoreStatistic = {
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
+/**
+ * Where a store's last written payload fingerprint is kept. Namespaced
+ * by database version because an upgrade drops every object store, so a
+ * fingerprint from before it describes data that no longer exists.
+ *
+ * @author raukk
+ *
+ * @param {string} storeName Object store name
+ * @returns {string} localStorage key
+ */
+function fingerprintKey(storeName: string): string {
+	return `prunplanner_store_fingerprint:${__INDEXEDDB_VERSION__}:${storeName}`;
+}
+
+/**
+ * Cheap content fingerprint of a record set, FNV-1a over its JSON.
+ *
+ * Not a cryptographic digest and does not need to be: a collision costs
+ * one skipped rewrite of identical-length data, and the only alternative
+ * on offer — rewriting every record every time — is what this exists to
+ * avoid. Returns null if the records cannot be serialized, which the
+ * caller reads as "cannot tell, write it".
+ *
+ * @author raukk
+ *
+ * @template T Record type
+ * @param {T[]} items Records to fingerprint
+ * @returns {(string | null)} Fingerprint, or null if unavailable
+ */
+function fingerprintRecords<T>(items: T[]): string | null {
+	let serialized: string;
+
+	try {
+		serialized = JSON.stringify(items);
+	} catch {
+		return null;
+	}
+
+	if (serialized === undefined) return null;
+
+	let hash: number = 0x811c9dc5;
+
+	for (let i = 0; i < serialized.length; i++) {
+		hash ^= serialized.charCodeAt(i);
+		// FNV prime, via shifts to stay in 32 bit integer math
+		hash +=
+			(hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+	}
+
+	return `${items.length}:${(hash >>> 0).toString(36)}`;
+}
+
 export async function requestPersistence() {
 	if (navigator && navigator.storage && navigator.storage.persist) {
 		await navigator.storage.persist();
@@ -141,6 +193,72 @@ export function useIndexedDBStore<T extends object, K extends keyof T & string>(
 		await tx.done;
 	}
 
+	async function count(): Promise<number> {
+		const db = await getDB();
+		return db.count(storeName);
+	}
+
+	/**
+	 * Writes a payload only if it differs from the one already stored.
+	 *
+	 * A refresh that brings back an identical payload is the normal case
+	 * for game data — most of what the exchange endpoint returns is a
+	 * daily close, and materials, recipes and buildings only move on a
+	 * patch — and rewriting it is not free: `setMany(_, true)` clears the
+	 * object store and re-puts every record, then the caller reloads and
+	 * swaps the map every reader resolves through, invalidating anything
+	 * computed from it. Comparing a fingerprint first skips all of that.
+	 *
+	 * The record count is verified alongside the fingerprint: a database
+	 * version upgrade drops and recreates every object store, and the
+	 * fingerprint alone would then happily report "already stored" for an
+	 * empty store.
+	 *
+	 * @author raukk
+	 *
+	 * @async
+	 * @param {T[]} items Records to store
+	 * @param {boolean} [wipe=false] Clear the store before writing
+	 * @returns {Promise<boolean>} Whether anything was written
+	 */
+	async function setManyIfChanged(
+		items: T[],
+		wipe: boolean = false
+	): Promise<boolean> {
+		const fingerprint: string | null = fingerprintRecords(items);
+
+		if (fingerprint !== null && fingerprint === readFingerprint()) {
+			try {
+				if ((await count()) === items.length) return false;
+			} catch (err) {
+				// unreadable store, fall through and write
+				console.error("Store count failed", storeName, err);
+			}
+		}
+
+		await setMany(items, wipe);
+		if (fingerprint !== null) writeFingerprint(fingerprint);
+
+		return true;
+	}
+
+	function readFingerprint(): string | null {
+		try {
+			return localStorage.getItem(fingerprintKey(storeName));
+		} catch {
+			// private mode or storage disabled, always rewrite
+			return null;
+		}
+	}
+
+	function writeFingerprint(value: string): void {
+		try {
+			localStorage.setItem(fingerprintKey(storeName), value);
+		} catch {
+			/* quota or storage disabled, the next write just repeats */
+		}
+	}
+
 	async function remove<K extends keyof T>(
 		key: KeyOfStore<T, K>
 	): Promise<void> {
@@ -186,6 +304,8 @@ export function useIndexedDBStore<T extends object, K extends keyof T & string>(
 		getAll,
 		set,
 		setMany,
+		setManyIfChanged,
+		count,
 		remove,
 		statistics,
 	} as const;

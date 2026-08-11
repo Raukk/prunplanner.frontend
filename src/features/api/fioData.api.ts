@@ -3,6 +3,7 @@ import { ZodType } from "zod";
 
 // config
 import config from "@/lib/config";
+import { withHttpCacheBypass } from "@/lib/httpCacheBypass";
 
 // schemas
 import { FIOPlanetFeeSchema } from "@/features/api/schemas/fioData.schemas";
@@ -57,7 +58,11 @@ export class FIOApiService {
 		path: string,
 		responseSchema: ZodType<Response>
 	): Promise<Response> {
-		const { data } = await this.client.get(path);
+		// FIO sends no no-cache headers of its own, so a repeat request
+		// is answered from the browser cache — worth keeping for a third
+		// party service whose bandwidth this is. A user triggered
+		// refresh still has to get past it.
+		const { data } = await this.client.get(withHttpCacheBypass(path));
 		return responseSchema.parse(data);
 	}
 }

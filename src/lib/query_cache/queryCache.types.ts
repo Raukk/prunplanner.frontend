@@ -44,13 +44,26 @@ export interface IQueryCacheMeta {
 	expireTime?: number;
 }
 
+/**
+ * How long a payload stays fresh, either a fixed duration or one
+ * derived from the payload itself.
+ *
+ * The derived form receives the timestamp the ttl will be measured
+ * from, so it can express "expires at the next rollover" rather than
+ * "expires N ms after whenever this happened to be fetched". See
+ * `@/lib/query_cache/expiry`.
+ */
+export type QueryExpireTime<TData> =
+	| number
+	| ((data: TData, since: number) => number);
+
 export type IQueryDefinition<TParams, TData> = [TParams] extends [undefined]
 	? {
 			key: () => JSONValue;
 			fetchFn: () => Promise<TData>;
 			hydrateFn?: () => Promise<TData | null>;
 			autoRefetch?: boolean;
-			expireTime?: number;
+			expireTime?: QueryExpireTime<TData>;
 			persist?: boolean;
 		}
 	: {
@@ -58,6 +71,6 @@ export type IQueryDefinition<TParams, TData> = [TParams] extends [undefined]
 			fetchFn: (params: TParams) => Promise<TData>;
 			hydrateFn?: (params: TParams) => Promise<TData | null>;
 			autoRefetch?: boolean;
-			expireTime?: number;
+			expireTime?: QueryExpireTime<TData>;
 			persist?: boolean;
 		};

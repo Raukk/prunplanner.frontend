@@ -43,6 +43,19 @@ import {
 } from "@/features/market_exploration/marketExploration.schemas";
 
 /**
+ * Endpoints whose responses may be served from the browser cache.
+ *
+ * Limited to game data that changes on a game update and whose query
+ * cache expiry runs on the wall clock. Deliberately excludes
+ * `/data/exchanges/`: its expiry is derived from the payload's own
+ * calendar date, so a cached copy would keep re-answering with the same
+ * day and the entry would never advance past it.
+ *
+ * @author raukk
+ */
+const ALLOW_HTTP_CACHE = { allowHttpCache: true } as const;
+
+/**
  * Calls the /data/materials API endpoint
  * @author jplacht
  *
@@ -53,7 +66,8 @@ import {
 export async function callDataMaterials(): Promise<IMaterial[]> {
 	return apiService.get<MaterialPayloadType>(
 		"/data/materials/",
-		MaterialPayloadSchema
+		MaterialPayloadSchema,
+		ALLOW_HTTP_CACHE
 	);
 }
 
@@ -83,7 +97,8 @@ export async function callDataExchanges(): Promise<IExchange[]> {
 export async function callDataRecipes(): Promise<IRecipe[]> {
 	return apiService.get<RecipePayloadType>(
 		"/data/recipes/",
-		RecipePayloadSchema
+		RecipePayloadSchema,
+		ALLOW_HTTP_CACHE
 	);
 }
 
@@ -98,7 +113,8 @@ export async function callDataRecipes(): Promise<IRecipe[]> {
 export async function callDataBuildings(): Promise<IBuilding[]> {
 	return apiService.get<BuildingPayloadType>(
 		"/data/buildings/",
-		BuildingPayloadSchema
+		BuildingPayloadSchema,
+		ALLOW_HTTP_CACHE
 	);
 }
 
@@ -117,7 +133,8 @@ export async function callDataPlanet(
 ): Promise<IPlanet> {
 	return apiService.get<PlanetPayloadType>(
 		`/data/planet/${planetNaturalId}/`,
-		PlanetSchema
+		PlanetSchema,
+		ALLOW_HTTP_CACHE
 	);
 }
 
