@@ -305,3 +305,84 @@ describe("RaukkShippingPage ?section= deep link", () => {
 		expect(wrapper.find("#s-settings").exists()).toBe(true);
 	});
 });
+
+/**
+ * Stubs that speak: the routes-by-ship jump is an emit from one section
+ * and a prop on two others, so the markers have to carry both.
+ */
+const ROUTE_STUBS: Record<string, unknown> = {
+	...STUBS,
+	RaukkFleetSection: {
+		emits: ["view-routes"],
+		template:
+			"<div id=\"s-fleet\" @click=\"$emit('view-routes', 'WCB')\" />",
+	},
+	RaukkTransportSection: {
+		props: ["shipFilter"],
+		emits: ["update:shipFilter"],
+		template:
+			'<div id="s-transport" :data-ship="shipFilter ?? \'\'" @click="$emit(\'update:shipFilter\', null)" />',
+	},
+	RaukkChainSection: {
+		props: ["shipFilter"],
+		template: '<div id="s-chains" :data-ship="shipFilter ?? \'\'" />',
+	},
+};
+
+async function renderRoutes(): Promise<VueWrapper> {
+	const router: Router = makeRouter();
+	await router.push("/shipping");
+	await router.isReady();
+
+	const wrapper = mount(RaukkShippingPage, {
+		global: { plugins: [i18n, router], stubs: ROUTE_STUBS },
+	});
+	await flushPromises();
+
+	return wrapper;
+}
+
+describe("RaukkShippingPage routes by ship", () => {
+	beforeEach(() => {
+		setActivePinia(createPinia());
+		useRaukkSourcingStore().setShippingConfig({ enabled: true });
+	});
+
+	it("opens the lanes of the ship type the fleet count names", async () => {
+		const wrapper = await renderRoutes();
+
+		await wrapper.find("#s-fleet").trigger("click");
+
+		expect(wrapper.find("#s-transport").attributes("data-ship")).toBe(
+			"WCB"
+		);
+	});
+
+	it("carries the same selection over to the chains", async () => {
+		// a route counted on the fleet page is a lane OR a chain, so the
+		// two tables have to filter on one selection or the count splits
+		const wrapper = await renderRoutes();
+
+		await wrapper.find("#s-fleet").trigger("click");
+		await clickTab(wrapper, "Chains");
+
+		expect(wrapper.find("#s-chains").attributes("data-ship")).toBe("WCB");
+	});
+
+	it("clears the selection from the section that shows it", async () => {
+		const wrapper = await renderRoutes();
+
+		await wrapper.find("#s-fleet").trigger("click");
+		await wrapper.find("#s-transport").trigger("click");
+
+		expect(wrapper.find("#s-transport").attributes("data-ship")).toBe("");
+	});
+
+	it("filters nothing until a count is clicked", async () => {
+		const wrapper = await renderRoutes();
+
+		await clickTab(wrapper, "Transport");
+
+		expect(wrapper.find("#s-transport").attributes("data-ship")).toBe("");
+	});
+});

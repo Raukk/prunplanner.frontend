@@ -55,6 +55,16 @@
 			required: false,
 			default: () => ({}),
 		},
+		/**
+		 * What the empty row says. Empty keeps the account-level "no
+		 * lanes stored yet" sentence, which is the wrong sentence for a
+		 * table emptied by a filter rather than by an empty account.
+		 */
+		emptyLabel: {
+			type: String,
+			required: false,
+			default: "",
+		},
 	});
 
 	const emit = defineEmits<{
@@ -92,8 +102,7 @@
 	function planPath(planUuid: string | undefined): string | null {
 		if (planUuid === undefined || planUuid === "") return null;
 
-		const planetNaturalId: string | undefined =
-			props.planPlanets[planUuid];
+		const planetNaturalId: string | undefined = props.planPlanets[planUuid];
 
 		return planetNaturalId === undefined
 			? null
@@ -282,7 +291,9 @@
 							:to="planPath(row.identity.planUuid) ?? ''">
 							{{ planLabel(row.identity.planUuid) }}
 						</RouterLink>
-						<span v-else>{{ planLabel(row.identity.planUuid) }}</span>
+						<span v-else>{{
+							planLabel(row.identity.planUuid)
+						}}</span>
 						<PTag v-if="row.stale" size="sm" type="warning">
 							{{ $t("raukk_sourcing.transport.stale") }}
 						</PTag>
@@ -369,20 +380,27 @@
 				</td>
 				<td class="text-right text-white/60">
 					<PTooltip
-						v-if="row.legs.length > 0 && row.ownCostPerTrip !== undefined">
+						v-if="
+							row.legs.length > 0 &&
+							row.ownCostPerTrip !== undefined
+						">
 						<template #trigger>
 							<span class="hover:cursor-help">
 								{{ figure(row.ownCostPerTrip) }}
 							</span>
 						</template>
 						{{
-							$t("raukk_sourcing.transport.own_per_trip_tooltip", {
-								legs: row.legs.length,
-								trips: formatNumber(row.tripsPerDay),
-								daily: formatNumber(
-									row.tripsPerDay * (row.ownCostPerTrip ?? 0)
-								),
-							})
+							$t(
+								"raukk_sourcing.transport.own_per_trip_tooltip",
+								{
+									legs: row.legs.length,
+									trips: formatNumber(row.tripsPerDay),
+									daily: formatNumber(
+										row.tripsPerDay *
+											(row.ownCostPerTrip ?? 0)
+									),
+								}
+							)
 						}}
 					</PTooltip>
 					<template v-else>
@@ -441,7 +459,11 @@
 			</tr>
 			<tr v-if="rows.length === 0">
 				<td colspan="12" class="text-center text-white/50">
-					{{ $t("raukk_sourcing.transport.empty") }}
+					{{
+						props.emptyLabel === ""
+							? $t("raukk_sourcing.transport.empty")
+							: props.emptyLabel
+					}}
 				</td>
 			</tr>
 		</tbody>

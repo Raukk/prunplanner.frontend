@@ -82,6 +82,11 @@
 		},
 	});
 
+	const emit = defineEmits<{
+		/** Show the lanes and chains one ship type flies, see the page */
+		(e: "view-routes", shipTypeId: string): void;
+	}>();
+
 	const { utilization, advisories } = useRaukkFleet();
 
 	const rows: ComputedRef<IRaukkFleetRow[]> = computed(() =>
@@ -463,7 +468,24 @@
 									})
 								}}
 							</PTooltip>
-							<span>{{ row.assignedCount }}</span>
+							<!-- the count is the way INTO the routes it
+							counts: a type flying nothing has nowhere to go
+							and stays a plain number -->
+							<PTooltip v-if="row.assignedCount > 0">
+								<template #trigger>
+									<span
+										class="hover:text-prunplanner hover:underline hover:cursor-pointer"
+										@click="
+											emit('view-routes', row.shipTypeId)
+										">
+										{{ row.assignedCount }}
+									</span>
+								</template>
+								{{
+									$t("raukk_sourcing.fleet.assigned_tooltip")
+								}}
+							</PTooltip>
+							<span v-else>{{ row.assignedCount }}</span>
 						</div>
 					</td>
 					<td>

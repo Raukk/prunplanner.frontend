@@ -11,6 +11,7 @@
 	// Components
 	import RaukkChainDetail from "@/features/raukk_sourcing/components/RaukkChainDetail.vue";
 	import RaukkChainEditor from "@/features/raukk_sourcing/components/RaukkChainEditor.vue";
+	import RaukkShipFilterBar from "@/features/raukk_sourcing/components/RaukkShipFilterBar.vue";
 	import RaukkVisitCadence from "@/features/raukk_sourcing/components/RaukkVisitCadence.vue";
 
 	// Calculations
@@ -25,6 +26,7 @@
 		raukkChainListRows,
 	} from "@/features/raukk_sourcing/calculations/shippingChainDisplay";
 	import { raukkChainAssignmentKey } from "@/features/raukk_sourcing/calculations/shippingFleet";
+	import { raukkFilterChainRows } from "@/features/raukk_sourcing/calculations/shippingRouteFilter";
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
@@ -50,7 +52,7 @@
 	import { RAUKK_SAME_SYSTEM_PRICING } from "@/features/raukk_sourcing/calculations/shippingChains.types";
 	import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
 
-	defineProps({
+	const props = defineProps({
 		/** Unit price per fuel ticker, prices the display side costing */
 		fuelPrices: {
 			type: Object as PropType<Record<string, number>>,
@@ -73,7 +75,22 @@
 			required: false,
 			default: () => [],
 		},
+		/**
+		 * Show only the chains this ship type flies, null shows every
+		 * chain. The page owns it, the fleet table's Routes column sets
+		 * it — a route of that column is a lane OR a chain, so the two
+		 * tables filter on the same selection.
+		 */
+		shipFilter: {
+			type: String as PropType<string | null>,
+			required: false,
+			default: null,
+		},
 	});
+
+	const emit = defineEmits<{
+		(e: "update:shipFilter", shipTypeId: string | null): void;
+	}>();
 
 	/** Planet natural id to plan name, over every stored snapshot */
 	const stopNames: ComputedRef<Record<string, string>> = computed(() =>
@@ -119,7 +136,7 @@
 			.map((profile) => ({ label: profile.name, value: profile.id }))
 	);
 
-	const rows: ComputedRef<IRaukkChainListRow[]> = computed(() =>
+	const allRows: ComputedRef<IRaukkChainListRow[]> = computed(() =>
 		raukkChainListRows(
 			sourcingStore.chains,
 			sourcingStore.chainResults,
@@ -128,8 +145,42 @@
 	);
 
 	/** The loops the chain pass derived, read only by construction */
-	const autoRows: ComputedRef<IRaukkChainListRow[]> = computed(() =>
+	const allAutoRows: ComputedRef<IRaukkChainListRow[]> = computed(() =>
 		raukkAutoChainListRows(sourcingStore.chainResults, stopNames.value)
+	);
+
+	/*
+	 * Routes by ship. Both listings filter, authored and derived alike:
+	 * the fleet table counts a chain of either kind as one route of the
+	 * hull that flew it, so hiding one kind would lose rows the number
+	 * that led here counted.
+	 */
+
+	const rows: ComputedRef<IRaukkChainListRow[]> = computed(() =>
+		raukkFilterChainRows(allRows.value, props.shipFilter)
+	);
+
+	const autoRows: ComputedRef<IRaukkChainListRow[]> = computed(() =>
+		raukkFilterChainRows(allAutoRows.value, props.shipFilter)
+	);
+
+	/** Label of the filtered ship type, its bare id where none names it */
+	const filterLabel: ComputedRef<string> = computed(
+		() =>
+			props.shipTypeOptions.find(
+				(option) => option.value === props.shipFilter
+			)?.label ?? String(props.shipFilter)
+	);
+
+	/** What the filter bar states, empty while nothing is filtered */
+	const countLabel: ComputedRef<string> = computed(() =>
+		props.shipFilter === null
+			? ""
+			: t("raukk_sourcing.ship_filter.chains", {
+					shown: rows.value.length + autoRows.value.length,
+					total: allRows.value.length + allAutoRows.value.length,
+					ship: filterLabel.value,
+				})
 	);
 
 	/** One table of derived loops: the class it serves and its rows */
@@ -233,6 +284,12 @@
 		<div class="text-white/50 pb-3">
 			{{ $t("raukk_sourcing.chains.info") }}
 		</div>
+
+		<RaukkShipFilterBar
+			:ship-filter="props.shipFilter"
+			:ship-type-options="props.shipTypeOptions"
+			:count-label="countLabel"
+			@update:ship-filter="(v) => emit('update:shipFilter', v)" />
 
 		<div
 			class="border rounded-[3px] border-white/20 p-3 mb-3 flex flex-row flex-wrap gap-3 child:my-auto">
@@ -518,7 +575,16 @@
 				</template>
 				<tr v-if="rows.length === 0">
 					<td colspan="7" class="text-center text-white/50">
-						{{ $t("raukk_sourcing.chains.empty") }}
+						{{
+							props.shipFilter === null
+								? $t("raukk_sourcing.chains.empty")
+								: $t(
+										"raukk_sourcing.ship_filter.chains_empty",
+										{
+											ship: filterLabel,
+										}
+									)
+						}}
 					</td>
 				</tr>
 			</tbody>
@@ -676,7 +742,13 @@
 		</div>
 
 		<div v-if="autoRows.length === 0" class="text-white/50 pb-3">
-			{{ $t("raukk_sourcing.auto_chains.empty") }}
+			{{
+				props.shipFilter === null
+					? $t("raukk_sourcing.auto_chains.empty")
+					: $t("raukk_sourcing.ship_filter.chains_empty", {
+							ship: filterLabel,
+						})
+			}}
 		</div>
 	</div>
 </template>
