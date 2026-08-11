@@ -300,6 +300,10 @@
 					cogc: plan.plan_cogc,
 					profit: planResult.profit,
 					roi: planResult.overview.roi,
+					experts: Object.values(planResult.experts).reduce(
+						(sum, expert) => sum + expert.amount,
+						0
+					),
 				};
 			}
 		);

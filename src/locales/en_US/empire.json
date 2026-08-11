@@ -28,7 +28,10 @@
 		},
 		"permits_planned": "Total @:terms.permits_plural planned: {permits}",
 		"permits_tooltip": "{count} permit | {count} permits",
-		"roi_never": "Plan is not profitable, construction cost is never paid back"
+		"roi_never": "Plan is not profitable, construction cost is never paid back",
+		"experts_flag": "{count}/{max} @:terms.experts_plural",
+		"experts_flag_under_tooltip": "Only {count} of {max} experts assigned, a fully staffed base runs 5 or 6",
+		"experts_flag_over_tooltip": "{count} experts assigned, a base holds at most {max}"
 	},
 	"material_io": {
 		"production_planets": "Production Planets",
