@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
+
+// Latch
+import { resetRaukkBlockSolveLatches } from "@/features/raukk_sourcing/raukkBlockSolveLatch";
 import { effectScope, EffectScope, nextTick, ref, Ref } from "vue";
 
 // the composable orchestrates loading, calculation and the snapshot
@@ -86,6 +89,8 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 		setActivePinia(createPinia());
+		// the unsolved block latch is module state and outlives one test
+		resetRaukkBlockSolveLatches();
 		sourcingStore = useRaukkSourcingStore();
 
 		mockExecute.mockReset();
@@ -131,22 +136,24 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 	 * every stored plan minus the excluded ones.
 	 */
 	function installScope(exclude: string[] = []): void {
-		(sourcingStore as unknown as IScopedStore).recomputeGraphInputs = () => {
-			const inScope = (uuid: string): boolean => !exclude.includes(uuid);
+		(sourcingStore as unknown as IScopedStore).recomputeGraphInputs =
+			() => {
+				const inScope = (uuid: string): boolean =>
+					!exclude.includes(uuid);
 
-			return {
-				configs: Object.fromEntries(
-					Object.entries(sourcingStore.configs).filter(([uuid]) =>
-						inScope(uuid)
-					)
-				),
-				snapshots: Object.fromEntries(
-					Object.entries(sourcingStore.snapshots).filter(([uuid]) =>
-						inScope(uuid)
-					)
-				),
+				return {
+					configs: Object.fromEntries(
+						Object.entries(sourcingStore.configs).filter(([uuid]) =>
+							inScope(uuid)
+						)
+					),
+					snapshots: Object.fromEntries(
+						Object.entries(sourcingStore.snapshots).filter(
+							([uuid]) => inScope(uuid)
+						)
+					),
+				};
 			};
-		};
 	}
 
 	/**
@@ -364,7 +371,9 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 
 		// the loop is surfaced, once, naming both members
 		expect(warn).toHaveBeenCalledTimes(1);
-		expect(warn.mock.calls[0][1]).toContain("supply loop of 2 plans (A, B)");
+		expect(warn.mock.calls[0][1]).toContain(
+			"supply loop of 2 plans (A, B)"
+		);
 
 		warn.mockRestore();
 	});

@@ -41,6 +41,12 @@ import {
 	loadEmpireList,
 } from "@/features/raukk_sourcing/useRaukkBlockRecompute";
 
+// Latch
+import { resetRaukkBlockSolveLatches } from "@/features/raukk_sourcing/raukkBlockSolveLatch";
+
+// Stores
+import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+
 // Types & Interfaces
 import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
 import { IRaukkProducerPriceOverride } from "@/features/raukk_sourcing/useRaukkSnapshot";
@@ -99,6 +105,8 @@ describe("useRaukkBlockRecompute", () => {
 
 	beforeEach(() => {
 		setActivePinia(createPinia());
+		// the unsolved latch is module state and outlives one test
+		resetRaukkBlockSolveLatches();
 
 		mockExecute.mockReset();
 		mockCalculate.mockReset();
@@ -174,9 +182,12 @@ describe("useRaukkBlockRecompute", () => {
 						override?: IRaukkProducerPriceOverride
 					): IRaukkSnapshot => {
 						const drawn: number =
-							override?.[member.from.uuid]?.[member.from.ticker] ??
-							stored[member.from.uuid]?.outputs[member.from.ticker]
-								?.costPerUnit ??
+							override?.[member.from.uuid]?.[
+								member.from.ticker
+							] ??
+							stored[member.from.uuid]?.outputs[
+								member.from.ticker
+							]?.costPerUnit ??
 							0;
 
 						const snapshot: IRaukkSnapshot = makeSnapshot(
@@ -392,8 +403,115 @@ describe("useRaukkBlockRecompute", () => {
 			// `usePlanCalculation` is the expensive part and the plan data
 			// cannot change within one run
 			expect(
-				mockPreparePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+				mockPreparePlanSnapshot.mock.calls.map(
+					(call) => call[0].planUuid
+				)
 			).toStrictEqual(["d", "e"]);
+		});
+	});
+
+	describe("unsolved block latch", () => {
+		/** The singular loop, which never has a finite fixed point */
+		const unsolvableLoop: ILoopMember[] = solvableLoop.map((member) => ({
+			...member,
+			slope: 1,
+		}));
+
+		/** Prepare calls of every runner built so far, by plan uuid */
+		const preparedUuids = (): string[] =>
+			mockPreparePlanSnapshot.mock.calls.map((call) => call[0].planUuid);
+
+		it("skips the block on a later run while the inputs are unchanged", async () => {
+			installAffineLoop(unsolvableLoop);
+
+			expect(await makeRunner().runLoopBlock(["d", "e"])).toBe(false);
+			expect(preparedUuids()).toStrictEqual(["d", "e"]);
+
+			const before: IRaukkSnapshot = stored.d;
+
+			// a NEW run, i.e. the next empire or shipping navigation
+			expect(await makeRunner().runLoopBlock(["d", "e"])).toBe(false);
+
+			// nothing prepared, nothing computed, nothing stored: the two
+			// edges that feed the block back to itself are never re-armed
+			expect(preparedUuids()).toStrictEqual(["d", "e"]);
+			expect(stored.d).toBe(before);
+		});
+
+		it("does not raise the block error again while it is latched", async () => {
+			installAffineLoop(unsolvableLoop);
+
+			await makeRunner().runLoopBlock(["d", "e"]);
+			expect(errors.length).toBe(1);
+
+			errors = [];
+			await makeRunner().runLoopBlock(["d", "e"]);
+
+			expect(errors).toStrictEqual([]);
+		});
+
+		it("still counts the skipped members as done", async () => {
+			installAffineLoop(unsolvableLoop);
+
+			await makeRunner().runLoopBlock(["d", "e"]);
+
+			doneCount = 0;
+			await makeRunner().runLoopBlock(["d", "e"]);
+
+			expect(doneCount).toBe(2);
+		});
+
+		it("retries the block after an input really changed", async () => {
+			installAffineLoop(unsolvableLoop);
+
+			await makeRunner().runLoopBlock(["d", "e"]);
+
+			// a sourcing configuration edit is a real input change
+			useRaukkSourcingStore().setRepairDay("d", 30);
+
+			await makeRunner().runLoopBlock(["d", "e"]);
+
+			expect(preparedUuids()).toStrictEqual(["d", "e", "d", "e"]);
+			expect(errors.length).toBe(2);
+		});
+
+		it("retries the block when its member set changed", async () => {
+			installAffineLoop(unsolvableLoop);
+
+			await makeRunner().runLoopBlock(["d", "e"]);
+
+			// a different system, so a different latch — and `e` alone has
+			// no in block producer, which makes it trivially solved
+			expect(await makeRunner().runLoopBlock(["e"])).toBe(true);
+		});
+
+		it("retries within one run, the chain freight pass", async () => {
+			installAffineLoop(unsolvableLoop);
+
+			const runner: IRaukkBlockRecomputer = makeRunner();
+
+			await runner.runLoopBlock(["d", "e"]);
+			await runner.runLoopBlock(["d", "e"]);
+
+			// the second pass of ONE run re-runs at fresher chain results,
+			// the input the fingerprint deliberately ignores
+			expect(errors.length).toBe(2);
+		});
+
+		it("drops the latch again once the block solves", async () => {
+			installAffineLoop(unsolvableLoop);
+
+			await makeRunner().runLoopBlock(["d", "e"]);
+
+			installAffineLoop(solvableLoop);
+			useRaukkSourcingStore().setRepairDay("d", 30);
+
+			expect(await makeRunner().runLoopBlock(["d", "e"])).toBe(true);
+
+			// solved, so a further run works the block as usual
+			installAffineLoop(unsolvableLoop);
+			expect(await makeRunner().runLoopBlock(["d", "e"])).toBe(false);
+			expect(errors.length).toBe(2);
 		});
 	});
 

@@ -34,6 +34,15 @@ import {
 } from "@/features/raukk_sourcing/raukkChainBlockSolve";
 import { RAUKK_LOOP_SOLVE_MAX_UNKNOWNS } from "@/features/raukk_sourcing/calculations/raukkLoopSolve";
 
+// raukk: a block with no answer must not be re-solved every navigation
+import {
+	clearRaukkBlockLatch,
+	latchRaukkBlockUnsolved,
+	raukkBlockLatchKey,
+	raukkBlockSolveFingerprint,
+	raukkBlockSolveLatched,
+} from "@/features/raukk_sourcing/raukkBlockSolveLatch";
+
 // Types & Interfaces
 import { IPlan, IPlanEmpireElement } from "@/stores/planningStore.types";
 import { IPlanResult } from "@/features/planning/usePlanCalculation.types";
@@ -217,6 +226,19 @@ export function createBlockRecomputer(
 	 */
 	const prepared: Record<string, IRaukkPreparedSnapshot> = {};
 
+	/**
+	 * Loop blocks this run already attempted, by
+	 * {@link raukkBlockLatchKey}.
+	 *
+	 * The unsolved latch is consulted for the FIRST attempt of a run only.
+	 * A second attempt within one run is the chain recomputes freight pass,
+	 * which re-runs the block at fresher chain results — the one input the
+	 * fingerprint deliberately ignores — so latching it out would silently
+	 * drop the documented one round freight retry. Across runs the latch
+	 * holds, which is the whole point of it.
+	 */
+	const attempted: Set<string> = new Set();
+
 	/** Reports the plan being worked on, when the caller listens */
 	const setCurrent = (planUuid: string): void =>
 		options.onCurrent?.(options.planNameOf(planUuid));
@@ -335,6 +357,11 @@ export function createBlockRecomputer(
 	 * {@link recordBlockUnsolved}: an unsolved loop is an error the run
 	 * surfaces, never something later passes converge.
 	 *
+	 * An unsolved block is LATCHED, see
+	 * {@link raukkBlockSolveFingerprint}: the next run skips it whole while
+	 * its inputs are unchanged, which is what keeps one unsolvable loop from
+	 * re-simulating the account on every navigation.
+	 *
 	 * @author raukk
 	 *
 	 * @param {string[]} members Member Plan Uuids of the block
@@ -342,6 +369,39 @@ export function createBlockRecomputer(
 	 * verified; false means the provisional single pass numbers stand
 	 */
 	async function runLoopBlock(members: string[]): Promise<boolean> {
+		const latchKey: string = raukkBlockLatchKey(members);
+
+		/*
+		 * The fingerprint is taken BEFORE anything is computed or stored,
+		 * so the value a failing run latches is the one the next run reads
+		 * back: the provisional snapshots this run writes are members of the
+		 * block, and the fingerprint holds no member snapshot.
+		 */
+		const fingerprint: string = raukkBlockSolveFingerprint(
+			members,
+			options.shipSources
+		);
+
+		/*
+		 * Known unsolvable at exactly these inputs: skip the block WHOLE.
+		 * Not merely the solve — the provisional computations are what
+		 * cascade staleness onto the members and notify the chain refresh,
+		 * i.e. the two edges that feed this block back to itself. No error
+		 * either; the failure was reported when the latch was armed.
+		 */
+		if (
+			!attempted.has(latchKey) &&
+			raukkBlockSolveLatched(members, fingerprint)
+		) {
+			// the members are accounted for all the same, or the progress
+			// display would never reach its total
+			members.forEach(() => options.onDone?.());
+
+			return false;
+		}
+
+		attempted.add(latchKey);
+
 		const failed: Set<string> = new Set();
 
 		for (const uuid of members) {
@@ -409,10 +469,16 @@ export function createBlockRecomputer(
 		}
 
 		if (outcome.snapshots === null) {
+			// stop later runs re-simulating a system with no answer until
+			// one of its inputs really moves
+			latchRaukkBlockUnsolved(members, fingerprint);
 			recordBlockUnsolved(members, outcome.reason, outcome.unknownCount);
 
 			return false;
 		}
+
+		// the block has an answer here, so nothing may skip it again
+		clearRaukkBlockLatch(members);
 
 		/*
 		 * Zero unknowns is a cycle of non price edges — lease links and the
