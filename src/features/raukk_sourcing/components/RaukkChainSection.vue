@@ -105,9 +105,27 @@
 	);
 
 	/**
-	 * Every stop the account can address: known planets, the four CXs and
-	 * the marked depots — a depot planet usually carries no plan of its
-	 * own, so nothing else would offer it as a stop.
+	 * Planet natural id to plan name over the SCOPED snapshots, the stops
+	 * a new chain may be authored across. `stopNames` above stays
+	 * unscoped because it LABELS existing loops, including one written
+	 * before a member was unassigned; this one decides what exists.
+	 */
+	const stopCandidateNames: ComputedRef<Record<string, string>> = computed(
+		() =>
+			Object.fromEntries(
+				Object.values(sourcingStore.scopedSnapshots()).map(
+					(snapshot: IRaukkSnapshot) => [
+						snapshot.planetNaturalId,
+						snapshot.planName,
+					]
+				)
+			)
+	);
+
+	/**
+	 * Every stop the account can address: operated planets, the four CXs
+	 * and the marked depots — a depot planet usually carries no plan of
+	 * its own, so nothing else would offer it as a stop.
 	 */
 	const stopOptions: ComputedRef<PSelectOption[]> = computed(() => [
 		...Object.keys(RAUKK_CX_SYSTEM_ID_BY_CODE).map((code) => ({
@@ -115,14 +133,16 @@
 			value: code,
 		})),
 		...Object.values(sourcingStore.depots)
-			.filter((depot) => !(depot.planetNaturalId in stopNames.value))
+			.filter(
+				(depot) => !(depot.planetNaturalId in stopCandidateNames.value)
+			)
 			.map((depot) => ({
 				label: t("raukk_sourcing.chains.depot_stop", {
 					planet: depot.planetNaturalId,
 				}),
 				value: depot.planetNaturalId,
 			})),
-		...Object.entries(stopNames.value)
+		...Object.entries(stopCandidateNames.value)
 			.map(([planet, name]) => ({
 				label: `${name} (${planet})`,
 				value: planet,

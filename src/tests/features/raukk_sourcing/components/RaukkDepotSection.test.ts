@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from "pinia";
 
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+import { usePlanningStore } from "@/stores/planningStore";
 
 // Components
 import RaukkDepotSection from "@/features/raukk_sourcing/components/RaukkDepotSection.vue";
@@ -18,6 +19,7 @@ import raukk_sourcing from "@/locales/en_US/raukk_sourcing.json";
 
 // Types & Interfaces
 import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
+import { IPlanEmpireElement } from "@/stores/planningStore.types";
 
 const i18n = createI18n({
 	legacy: false,
@@ -30,6 +32,9 @@ const HEPH: string = "ZV-307c";
 
 /** A planet the systems JSON carries, with no transcribed gate */
 const GATELESS: string = "ZV-194a";
+
+/** A second gate planet, so a dropped suggestion is a scoping one */
+const OTHER_GATE: string = "OT-580b";
 
 function render(): VueWrapper {
 	return mount(RaukkDepotSection, { global: { plugins: [i18n] } });
@@ -118,6 +123,31 @@ describe("Raukk Sourcing: RaukkDepotSection", () => {
 	it("suggests own bases on gate planets, and nothing else", async () => {
 		store.setSnapshot("gate", makeSnapshot("Hephaestus", HEPH));
 		store.setSnapshot("plain", makeSnapshot("Somewhere", GATELESS));
+
+		const wrapper: VueWrapper = render();
+
+		expect(wrapper.findComponent(PSelect).props("options")).toStrictEqual([
+			{ label: `Hephaestus (${HEPH})`, value: HEPH },
+		]);
+	});
+
+	it("suggests no planet only an unassigned base stands on", async () => {
+		store.setSnapshot("gate", makeSnapshot("Hephaestus", HEPH));
+		store.setSnapshot("off", makeSnapshot("Switched Off", OTHER_GATE));
+
+		usePlanningStore().empires = {
+			e1: {
+				uuid: "e1",
+				name: "E1",
+				plans: [
+					{
+						uuid: "gate",
+						plan_name: "gate",
+						planet_natural_id: HEPH,
+					},
+				],
+			},
+		} as unknown as Record<string, IPlanEmpireElement>;
 
 		const wrapper: VueWrapper = render();
 

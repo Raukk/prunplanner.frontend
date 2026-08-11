@@ -129,7 +129,9 @@ export function useRaukkLease(planUuid: Ref<string | undefined>) {
 
 		if (ownPlanet === undefined) return [];
 
-		return Object.keys(sourcingStore.snapshots)
+		// scoped: a host flies the whole docking site, so a plan the
+		// account does not operate cannot be one
+		return Object.keys(sourcingStore.scopedSnapshots())
 			.filter(
 				(uuid) =>
 					uuid !== planUuid.value &&

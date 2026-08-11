@@ -13,4 +13,6 @@ Accepted: removed outbound CX cargo shifts round-trip amortization onto inbound 
 
 Constraint: label by ad type, never bare "LM" (drift LM-1).
 
+Previously: an LM sold output kept its whole exchange lane whenever ANY stored snapshot held a draw against it, unassigned bases included — the flag drops the `unitsPerDay − subscribedOf` term, so the `viaCxSold` remainder is the only thing left and a phantom draw stands alone in it. The LM sell surface is where that scoping hole showed first and, until an output is flagged, the only place it can show at all. See shipping-decisions rd 33.
+
 Unbuilt: chain validation against a claimed flow vanishing because its ticker got flagged local — unverified.

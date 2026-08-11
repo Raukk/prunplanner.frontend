@@ -478,6 +478,9 @@ function planCapDays(
  * plan uuid order and the first one wins, so the answer is stable no
  * matter in which order the snapshots were written.
  *
+ * Scoped: an unassigned plan does not get to anchor the planet a chain
+ * calls at, which would move a loop the account really flies.
+ *
  * @author raukk
  *
  * @param {IRaukkShippingConfig} shippingConfig Shipping configuration
@@ -489,12 +492,14 @@ function planetAnchorLookup(
 	const sourcingStore = useRaukkSourcingStore();
 
 	const overrides: Map<string, string> = new Map();
+	const scoped: Record<string, IRaukkSnapshot> =
+		sourcingStore.scopedSnapshots();
 
-	Object.keys(sourcingStore.snapshots)
+	Object.keys(scoped)
 		.sort()
 		.forEach((planUuid) => {
 			const planet: string | undefined =
-				sourcingStore.snapshots[planUuid]?.planetNaturalId;
+				scoped[planUuid]?.planetNaturalId;
 			const anchor: string | undefined =
 				sourcingStore.configs[planUuid]?.cxAnchor;
 

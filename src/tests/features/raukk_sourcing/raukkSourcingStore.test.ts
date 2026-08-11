@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
+import { nextTick } from "vue";
 
 // stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
@@ -836,6 +837,23 @@ describe("Raukk Sourcing Store", () => {
 			expect(store.snapshots.c.stale).toBe(true);
 		});
 
+		it("marks the plans it drew FROM stale as well", () => {
+			// "a" produces, "b" draws from it: deleting the consumer takes
+			// the draw away, and the producers exchange lane carried it
+			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot(
+				"b",
+				makeSnapshot("B", { MET: 50 }, { a: { ORE: 40 } })
+			);
+
+			store.deletePlanData("b");
+
+			// a producer does not DEPEND on its consumer, so nothing else
+			// would ever stale it and its frozen lanes would keep flying
+			// the 40 ORE a day for a base that no longer exists
+			expect(store.snapshots.a.stale).toBe(true);
+		});
+
 		it("scrubs the shipping keys of the deleted plan", () => {
 			store.setShippingConfig({
 				enabled: true,
@@ -1397,6 +1415,38 @@ describe("Raukk Sourcing Store", () => {
 					(profile) => profile.id === RAUKK_DEFAULT_SHIP_PROFILE_ID
 				)?.costPerParsec
 			).toBe(12);
+		});
+	});
+
+	describe("empire assignment", () => {
+		it("stales nothing on the first assignment it sees", async () => {
+			assignOnly("a");
+			await nextTick();
+
+			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot("b", makeSnapshot("B", { MET: 50 }));
+
+			// the page load: the stored snapshots were computed under this
+			// very set, staling them would recompute the account on boot
+			expect(store.snapshots.a.stale).toBe(false);
+			expect(store.snapshots.b.stale).toBe(false);
+		});
+
+		it("stales the whole store when the assignment changes", async () => {
+			assignOnly("a");
+			await nextTick();
+
+			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot("b", makeSnapshot("B", { MET: 50 }));
+
+			// the user edits the management screen: which plans the
+			// account operates decides what every OTHER plan may see, in
+			// both directions, so no dependency edge can carry it
+			assignOnly("b");
+			await nextTick();
+
+			expect(store.snapshots.a.stale).toBe(true);
+			expect(store.snapshots.b.stale).toBe(true);
 		});
 	});
 

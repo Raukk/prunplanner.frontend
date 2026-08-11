@@ -635,6 +635,14 @@ function chainClaimedUnits(
  * the draw was recorded and nothing puts them back, which is the whole
  * of the local transfer rule on the producers side.
  *
+ * The counterparts are read through `sourcingScopedSnapshots`, the very
+ * set `subscription` answers from. A plan the user unassigned keeps its
+ * snapshot and therefore keeps its stored `draws` — reading those raw
+ * would let a base nobody operates hold an assigned plans output on its
+ * exchange lane, invisibly, since every surface that reports a draw is
+ * scoped. The two halves of one draw must come from one set or they
+ * cannot cancel.
+ *
  * @author raukk
  *
  * @param {IRaukkShippingInput} input Plan flows, resolver and config
@@ -649,12 +657,15 @@ function planHubSpokeRouting(
 
 	if (!input.shippingConfig.enabled) return routing;
 
-	Object.keys(sourcingStore.snapshots)
+	const counterparts: Record<string, IRaukkSnapshot> =
+		sourcingStore.sourcingScopedSnapshots();
+
+	Object.keys(counterparts)
 		.sort()
 		.forEach((counterpartUuid) => {
 			if (counterpartUuid === input.planUuid) return;
 
-			const counterpart: IRaukkSnapshot = sourcingStore.snapshots[
+			const counterpart: IRaukkSnapshot = counterparts[
 				counterpartUuid
 			] as IRaukkSnapshot;
 

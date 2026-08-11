@@ -23,6 +23,7 @@ import { useRaukkFleet } from "@/features/raukk_sourcing/useRaukkFleet";
 
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+import { usePlanningStore } from "@/stores/planningStore";
 
 // Calculations
 import { TOTALMSDAY } from "@/features/planning/calculations/buildingCalculations";
@@ -41,6 +42,7 @@ import {
 	IRaukkShipProfile,
 	IRaukkSnapshot,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
+import { IPlanEmpireElement } from "@/stores/planningStore.types";
 
 /** Antares III, one jump from the consumer and NOT via the exchange */
 const SOURCE_PLANET: string = "ZV-194a";
@@ -854,6 +856,50 @@ describe("Raukk Sourcing: account level chain compute", () => {
 						!chainId.includes(`:${RAUKK_AUTO_CHAIN_DIRECT}:`)
 				)
 			).toStrictEqual([]);
+		});
+
+		it("lets no unassigned plan anchor the planet it stands on", async () => {
+			/*
+			 * A base the user switched off, sharing the consumers planet
+			 * and pinned to another exchange. Its uuid sorts first, so the
+			 * unscoped lookup would hand its NC1 to the whole planet and
+			 * pull the region apart exactly as the test above does — for a
+			 * plan the account does not operate.
+			 */
+			store.setSnapshot("abandoned", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Abandoned",
+				planetNaturalId: CONSUMER_PLANET,
+				outputs: {},
+				draws: {},
+			});
+			store.setPlanCxAnchor("abandoned", "NC1");
+
+			usePlanningStore().empires = {
+				e1: {
+					uuid: "e1",
+					name: "E1",
+					plans: [
+						{
+							uuid: "consumer",
+							plan_name: "consumer",
+							planet_natural_id: CONSUMER_PLANET,
+						},
+						{
+							uuid: "source",
+							plan_name: "source",
+							planet_natural_id: SOURCE_PLANET,
+						},
+					],
+				},
+			} as unknown as Record<string, IPlanEmpireElement>;
+
+			await computePlanSnapshot(context(planResult(1, 3)));
+			await computeChainResults(loadPrices);
+
+			// the region is intact: the anchored loop is still derived
+			expect(store.chainResults[AUTO_ID]).toBeDefined();
 		});
 
 		it("hauls between the regions on a loop with no exchange", async () => {

@@ -7,9 +7,11 @@ import { useRaukkLease } from "@/features/raukk_sourcing/useRaukkLease";
 
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+import { usePlanningStore } from "@/stores/planningStore";
 
 // Types & Interfaces
 import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
+import { IPlanEmpireElement } from "@/stores/planningStore.types";
 
 function makeSnapshot(name: string, planetNaturalId: string): IRaukkSnapshot {
 	return {
@@ -52,6 +54,28 @@ describe("useRaukkLease", () => {
 		expect(candidates.value.map((option) => option.value)).toStrictEqual([
 			"host",
 			"other",
+		]);
+	});
+
+	it("offers no host the account does not operate", () => {
+		// `other` belongs to no empire: a host flies the whole docking
+		// site, so a base nobody operates cannot be one
+		usePlanningStore().empires = {
+			e1: {
+				uuid: "e1",
+				name: "E1",
+				plans: ["host", "lease"].map((uuid) => ({
+					uuid,
+					plan_name: uuid,
+					planet_natural_id: "OT-580b",
+				})),
+			},
+		} as unknown as Record<string, IPlanEmpireElement>;
+
+		const { candidates } = useRaukkLease(ref("lease"));
+
+		expect(candidates.value.map((option) => option.value)).toStrictEqual([
+			"host",
 		]);
 	});
 
