@@ -937,8 +937,9 @@
 	},
 	"defaults": {
 		"title": "Sourcing Defaults",
-		"tooltip": "Default source of every base at once, per input group: a ticker without its own setting on a base follows the default of its group. \"All producers (weighted avg + market top-up)\" charges the share your own bases actually cover at their weighted average and buys the rest at the market price — bases producing two thirds of your rations pay two thirds average and one third market. A per-base setting always wins; pick \"CX Preference (pinned)\" on a row to opt that one ticker out.",
-		"none": "No default (CX preference)",
+		"tooltip": "Default source of every base at once, per input group: a ticker without its own setting on a base follows the default of its group. \"All producers (weighted avg + market top-up)\" charges the share your own bases actually cover at their weighted average and buys the rest at the market price — bases producing two thirds of your rations pay two thirds average and one third market. \"CX Preference price\" buys the group at the exchange instead and draws from no base at all, which is the setting that takes a whole input group out of your supply chains. A per-base setting always wins; pick \"CX Preference (pinned)\" on a row to opt that one ticker out.",
+		"none": "No default (all producers + market top-up)",
+		"cx": "CX Preference price (drawn from no base)",
 		"row_marker": "(default)",
 		"row_marker_tooltip": "Follows the account default of this input group, this base stores no setting of its own.",
 		"confirm_title": "Replace the settings on every base?",

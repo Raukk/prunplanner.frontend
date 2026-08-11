@@ -56,6 +56,48 @@ export function isAggregateSource(
 }
 
 /**
+ * A source the producer pool cannot honour.
+ *
+ * Two ways an entry goes dead, both of them behind the users back:
+ * a base source whose producer stopped making the ticker — the base was
+ * dropped from the empire, deleted, or simply lost the recipe — and a
+ * POOL ONLY aggregate over an empty pool, `AGG_AVG` and `AGG_MAX`, which
+ * charge the whole need at pool cost and have no pool left to read it
+ * off. Neither is offered by {@link buildSourceOptions} any more, so
+ * leaving it in place puts an unpickable dead end on the row.
+ *
+ * `AGG_AVG_MKT` is never dangling: an empty pool means it buys the whole
+ * need at the market, which is the entire point of it.
+ *
+ * Without a producer lookup nothing is dangling — a caller that cannot
+ * see the pool must not heal anything away.
+ *
+ * @author raukk
+ *
+ * @param {string} ticker Material Ticker
+ * @param {IRaukkTickerSource} source Source to check
+ * @param {Function} [producerUuidsOf] Plans producing a ticker
+ * @returns {boolean} The pool cannot honour the source
+ */
+export function isDanglingSource(
+	ticker: string,
+	source: IRaukkTickerSource,
+	producerUuidsOf?: (ticker: string) => string[]
+): boolean {
+	if (producerUuidsOf === undefined) return false;
+	if (source.mode !== "plan") return false;
+
+	const producers: string[] = producerUuidsOf(ticker);
+
+	if (isAggregateSource(source.sourcePlanUuid))
+		return (
+			source.sourcePlanUuid !== "AGG_AVG_MKT" && producers.length === 0
+		);
+
+	return !producers.includes(source.sourcePlanUuid);
+}
+
+/**
  * Price of an aggregate source over a set of producers.
  *
  * `AGG_AVG` and `AGG_AVG_MKT` are the output weighted average of the
@@ -404,7 +446,10 @@ export function withFleetDraws(
  * without ever having to be reset by hand. `AGG_AVG` and `AGG_MAX`
  * charge the whole need at pool cost however little the pool covers,
  * which only makes sense once a pool actually exists: those two are
- * still appended only from two producers up.
+ * appended from ONE producer up. A pool of one is a pool — both price
+ * it exactly as picking that base does — and hiding them there would
+ * turn a stored aggregate into an unpickable row the moment an account
+ * drops to its last producer of a ticker.
  *
  * `ownPct` is this plans prospective draw, `othersPct` everything other
  * plans already draw from the stored edges; the consumers own stored
@@ -528,11 +573,11 @@ export function buildSourceOptions(
 	);
 
 	/**
-	 * The market topping aggregate always, the two pool-only ones from a
-	 * real pool of two upwards, see the function doc.
+	 * The market topping aggregate always, the two pool-only ones as soon
+	 * as there is a pool at all, see the function doc.
 	 */
 	const offered: RAUKK_SOURCE_AGGREGATE[] =
-		producers.length < 2
+		producers.length === 0
 			? ["AGG_AVG_MKT"]
 			: ["AGG_AVG", "AGG_MAX", "AGG_AVG_MKT"];
 

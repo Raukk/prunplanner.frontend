@@ -462,6 +462,19 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Plan uuids of {@link producersOf}, the shape the dangling
+		 * source heal reads the pool in.
+		 *
+		 * @author raukk
+		 *
+		 * @param {string} ticker Material Ticker
+		 * @returns {string[]} Producing Plan Uuids
+		 */
+		function producerUuidsOf(ticker: string): string[] {
+			return producersOf(ticker).map((producer) => producer.planUuid);
+		}
+
+		/**
 		 * Aggregates all draws other plans hold against one source
 		 * plans output ticker. Oversubscription is allowed, the
 		 * percentage can therefore exceed 1.
@@ -606,7 +619,10 @@ export const useRaukkSourcingStore = defineStore(
 				buildDependencyGraph(
 					configs.value,
 					snapshots.value,
-					raukkEffectiveShipSources(shipSourcing.value)
+					raukkEffectiveShipSources(
+						shipSourcing.value,
+						producerUuidsOf
+					)
 				),
 				planUuid
 			).forEach((dependentUuid) => {
@@ -2132,7 +2148,10 @@ export const useRaukkSourcingStore = defineStore(
 				buildDependencyGraph(
 					configs.value,
 					snapshots.value,
-					raukkEffectiveShipSources(shipSourcing.value)
+					raukkEffectiveShipSources(
+						shipSourcing.value,
+						producerUuidsOf
+					)
 				),
 				planUuid
 			);
@@ -2295,6 +2314,7 @@ export const useRaukkSourcingStore = defineStore(
 			getShipProfile,
 			listShipProfiles,
 			producersOf,
+			producerUuidsOf,
 			subscription,
 			getChain,
 			getChainResult,

@@ -12,6 +12,7 @@ import {
 	formatSourceOptionLabel,
 	inputDemandPerDay,
 	isAggregateSource,
+	isDanglingSource,
 	maxAbsoluteOutputDelta,
 	outputsSettled,
 	resolveCxExchangeCode,
@@ -83,6 +84,86 @@ describe("Raukk Sourcing Pricing", () => {
 			expect(isAggregateSource("AGG_MAX")).toBe(true);
 			expect(isAggregateSource("AGG_AVG_MKT")).toBe(true);
 			expect(isAggregateSource("uuid-1")).toBe(false);
+		});
+	});
+
+	describe("isDanglingSource", () => {
+		const pool = (uuids: string[]) => (): string[] => uuids;
+
+		it("dangles a base that no longer makes the ticker", () => {
+			expect(
+				isDanglingSource(
+					"RAT",
+					{ mode: "plan", sourcePlanUuid: "gone" },
+					pool(["living"])
+				)
+			).toBe(true);
+		});
+
+		it("keeps a base that still makes the ticker", () => {
+			expect(
+				isDanglingSource(
+					"RAT",
+					{ mode: "plan", sourcePlanUuid: "living" },
+					pool(["living"])
+				)
+			).toBe(false);
+		});
+
+		it("dangles a pool only aggregate over an empty pool", () => {
+			expect(
+				isDanglingSource(
+					"RAT",
+					{ mode: "plan", sourcePlanUuid: "AGG_AVG" },
+					pool([])
+				)
+			).toBe(true);
+			expect(
+				isDanglingSource(
+					"RAT",
+					{ mode: "plan", sourcePlanUuid: "AGG_MAX" },
+					pool([])
+				)
+			).toBe(true);
+		});
+
+		it("keeps a pool only aggregate over a pool of one", () => {
+			expect(
+				isDanglingSource(
+					"RAT",
+					{ mode: "plan", sourcePlanUuid: "AGG_AVG" },
+					pool(["living"])
+				)
+			).toBe(false);
+		});
+
+		it("never dangles the market top up or a priced source", () => {
+			expect(
+				isDanglingSource(
+					"RAT",
+					{ mode: "plan", sourcePlanUuid: "AGG_AVG_MKT" },
+					pool([])
+				)
+			).toBe(false);
+			expect(isDanglingSource("RAT", { mode: "cx" }, pool([]))).toBe(
+				false
+			);
+			expect(
+				isDanglingSource(
+					"RAT",
+					{ mode: "market", priceMode: "BID" },
+					pool([])
+				)
+			).toBe(false);
+		});
+
+		it("dangles nothing without a producer lookup", () => {
+			expect(
+				isDanglingSource("RAT", {
+					mode: "plan",
+					sourcePlanUuid: "gone",
+				})
+			).toBe(false);
 		});
 	});
 
@@ -546,13 +627,17 @@ describe("Raukk Sourcing Pricing", () => {
 			expect(options[0].costPerUnit).toBe(42);
 		});
 
-		it("offers the market top up next to a single producer", () => {
+		it("offers every aggregate next to a single producer", () => {
+			// a pool of one is a pool: hiding the pool only aggregates
+			// here would strand a row already set to one of them
 			const options: IRaukkSourceOption[] = build({
 				producers: [producer("a", 10, 100)],
 			});
 
 			expect(options.map((option) => option.value)).toStrictEqual([
 				"a",
+				"AGG_AVG",
+				"AGG_MAX",
 				"AGG_AVG_MKT",
 			]);
 		});

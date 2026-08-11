@@ -134,7 +134,10 @@ export function useRaukkChainRecompute() {
 			buildDependencyGraph(
 				inputs.configs,
 				inputs.snapshots,
-				raukkEffectiveShipSources(sourcingStore.shipSourcing)
+				raukkEffectiveShipSources(
+					sourcingStore.shipSourcing,
+					sourcingStore.producerUuidsOf
+				)
 			),
 			planUuid,
 			(uuid: string) => inputs.snapshots[uuid] !== undefined
@@ -158,7 +161,8 @@ export function useRaukkChainRecompute() {
 			const runner: IRaukkBlockRecomputer = createBlockRecomputer({
 				empireList,
 				shipSources: raukkEffectiveShipSources(
-					sourcingStore.shipSourcing
+					sourcingStore.shipSourcing,
+					sourcingStore.producerUuidsOf
 				),
 				planNameOf: (uuid: string) =>
 					sourcingStore.snapshots[uuid]?.planName ?? uuid,

@@ -183,7 +183,8 @@ export function useRaukkEmpireAutoSnapshot(
 			const runner: IRaukkBlockRecomputer = createBlockRecomputer({
 				empireList,
 				shipSources: raukkEffectiveShipSources(
-					sourcingStore.shipSourcing
+					sourcingStore.shipSourcing,
+					sourcingStore.producerUuidsOf
 				),
 				planNameOf: (planUuid: string) =>
 					sourcingStore.snapshots[planUuid]?.planName ?? planUuid,
@@ -213,7 +214,10 @@ export function useRaukkEmpireAutoSnapshot(
 					buildDependencyGraph(
 						inputs.configs,
 						inputs.snapshots,
-						raukkEffectiveShipSources(sourcingStore.shipSourcing)
+						raukkEffectiveShipSources(
+							sourcingStore.shipSourcing,
+							sourcingStore.producerUuidsOf
+						)
 					),
 					pending,
 					// the SCOPED snapshots decide which loop mates join a

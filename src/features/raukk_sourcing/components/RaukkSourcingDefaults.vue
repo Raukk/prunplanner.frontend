@@ -20,8 +20,11 @@
 		RAUKK_SOURCE_BUCKET,
 	} from "@/features/raukk_sourcing/raukkSourcing.types";
 
-	/** Sentinel of the "no default, follow the CX preference" entry */
+	/** Sentinel of the "no default of its own" entry */
 	const NO_DEFAULT: string = "NONE";
+
+	/** Sentinel of the "everything at the CX preference price" entry */
+	const CX_MODE: string = "CX";
 
 	/** Buckets a default can be set for, in the order they are rendered */
 	const BUCKETS: RAUKK_SOURCE_BUCKET[] = [
@@ -32,6 +35,7 @@
 
 	const options: ComputedRef<PSelectOption[]> = computed(() => [
 		{ label: t("raukk_sourcing.defaults.none"), value: NO_DEFAULT },
+		{ label: t("raukk_sourcing.defaults.cx"), value: CX_MODE },
 		{
 			label: t("raukk_sourcing.source_option.agg_avg"),
 			value: "AGG_AVG",
@@ -49,6 +53,8 @@
 	function valueOf(bucket: RAUKK_SOURCE_BUCKET): string {
 		const source: IRaukkTickerSource | undefined =
 			sourcingStore.sourcingDefaults[bucket];
+
+		if (source?.mode === "cx") return CX_MODE;
 
 		return source?.mode === "plan" ? source.sourcePlanUuid : NO_DEFAULT;
 	}
@@ -90,16 +96,19 @@
 		Array.from(new Set(Object.values(pendingOverrides.value).flat())).sort()
 	);
 
+	/** Stored form of a picked entry, `undefined` clearing the default */
+	function sourceOf(value: string): IRaukkTickerSource | undefined {
+		if (value === NO_DEFAULT) return undefined;
+		if (value === CX_MODE) return { mode: "cx" };
+
+		return {
+			mode: "plan",
+			sourcePlanUuid: value as RAUKK_SOURCE_AGGREGATE,
+		};
+	}
+
 	function change(bucket: RAUKK_SOURCE_BUCKET, value: string): void {
-		sourcingStore.setSourcingDefault(
-			bucket,
-			value === NO_DEFAULT
-				? undefined
-				: {
-						mode: "plan",
-						sourcePlanUuid: value as RAUKK_SOURCE_AGGREGATE,
-					}
-		);
+		sourcingStore.setSourcingDefault(bucket, sourceOf(value));
 
 		refPendingBucket.value = bucket;
 

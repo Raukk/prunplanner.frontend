@@ -1423,10 +1423,8 @@ export async function preparePlanSnapshot(
 			config.sources,
 			inputBuckets,
 			inertClone(sourcingStore.sourcingDefaults),
-			(ticker: string, sourcePlanUuid: string) =>
-				producersOf(ticker).some(
-					(producer) => producer.planUuid === sourcePlanUuid
-				)
+			(ticker: string) =>
+				producersOf(ticker).map((producer) => producer.planUuid)
 		);
 
 		const demandPerDay: IRaukkMaterialUnits = inputDemandPerDay(
@@ -1773,11 +1771,9 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 	 * Everything downstream — resolver, shipping, rows — reads this, never
 	 * the stored map, so the tool shows what a computation would freeze.
 	 */
-	/** A plan still producing the ticker, the dangling entry heal reads it */
-	function isProducing(ticker: string, sourcePlanUuid: string): boolean {
-		return getProducers(ticker).some(
-			(producer) => producer.planUuid === sourcePlanUuid
-		);
+	/** Plans still producing the ticker, the dangling entry heal reads it */
+	function producerUuidsOf(ticker: string): string[] {
+		return getProducers(ticker).map((producer) => producer.planUuid);
 	}
 
 	const effectiveSources: ComputedRef<Record<string, IRaukkTickerSource>> =
@@ -1788,7 +1784,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 				// detached for the same reason `computePlanSnapshot` detaches
 				// them: a merged entry travels into cloned structures
 				inertClone(sourcingStore.sourcingDefaults),
-				isProducing
+				producerUuidsOf
 			)
 		);
 
@@ -1798,7 +1794,7 @@ export async function useRaukkSnapshot(context: IRaukkSnapshotContext) {
 			config.value.sources,
 			inputBuckets.value,
 			sourcingStore.sourcingDefaults,
-			isProducing
+			producerUuidsOf
 		)
 	);
 
