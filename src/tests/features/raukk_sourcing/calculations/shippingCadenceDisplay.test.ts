@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 // Calculations
 import {
 	RAUKK_CADENCE_RATE_MIN_TRIPS,
+	raukkShipTimeByBucket,
 	raukkShipTimeByType,
 	raukkVisitCadence,
 } from "@/features/raukk_sourcing/calculations/shippingCadenceDisplay";
@@ -167,9 +168,9 @@ describe("Raukk Shipping: Cadence Display", () => {
 		});
 
 		it("skips hired legs: the operator flies its own ships", () => {
-			expect(
-				raukkShipTimeByType([lane({ hired: true })])
-			).toStrictEqual([]);
+			expect(raukkShipTimeByType([lane({ hired: true })])).toStrictEqual(
+				[]
+			);
 		});
 
 		it("skips legs moving nothing", () => {
@@ -180,6 +181,87 @@ describe("Raukk Shipping: Cadence Display", () => {
 
 		it("has no entries without any lanes", () => {
 			expect(raukkShipTimeByType([])).toStrictEqual([]);
+		});
+	});
+
+	describe("raukkShipTimeByBucket", () => {
+		it("reports the three buckets apart, tightest cadence first", () => {
+			const groups = raukkShipTimeByBucket([
+				lane({ bucket: "repair", tripsPerDay: 1 / 90 }),
+				lane({ bucket: "workforce", tripsPerDay: 1 / 30 }),
+				lane({ bucket: "production", tripsPerDay: 1 / 14 }),
+			]);
+
+			expect(groups.map((group) => group.bucket)).toStrictEqual([
+				"production",
+				"workforce",
+				"repair",
+			]);
+			expect(groups.map((group) => group.entries.length)).toStrictEqual([
+				1, 1, 1,
+			]);
+		});
+
+		it("states each bucket's own interval, never their sum", () => {
+			// the two used to roll into one 22.5 day line: 1/30 + 1/90
+			const groups = raukkShipTimeByBucket([
+				lane({ bucket: "workforce", tripsPerDay: 1 / 30 }),
+				lane({ bucket: "repair", tripsPerDay: 1 / 90 }),
+			]);
+
+			expect(groups[0].entries[0].visitDays).toBeCloseTo(30, 10);
+			expect(groups[1].entries[0].visitDays).toBeCloseTo(90, 10);
+		});
+
+		it("shows a bucket its legs fly on two hulls as two entries", () => {
+			const groups = raukkShipTimeByBucket([
+				lane({
+					bucket: "workforce",
+					shipTypeId: "1000x1000-standard",
+					tripsPerDay: 1 / 30,
+					roundTripMinutes: 600,
+				}),
+				lane({
+					bucket: "workforce",
+					pairKey: "plan>other",
+					shipTypeId: "500x500-standard",
+					tripsPerDay: 1 / 30,
+					roundTripMinutes: 60,
+				}),
+			]);
+
+			expect(groups).toHaveLength(1);
+			expect(
+				groups[0].entries.map((entry) => entry.shipTypeId)
+			).toStrictEqual(["1000x1000-standard", "500x500-standard"]);
+		});
+
+		it("keeps pre cadence legs in their own unlabelled group", () => {
+			const groups = raukkShipTimeByBucket([
+				lane({ bucket: undefined }),
+				lane({ bucket: "production" }),
+			]);
+
+			expect(groups.map((group) => group.bucket)).toStrictEqual([
+				"production",
+				undefined,
+			]);
+		});
+
+		it("drops buckets whose every leg is hired or empty", () => {
+			const groups = raukkShipTimeByBucket([
+				lane({ bucket: "production", hired: true }),
+				lane({ bucket: "workforce", tripsPerDay: 0 }),
+				lane({ bucket: "repair" }),
+			]);
+
+			expect(groups.map((group) => group.bucket)).toStrictEqual([
+				"repair",
+			]);
+		});
+
+		it("has no groups without any lanes", () => {
+			expect(raukkShipTimeByBucket([])).toStrictEqual([]);
 		});
 	});
 });

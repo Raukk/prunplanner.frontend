@@ -122,7 +122,19 @@ describe("Raukk Sourcing: Shipping Hull Selection", () => {
 				14
 			)!;
 
-			expect(RAUKK_DENSITY_WEIGHT_BIASED).toBe(2.5);
+			expect(RAUKK_DENSITY_WEIGHT_BIASED).toBe(2);
+			expect(pick.candidate.shipTypeId).toBe(WCB.shipTypeId);
+		});
+
+		it("puts cargo of twice its volume into the weight hull", () => {
+			// exactly 2 t per m³, the widened weight band's own edge: the
+			// WCB is the workhorse and takes everything from here up
+			const pick: IRaukkHullPick = raukkPickHull(
+				ALL,
+				inbound(100, 50),
+				14
+			)!;
+
 			expect(pick.candidate.shipTypeId).toBe(WCB.shipTypeId);
 		});
 
@@ -134,8 +146,22 @@ describe("Raukk Sourcing: Shipping Hull Selection", () => {
 				14
 			)!;
 
-			expect(RAUKK_DENSITY_VOLUME_BIASED).toBe(0.4);
+			expect(RAUKK_DENSITY_VOLUME_BIASED).toBeCloseTo(1 / 3, 10);
 			expect(pick.candidate.shipTypeId).toBe(VCB.shipTypeId);
+		});
+
+		it("keeps cargo of less than three times its weight balanced", () => {
+			// 0.4 t per m³ used to be volume biased; only cargo whose
+			// volume really is 3× its weight leaves the balanced band now
+			const pick: IRaukkHullPick = raukkPickHull(
+				ALL,
+				inbound(40, 100),
+				14
+			)!;
+
+			expect([SCB, MCB, LCB, HCB].map((c) => c.shipTypeId)).toContain(
+				pick.candidate.shipTypeId
+			);
 		});
 
 		it("keeps balanced cargo in a balanced hull", () => {
@@ -249,9 +275,9 @@ describe("Raukk Sourcing: Shipping Hull Selection", () => {
 			const wide: IRaukkHullCandidate = hull(1000, 3000);
 			const heavy: IRaukkHullCandidate = hull(3000, 1000);
 
-			expect(
-				raukkSmallestCandidate([heavy, wide])?.shipTypeId
-			).toBe(wide.shipTypeId);
+			expect(raukkSmallestCandidate([heavy, wide])?.shipTypeId).toBe(
+				wide.shipTypeId
+			);
 		});
 
 		it("has nothing to answer for an empty list", () => {
