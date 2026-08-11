@@ -151,4 +151,33 @@ describe("RaukkSourcingDefaults", () => {
 
 		expect(store.sourcingDefaults.repair).toBeUndefined();
 	});
+
+	it("asks before clearing a default the bases override", async () => {
+		store.setSnapshot("a", snapshot());
+		store.setTickerSource("a", "RAT", { mode: "market", priceMode: "ASK" });
+
+		const wrapper: VueWrapper = render();
+
+		await pick(wrapper, 0, "NONE");
+
+		expect(wrapper.vm.refShowConfirm).toBe(true);
+
+		wrapper.vm.applyEverywhere();
+		await wrapper.vm.$nextTick();
+
+		expect(store.configs.a.sources.RAT).toBeUndefined();
+	});
+
+	it("pins a whole bucket to the CX preference price", async () => {
+		const wrapper: VueWrapper = render();
+
+		await pick(wrapper, 1, "CX");
+
+		// no plan source at all: the group draws from no base, which is
+		// what takes it out of the supply chains
+		expect(store.sourcingDefaults.repair).toStrictEqual({ mode: "cx" });
+		expect(
+			wrapper.findAllComponents({ name: "PSelect" })[1].props("value")
+		).toBe("CX");
+	});
 });

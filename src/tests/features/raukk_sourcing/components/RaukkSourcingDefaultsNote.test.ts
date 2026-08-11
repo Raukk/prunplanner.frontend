@@ -54,4 +54,13 @@ describe("RaukkSourcingDefaultsNote", () => {
 		// the group without a default is not listed
 		expect(text).not.toContain(raukk_sourcing.inputs.groups.production);
 	});
+
+	it("names a group pinned to the CX preference price", () => {
+		store.setSourcingDefault("repair", { mode: "cx" });
+
+		const text: string = render().text();
+
+		expect(text).toContain(raukk_sourcing.inputs.groups.repair);
+		expect(text).toContain(raukk_sourcing.defaults.cx);
+	});
 });

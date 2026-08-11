@@ -366,8 +366,12 @@ describe("Raukk Sourcing Store", () => {
 				a: ["RAT"],
 				b: ["RAT"],
 			});
-			// the repair entry belongs to a bucket without a default
-			expect(store.bucketOverrides("repair")).toStrictEqual({});
+			// a bucket without a default of its own still owns the tickers
+			// no other bucket claims: setting one and clearing one are the
+			// same change to the bases that override it
+			expect(store.bucketOverrides("repair")).toStrictEqual({
+				a: ["BSE"],
+			});
 		});
 
 		it("drops the per plan entries of one bucket on every base", () => {

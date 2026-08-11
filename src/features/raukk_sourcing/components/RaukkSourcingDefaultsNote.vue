@@ -30,7 +30,7 @@
 			const source: IRaukkTickerSource | undefined =
 				sourcingStore.sourcingDefaults[bucket];
 
-			if (source?.mode !== "plan") return [];
+			if (source === undefined) return [];
 
 			const names: Record<string, string> = {
 				AGG_AVG: t("raukk_sourcing.source_option.agg_avg"),
@@ -38,11 +38,20 @@
 				AGG_MAX: t("raukk_sourcing.source_option.agg_max"),
 			};
 
-			return [
-				`${t(`raukk_sourcing.inputs.groups.${bucket}`)}: ${
-					names[source.sourcePlanUuid] ?? source.sourcePlanUuid
-				}`,
-			];
+			// a bucket pinned to the CX preference price states so as well,
+			// it is a default like any other and the rows it governs carry
+			// the "(default)" marker
+			const name: string | undefined =
+				source.mode === "cx"
+					? t("raukk_sourcing.defaults.cx")
+					: source.mode === "plan"
+						? (names[source.sourcePlanUuid] ??
+							source.sourcePlanUuid)
+						: undefined;
+
+			if (name === undefined) return [];
+
+			return [`${t(`raukk_sourcing.inputs.groups.${bucket}`)}: ${name}`];
 		})
 	);
 </script>

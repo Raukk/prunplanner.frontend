@@ -117,12 +117,45 @@ export const RAUKK_BUILTIN_DEFAULT_SOURCE: IRaukkTickerSource = {
 };
 
 /**
- * Account wide default source of a ticker, given the buckets it sits in.
+ * Bucket whose default a ticker follows, given the buckets it sits in.
  *
  * The first bucket of {@link RAUKK_SOURCE_BUCKET_ORDER} carrying a stored
- * default wins. A ticker in a bucket none of which stores one falls back
- * to {@link RAUKK_BUILTIN_DEFAULT_SOURCE}; only a ticker in no bucket at
- * all — ship fuel, a ticker the plan does not consume — has no default.
+ * default wins. A ticker none of whose buckets stores one is owned by its
+ * first bucket in that order anyway: nothing else can claim it, and the
+ * "replace on every base" action of a bucket set back to NO default has
+ * to know which tickers that bucket still speaks for. Only a ticker in no
+ * bucket at all — ship fuel, a ticker the plan does not consume — has no
+ * owning bucket.
+ *
+ * @author raukk
+ *
+ * @param {RAUKK_SOURCE_BUCKET[]} buckets Buckets of the ticker
+ * @param {IRaukkSourcingDefaults} defaults Account wide defaults
+ * @returns {RAUKK_SOURCE_BUCKET | undefined} Owning bucket
+ */
+export function owningBucketOf(
+	buckets: RAUKK_SOURCE_BUCKET[] | undefined,
+	defaults: IRaukkSourcingDefaults
+): RAUKK_SOURCE_BUCKET | undefined {
+	if (!buckets || buckets.length === 0) return undefined;
+
+	return (
+		RAUKK_SOURCE_BUCKET_ORDER.find(
+			(candidate) => buckets.includes(candidate) && defaults[candidate]
+		) ??
+		RAUKK_SOURCE_BUCKET_ORDER.find((candidate) =>
+			buckets.includes(candidate)
+		)
+	);
+}
+
+/**
+ * Account wide default source of a ticker, given the buckets it sits in.
+ *
+ * The default of its owning bucket, see {@link owningBucketOf}. A ticker
+ * in a bucket none of which stores one falls back to
+ * {@link RAUKK_BUILTIN_DEFAULT_SOURCE}; only a ticker in no bucket at all
+ * has no default.
  *
  * @author raukk
  *
@@ -134,14 +167,14 @@ export function defaultSourceOf(
 	buckets: RAUKK_SOURCE_BUCKET[] | undefined,
 	defaults: IRaukkSourcingDefaults
 ): IRaukkTickerSource | undefined {
-	if (!buckets || buckets.length === 0) return undefined;
+	const bucket: RAUKK_SOURCE_BUCKET | undefined = owningBucketOf(
+		buckets,
+		defaults
+	);
 
-	const bucket: RAUKK_SOURCE_BUCKET | undefined =
-		RAUKK_SOURCE_BUCKET_ORDER.find(
-			(candidate) => buckets.includes(candidate) && defaults[candidate]
-		);
+	if (bucket === undefined) return undefined;
 
-	return bucket ? defaults[bucket] : { ...RAUKK_BUILTIN_DEFAULT_SOURCE };
+	return defaults[bucket] ?? { ...RAUKK_BUILTIN_DEFAULT_SOURCE };
 }
 
 /**
@@ -294,8 +327,13 @@ export function mergeSnapshotBuckets(
  * Every stored source of a ticker the given bucket default covers, keyed
  * by plan uuid — the count the confirmation dialog states before the
  * entries are dropped. A ticker sitting in several buckets is only listed
- * for the bucket that actually wins its default under `defaults`, so the
- * dialog never promises to touch an entry the merge would leave alone.
+ * for the bucket that owns it under `defaults`, so the dialog never
+ * promises to touch an entry the merge would leave alone.
+ *
+ * A bucket set back to NO default still owns its tickers, see
+ * {@link owningBucketOf}: clearing one is as much a change of what those
+ * bases should follow — the builtin market top up — as setting one, and
+ * the per base entries overriding it are the same entries either way.
  *
  * @author raukk
  *
@@ -321,17 +359,11 @@ export function overriddenTickersOf(
 
 				if (!tickerBuckets?.includes(bucket)) return false;
 
-				// the winning bucket owns the entry: a repair material that
+				// the owning bucket owns the entry: a repair material that
 				// is also a workforce consumable follows the workforce
 				// default whenever that one is set, so the repair default
 				// must not claim it
-				return (
-					RAUKK_SOURCE_BUCKET_ORDER.find(
-						(candidate) =>
-							tickerBuckets.includes(candidate) &&
-							defaults[candidate] !== undefined
-					) === bucket
-				);
+				return owningBucketOf(tickerBuckets, defaults) === bucket;
 			})
 			.sort();
 

@@ -7,6 +7,7 @@ import {
 	defaultSourceOf,
 	mergeSnapshotBuckets,
 	overriddenTickersOf,
+	owningBucketOf,
 	RAUKK_BUILTIN_DEFAULT_SOURCE,
 	resolveEffectiveSources,
 } from "@/features/raukk_sourcing/raukkSourcingDefaults";
@@ -374,6 +375,47 @@ describe("Raukk Sourcing Defaults", () => {
 					repair: TOP_UP,
 				})
 			).toStrictEqual({ a: ["BSE", "OVE"] });
+		});
+
+		it("lists the entries of a bucket set back to no default", () => {
+			// clearing one is as much a change of what those bases follow
+			// as setting one, the dialog has to offer the same replace
+			expect(
+				overriddenTickersOf(configs, buckets, "workforce", {})
+			).toStrictEqual({ a: ["OVE", "RAT"], b: ["DW"] });
+		});
+
+		it("keeps a cleared bucket off the tickers another one owns", () => {
+			expect(
+				overriddenTickersOf(configs, buckets, "repair", {
+					workforce: AVERAGE,
+				})
+			).toStrictEqual({ a: ["BSE"] });
+		});
+	});
+
+	describe("owningBucketOf", () => {
+		it("takes the first bucket in order carrying a default", () => {
+			expect(
+				owningBucketOf(["workforce", "repair"], { repair: TOP_UP })
+			).toBe("repair");
+			expect(
+				owningBucketOf(["workforce", "repair"], {
+					workforce: AVERAGE,
+					repair: TOP_UP,
+				})
+			).toBe("workforce");
+		});
+
+		it("falls back to the first bucket while none carries one", () => {
+			expect(owningBucketOf(["repair", "production"], {})).toBe("repair");
+		});
+
+		it("owns nothing outside every bucket", () => {
+			expect(owningBucketOf([], { workforce: AVERAGE })).toBeUndefined();
+			expect(
+				owningBucketOf(undefined, { workforce: AVERAGE })
+			).toBeUndefined();
 		});
 	});
 });
