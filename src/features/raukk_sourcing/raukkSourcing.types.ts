@@ -381,6 +381,16 @@ export interface IRaukkSnapshotLane {
 	 * denominator of the lane wide ȼ per unit. Absent for the same
 	 * reason as {@link ownCostPerTrip}. */
 	unitsPerDay?: number;
+	/** Daily tonnage and volume of the leg, per direction: `out` leaves
+	 * the owning plan, `back` arrives at it. Frozen because they are what
+	 * the hull was picked against — the transport table can otherwise not
+	 * say why a lane moving little cargo is flown with a large hull.
+	 * Absent on snapshots frozen before the figures were stored; the
+	 * table then reports them as unknown rather than as no freight. */
+	weightOutPerDay?: number;
+	volumeOutPerDay?: number;
+	weightBackPerDay?: number;
+	volumeBackPerDay?: number;
 }
 
 /** ȼ per unit a chain charges one flow it claimed */
