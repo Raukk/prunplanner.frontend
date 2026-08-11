@@ -10,7 +10,7 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PTable, PTag, PTooltip } from "@/ui";
+	import { PTable, PTag } from "@/ui";
 
 	// Types & Interfaces
 	import {
@@ -149,14 +149,6 @@
 				</th>
 				<th>
 					{{ $t("raukk_sourcing.inputs.source") }}
-					<PTooltip>
-						<template #trigger>
-							<span class="pl-1 text-white/40 hover:cursor-help">
-								(i)
-							</span>
-						</template>
-						{{ $t("raukk_sourcing.inputs.lm_buy_tooltip") }}
-					</PTooltip>
 				</th>
 				<th v-if="shippingEnabled" class="text-right!">
 					{{ $t("raukk_sourcing.inputs.shipping_price") }}
@@ -221,7 +213,11 @@
 								:disabled="disabled"
 								@update:source="
 									(source) =>
-										emit('update:source', row.ticker, source)
+										emit(
+											'update:source',
+											row.ticker,
+											source
+										)
 								" />
 							<RaukkLocalPriceInput
 								:price="localPrice(row)"

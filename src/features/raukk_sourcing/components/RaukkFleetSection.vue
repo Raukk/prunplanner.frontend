@@ -15,7 +15,6 @@
 	import RaukkCalibrationModal from "@/features/raukk_sourcing/components/RaukkCalibrationModal.vue";
 
 	// Calculations
-	import { RAUKK_REPAIR_BILL } from "@/features/raukk_sourcing/calculations/shipping";
 	import {
 		raukkBayCode,
 		raukkFleetAdvisoryRows,
@@ -39,7 +38,6 @@
 		PSelect,
 		PTable,
 		PTag,
-		PTooltip,
 	} from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
@@ -222,9 +220,6 @@
 	}
 
 	/** The full repair bill, spelled out for the drydock tooltip */
-	const billLabel: string = Object.entries(RAUKK_REPAIR_BILL)
-		.map(([ticker, units]) => `${units} ${ticker}`)
-		.join(" · ");
 </script>
 
 <template>
@@ -411,80 +406,33 @@
 						}}
 					</td>
 					<td class="text-right text-white/60">
-						<PTooltip v-if="row.drydockDays !== null">
-							<template #trigger>
-								<span class="hover:cursor-help">
-									{{
-										$t(
-											"raukk_sourcing.fleet.drydock_days",
-											{
-												days: formatNumber(
-													row.drydockDays
-												),
-											}
-										)
-									}}
-								</span>
-							</template>
+						<span v-if="row.drydockDays !== null">
 							{{
-								$t("raukk_sourcing.fleet.drydock_tooltip", {
-									damage: formatNumber(
-										row.damagePercentPerDay ?? 0
-									),
-									bill: billLabel,
+								$t("raukk_sourcing.fleet.drydock_days", {
+									days: formatNumber(row.drydockDays),
 								})
 							}}
-							<template v-if="row.repairCostPerDay !== null">
-								{{
-									$t("raukk_sourcing.fleet.drydock_cost", {
-										daily: formatNumber(
-											row.repairCostPerDay
-										),
-									})
-								}}
-							</template>
-						</PTooltip>
-						<PTooltip v-else-if="row.wearUnknown">
-							<template #trigger>
-								<span class="hover:cursor-help">—</span>
-							</template>
-							{{ $t("raukk_sourcing.fleet.drydock_unknown") }}
-						</PTooltip>
+						</span>
 						<span v-else>—</span>
 					</td>
 					<td class="text-right text-white/60">
 						<div
 							class="flex flex-row gap-x-1 justify-end child:my-auto">
-							<PTooltip v-if="row.staleCount > 0">
-								<template #trigger>
-									<PTag size="sm" type="warning">
-										{{ $t("raukk_sourcing.fleet.stale") }}
-									</PTag>
-								</template>
-								{{
-									$t("raukk_sourcing.fleet.stale_tooltip", {
-										stale: row.staleCount,
-										total: row.assignedCount,
-									})
-								}}
-							</PTooltip>
+							<PTag
+								v-if="row.staleCount > 0"
+								size="sm"
+								type="warning">
+								{{ $t("raukk_sourcing.fleet.stale") }}
+							</PTag>
 							<!-- the count is the way INTO the routes it
 							counts: a type flying nothing has nowhere to go
 							and stays a plain number -->
-							<PTooltip v-if="row.assignedCount > 0">
-								<template #trigger>
-									<span
-										class="hover:text-prunplanner hover:underline hover:cursor-pointer"
-										@click="
-											emit('view-routes', row.shipTypeId)
-										">
-										{{ row.assignedCount }}
-									</span>
-								</template>
-								{{
-									$t("raukk_sourcing.fleet.assigned_tooltip")
-								}}
-							</PTooltip>
+							<span
+								v-if="row.assignedCount > 0"
+								class="hover:text-prunplanner hover:underline hover:cursor-pointer"
+								@click="emit('view-routes', row.shipTypeId)">
+								{{ row.assignedCount }}
+							</span>
 							<span v-else>{{ row.assignedCount }}</span>
 						</div>
 					</td>

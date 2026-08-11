@@ -25,15 +25,7 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import {
-		PButton,
-		PInput,
-		PInputNumber,
-		PSelect,
-		PTable,
-		PTag,
-		PTooltip,
-	} from "@/ui";
+	import { PButton, PInput, PInputNumber, PSelect, PTable, PTag } from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -228,33 +220,18 @@
 								type="secondary">
 								{{ $t("raukk_sourcing.depots.unused") }}
 							</PTag>
-							<PTooltip v-if="!isRouted(row.planetNaturalId)">
-								<template #trigger>
-									<PTag
-										size="sm"
-										type="error"
-										class="hover:cursor-help">
-										{{
-											$t("raukk_sourcing.depots.unrouted")
-										}}
-									</PTag>
-								</template>
-								{{
-									$t("raukk_sourcing.depots.unrouted_tooltip")
-								}}
-							</PTooltip>
-							<PTooltip
-								v-else-if="!raukkHasGate(row.planetNaturalId)">
-								<template #trigger>
-									<PTag
-										size="sm"
-										type="warning"
-										class="hover:cursor-help">
-										{{ $t("raukk_sourcing.depots.nogate") }}
-									</PTag>
-								</template>
-								{{ $t("raukk_sourcing.depots.nogate_tooltip") }}
-							</PTooltip>
+							<PTag
+								v-if="!isRouted(row.planetNaturalId)"
+								size="sm"
+								type="error">
+								{{ $t("raukk_sourcing.depots.unrouted") }}
+							</PTag>
+							<PTag
+								v-else-if="!raukkHasGate(row.planetNaturalId)"
+								size="sm"
+								type="warning">
+								{{ $t("raukk_sourcing.depots.nogate") }}
+							</PTag>
 						</div>
 					</td>
 					<td class="text-right">
@@ -358,14 +335,9 @@
 				<span>{{ formatNumber(chainDailyCost) }}</span>
 			</div>
 			<div class="flex flex-row gap-x-2 child:my-auto">
-				<PTooltip>
-					<template #trigger>
-						<span class="w-60 text-white/60 hover:cursor-help">
-							{{ $t("raukk_sourcing.depots.rollup.rent") }}
-						</span>
-					</template>
-					{{ $t("raukk_sourcing.depots.rollup.rent_tooltip") }}
-				</PTooltip>
+				<span class="w-60 text-white/60">
+					{{ $t("raukk_sourcing.depots.rollup.rent") }}
+				</span>
 				<span>{{ formatNumber(depotDailyCost) }}</span>
 			</div>
 			<div class="flex flex-row gap-x-2 child:my-auto font-bold">

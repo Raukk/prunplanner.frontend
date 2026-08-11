@@ -5,10 +5,7 @@
 	"tooltip_intro": "Selling {units} / day of {ticker} into {exchange}, net of everything your own bases consume.",
 	"tooltip_window": "{window} at {exchange}: {traded} units traded ({perDay} / day) — your sale is {percent}% of it.",
 	"tooltip_window_empty": "{window} at {exchange}: nothing traded.",
-	"tooltip_illiquid": "{exchange} traded {traded} units of {ticker} in 7 days. There is no depth here to sell into: expect to move the price yourself, or to sit on the stock.",
-	"tooltip_yellow": "At this share you are a noticeable part of the market. Watch the price you planned with.",
-	"tooltip_red": "At this share you ARE the market. Selling this much will push the price down, and the plan's revenue is priced at a level your own production destroys.",
-	"tooltip_none": "Small enough a share that the market absorbs it without moving.",
+	"tooltip_illiquid": "{exchange} traded {traded} units of {ticker} in 7 days.",
 	"preferences_yellow": "CX Volume Warning (Yellow, %)",
 	"preferences_red": "CX Volume Warning (Red, %)"
 }

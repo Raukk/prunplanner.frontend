@@ -131,14 +131,6 @@
 			);
 		}
 
-		lines.push(
-			share.level === "red"
-				? t("cx_volume.tooltip_red")
-				: share.level === "yellow"
-					? t("cx_volume.tooltip_yellow")
-					: t("cx_volume.tooltip_none")
-		);
-
 		return lines;
 	});
 </script>

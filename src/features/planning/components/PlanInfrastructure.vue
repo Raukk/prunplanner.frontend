@@ -115,13 +115,9 @@
 							:disabled="disabled || habOptimizeForced" />
 					</template>
 					{{
-						habOptimizeForced
-							? $t(
-									"plan.components.infrastructure.auto_optimize_forced_tooltip"
-								)
-							: $t(
-									"plan.components.infrastructure.auto_optimize_tooltip"
-								)
+						$t(
+							"plan.components.infrastructure.auto_optimize_tooltip"
+						)
 					}}
 				</PTooltip>
 			</PFormItem>

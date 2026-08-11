@@ -41,22 +41,11 @@
 	interface IRaukkVisualTab {
 		key: string;
 		labelKey: string;
-		/** Hover line saying what this view answers — the label alone
-		 * does not tell you which of the two to open */
-		tooltipKey: string;
 	}
 
 	const TABS: IRaukkVisualTab[] = [
-		{
-			key: "map",
-			labelKey: "raukk_sourcing.visuals.tab_map",
-			tooltipKey: "raukk_sourcing.visuals.tab_map_tooltip",
-		},
-		{
-			key: "plane",
-			labelKey: "raukk_sourcing.visuals.tab_plane",
-			tooltipKey: "raukk_sourcing.visuals.tab_plane_tooltip",
-		},
+		{ key: "map", labelKey: "raukk_sourcing.visuals.tab_map" },
+		{ key: "plane", labelKey: "raukk_sourcing.visuals.tab_plane" },
 	];
 
 	const refActiveTab: Ref<string> = ref("map");
@@ -124,7 +113,6 @@
 					:key="`RAUKKVISUALTAB#${tab.key}`"
 					:type="refActiveTab === tab.key ? 'primary' : 'secondary'"
 					size="sm"
-					:title="$t(tab.tooltipKey)"
 					@click="() => (refActiveTab = tab.key)">
 					{{ $t(tab.labelKey) }}
 				</PButton>

@@ -15,7 +15,6 @@
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
-	import { formatDate } from "@/util/date";
 
 	// Types & Interfaces
 	import {
@@ -31,9 +30,6 @@
 		value: number;
 		cssClass: string;
 	}
-
-	// UI
-	import { PTooltip } from "@/ui";
 
 	const props = defineProps({
 		planUuid: {
@@ -133,15 +129,6 @@
 	const localIsStale: ComputedRef<boolean> = computed(
 		() => localSnapshot.value?.stale === true
 	);
-
-	const localComputedAt: ComputedRef<string> = computed(() =>
-		localSnapshot.value
-			? formatDate(
-					new Date(localSnapshot.value.computedAt),
-					"YYYY-MM-DD HH:mm"
-				)
-			: "—"
-	);
 </script>
 
 <template>
@@ -174,18 +161,9 @@
 					})
 				}}
 			</span>
-			<PTooltip v-if="localIsStale">
-				<template #trigger>
-					<span class="text-amber-400 hover:cursor-help">
-						{{ $t("raukk_strips.stale.tag") }}
-					</span>
-				</template>
-				{{
-					$t("raukk_strips.stale.tooltip", {
-						computedAt: localComputedAt,
-					})
-				}}
-			</PTooltip>
+			<span v-if="localIsStale" class="text-amber-400">
+				{{ $t("raukk_strips.stale.tag") }}
+			</span>
 		</div>
 		<div v-else-if="!localSnapshot">
 			{{ $t("raukk_strips.empty") }}

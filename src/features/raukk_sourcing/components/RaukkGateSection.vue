@@ -47,7 +47,6 @@
 		PSelect,
 		PTable,
 		PTag,
-		PTooltip,
 	} from "@/ui";
 
 	// Types & Interfaces
@@ -323,13 +322,6 @@
 	 * Only the head of it: the full bill is 28 tickers and reads as noise,
 	 * while the handful that dominate it are the whole story.
 	 */
-	function materialsLabel(row: IRaukkGatePlanningRow): string {
-		return Object.entries(row.materials)
-			.sort(([, a], [, b]) => b - a)
-			.slice(0, 8)
-			.map(([ticker, amount]) => `${formatNumber(amount)} ${ticker}`)
-			.join(", ");
-	}
 
 	/**
 	 * Switched ON, but not an edge of the graph.
@@ -418,54 +410,30 @@
 						<span class="font-bold">
 							{{ row.gate.planetA }} ⇄ {{ row.gate.planetB }}
 						</span>
-						<PTooltip v-if="row.value.issue !== ''">
-							<template #trigger>
-								<PTag
-									size="sm"
-									type="error"
-									class="hover:cursor-help">
-									{{
-										rangeShortfall(row) === null
-											? $t(
-													"raukk_sourcing.gates.unrouted"
-												)
-											: $t(
-													"raukk_sourcing.gates.out_of_range_tag"
-												)
-									}}
-								</PTag>
-							</template>
+						<PTag
+							v-if="row.value.issue !== ''"
+							size="sm"
+							type="error">
 							{{
-								$t(
-									`raukk_sourcing.gates.issue.${row.value.issue}`,
-									{
-										needed:
-											row.value.rangeUpgradesNeeded ?? 0,
-									}
-								)
+								rangeShortfall(row) === null
+									? $t("raukk_sourcing.gates.unrouted")
+									: $t(
+											"raukk_sourcing.gates.out_of_range_tag"
+										)
 							}}
-						</PTooltip>
+						</PTag>
 						<PTag
 							v-else-if="row.value.hcbCapable"
 							size="sm"
 							type="secondary">
 							{{ $t("raukk_sourcing.gates.hcb") }}
 						</PTag>
-						<PTooltip v-if="row.duplicateOf !== null">
-							<template #trigger>
-								<PTag
-									size="sm"
-									type="warning"
-									class="hover:cursor-help">
-									{{ $t("raukk_sourcing.gates.duplicate") }}
-								</PTag>
-							</template>
-							{{
-								$t("raukk_sourcing.gates.duplicate_tooltip", {
-									gate: row.duplicateOf,
-								})
-							}}
-						</PTooltip>
+						<PTag
+							v-if="row.duplicateOf !== null"
+							size="sm"
+							type="warning">
+							{{ $t("raukk_sourcing.gates.duplicate") }}
+						</PTag>
 					</div>
 				</td>
 				<td class="text-right">
@@ -529,23 +497,13 @@
 				</td>
 				<td class="text-right">
 					<div class="flex flex-col gap-y-1 items-end">
-						<PTooltip>
-							<template #trigger>
-								<span class="hover:cursor-help">
-									{{
-										pricesLoaded
-											? formatNumber(row.buildCostAic)
-											: "…"
-									}}
-								</span>
-							</template>
+						<span>
 							{{
-								$t("raukk_sourcing.gates.build_cost_tooltip", {
-									ends: raukkPlannedGateBuildEnds(row.gate),
-									materials: materialsLabel(row),
-								})
+								pricesLoaded
+									? formatNumber(row.buildCostAic)
+									: "…"
 							}}
-						</PTooltip>
+						</span>
 						<PSelect
 							class="w-33!"
 							:value="raukkPlannedGateBuildEnds(row.gate)"
@@ -566,17 +524,9 @@
 										enabled: v === true,
 									})
 							" />
-						<PTooltip v-if="strandedOn(row)">
-							<template #trigger>
-								<PTag
-									size="sm"
-									type="error"
-									class="hover:cursor-help">
-									{{ $t("raukk_sourcing.gates.not_routed") }}
-								</PTag>
-							</template>
-							{{ $t("raukk_sourcing.gates.enabled_broken") }}
-						</PTooltip>
+						<PTag v-if="strandedOn(row)" size="sm" type="error">
+							{{ $t("raukk_sourcing.gates.not_routed") }}
+						</PTag>
 					</div>
 				</td>
 				<td>

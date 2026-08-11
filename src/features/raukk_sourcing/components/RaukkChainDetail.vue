@@ -28,7 +28,7 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PTable, PTag, PTooltip } from "@/ui";
+	import { PTable, PTag } from "@/ui";
 
 	// Types & Interfaces
 	import { IRaukkChainResult } from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -179,35 +179,21 @@
 				<PTag v-if="costing.hired" size="sm" type="secondary">
 					{{ $t("raukk_sourcing.chains.detail.hired") }}
 				</PTag>
-				<PTooltip v-if="wearOf(costing) !== null">
-					<template #trigger>
-						<span class="text-white/60 hover:cursor-help">
-							{{
-								$t("raukk_sourcing.chains.detail.wear", {
-									damage: formatNumber(
-										wearOf(costing)!.damagePerTrip * 100
-									),
-									trips: formatNumber(
-										wearOf(costing)!.tripsUntilRepair
-									),
-									days: formatNumber(
-										wearOf(costing)!.daysUntilRepair
-									),
-								})
-							}}
-						</span>
-					</template>
+				<span v-if="wearOf(costing) !== null" class="text-white/60">
 					{{
-						$t("raukk_sourcing.chains.detail.wear_tooltip", {
-							cost: formatNumber(
-								wearOf(costing)!.repairCostPerTrip
+						$t("raukk_sourcing.chains.detail.wear", {
+							damage: formatNumber(
+								wearOf(costing)!.damagePerTrip * 100
 							),
-							daily: formatNumber(
-								wearOf(costing)!.repairCostPerDay
+							trips: formatNumber(
+								wearOf(costing)!.tripsUntilRepair
+							),
+							days: formatNumber(
+								wearOf(costing)!.daysUntilRepair
 							),
 						})
 					}}
-				</PTooltip>
+				</span>
 			</div>
 
 			<PTable striped>
@@ -317,29 +303,11 @@
 							{{ formatNumber(row.durationHours) }}
 						</td>
 						<td class="text-right text-white/60">
-							<PTooltip v-if="row.fuelOverridden">
-								<template #trigger>
-									<span class="hover:cursor-help">
-										{{
-											row.fuelCost === null
-												? "—"
-												: formatNumber(row.fuelCost)
-										}}*
-									</span>
-								</template>
-								{{
-									$t(
-										"raukk_sourcing.chains.detail.fuel_overridden"
-									)
-								}}
-							</PTooltip>
-							<template v-else>
-								{{
-									row.fuelCost === null
-										? "—"
-										: formatNumber(row.fuelCost)
-								}}
-							</template>
+							{{
+								row.fuelCost === null
+									? "—"
+									: formatNumber(row.fuelCost)
+							}}<span v-if="row.fuelOverridden">*</span>
 						</td>
 						<td class="text-right text-white/60">
 							{{ formatNumber(row.costPerTrip) }}

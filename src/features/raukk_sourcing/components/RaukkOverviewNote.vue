@@ -19,10 +19,6 @@
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
-	import { formatDate } from "@/util/date";
-
-	// UI
-	import { PTooltip } from "@/ui";
 
 	const props = defineProps({
 		planUuid: {
@@ -110,85 +106,73 @@
 				? raukkShipTimeByBucket(localSnapshot.value.lanes)
 				: []
 	);
-
-	const localComputedAt: ComputedRef<string> = computed(() =>
-		localSnapshot.value
-			? formatDate(
-					new Date(localSnapshot.value.computedAt),
-					"YYYY-MM-DD HH:mm"
-				)
-			: "—"
-	);
 </script>
 
 <template>
-	<PTooltip v-if="localSnapshot && localOutputs.length > 0">
-		<template #trigger>
-			<div
-				class="pt-2 text-xs hover:cursor-help"
-				:class="localIsStale ? 'text-amber-400' : 'text-white/50'">
-				<div>
-					{{
-						$t("raukk_overview.line_cost", {
-							cost: formatNumber(localCostPerDay),
-							repair: formatNumber(localRepairPerDay),
-						})
-					}}
-				</div>
-				<div v-if="localProfitPerDay !== undefined">
-					{{
-						$t("raukk_overview.line_profit", {
-							profit: formatNumber(localProfitPerDay),
-						})
-					}}
-					<span v-if="localIsStale">
-						{{ $t("raukk_overview.stale") }}
-					</span>
-				</div>
-				<div v-if="localProfitPerBase !== undefined">
-					{{
-						$t("raukk_overview.line_profit_per_base", {
-							perBase: formatNumber(localProfitPerBase),
-							baseFraction: formatNumber(
-								localSnapshot!.baseFraction!
-							),
-						})
-					}}
-				</div>
-				<div
-					v-for="group in localShipTime"
-					:key="group.bucket ?? 'RAUKKBUCKET#none'">
-					<span
-						v-for="(entry, index) in group.entries"
-						:key="entry.shipTypeId">
-						{{
-							$t("raukk_overview.line_ship_time", {
-								bucket:
-									group.bucket === undefined
-										? $t("raukk_overview.bucket_unknown")
-										: $t(
-												`raukk_sourcing.buckets.${group.bucket}`
-											),
-								ship: raukkShipTypeLabel(entry.shipTypeId),
-								perTrip: formatNumber(entry.hoursPerTrip),
-								visitDays:
-									entry.visitDays === null
-										? "—"
-										: formatNumber(entry.visitDays),
-								perDay: formatNumber(entry.hoursPerDay),
-							})
-						}}
-						<!-- a bucket flying two hull types is a split leg
-						set, and the reader has to see both on its line -->
-						<span
-							v-if="index < group.entries.length - 1"
-							class="text-amber-400">
-							{{ $t("raukk_overview.ship_time_split") }}
-						</span>
-					</span>
-				</div>
+	<template v-if="localSnapshot && localOutputs.length > 0">
+		<div
+			class="pt-2 text-xs"
+			:class="localIsStale ? 'text-amber-400' : 'text-white/50'">
+			<div>
+				{{
+					$t("raukk_overview.line_cost", {
+						cost: formatNumber(localCostPerDay),
+						repair: formatNumber(localRepairPerDay),
+					})
+				}}
 			</div>
-		</template>
-		{{ $t("raukk_overview.tooltip", { computedAt: localComputedAt }) }}
-	</PTooltip>
+			<div v-if="localProfitPerDay !== undefined">
+				{{
+					$t("raukk_overview.line_profit", {
+						profit: formatNumber(localProfitPerDay),
+					})
+				}}
+				<span v-if="localIsStale">
+					{{ $t("raukk_overview.stale") }}
+				</span>
+			</div>
+			<div v-if="localProfitPerBase !== undefined">
+				{{
+					$t("raukk_overview.line_profit_per_base", {
+						perBase: formatNumber(localProfitPerBase),
+						baseFraction: formatNumber(
+							localSnapshot!.baseFraction!
+						),
+					})
+				}}
+			</div>
+			<div
+				v-for="group in localShipTime"
+				:key="group.bucket ?? 'RAUKKBUCKET#none'">
+				<span
+					v-for="(entry, index) in group.entries"
+					:key="entry.shipTypeId">
+					{{
+						$t("raukk_overview.line_ship_time", {
+							bucket:
+								group.bucket === undefined
+									? $t("raukk_overview.bucket_unknown")
+									: $t(
+											`raukk_sourcing.buckets.${group.bucket}`
+										),
+							ship: raukkShipTypeLabel(entry.shipTypeId),
+							perTrip: formatNumber(entry.hoursPerTrip),
+							visitDays:
+								entry.visitDays === null
+									? "—"
+									: formatNumber(entry.visitDays),
+							perDay: formatNumber(entry.hoursPerDay),
+						})
+					}}
+					<!-- a bucket flying two hull types is a split leg
+						set, and the reader has to see both on its line -->
+					<span
+						v-if="index < group.entries.length - 1"
+						class="text-amber-400">
+						{{ $t("raukk_overview.ship_time_split") }}
+					</span>
+				</span>
+			</div>
+		</div>
+	</template>
 </template>

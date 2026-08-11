@@ -325,37 +325,27 @@
 	</div>
 	<!-- raukk: government production fee of one batch of this recipe -->
 	<div class="col-span-6 xl:col-span-2 text-xs">
-		<PTooltip v-if="localRecipeData.productionFeeBatch !== undefined">
-			<template #trigger>
-				<div class="flex flex-col hover:cursor-help">
-					<span class="text-white/80 text-nowrap">
-						{{
-							$t("plan.components.production_recipe.fee_batch", {
-								fee: formatNumber(
-									localRecipeData.productionFeeBatch
-								),
-							})
-						}}
-					</span>
-					<span class="text-white/50 text-nowrap">
-						{{
-							$t("plan.components.production_recipe.fee_unit", {
-								fee: formatNumber(
-									localRecipeData.productionFeePerUnit ?? 0
-								),
-							})
-						}}
-					</span>
-				</div>
-			</template>
-			{{ $t("plan.components.production_recipe.fee_tooltip") }}
-		</PTooltip>
-		<PTooltip v-else>
-			<template #trigger>
-				<span class="text-white/30 hover:cursor-help">—</span>
-			</template>
-			{{ $t("plan.components.production_recipe.fee_unknown_tooltip") }}
-		</PTooltip>
+		<div
+			v-if="localRecipeData.productionFeeBatch !== undefined"
+			class="flex flex-col">
+			<span class="text-white/80 text-nowrap">
+				{{
+					$t("plan.components.production_recipe.fee_batch", {
+						fee: formatNumber(localRecipeData.productionFeeBatch),
+					})
+				}}
+			</span>
+			<span class="text-white/50 text-nowrap">
+				{{
+					$t("plan.components.production_recipe.fee_unit", {
+						fee: formatNumber(
+							localRecipeData.productionFeePerUnit ?? 0
+						),
+					})
+				}}
+			</span>
+		</div>
+		<span v-else class="text-white/30">—</span>
 	</div>
 	<div class="col-span-6 xl:col-span-2 flex flex-row gap-x-3 items-center">
 		<template v-if="localRecipeData.dailyShare != 1">

@@ -111,7 +111,9 @@ describe("CXVolumeShare", () => {
 		const wrapper = render(share);
 
 		expect(wrapper.find(".trigger").text()).toContain("CI1 barely trades");
-		expect(wrapper.find(".content").text()).toContain("no depth here");
+		expect(wrapper.find(".content").text()).toContain(
+			"CI1 traded 0 units of BSE in 7 days."
+		);
 	});
 
 	it("carries both windows and the universe context in the tooltip", () => {
@@ -121,7 +123,6 @@ describe("CXVolumeShare", () => {
 		expect(content).toContain("9,656 units traded");
 		expect(content).toContain("9,018 units traded");
 		expect(content).toContain("UNIVERSE");
-		expect(content).toContain("you ARE the market");
 	});
 
 	it("omits the universe lines when the sale is universe wide", () => {
@@ -138,8 +139,8 @@ describe("CXVolumeShare", () => {
 		);
 		const lines = render(share).findAll(".content > div > div");
 
-		// intro, 7d, 30d, verdict — no repeated universe pair
-		expect(lines).toHaveLength(4);
+		// intro, 7d, 30d — no repeated universe pair
+		expect(lines).toHaveLength(3);
 	});
 
 	it("says so when the window traded nothing but the sale is tiny", () => {

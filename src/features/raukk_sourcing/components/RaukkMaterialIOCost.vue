@@ -15,8 +15,6 @@
 	// Util
 	import { formatNumber } from "@/util/numbers";
 
-	// UI
-	import { PTooltip } from "@/ui";
 	import { WarningAmberOutlined } from "@vicons/material";
 
 	// Types & Interfaces
@@ -148,31 +146,19 @@
 </script>
 
 <template>
-	<PTooltip v-if="localVisible">
-		<template #trigger>
-			<div
-				class="text-xs hover:cursor-help flex flex-row gap-x-1 items-center"
-				:class="localCostClass">
-				<WarningAmberOutlined
-					v-if="localIsWorseThanMarket"
-					class="w-3.5 h-3.5 shrink-0" />
-				<span>
-					{{
-						$t("raukk_matio.our_cost", {
-							cost: formatNumber(localCostPerDay ?? 0),
-						})
-					}}
-				</span>
-			</div>
-		</template>
-		{{
-			localIsWorseThanMarket
-				? $t("raukk_matio.our_cost_worse_tooltip", {
-						price: formatNumber(localUnitPrice ?? 0),
-					})
-				: $t("raukk_matio.our_cost_tooltip", {
-						price: formatNumber(localUnitPrice ?? 0),
-					})
-		}}
-	</PTooltip>
+	<div
+		v-if="localVisible"
+		class="text-xs flex flex-row gap-x-1 items-center"
+		:class="localCostClass">
+		<WarningAmberOutlined
+			v-if="localIsWorseThanMarket"
+			class="w-3.5 h-3.5 shrink-0" />
+		<span>
+			{{
+				$t("raukk_matio.our_cost", {
+					cost: formatNumber(localCostPerDay ?? 0),
+				})
+			}}
+		</span>
+	</div>
 </template>

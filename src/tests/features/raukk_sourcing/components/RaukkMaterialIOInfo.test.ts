@@ -130,9 +130,6 @@ describe("RaukkMaterialIOInfo", () => {
 
 			expect(wrapper.text()).toContain("← Hermes (120.00%)");
 			expect(wrapper.find(".text-negative").exists()).toBe(true);
-			expect(wrapper.text()).toContain(
-				raukk_matio.sourced_oversubscribed_tooltip
-			);
 		});
 
 		it("links a concrete source to its plan view", () => {

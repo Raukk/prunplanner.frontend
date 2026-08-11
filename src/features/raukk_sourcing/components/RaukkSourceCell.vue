@@ -292,10 +292,7 @@
 			:disabled="disabled"
 			:render-label="renderLabel"
 			@update:value="select" />
-		<span
-			v-if="fromDefault"
-			class="text-white/40 text-nowrap"
-			:title="$t('raukk_sourcing.defaults.row_marker_tooltip')">
+		<span v-if="fromDefault" class="text-white/40 text-nowrap">
 			{{ $t("raukk_sourcing.defaults.row_marker") }}
 		</span>
 	</div>

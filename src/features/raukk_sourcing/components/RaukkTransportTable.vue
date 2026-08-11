@@ -6,14 +6,13 @@
 
 	// Calculations
 	import { RAUKK_EPSILON_EQUAL } from "@/features/raukk_sourcing/calculations/raukkEpsilon";
-	import { RAUKK_REPAIR_BILL } from "@/features/raukk_sourcing/calculations/shipping";
 	import { IRaukkShipWear } from "@/features/raukk_sourcing/calculations/shippingWear";
 
 	// Components
 	import RaukkVisitCadence from "@/features/raukk_sourcing/components/RaukkVisitCadence.vue";
 
 	// UI
-	import { PInputNumber, PSelect, PTable, PTag, PTooltip } from "@/ui";
+	import { PInputNumber, PSelect, PTable, PTag } from "@/ui";
 	import { ColorKey, PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -164,9 +163,6 @@
 	}
 
 	/** The full repair bill, spelled out for the wear tooltip */
-	const billLabel: string = Object.entries(RAUKK_REPAIR_BILL)
-		.map(([ticker, units]) => `${units} ${ticker}`)
-		.join(" · ");
 
 	/**
 	 * Days until the repair threshold as the wear cell prints them: an
@@ -270,14 +266,7 @@
 					{{ $t("raukk_sourcing.transport.hired_per_unit") }}
 				</th>
 				<th class="text-right!">
-					<PTooltip>
-						<template #trigger>
-							<span class="hover:cursor-help">
-								{{ $t("raukk_sourcing.transport.difference") }}
-							</span>
-						</template>
-						{{ $t("raukk_sourcing.transport.difference_tooltip") }}
-					</PTooltip>
+					{{ $t("raukk_sourcing.transport.difference") }}
 				</th>
 			</tr>
 		</thead>
@@ -379,61 +368,16 @@
 					}}
 				</td>
 				<td class="text-right text-white/60">
-					<PTooltip
-						v-if="
-							row.legs.length > 0 &&
-							row.ownCostPerTrip !== undefined
-						">
-						<template #trigger>
-							<span class="hover:cursor-help">
-								{{ figure(row.ownCostPerTrip) }}
-							</span>
-						</template>
-						{{
-							$t(
-								"raukk_sourcing.transport.own_per_trip_tooltip",
-								{
-									legs: row.legs.length,
-									trips: formatNumber(row.tripsPerDay),
-									daily: formatNumber(
-										row.tripsPerDay *
-											(row.ownCostPerTrip ?? 0)
-									),
-								}
-							)
-						}}
-					</PTooltip>
-					<template v-else>
-						{{ figure(row.ownCostPerTrip) }}
-					</template>
+					{{ figure(row.ownCostPerTrip) }}
 				</td>
 				<td class="text-right text-white/60">
-					<PTooltip
-						v-if="row.ownWear && row.ownWear.damagePerTrip > 0">
-						<template #trigger>
-							<span class="hover:cursor-help">
-								{{
-									$t("raukk_sourcing.transport.wear_days", {
-										days: wearDaysLabel(row.ownWear),
-									})
-								}}
-							</span>
-						</template>
+					<span v-if="row.ownWear && row.ownWear.damagePerTrip > 0">
 						{{
-							$t("raukk_sourcing.transport.wear_tooltip", {
-								damage: formatNumber(
-									row.ownWear.damagePerTrip * 100
-								),
-								trips: formatNumber(
-									row.ownWear.tripsUntilRepair
-								),
-								cost: formatNumber(
-									row.ownWear.repairCostPerTrip
-								),
-								bill: billLabel,
+							$t("raukk_sourcing.transport.wear_days", {
+								days: wearDaysLabel(row.ownWear),
 							})
 						}}
-					</PTooltip>
+					</span>
 					<span v-else>—</span>
 				</td>
 				<td class="text-right">

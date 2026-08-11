@@ -9,7 +9,7 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PCheckbox, PTable, PTooltip } from "@/ui";
+	import { PCheckbox, PTable } from "@/ui";
 
 	// Types & Interfaces
 	import { IRaukkLocalPrice } from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -123,14 +123,6 @@
 				</th>
 				<th>
 					{{ $t("raukk_sourcing.outputs.lm_sell") }}
-					<PTooltip>
-						<template #trigger>
-							<span class="pl-1 text-white/40 hover:cursor-help">
-								(i)
-							</span>
-						</template>
-						{{ $t("raukk_sourcing.outputs.lm_sell_tooltip") }}
-					</PTooltip>
 				</th>
 			</tr>
 		</thead>
