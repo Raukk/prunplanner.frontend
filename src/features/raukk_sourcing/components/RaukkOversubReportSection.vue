@@ -507,7 +507,6 @@
 				<PButton
 					:type="refActiveTab === 'table' ? 'primary' : 'secondary'"
 					size="sm"
-					:title="tabTooltip('table')"
 					@click="() => (refActiveTab = 'table')">
 					{{ $t("raukk_sourcing.oversub_report.tabs.table") }}
 				</PButton>
@@ -516,7 +515,6 @@
 					:key="tab.key"
 					:type="refActiveTab === tab.key ? 'primary' : 'secondary'"
 					size="sm"
-					:title="tabTooltip(tab.key)"
 					@click="() => (refActiveTab = tab.key)">
 					{{ $t(tab.labelKey) }}
 				</PButton>

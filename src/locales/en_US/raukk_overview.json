@@ -6,8 +6,5 @@
 	"bucket_unknown": "Unbucketed",
 	"ship_time_split": "+",
 	"stale": "(stale)",
-	"shipping_label": "Est. Shipping",
-	"shipping_tooltip": "Freight this base pays per day at its sourcing snapshot from {computedAt}: the inbound freight of the inputs it buys plus the outbound freight of what it sells, over its own lanes. Units drawn from another base carry that base's freight inside their price and are not counted here, so no lane is charged twice across the empire. The vanilla rows around it do not include this cost.",
-	"shipping_tooltip_missing": "No sourcing snapshot for this plan yet — compute one in the sourcing section further down the page.",
-	"tooltip": "Daily numbers at the plan's sourcing snapshot from {computedAt}: full true cost of all outputs, repair capital cost (the degradation counterpart) and profit against the frozen market sell prices. The per-base line divides that profit by the base fraction — the number of base permits the product chain really occupies. Ship time lines state, per cargo bucket and per hull type over the plan's own lanes, the average round trip, how often one lifts off and the summed flight hours per day; hired lanes cost ȼ but none of these hours. Each bucket flies its own cadence — production at the in/out cap, consumables at the workforce cap, repair materials at the plan's repair cycle — so one line per bucket is one real visit schedule. Two hulls joined by a + on one bucket's line mean its legs did not agree on a single ship. The vanilla numbers above stay untouched."
+	"shipping_label": "Est. Shipping"
 }

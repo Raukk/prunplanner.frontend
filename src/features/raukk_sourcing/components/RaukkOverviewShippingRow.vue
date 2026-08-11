@@ -12,10 +12,6 @@
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
-	import { formatDate } from "@/util/date";
-
-	// UI
-	import { PTooltip } from "@/ui";
 
 	const props = defineProps({
 		planUuid: {
@@ -25,7 +21,7 @@
 		},
 	});
 
-	const { snapshot, outputs, isStale } = useRaukkOverviewSnapshot(
+	const { outputs, isStale } = useRaukkOverviewSnapshot(
 		toRef(props, "planUuid")
 	);
 
@@ -48,34 +44,12 @@
 				)
 			: undefined
 	);
-
-	const localComputedAt: ComputedRef<string> = computed(() =>
-		snapshot.value
-			? formatDate(
-					new Date(snapshot.value.computedAt),
-					"YYYY-MM-DD HH:mm"
-				)
-			: "—"
-	);
 </script>
 
 <template>
 	<tr>
 		<td>
-			<PTooltip>
-				<template #trigger>
-					<span class="hover:cursor-help">
-						{{ $t("raukk_overview.shipping_label") }}
-					</span>
-				</template>
-				{{
-					localShippingPerDay === undefined
-						? $t("raukk_overview.shipping_tooltip_missing")
-						: $t("raukk_overview.shipping_tooltip", {
-								computedAt: localComputedAt,
-							})
-				}}
-			</PTooltip>
+			<span>{{ $t("raukk_overview.shipping_label") }}</span>
 		</td>
 		<td :class="isStale ? 'text-amber-400!' : ''">
 			<template v-if="localShippingPerDay === undefined"> — </template>

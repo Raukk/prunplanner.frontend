@@ -13,11 +13,9 @@
 		"cadence_workforce": "Days/Visit Workforce",
 		"cadence_repair": "Days/Visit Repair",
 		"data_label": "Sourcing Data",
-		"cadence_tooltip": "Days between two deliveries this plan accepts, per cargo class: production in and out, workforce consumables, repair materials. Empty follows the account default — the placeholder shows what applies. Any positive day count is allowed; 365 means once a year. The cap binds the shipping: a hold needing longer to fill flies partly loaded, and a partial trip pays a full trip.",
 		"compute": "Compute Snapshot",
 		"compute_error": "Snapshot computation failed: {message}",
 		"recompute_chain": "Recompute Chain",
-		"recompute_chain_tooltip": "Recomputes the snapshots of this plan's whole sourcing chain — its sources, this plan and everything drawing from it — upstream first.",
 		"recompute_chain_progress": "Recomputing {done}/{total}: {name}…",
 		"recompute_chain_error": "{name}: {message}",
 		"export": "Export JSON",
@@ -36,10 +34,7 @@
 		"current": "Current",
 		"stale_sources": "{count} upstream snapshot(s) used here are stale",
 		"base_fraction": "Base fraction: {value}",
-		"base_fraction_tooltip": "Base permits this product chain occupies: the plan's own base plus, per source plan, the cost-weighted share of that source's output drawn here, times the source's own base fraction. Fully using this base and half of another one gives 1.50. High values mean the chain ties up several bases — often cheaper to buy than to build.",
-		"shipping_fraction": "Ship time: {value}",
-		"shipping_fraction_tooltip": "Ship time this plan's own route pairs occupy: trips per day times round-trip time, divided by a full day of the ships available on the profile. 100 % means one ship flies for this plan around the clock, and a figure past it — shown in red — means the lanes need more ships. Lanes flown by a hired LM carrier count as 0 %.",
-		"shipping_fraction_link_hint": "Click to manage the fleet and its routes."
+		"shipping_fraction": "Ship time: {value}"
 	},
 	"inputs_title": "Inputs",
 	"inputs": {
@@ -57,7 +52,6 @@
 		"repair_cost": "Repair Capital Cost / Day",
 		"market": "Market",
 		"lm_buy": "LM Buy",
-		"lm_buy_tooltip": "LM Buy prices this input at an ad on the local market of this base's own planet: nothing is bought at the exchange and no freight is charged for it, whatever cargo class it belongs to. Pick a basis and a price — Manual is the absolute ȼ/unit you offer, any market basis follows that price at the exchange named next to the basis minus the offset you enter (negative bids above it), never dropping below zero. A basis whose side of the book is empty — every side of the synthetic UNIVERSE exchange is — falls back to the 30 day VWAP. The resolved ȼ/unit is shown after the field and turns red once the offset has eaten the whole basis price. Trading on the local market needs a Pro license in game; a Basic account can still trade when the counterpart holds one.",
 		"empty": "This plan has no net inputs.",
 		"shipping_cost_link": "ship fuel included — priced and sourced account-wide on the Shipping page",
 		"groups": {
@@ -119,24 +113,11 @@
 			"depots": "Depots",
 			"gates": "Gates",
 			"visuals": "Visuals",
-			"calibration": "Calibration",
-			"settings_tooltip": "Account-wide shipping switches: whether shipping is charged at all, the default ship profile, cadences and the CX anchor rule.",
-			"defaults_tooltip": "Where every base sources each input group by default, set once instead of base by base. Independent of the shipping switch.",
-			"sourcing_tooltip": "Where the fleet gets its fuel and its repair materials from, account-wide. Refuelling and repairs happen at the exchange or the depot, so none of it is shipped.",
-			"fleet_tooltip": "Every ship the account commits, its wear and its share of the repair bill.",
-			"transport_tooltip": "Every stored lane, what your own fleet charges to fly it and what hiring an LM carrier would cost instead.",
-			"chains_tooltip": "Routes the cargo actually flies — authored chains and the automatic ones.",
-			"hubspoke_tooltip": "Cargo no chain hauls: what each base still sells at its exchange and buys back at another, one grid per cargo class.",
-			"depots_tooltip": "Planets that act as ship homes and handover points.",
-			"gates_tooltip": "Gates you plan to build: what they cost, whether they are in range, and what the routes look like once they exist.",
-			"visuals_tooltip": "The account's freight drawn out: a star map of every lane, and weight against volume per trip versus a bay's hold.",
-			"calibration_tooltip": "Per-hull figures behind every cost on this page — speeds, fuel burn and hold sizes."
+			"calibration": "Calibration"
 		},
 		"manage_link": "Manage fleet & routes",
 		"recompute": "Recompute Chains",
-		"recompute_tooltip": "Re-costs every chain from the stored snapshot flows. It never touches the snapshots — use Recompute Snapshots for those.",
 		"recompute_snapshots": "Recompute Snapshots",
-		"recompute_snapshots_tooltip": "Recomputes every stored snapshot flagged stale, upstream first, then re-costs the chains. This is what moves lanes onto a changed fleet: a ship count crossing zero stales the stored results, but the assignment each lane was costed with only changes when its plan is recomputed.",
 		"recompute_snapshots_progress": "Recomputing snapshot {done}/{total}: {name}…",
 		"snapshot_error": "{name}: {message}",
 		"chain_error": "Chain '{name}': {message}",
@@ -164,16 +145,13 @@
 		"round_trip": "Round Trip",
 		"round_trip_minutes": "{minutes} min",
 		"own_per_trip": "Own ȼ/Trip",
-		"own_per_trip_tooltip": "Trip-weighted mean over this lane's {legs} leg(s), which may fly different hulls: the lane costs {daily} ȼ/day in total at {trips} trips/day, ȼ/day being the sum of each leg's trips times that leg's ȼ/trip. Days per visit of each leg are in the Days / Visit column.",
 		"wear": "Repair In",
 		"wear_days": "{days} d",
-		"wear_tooltip": "Micrometeorite and jump wear of your own fleet on this lane: {damage} % hull damage per round trip, so a ship drops to the 80 % condition repair point after about {trips} trips. Wear costs {cost} ȼ per trip; a full repair bill is {bill}.",
 		"rate_per_trip": "LM ȼ/Trip",
 		"rate_placeholder": "not hired",
 		"own_per_unit": "Own ȼ/u",
 		"hired_per_unit": "Hired ȼ/u",
 		"difference": "Difference ȼ/u",
-		"difference_tooltip": "Hired ȼ/u minus own ȼ/u: what a hired unit costs on top of flying it yourself, negative where the ad is the cheaper one to run. Operating cost only — the own ȼ presume a hull you already own, and buying one is not in either column.",
 		"hired": "Hired",
 		"stale": "stale",
 		"empty": "No stored lanes yet — compute a plan snapshot, or check that its inputs and outputs actually move."
@@ -183,15 +161,11 @@
 		"enabled": "Charge Shipping",
 		"disabled_info": "Shipping is off: freight costs nothing and no snapshot changes. Turning it on marks every stored snapshot stale — the fleet is account-global, so it moves the numbers of every plan.",
 		"unassigned_sources": "Source From Unassigned Plans",
-		"unassigned_sources_tooltip": "Off by default: a plan assigned to no empire on the Management screen produces nothing for the plans that are. A configuration still naming one falls back to the market price and books no draw. Switched on, such a plan is offered as a source again and its cost per unit is charged — its lanes are ignored by chains, the fleet and hub/spoke either way. Flipping this marks every stored snapshot stale.",
 		"default_profile": "Default Profile",
 		"same_system_cost": "Same-System ȼ/Trip",
 		"cadence_in_out": "Days/Visit In-Out",
 		"cadence_workforce": "Days/Visit Workforce",
-		"cadence_tooltip": "Account default for the maximum days between two deliveries of that cargo class. Repair materials follow each plan's own repair day. Every plan may override all three. The cap binds the shipping, not the storage: a hold needing longer to fill flies partly loaded, and a partial trip pays a full trip.",
 		"calibration_info": "Calibration constants per hull and FTL reactor, pre-filled from recorded test flights. Cost per parsec and per sublight block are left empty on purpose: an empty field follows the profile's fuel burn at the current FF and SF price. Type a number to override one, empty it again to go back to the derived value. Edited profiles override the preset until reset.",
-		"derived_tooltip": "Empty: derived from this profile's fuel burn times the current FF (per parsec) or SF (per sublight block) price. Any number you enter — zero included — wins.",
-		"stl_only_tooltip": "A hull built without an FTL drive and reactor — roughly a quarter cheaper. It can only leave its system through a GATE, which drops it straight into the destination orbit, so it serves same-system lanes and lanes whose every inter-system hop is a gate. A lane without such a route is an error, not a slower route: the ship cannot fly it. The FTL constants are greyed out for such a profile and kept as they are.",
 		"profile": "Profile",
 		"overridden": "Edited",
 		"reset_profile": "Reset",
@@ -222,7 +196,6 @@
 		"market_price": "Market ȼ/u",
 		"margin": "Margin ȼ/u",
 		"lm_sell": "LM Sell",
-		"lm_sell_tooltip": "LM Sell puts all of this ticker's market-bound excess on the local market of this base's own planet instead of shipping it to the exchange — the whole ticker is then valued at the ad price. Units other bases draw from here are unaffected and keep shipping on their usual lanes. Pick a basis and a price — Manual is the absolute ȼ/unit you ask, any market basis follows that price at the exchange named next to the basis minus the offset you enter (negative asks above it), never dropping below zero. A basis whose side of the book is empty — every side of the synthetic UNIVERSE exchange is — falls back to the 30 day VWAP. The resolved ȼ/unit is shown after the field and turns red once the offset has eaten the whole basis price. Trading on the local market needs a Pro license in game; a Basic account can still trade when the counterpart holds one.",
 		"empty": "This plan has no net outputs."
 	},
 	"fleet": {
@@ -238,13 +211,8 @@
 		"utilization": "Shipping Capacity",
 		"drydock": "Drydock",
 		"drydock_days": "≈ {days} d",
-		"drydock_tooltip": "One hull of this type takes {damage} % micrometeorite and jump damage per day over its assigned lanes and chains, so it drops to the 80 % condition repair point after the stated days. A full repair bill is {bill}.",
-		"drydock_cost": "Wear over all hulls of the type costs {daily} ȼ/day, already included in the lane and chain costs.",
-		"drydock_unknown": "At least one stored result of this type predates wear tracking, so the wear is unknown rather than zero. Recompute the plan snapshots and chains to fill it in.",
 		"assigned": "Routes",
-		"assigned_tooltip": "Lanes and chains this type flies. Click to list them: the Transport tab opens filtered to this hull, and the Chains tab filters on the same selection — a route counted here is one or the other. Hired work is not counted, someone else's ship flies it.",
 		"stale": "stale",
-		"stale_tooltip": "{stale} of {total} routes on this type come from stored results flagged stale: the assignment is what the LAST compute chose, and a fleet change stales the stored results without moving anything. Recompute the plan snapshots and the chains and the automatic pick reruns over the fleet you own now.",
 		"calibrate": "Calibrate",
 		"remove": "Remove",
 		"add": "Add Type",
@@ -375,7 +343,6 @@
 			"summary": "· {minutes} min round trip · {cost} ȼ/day",
 			"hired": "Hired",
 			"wear": "{damage} %/trip wear · repair after ~{trips} trips ≈ {days} d",
-			"wear_tooltip": "Micrometeorite and jump damage of one loop, summed over its legs and weighted by the meteoroid density flown through. Wear costs {cost} ȼ per trip — {daily} ȼ/day — already included in the loop cost.",
 			"leg": "Leg",
 			"parsecs": "Parsecs",
 			"weight": "t / Trip",
@@ -383,7 +350,6 @@
 			"utilization": "Load",
 			"duration": "Hours",
 			"fuel": "Fuel ȼ / Trip",
-			"fuel_overridden": "This ship profile carries a manual ȼ/parsec or ȼ/STL block, which wins over its fuel burn — so this is the cost basis the ȼ/trip next to it is charged from, not a measured burn.",
 			"cost_trip": "ȼ / Trip",
 			"binding": "Weakest link",
 			"same_system": "Same system",
@@ -413,20 +379,12 @@
 			"partial": "half-empty runs",
 			"neighbours": "on the way"
 		},
-		"reason_tooltip": {
-			"supply": "One of these bases feeds another: the loop exists to carry that cargo, and its stop order is fixed by it — the producing base is always visited before the one consuming from it.",
-			"partial": "Every stop trades with the exchange only, and a visit still leaves the ship less than half full. Each base flying its own lane would pay a full round trip for a part load, so they share one lap — the fleet is charged ship time, not cargo.",
-			"neighbours": "The stops fill the ship on their own and sit on one another's way, so one loop through all of them is shorter than a separate lane each."
-		},
 		"cap_days": "Days / Visit Cap",
-		"cap_days_tooltip": "Longest gap between two visits this loop accepts, the tightest cadence of the bases it serves. A loop reaching the cap flies before its hold is full, and that partial trip pays a full trip.",
 		"empty": "No automatic chains. Bases carrying less than the stop share, sitting outside the detour budget or anchored at another exchange trade through the exchange instead.",
 		"config": {
 			"min_share": "Stop Share",
-			"min_share_tooltip": "Share of a shipments weight OR volume a base has to carry before a loop stops there. Below it the cargo goes through the exchange.",
 			"detour_in_out": "In/Out Detour (pc)",
-			"detour_loose": "Workforce & Repair Detour (pc)",
-			"detour_tooltip": "Parsecs a stop may add to the round trip. The in/out class flies every two weeks and pays every parsec often, the 30 and 90 day classes can afford a short extra jump."
+			"detour_loose": "Workforce & Repair Detour (pc)"
 		},
 		"class_note": {
 			"production": "Inputs and outputs: the fortnightly runs that carry the tonnage and size the fleet.",
@@ -455,8 +413,7 @@
 	"cx_anchor": {
 		"label": "CX Anchor",
 		"plan_label": "Plan CX Anchor",
-		"nearest": "Nearest",
-		"tooltip": "Exchange a base ships through. Bases sharing an anchor form the region an automatic chain is built over; a plan may override the account wide setting."
+		"nearest": "Nearest"
 	},
 	"depots": {
 		"title": "Depots",
@@ -467,9 +424,7 @@
 		"chains": "Chains",
 		"unused": "Unused",
 		"unrouted": "Unknown Planet",
-		"unrouted_tooltip": "No system of the route index carries this id, so no chain can be cut here — check the spelling, e.g. ZV-307c.",
 		"nogate": "No Gate",
-		"nogate_tooltip": "No gate is known on this planet, so no non-FTL ship can be based here — such a hull can only leave its own system through a gate. The depot still anchors chain splits for FTL haulers. The gate list is a transcription of the map and may simply not know a gate you built.",
 		"remove": "Remove",
 		"add": "Add Depot",
 		"add_placeholder": "Planet id, e.g. ZV-307c",
@@ -488,7 +443,6 @@
 		"rollup": {
 			"chains": "Chains ȼ / Day",
 			"rent": "Depot Rent ȼ / Day",
-			"rent_tooltip": "Warehouse rent of every depot a chain calls at, weekly rent divided by seven. Charged ONCE per depot and day however many chains visit it — it is the warehouse standing there, not a docking fee.",
 			"total": "Shipping ȼ / Day"
 		}
 	},
@@ -508,7 +462,6 @@
 		"add": "Add Gate",
 		"hcb": "HCB",
 		"duplicate": "Duplicate",
-		"duplicate_tooltip": "'{gate}' already links these two systems. A gate is bidirectional — the route graph carries both directions of every link — so this row plans nothing the other does not already plan, and its build ȼ are counted on top of it. Remove one of the two.",
 		"duplicate_warning": "{count} planned gate(s) repeat a link another row already plans, the same pair the other way round or between two other planets of the same two systems. Their build ȼ are counted twice in the total below. Remove the copies.",
 		"unrouted": "Unroutable",
 		"opens_route": "opens a route",
@@ -518,14 +471,6 @@
 		"status": {
 			"construction": "Under construction",
 			"proposed": "Wishlist"
-		},
-		"issue": {
-			"no_endpoints": "The gate is missing a planet on one of its sides.",
-			"unknown_a": "No planet of the A side id is known — check the spelling, e.g. ZV-307c.",
-			"unknown_b": "No planet of the B side id is known — check the spelling, e.g. OT-580b.",
-			"same_system": "Both planets sit in one system, and a gate bridges systems — there is nothing here to traverse.",
-			"out_of_range": "The gap is wider than this gate's linking range. It needs {needed} range upgrade(s) to reach — buy them in the Upgrades column.",
-			"unreachable_range": "The gap is wider than any gate can link, even with all 3 range upgrades (25 parsecs). No gate can be built here."
 		},
 		"hint": {
 			"empty": "Type both planet ids to enable Add Gate.",
@@ -549,12 +494,10 @@
 		},
 		"budget_left": "{left} of {total} upgrade levels left",
 		"build_cost": "Build ȼ",
-		"build_cost_tooltip": "{ends} gate(s) at today's exchange prices. A link is always two gates, one at each end — pick \"Build one end\" when the far one already stands or a partner is putting it up, and only your own is billed. It changes the bill and nothing else: the route, the fee and the clearance are the same either way. The bill is dominated by a few enormous positions ({materials}), and those are thin markets: this is what the exchange says today, not what actually buying that much would cost.",
 		"cost_note": "A link is two gates, one at each end, and Build ȼ counts both of them unless a row is set to \"Build one end\" — for a link whose far gate already stands or is somebody else's to build. That is a billing choice only: a gate is bidirectional and routes identically either way, which is also why the same pair reversed is not a second gate. A gate holds {budget} upgrade levels in total across uses, volume and range, so every level of range is a level of clearance not bought. Upgrade cost is triangular: the n-th level costs n times the first, so the third level of an upgrade costs three times what the first one did.",
 		"rollup_build": "Build ȼ, every planned link",
 		"out_of_range_tag": "Out of Range",
-		"not_routed": "Not Routed",
-		"enabled_broken": "Switched on, but this gate cannot exist as configured, so nothing is being routed over it. Fix the range or the planets — or switch it off."
+		"not_routed": "Not Routed"
 	},
 	"oversub_report": {
 		"title": "Oversubscription",
@@ -659,7 +602,6 @@
 			"utilization": "Utilization",
 			"flags": "Flags"
 		},
-		"self_marker_tooltip": "This producer draws its own output; the self draw comes off the top of its capacity before any subscriber counts.",
 		"utilization_na": "n/a",
 		"badges": {
 			"stale": "Stale",
@@ -677,10 +619,7 @@
 		},
 		"recompute": {
 			"row": "Recompute",
-			"row_tooltip": "Recomputes the full dependency subgraph of this producer — its sources, the plan itself and its dependents. The subgraph may include plans outside this empire.",
 			"fleet": "Recompute chain results",
-			"fleet_tooltip": "Reprices every shipping chain from the stored snapshot flows — the same recompute as on the Shipping page. The snapshots themselves stay untouched.",
-			"busy_tooltip": "A sourcing recompute is already running — wait for it to finish before starting another.",
 			"strip_current": "Recomputing {name} …",
 			"strip_scope": "Recomputing the full dependency subgraph — it may include plans outside this empire.",
 			"fleet_running": "Recomputing chain results …",
@@ -866,8 +805,6 @@
 		"info": "The account's frozen freight, drawn two ways: where the cargo actually flies, and whether a bay can carry it.",
 		"tab_map": "Freight star map",
 		"tab_plane": "Weight / volume plane",
-		"tab_map_tooltip": "Every lane on the real system coordinates — which stops carry the tonnage, which gates the freight passes.",
-		"tab_plane_tooltip": "Every lane as one dot of weight against volume per trip, against the selected bay's hold — which cargo needs a bigger ship, and which dimension binds.",
 		"empty": "No frozen flows yet. Recompute the plans with shipping enabled and the account's cargo shows up here."
 	},
 	"shipping_map": {
@@ -925,7 +862,6 @@
 	"ship_sourcing": {
 		"title": "Fleet Sourcing",
 		"info": "Where the fleet gets what it consumes, for the whole account at once: the fuel every ship burns and the materials every repair eats. Both are fleet costs, not base costs — one fleet serves every base — so they are set here instead of base by base. Refuelling and repairs happen at the exchange or at a depot, so none of these materials is ever shipped and none of them pays freight. Changing anything marks every stored snapshot and every chain result stale.",
-		"tooltip": "The group setting applies to every ticker of the group that has no row setting of its own. \"All producers\" prices the units at your own bases: weighted average, worst case, or the weighted average with a market top-up for the share your bases cannot cover. A row setting always wins; pick \"CX Preference (pinned)\" on a row to opt that one ticker out of its group setting.",
 		"none": "No group setting (exchange price)",
 		"follow_group": "Group setting",
 		"daily_need": "Fleet Need / Day",
@@ -941,7 +877,6 @@
 		"none": "No default (all producers + market top-up)",
 		"cx": "CX Preference price (drawn from no base)",
 		"row_marker": "(default)",
-		"row_marker_tooltip": "Follows the account default of this input group, this base stores no setting of its own.",
 		"confirm_title": "Replace the settings on every base?",
 		"confirm_text": "{tickers} ticker setting(s) on {plans} base(s) override this default. Replacing drops them, so those bases follow the account default from here on.",
 		"confirm_apply": "Replace everywhere",

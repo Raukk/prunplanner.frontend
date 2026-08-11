@@ -9,7 +9,7 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PTable, PTooltip } from "@/ui";
+	import { PTable } from "@/ui";
 
 	// Types & Interfaces
 	import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -120,24 +120,16 @@
 			</tr>
 			<tr v-if="localSourcedPerDay !== undefined">
 				<td>
-					<PTooltip>
-						<template #trigger>
-							<span
-								class="hover:cursor-help"
-								:class="
-									localIsStale
-										? 'text-amber-400'
-										: 'text-white/50'
-								">
-								{{
-									$t("raukk_repair.totals.sourced", {
-										days: localSourcedDay ?? "—",
-									})
-								}}
-							</span>
-						</template>
-						{{ $t("raukk_repair.totals.sourced_tooltip") }}
-					</PTooltip>
+					<span
+						:class="
+							localIsStale ? 'text-amber-400' : 'text-white/50'
+						">
+						{{
+							$t("raukk_repair.totals.sourced", {
+								days: localSourcedDay ?? "—",
+							})
+						}}
+					</span>
 				</td>
 				<td
 					class="text-end"

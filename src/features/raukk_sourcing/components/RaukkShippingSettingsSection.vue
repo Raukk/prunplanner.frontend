@@ -16,7 +16,7 @@
 	import { RAUKK_CX_ANCHOR_NEAREST } from "@/features/raukk_sourcing/calculations/shippingFlows";
 
 	// UI
-	import { PCheckbox, PInputNumber, PSelect, PTooltip } from "@/ui";
+	import { PCheckbox, PInputNumber, PSelect } from "@/ui";
 
 	// Types & Interfaces
 	import { IRaukkShippingConfig } from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -116,14 +116,9 @@
 				class="pl-3"
 				:checked="config.allowUnassignedSources === true"
 				@update:checked="(v) => toggleUnassignedSources(v === true)" />
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold hover:cursor-help">
-						{{ $t("raukk_sourcing.shipping.unassigned_sources") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.shipping.unassigned_sources_tooltip") }}
-			</PTooltip>
+			<div class="font-bold">
+				{{ $t("raukk_sourcing.shipping.unassigned_sources") }}
+			</div>
 
 			<template v-if="config.enabled">
 				<div class="font-bold pl-3">
@@ -145,14 +140,9 @@
 					:value="config.sameSystemFlatCost"
 					@update:value="changeSameSystemFlatCost" />
 
-				<PTooltip>
-					<template #trigger>
-						<div class="font-bold pl-3 hover:cursor-help">
-							{{ $t("raukk_sourcing.shipping.cadence_in_out") }}
-						</div>
-					</template>
-					{{ $t("raukk_sourcing.shipping.cadence_tooltip") }}
-				</PTooltip>
+				<div class="font-bold pl-3">
+					{{ $t("raukk_sourcing.shipping.cadence_in_out") }}
+				</div>
 				<PInputNumber
 					class="min-w-25"
 					:min="1"
@@ -162,16 +152,9 @@
 					"
 					@update:value="changeCadenceInOut" />
 
-				<PTooltip>
-					<template #trigger>
-						<div class="font-bold pl-3 hover:cursor-help">
-							{{
-								$t("raukk_sourcing.shipping.cadence_workforce")
-							}}
-						</div>
-					</template>
-					{{ $t("raukk_sourcing.shipping.cadence_tooltip") }}
-				</PTooltip>
+				<div class="font-bold pl-3">
+					{{ $t("raukk_sourcing.shipping.cadence_workforce") }}
+				</div>
 				<PInputNumber
 					class="min-w-25"
 					:min="1"
@@ -181,14 +164,9 @@
 					"
 					@update:value="changeCadenceWorkforce" />
 
-				<PTooltip>
-					<template #trigger>
-						<div class="font-bold pl-3 hover:cursor-help">
-							{{ $t("raukk_sourcing.cx_anchor.label") }}
-						</div>
-					</template>
-					{{ $t("raukk_sourcing.cx_anchor.tooltip") }}
-				</PTooltip>
+				<div class="font-bold pl-3">
+					{{ $t("raukk_sourcing.cx_anchor.label") }}
+				</div>
 				<PSelect
 					class="w-40!"
 					:value="config.cxAnchorMode ?? RAUKK_CX_ANCHOR_NEAREST"

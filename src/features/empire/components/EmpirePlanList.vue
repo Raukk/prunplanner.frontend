@@ -207,7 +207,7 @@
 					class="text-nowrap text-end"
 					:title="
 						hasROI(rowData.roi)
-							? t('empire.plan_list.roi_tooltip')
+							? undefined
 							: t('empire.plan_list.roi_never')
 					">
 					<span :class="roiClass(rowData.roi)">

@@ -18,9 +18,6 @@
 	import { formatNumber } from "@/util/numbers";
 	import { isAggregateSource } from "@/features/raukk_sourcing/raukkSourcingPricing";
 
-	// UI
-	import { PTooltip } from "@/ui";
-
 	// Types & Interfaces
 	import {
 		IRaukkSnapshot,
@@ -115,9 +112,8 @@
 		if (!isAggregateSource(source.sourcePlanUuid))
 			return raukkSourcingStore
 				.producersOf(props.ticker)
-				.find(
-					(producer) => producer.planUuid === source.sourcePlanUuid
-				)?.planName;
+				.find((producer) => producer.planUuid === source.sourcePlanUuid)
+				?.planName;
 
 		const count: number = raukkSourcingStore
 			.producersOf(props.ticker)
@@ -252,49 +248,34 @@
 </script>
 
 <template>
-	<PTooltip v-if="localSourceLabel">
-		<template #trigger>
-			<router-link
-				v-if="localSourceLink"
-				:to="localSourceLink"
-				class="pl-1 text-xs hover:underline"
-				:class="
-					localSourceOversubscribed ? 'text-negative' : 'text-white/40'
-				">
-				{{ localSourceText }}
-			</router-link>
-			<span
-				v-else
-				class="pl-1 text-xs hover:cursor-help"
-				:class="
-					localSourceOversubscribed ? 'text-negative' : 'text-white/40'
-				">
-				{{ localSourceText }}
-			</span>
-		</template>
+	<template v-if="localSourceLabel">
+		<router-link
+			v-if="localSourceLink"
+			:to="localSourceLink"
+			class="pl-1 text-xs hover:underline"
+			:class="
+				localSourceOversubscribed ? 'text-negative' : 'text-white/40'
+			">
+			{{ localSourceText }}
+		</router-link>
+		<span
+			v-else
+			class="pl-1 text-xs"
+			:class="
+				localSourceOversubscribed ? 'text-negative' : 'text-white/40'
+			">
+			{{ localSourceText }}
+		</span>
+	</template>
+	<span
+		v-else-if="localSubscription"
+		class="pl-1 text-xs"
+		:class="localOversubscribed ? 'text-negative' : 'text-white/40'">
 		{{
-			localSourceOversubscribed
-				? $t("raukk_matio.sourced_oversubscribed_tooltip")
-				: $t("raukk_matio.sourced_tooltip")
+			$t("raukk_matio.subscribed", {
+				units: formatNumber(localSubscription.totalDrawnPerDay),
+				percent: formatNumber(localSubscription.pctOfOutput * 100),
+			})
 		}}
-	</PTooltip>
-	<PTooltip v-else-if="localSubscription">
-		<template #trigger>
-			<span
-				class="pl-1 text-xs hover:cursor-help"
-				:class="
-					localOversubscribed ? 'text-negative' : 'text-white/40'
-				">
-				{{
-					$t("raukk_matio.subscribed", {
-						units: formatNumber(localSubscription.totalDrawnPerDay),
-						percent: formatNumber(
-							localSubscription.pctOfOutput * 100
-						),
-					})
-				}}
-			</span>
-		</template>
-		{{ $t("raukk_matio.subscribed_tooltip") }}
-	</PTooltip>
+	</span>
 </template>

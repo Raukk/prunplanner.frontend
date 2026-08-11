@@ -18,7 +18,7 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PButton, PTable, PTag, PTooltip } from "@/ui";
+	import { PButton, PTable, PTag } from "@/ui";
 
 	// Types & Interfaces
 	import {
@@ -202,15 +202,7 @@
 					</td>
 					<td class="text-right text-white/60">
 						{{ formatNumber(row.selfPerDay)
-						}}<span
-							v-if="row.selfPerDay > 0"
-							:title="
-								$t(
-									'raukk_sourcing.oversub_report.self_marker_tooltip'
-								)
-							">
-							⌂</span
-						>
+						}}<span v-if="row.selfPerDay > 0"> ⌂</span>
 					</td>
 					<td class="text-right">
 						{{ formatNumber(row.netPerDay) }}
@@ -271,35 +263,19 @@
 						</div>
 					</td>
 					<td class="text-right">
-						<PTooltip>
-							<template #trigger>
-								<PButton
-									size="sm"
-									type="secondary"
-									:disabled="recomputeBusy"
-									@click="
-										emit(
-											'recompute-plan',
-											row.producerPlanUuid
-										)
-									">
-									{{
-										$t(
-											"raukk_sourcing.oversub_report.recompute.row"
-										)
-									}}
-								</PButton>
-							</template>
+						<PButton
+							size="sm"
+							type="secondary"
+							:disabled="recomputeBusy"
+							@click="
+								emit('recompute-plan', row.producerPlanUuid)
+							">
 							{{
-								recomputeBusy
-									? $t(
-											"raukk_sourcing.oversub_report.recompute.busy_tooltip"
-										)
-									: $t(
-											"raukk_sourcing.oversub_report.recompute.row_tooltip"
-										)
+								$t(
+									"raukk_sourcing.oversub_report.recompute.row"
+								)
 							}}
-						</PTooltip>
+						</PButton>
 					</td>
 				</tr>
 				<template v-if="refExpanded.has(rowKey(row))">
@@ -358,28 +334,13 @@
 					{{ $t("raukk_sourcing.oversub_report.groups.fleet_note") }}
 				</span>
 			</h4>
-			<PTooltip>
-				<template #trigger>
-					<PButton
-						size="sm"
-						type="secondary"
-						:disabled="recomputeBusy"
-						@click="emit('recompute-fleet')">
-						{{
-							$t("raukk_sourcing.oversub_report.recompute.fleet")
-						}}
-					</PButton>
-				</template>
-				{{
-					recomputeBusy
-						? $t(
-								"raukk_sourcing.oversub_report.recompute.busy_tooltip"
-							)
-						: $t(
-								"raukk_sourcing.oversub_report.recompute.fleet_tooltip"
-							)
-				}}
-			</PTooltip>
+			<PButton
+				size="sm"
+				type="secondary"
+				:disabled="recomputeBusy"
+				@click="emit('recompute-fleet')">
+				{{ $t("raukk_sourcing.oversub_report.recompute.fleet") }}
+			</PButton>
 		</div>
 		<PTable striped>
 			<thead>

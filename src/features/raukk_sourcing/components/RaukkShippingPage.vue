@@ -43,7 +43,7 @@
 	} from "@/features/raukk_sourcing/calculations/shippingSections";
 
 	// UI
-	import { PButton, PButtonGroup, PTooltip } from "@/ui";
+	import { PButton, PButtonGroup } from "@/ui";
 
 	// Types & Interfaces
 	import {
@@ -279,39 +279,21 @@
 		<div
 			v-if="config.enabled"
 			class="flex flex-row flex-wrap gap-3 pb-3 child:my-auto">
-			<PTooltip>
-				<template #trigger>
-					<PButton
-						type="primary"
-						:loading="refRecomputing"
-						:disabled="refRecomputing || refSnapshotsRunning"
-						@click="recomputeChains">
-						{{ $t("raukk_sourcing.shipping_page.recompute") }}
-					</PButton>
-				</template>
-				{{ $t("raukk_sourcing.shipping_page.recompute_tooltip") }}
-			</PTooltip>
+			<PButton
+				type="primary"
+				:loading="refRecomputing"
+				:disabled="refRecomputing || refSnapshotsRunning"
+				@click="recomputeChains">
+				{{ $t("raukk_sourcing.shipping_page.recompute") }}
+			</PButton>
 
-			<PTooltip>
-				<template #trigger>
-					<PButton
-						type="primary"
-						:loading="refSnapshotsRunning"
-						:disabled="refRecomputing || refSnapshotsRunning"
-						@click="recomputeSnapshots">
-						{{
-							$t(
-								"raukk_sourcing.shipping_page.recompute_snapshots"
-							)
-						}}
-					</PButton>
-				</template>
-				{{
-					$t(
-						"raukk_sourcing.shipping_page.recompute_snapshots_tooltip"
-					)
-				}}
-			</PTooltip>
+			<PButton
+				type="primary"
+				:loading="refSnapshotsRunning"
+				:disabled="refRecomputing || refSnapshotsRunning"
+				@click="recomputeSnapshots">
+				{{ $t("raukk_sourcing.shipping_page.recompute_snapshots") }}
+			</PButton>
 		</div>
 	</div>
 	<div class="text-white/50 pb-3">
@@ -328,11 +310,6 @@
 				:key="`RAUKKSHIPSECTION#${section}`"
 				:type="refSection === section ? 'primary' : 'secondary'"
 				size="sm"
-				:title="
-					$t(
-						`raukk_sourcing.shipping_page.sections.${section}_tooltip`
-					)
-				"
 				@click="() => (refSection = section)">
 				{{ $t(`raukk_sourcing.shipping_page.sections.${section}`) }}
 			</PButton>

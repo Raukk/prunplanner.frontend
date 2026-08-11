@@ -39,7 +39,6 @@
 		PSelect,
 		PTable,
 		PTag,
-		PTooltip,
 	} from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
@@ -360,14 +359,9 @@
 					(v) => changeConfig({ stlCostPerMegameter: v ?? 0 })
 				" />
 
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.auto_chains.config.min_share") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.auto_chains.config.min_share_tooltip") }}
-			</PTooltip>
+			<div class="font-bold pl-3">
+				{{ $t("raukk_sourcing.auto_chains.config.min_share") }}
+			</div>
 			<PInputNumber
 				class="min-w-25"
 				decimals
@@ -381,18 +375,9 @@
 					(v) => changeConfig({ autoChainMinShare: v ?? 0 })
 				" />
 
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{
-							$t(
-								"raukk_sourcing.auto_chains.config.detour_in_out"
-							)
-						}}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.auto_chains.config.detour_tooltip") }}
-			</PTooltip>
+			<div class="font-bold pl-3">
+				{{ $t("raukk_sourcing.auto_chains.config.detour_in_out") }}
+			</div>
 			<PInputNumber
 				class="min-w-25"
 				decimals
@@ -405,16 +390,9 @@
 					(v) => changeConfig({ autoChainDetourInOutParsecs: v ?? 0 })
 				" />
 
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{
-							$t("raukk_sourcing.auto_chains.config.detour_loose")
-						}}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.auto_chains.config.detour_tooltip") }}
-			</PTooltip>
+			<div class="font-bold pl-3">
+				{{ $t("raukk_sourcing.auto_chains.config.detour_loose") }}
+			</div>
 			<PInputNumber
 				class="min-w-25"
 				decimals
@@ -684,22 +662,16 @@
 									{{ $t("raukk_sourcing.auto_chains.tag") }}
 								</PTag>
 								<!-- raukk: what the builder saw, nobody authored it -->
-								<PTooltip v-if="row.autoReason">
-									<template #trigger>
-										<PTag size="sm" type="primary">
-											{{
-												$t(
-													`raukk_sourcing.auto_chains.reason.${row.autoReason}`
-												)
-											}}
-										</PTag>
-									</template>
+								<PTag
+									v-if="row.autoReason"
+									size="sm"
+									type="primary">
 									{{
 										$t(
-											`raukk_sourcing.auto_chains.reason_tooltip.${row.autoReason}`
+											`raukk_sourcing.auto_chains.reason.${row.autoReason}`
 										)
 									}}
-								</PTooltip>
+								</PTag>
 								<PTag v-if="row.stale" size="sm" type="error">
 									{{ $t("raukk_sourcing.chains.stale") }}
 								</PTag>
@@ -722,19 +694,11 @@
 								" />
 						</td>
 						<td class="text-right">
-							<PTooltip v-if="row.capDays !== null">
-								<template #trigger>
-									<span class="hover:cursor-help">
-										{{ formatNumber(row.capDays) }}
-									</span>
-								</template>
-								{{
-									$t(
-										"raukk_sourcing.auto_chains.cap_days_tooltip"
-									)
-								}}
-							</PTooltip>
-							<span v-else>—</span>
+							{{
+								row.capDays === null
+									? "—"
+									: formatNumber(row.capDays)
+							}}
 						</td>
 						<td class="text-right">
 							<RaukkVisitCadence

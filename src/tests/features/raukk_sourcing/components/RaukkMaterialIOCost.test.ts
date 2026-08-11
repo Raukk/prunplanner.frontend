@@ -110,9 +110,9 @@ describe("RaukkMaterialIOCost", () => {
 
 		expect(wrapper.text()).toContain("ours -800.00");
 		expect(wrapper.find("div.text-negative").exists()).toBe(true);
-		expect(wrapper.findComponent({ name: "WarningAmberOutlined" }).exists())
-			.toBe(true);
-		expect(wrapper.text()).toContain("costs MORE than buying it");
+		expect(
+			wrapper.findComponent({ name: "WarningAmberOutlined" }).exists()
+		).toBe(true);
 	});
 
 	it("stays neutral while sourcing is the cheaper side", () => {
@@ -126,8 +126,9 @@ describe("RaukkMaterialIOCost", () => {
 		const wrapper: VueWrapper = render(-10, -500);
 
 		expect(wrapper.find("div.text-negative").exists()).toBe(false);
-		expect(wrapper.findComponent({ name: "WarningAmberOutlined" }).exists())
-			.toBe(false);
+		expect(
+			wrapper.findComponent({ name: "WarningAmberOutlined" }).exists()
+		).toBe(false);
 	});
 
 	it("stays silent while the input has no source at all", () => {

@@ -2,14 +2,7 @@
 	import { computed, ComputedRef, PropType } from "vue";
 
 	// UI
-	import {
-		PButton,
-		PCheckbox,
-		PInputNumber,
-		PTable,
-		PTag,
-		PTooltip,
-	} from "@/ui";
+	import { PButton, PCheckbox, PInputNumber, PTable, PTag } from "@/ui";
 
 	// Calculations
 	import {
@@ -227,12 +220,7 @@
 			<tr>
 				<th>{{ $t("raukk_sourcing.shipping.profile") }}</th>
 				<th class="text-right!">
-					<PTooltip>
-						<template #trigger>
-							{{ $t("raukk_sourcing.shipping.fields.stlOnly") }}
-						</template>
-						{{ $t("raukk_sourcing.shipping.stl_only_tooltip") }}
-					</PTooltip>
+					{{ $t("raukk_sourcing.shipping.fields.stlOnly") }}
 				</th>
 				<th
 					v-for="field in fields"
@@ -278,23 +266,17 @@
 					v-for="field in fields"
 					:key="`RAUKKSHIPVALUE#${profile.id}#${field}`"
 					class="text-right">
-					<PTooltip v-if="isDerivable(field)">
-						<template #trigger>
-							<PInputNumber
-								class="min-w-25"
-								size="sm"
-								decimals
-								:value="profile[field]"
-								:disabled="isDisabled(profile, field)"
-								:placeholder="
-									formatNumber(derivedValue(profile, field))
-								"
-								@update:value="
-									(v) => change(profile, field, v)
-								" />
-						</template>
-						{{ $t("raukk_sourcing.shipping.derived_tooltip") }}
-					</PTooltip>
+					<PInputNumber
+						v-if="isDerivable(field)"
+						class="min-w-25"
+						size="sm"
+						decimals
+						:value="profile[field]"
+						:disabled="isDisabled(profile, field)"
+						:placeholder="
+							formatNumber(derivedValue(profile, field))
+						"
+						@update:value="(v) => change(profile, field, v)" />
 					<PInputNumber
 						v-else
 						class="min-w-25"

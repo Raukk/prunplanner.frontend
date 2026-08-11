@@ -38,7 +38,6 @@
 		PInputNumber,
 		PSelect,
 		PTag,
-		PTooltip,
 		PInput,
 	} from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
@@ -431,44 +430,32 @@
 						: $t("raukk_sourcing.snapshot.current")
 				}}
 			</PTag>
-			<PTooltip v-if="snapshot.baseFraction !== undefined">
-				<template #trigger>
-					<span class="text-white/60 hover:cursor-help">
-						{{
-							$t("raukk_sourcing.snapshot.base_fraction", {
-								value: formatNumber(snapshot.baseFraction),
-							})
-						}}
-					</span>
-				</template>
-				{{ $t("raukk_sourcing.snapshot.base_fraction_tooltip") }}
-			</PTooltip>
-			<PTooltip v-if="snapshot.shippingFraction !== undefined">
-				<template #trigger>
-					<RouterLink to="/shipping">
-						<span
-							class="hover:underline"
-							:class="
-								raukkShipTimeOver(snapshot.shippingFraction)
-									? 'text-negative font-bold'
-									: 'text-white/60'
-							">
-							{{
-								$t(
-									"raukk_sourcing.snapshot.shipping_fraction",
-									{
-										value: shipTimeLabel(
-											snapshot.shippingFraction
-										),
-									}
-								)
-							}}
-						</span>
-					</RouterLink>
-				</template>
-				{{ $t("raukk_sourcing.snapshot.shipping_fraction_tooltip") }}
-				{{ $t("raukk_sourcing.snapshot.shipping_fraction_link_hint") }}
-			</PTooltip>
+			<span
+				v-if="snapshot.baseFraction !== undefined"
+				class="text-white/60">
+				{{
+					$t("raukk_sourcing.snapshot.base_fraction", {
+						value: formatNumber(snapshot.baseFraction),
+					})
+				}}
+			</span>
+			<RouterLink
+				v-if="snapshot.shippingFraction !== undefined"
+				to="/shipping">
+				<span
+					class="hover:underline"
+					:class="
+						raukkShipTimeOver(snapshot.shippingFraction)
+							? 'text-negative font-bold'
+							: 'text-white/60'
+					">
+					{{
+						$t("raukk_sourcing.snapshot.shipping_fraction", {
+							value: shipTimeLabel(snapshot.shippingFraction),
+						})
+					}}
+				</span>
+			</RouterLink>
 
 			<!-- stated next to the ship time, which is the number a lease
 			link changes: a LEASE reads an em-dash because its host flies
@@ -510,17 +497,12 @@
 			{{ $t("raukk_sourcing.controls.compute") }}
 		</PButton>
 
-		<PTooltip>
-			<template #trigger>
-				<PButton
-					:loading="chainRunning"
-					:disabled="readOnly || busy"
-					@click="recompute">
-					{{ $t("raukk_sourcing.controls.recompute_chain") }}
-				</PButton>
-			</template>
-			{{ $t("raukk_sourcing.controls.recompute_chain_tooltip") }}
-		</PTooltip>
+		<PButton
+			:loading="chainRunning"
+			:disabled="readOnly || busy"
+			@click="recompute">
+			{{ $t("raukk_sourcing.controls.recompute_chain") }}
+		</PButton>
 
 		<span v-if="chainRunning" class="text-white/60">
 			{{
@@ -615,14 +597,9 @@
 					(v) => changeRepairDay(Number(v) as RAUKK_REPAIR_DAY)
 				" />
 
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.controls.cadence_production") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.controls.cadence_tooltip") }}
-			</PTooltip>
+			<div class="font-bold pl-3">
+				{{ $t("raukk_sourcing.controls.cadence_production") }}
+			</div>
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
@@ -631,14 +608,9 @@
 				:value="config.cadence?.production ?? null"
 				@update:value="(v) => changeCadence('production', v ?? null)" />
 
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.controls.cadence_workforce") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.controls.cadence_tooltip") }}
-			</PTooltip>
+			<div class="font-bold pl-3">
+				{{ $t("raukk_sourcing.controls.cadence_workforce") }}
+			</div>
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
@@ -647,14 +619,9 @@
 				:value="config.cadence?.workforce ?? null"
 				@update:value="(v) => changeCadence('workforce', v ?? null)" />
 
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold pl-3 hover:cursor-help">
-						{{ $t("raukk_sourcing.controls.cadence_repair") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.controls.cadence_tooltip") }}
-			</PTooltip>
+			<div class="font-bold pl-3">
+				{{ $t("raukk_sourcing.controls.cadence_repair") }}
+			</div>
 			<PInputNumber
 				class="min-w-25"
 				:min="1"
@@ -667,14 +634,9 @@
 		<div
 			v-if="shippingConfig.enabled"
 			class="mt-3 border rounded-[3px] border-white/20 p-3 flex flex-row flex-wrap gap-3 child:my-auto">
-			<PTooltip>
-				<template #trigger>
-					<div class="font-bold hover:cursor-help">
-						{{ $t("raukk_sourcing.cx_anchor.plan_label") }}
-					</div>
-				</template>
-				{{ $t("raukk_sourcing.cx_anchor.tooltip") }}
-			</PTooltip>
+			<div class="font-bold">
+				{{ $t("raukk_sourcing.cx_anchor.plan_label") }}
+			</div>
 			<PSelect
 				class="w-40!"
 				clearable

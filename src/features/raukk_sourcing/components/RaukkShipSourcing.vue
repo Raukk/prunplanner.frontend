@@ -23,7 +23,7 @@
 	import { formatNumber } from "@/util/numbers";
 
 	// UI
-	import { PSelect, PTable, PTooltip } from "@/ui";
+	import { PSelect, PTable } from "@/ui";
 	import { PSelectOption } from "@/ui/ui.types";
 
 	// Types & Interfaces
@@ -215,13 +215,6 @@
 						(v) => changeGroup(group, String(v ?? NO_DEFAULT))
 					" />
 			</template>
-
-			<PTooltip>
-				<template #trigger>
-					<span class="text-white/40 hover:cursor-help">(i)</span>
-				</template>
-				{{ $t("raukk_sourcing.ship_sourcing.tooltip") }}
-			</PTooltip>
 		</div>
 
 		<PTable striped>
