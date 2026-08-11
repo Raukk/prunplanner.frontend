@@ -4,6 +4,7 @@ import {
 	DAY_MS,
 	DERIVED_EXPIRE_MIN_MS,
 	ROLLOVER_GRACE_MS,
+	untilEarliestBoundary,
 	untilNextUtcMidnight,
 	untilRolloverAfter,
 } from "@/lib/query_cache/expiry";
@@ -78,5 +79,71 @@ describe("untilNextUtcMidnight", () => {
 			expect(ttl).toBeGreaterThanOrEqual(DERIVED_EXPIRE_MIN_MS);
 			expect(ttl).toBeLessThanOrEqual(DAY_MS + ROLLOVER_GRACE_MS);
 		}
+	});
+});
+
+describe("untilEarliestBoundary", () => {
+	const WEEK_MS: number = 7 * DAY_MS;
+
+	it("lands on the first boundary still ahead", () => {
+		const since: number = MIDNIGHT;
+		const boundaries: number[] = [
+			since - WEEK_MS,
+			since + 2 * DAY_MS,
+			since + WEEK_MS,
+		];
+
+		expect(untilEarliestBoundary(boundaries, since)).toBe(
+			2 * DAY_MS + ROLLOVER_GRACE_MS
+		);
+	});
+
+	it("takes the soonest across a multi entry payload", () => {
+		/*
+			A batch stops being current as soon as any one of its members
+			does, so the whole entry expires with the earliest of them.
+		*/
+		const since: number = MIDNIGHT;
+
+		expect(
+			untilEarliestBoundary(
+				[since + 5 * DAY_MS, since + DAY_MS, since + 3 * DAY_MS],
+				since
+			)
+		).toBe(DAY_MS + ROLLOVER_GRACE_MS);
+	});
+
+	it("reports nothing scheduled when every boundary is past", () => {
+		const since: number = MIDNIGHT;
+
+		expect(
+			untilEarliestBoundary([since - WEEK_MS, since - DAY_MS], since)
+		).toBeUndefined();
+		expect(untilEarliestBoundary([], since)).toBeUndefined();
+	});
+
+	it("ignores a boundary exactly at the measuring point", () => {
+		const since: number = MIDNIGHT;
+
+		expect(untilEarliestBoundary([since], since)).toBeUndefined();
+	});
+
+	it("skips unusable values rather than failing on them", () => {
+		const since: number = MIDNIGHT;
+
+		expect(
+			untilEarliestBoundary(
+				[Number.NaN, Number.POSITIVE_INFINITY, since + DAY_MS],
+				since
+			)
+		).toBe(DAY_MS + ROLLOVER_GRACE_MS);
+	});
+
+	it("never returns less than the floor for an imminent boundary", () => {
+		const since: number = MIDNIGHT;
+
+		expect(untilEarliestBoundary([since + 1_000], since)).toBe(
+			DERIVED_EXPIRE_MIN_MS
+		);
 	});
 });

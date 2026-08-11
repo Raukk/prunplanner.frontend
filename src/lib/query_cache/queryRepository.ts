@@ -1,5 +1,6 @@
 import { IQueryDefinition } from "@/lib/query_cache/queryCache.types";
 import {
+	untilEarliestBoundary,
 	untilNextUtcMidnight,
 	untilRolloverAfter,
 } from "@/lib/query_cache/expiry";
@@ -82,6 +83,62 @@ function dailyGameDataExpiry(
 		untilRolloverAfter(anchor, since) ?? untilNextUtcMidnight(since);
 
 	return Math.min(60_000 * capMinutes, rollover);
+}
+
+/**
+ * Fallback expiry for a planet whose COGC schedule has run out.
+ *
+ * Every program in the payload having already ended does not mean the
+ * planet is idle — on a populated planet the programs run back to back,
+ * so it means the backend has not re-ingested this planet since the last
+ * one lapsed and its copy is behind. Asking again reasonably soon is the
+ * right response; asking every twelve hours is also as fast as it is
+ * worth going, since nothing here makes the backend ingest any sooner.
+ */
+const PLANET_UNSCHEDULED_MS: number = 12 * 60 * 60_000;
+
+/**
+ * Expiry for planet data, anchored to its COGC schedule.
+ *
+ * Everything else the payload carries is fixed: geology, resources, the
+ * system it sits in. Habitation buildings only ever get added and only
+ * rarely. The COGC program is the one field that turns over on a clock,
+ * and the payload states when — programs run in seven day windows and a
+ * populated planet carries the next one already scheduled, so the
+ * earliest end still ahead is precisely when this copy stops being
+ * current. Refetching before then learns nothing; refetching on a fixed
+ * twelve hour timer both wastes most of those requests and still lands
+ * up to twelve hours late on the one change that matters.
+ *
+ * Each path keeps its own configured upper bound.
+ *
+ * @author raukk
+ *
+ * @param {IPlanet[]} planets Planets in this payload
+ * @param {number} since Timestamp the ttl is measured from
+ * @returns {number} Ttl in ms
+ */
+function planetExpiry(planets: IPlanet[], since: number): number {
+	// the earliest across a multi planet payload: the whole entry stops
+	// being current as soon as any one of its planets does
+	const boundaries: number[] = planets.flatMap((planet) =>
+		(planet?.cogc_programs ?? []).map((program) => program.end_epochms)
+	);
+
+	const scheduled: number | undefined = untilEarliestBoundary(
+		boundaries,
+		since
+	);
+
+	return scheduled !== undefined
+		? Math.min(
+				60_000 * config.GAME_DATA_STALE_MINUTES_PLANET_SCHEDULED,
+				scheduled
+			)
+		: Math.min(
+				60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
+				PLANET_UNSCHEDULED_MS
+			);
 }
 
 /**
@@ -451,7 +508,8 @@ export function useQueryRepository() {
 
 				return (await db.get(params.planetNaturalId)) ?? null;
 			},
-			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
+			expireTime: (data: IPlanet, since: number) =>
+				planetExpiry([data], since),
 			autoRefetch: true,
 			persist: true,
 		} as IQueryDefinition<{ planetNaturalId: string }, IPlanet>,
@@ -506,7 +564,8 @@ export function useQueryRepository() {
 
 				return planets as IPlanet[];
 			},
-			expireTime: 60_000 * config.GAME_DATA_STALE_MINUTES_PLANETS,
+			expireTime: (data: IPlanet[], since: number) =>
+				planetExpiry(data, since),
 			autoRefetch: true,
 			persist: true,
 		} as IQueryDefinition<{ planetNaturalIds: string[] }, IPlanet[]>,

@@ -82,6 +82,37 @@ export function untilRolloverAfter(
 }
 
 /**
+ * Milliseconds from `since` until the earliest boundary still ahead of
+ * it. Undefined when every boundary is already behind, which for a
+ * payload that schedules itself forward means the copy is out of date
+ * rather than that nothing is coming.
+ *
+ * @author raukk
+ *
+ * @param {number[]} boundaries Candidate boundary timestamps
+ * @param {number} since Fetch timestamp the ttl is measured from
+ * @returns {(number | undefined)} Ttl in ms, undefined if all are past
+ */
+export function untilEarliestBoundary(
+	boundaries: number[],
+	since: number
+): number | undefined {
+	const base: number = baseOf(since);
+
+	let earliest: number = Number.POSITIVE_INFINITY;
+
+	for (const boundary of boundaries) {
+		if (!Number.isFinite(boundary)) continue;
+		if (boundary <= base) continue;
+		if (boundary < earliest) earliest = boundary;
+	}
+
+	if (!Number.isFinite(earliest)) return undefined;
+
+	return Math.max(DERIVED_EXPIRE_MIN_MS, earliest + ROLLOVER_GRACE_MS - base);
+}
+
+/**
  * Milliseconds from `since` until the next midnight UTC. For payloads
  * that change daily without saying so themselves.
  *
