@@ -2551,7 +2551,12 @@ export const useRaukkSourcingStore = defineStore(
 		};
 	},
 	{
-		persist: {
+		// raukk: NOT the persistedstate plugin. That one serializes the
+		// complete picked state on every single mutation, and a recompute
+		// sweep mutates thousands of times — key and payload shape are
+		// identical, the write is coalesced. See util/debouncedPersist.ts
+		debouncedPersist: {
+			delay: 1000,
 			// refs missing from this list silently never persist
 			pick: [
 				"configs",
