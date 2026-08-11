@@ -579,34 +579,15 @@ function chainClaimedUnits(
 	fromStop: string,
 	toStop: string
 ): Record<string, number> {
-	const sourcingStore = useRaukkSourcingStore();
-
-	const claimed: Record<string, number> = {};
-
-	Object.values(sourcingStore.chainResults).forEach(
-		(result: IRaukkChainResult) =>
-			result.flows.forEach((flow: IRaukkChainFlowCost) => {
-				if (
-					flow.ownerPlanUuid !== undefined &&
-					flow.ownerPlanUuid !== ownerPlanUuid
-				)
-					return;
-
-				if (
-					flow.sourcePlanUuid !== undefined &&
-					flow.sourcePlanUuid !== sourcePlanUuid
-				)
-					return;
-
-				if (flow.fromStop !== fromStop || flow.toStop !== toStop)
-					return;
-
-				claimed[flow.ticker] =
-					(claimed[flow.ticker] ?? 0) + Math.max(flow.unitsPerDay, 0);
-			})
+	// the store answers it from its per lane flow index: one plan asks
+	// this once per counterpart, and scanning every chain result each
+	// time is what made a loop block solve quadratic
+	return useRaukkSourcingStore().chainClaimedUnitsOn(
+		ownerPlanUuid,
+		sourcePlanUuid,
+		fromStop,
+		toStop
 	);
-
-	return claimed;
 }
 
 /**

@@ -18,6 +18,7 @@ import { RaukkLocalPriceSchema } from "@/features/raukk_sourcing/raukkSourcingSt
 // Types & Interfaces
 import {
 	IRaukkChainFlow,
+	IRaukkChainResult,
 	IRaukkSnapshot,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import { IPlanEmpireElement } from "@/stores/planningStore.types";
@@ -810,6 +811,127 @@ describe("Raukk Sourcing Store", () => {
 				byPlan: [],
 				pctOfOutput: 0,
 			});
+		});
+	});
+
+	describe("chainClaimedUnitsOn", () => {
+		/** Two chain results over the same directed lane */
+		function claimingChains(): void {
+			store.setChainResult("c1", {
+				flows: [
+					{
+						ownerPlanUuid: "b",
+						sourcePlanUuid: "a",
+						ticker: "ORE",
+						fromStop: "OT-580b",
+						toStop: "XK-745c",
+						unitsPerDay: 30,
+						costPerUnit: 1,
+					},
+					{
+						// another lane entirely, never claimed here
+						ownerPlanUuid: "b",
+						sourcePlanUuid: "a",
+						ticker: "ORE",
+						fromStop: "XK-745c",
+						toStop: "OT-580b",
+						unitsPerDay: 500,
+						costPerUnit: 1,
+					},
+				],
+			} as unknown as IRaukkChainResult);
+
+			store.setChainResult("c2", {
+				chainId: "c2",
+				flows: [
+					{
+						// frozen before ownership was carried: counts for
+						// every plan on the lane
+						ticker: "ORE",
+						fromStop: "OT-580b",
+						toStop: "XK-745c",
+						unitsPerDay: 5,
+						costPerUnit: 1,
+					},
+					{
+						ownerPlanUuid: "other",
+						sourcePlanUuid: "a",
+						ticker: "ORE",
+						fromStop: "OT-580b",
+						toStop: "XK-745c",
+						unitsPerDay: 900,
+						costPerUnit: 1,
+					},
+				],
+			} as unknown as IRaukkChainResult);
+		}
+
+		it("sums the flows of one lane, owner and source filtered", () => {
+			claimingChains();
+
+			expect(
+				store.chainClaimedUnitsOn("b", "a", "OT-580b", "XK-745c")
+			).toStrictEqual({ ORE: 35 });
+		});
+
+		it("claims nothing on a lane no flow runs on", () => {
+			claimingChains();
+
+			expect(
+				store.chainClaimedUnitsOn("b", "a", "OT-580b", "ZV-307c")
+			).toStrictEqual({});
+		});
+
+		it("follows a chain result that changed", () => {
+			claimingChains();
+			store.chainClaimedUnitsOn("b", "a", "OT-580b", "XK-745c");
+
+			store.setChainResult("c2", {
+				chainId: "c2",
+				flows: [],
+			} as unknown as IRaukkChainResult);
+
+			expect(
+				store.chainClaimedUnitsOn("b", "a", "OT-580b", "XK-745c")
+			).toStrictEqual({ ORE: 30 });
+		});
+	});
+
+	describe("shipDemandPerDay", () => {
+		it("sums stored fuel burn and repairs of the own fleet", () => {
+			const snapshot: IRaukkSnapshot = {
+				...makeSnapshot("A", { ORE: 100 }),
+				fuelUnitsPerDay: { FF: 2, SF: 1 },
+			};
+
+			store.setSnapshot("a", snapshot);
+			assignOnly("a");
+
+			expect(store.shipDemandPerDay()).toMatchObject({ FF: 2, SF: 1 });
+		});
+
+		it("drops a plan no empire holds any more", () => {
+			store.setSnapshot("assigned", makeSnapshot("A", { ORE: 100 }));
+			store.setSnapshot("dropped", {
+				...makeSnapshot("Dropped", { MET: 10 }),
+				fuelUnitsPerDay: { FF: 7 },
+			});
+			assignOnly("assigned");
+
+			expect(store.shipDemandPerDay()).toStrictEqual({});
+		});
+
+		it("hands out a fresh copy per call", () => {
+			store.setSnapshot("a", {
+				...makeSnapshot("A", { ORE: 100 }),
+				fuelUnitsPerDay: { FF: 2 },
+			});
+			assignOnly("a");
+
+			const first = store.shipDemandPerDay();
+			first.FF = 999;
+
+			expect(store.shipDemandPerDay().FF).toBe(2);
 		});
 	});
 

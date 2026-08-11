@@ -256,6 +256,14 @@ export function raukkOversubTickerRows(
  * Shared by `useRaukkFleet` and the oversubscription report, so a
  * cadence change cannot drift the two.
  *
+ * `stale` is a LAZY getter, deliberately: the account wide material
+ * demand this feeds (`shipDemandPerDay`) is memoized and never asks for
+ * it, so the stale flag sprays of a recompute sweep leave that rollup
+ * cached. A caller that does read the flag — the fleet table, the
+ * oversubscription report — tracks it at the point of the read, which is
+ * where it wants the dependency, and reads the same value the eager
+ * field carried.
+ *
  * @author raukk
  *
  * @param {Record<string, IRaukkSnapshot>} snapshots Snapshots per plan
@@ -283,7 +291,9 @@ export function raukkFleetLoadEntries(
 					lane.damagePerTrip === undefined
 						? undefined
 						: lane.tripsPerDay * lane.damagePerTrip,
-				stale: snapshot.stale === true,
+				get stale(): boolean {
+					return snapshot.stale === true;
+				},
 			});
 		})
 	);
@@ -297,7 +307,9 @@ export function raukkFleetLoadEntries(
 			tripsPerDay: 1,
 			roundTripMinutes: chain.shipMinutesPerDay,
 			damagePerDay: chain.damagePerDay,
-			stale: chain.stale === true,
+			get stale(): boolean {
+				return chain.stale === true;
+			},
 		});
 	});
 

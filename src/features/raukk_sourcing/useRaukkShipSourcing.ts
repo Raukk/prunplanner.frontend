@@ -20,10 +20,8 @@ import {
 	raukkShipDefaultedTickers,
 	raukkShipGroupTickers,
 	raukkShipSourceGroupOf,
-	raukkShipSourcingDemand,
 	raukkShipSourcingTickers,
 } from "@/features/raukk_sourcing/calculations/shipSourcing";
-import { raukkFleetLoadEntries } from "@/features/raukk_sourcing/calculations/oversubReport";
 
 // Types & Interfaces
 import {
@@ -129,21 +127,19 @@ export async function raukkLoadShipPrices(
  * damage the stored lanes and chain results took — never from live
  * numbers, the rule every account level rollup follows.
  *
+ * The rollup itself lives in the store, memoized: it is account wide
+ * while its hottest caller is per plan — every snapshot computation
+ * builds a ship price resolver — and a loop block solve computes
+ * hundreds of snapshots without moving a lane. Scoped there too: a plan
+ * the account no longer operates flies nothing, so its hulls burn
+ * nothing either.
+ *
  * @author raukk
  *
  * @returns {IRaukkMaterialUnits} Units per day, keyed by ticker
  */
 export function raukkShipDemandPerDay(): IRaukkMaterialUnits {
-	const sourcingStore = useRaukkSourcingStore();
-
-	// scoped: a plan the account no longer operates flies nothing, so its
-	// hulls burn nothing either
-	const snapshots = sourcingStore.scopedSnapshots();
-
-	return raukkShipSourcingDemand(
-		snapshots,
-		raukkFleetLoadEntries(snapshots, sourcingStore.chainResults)
-	);
+	return useRaukkSourcingStore().shipDemandPerDay();
 }
 
 /**

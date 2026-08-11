@@ -31,7 +31,9 @@ import {
 import {
 	raukkEffectiveShipSources,
 	raukkEmptyShipSourcing,
+	raukkShipSourcingDemand,
 } from "@/features/raukk_sourcing/calculations/shipSourcing";
+import { raukkFleetLoadEntries } from "@/features/raukk_sourcing/calculations/oversubReport";
 
 // Schemas
 import {
@@ -87,6 +89,7 @@ import {
 	IRaukkCadenceOverrides,
 	IRaukkChain,
 	IRaukkChainConfig,
+	IRaukkChainFlowCost,
 	IRaukkChainResult,
 	IRaukkDepot,
 	IRaukkFleetShip,
@@ -105,6 +108,7 @@ import {
 	RAUKK_SOURCE_BUCKET,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
+import { IRaukkMaterialUnits } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 import {
 	IRaukkExportPayload,
 	IRaukkProducerOption,
@@ -428,6 +432,51 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Every ship profile the store knows by id, the users override
+		 * on top of the preset and completed — the resolution
+		 * {@link getShipProfile} used to redo per call.
+		 *
+		 * Completing is what a local storage blob written before the fuel
+		 * burn rates existed needs: such a profile carries none, and the
+		 * shipped calibration of its own hull fills them in.
+		 *
+		 * Reads the override MAP and the overrides themselves, nothing
+		 * else — no snapshot, no config, so only editing the calibration
+		 * table rebuilds it. The hull pick of a plan lists every profile
+		 * and then asks for each one again, twice over per snapshot
+		 * computation, and pays a spread each now rather than a deep
+		 * clone of a reactive object.
+		 */
+		const completedShipProfiles: ComputedRef<
+			Record<string, IRaukkShipProfile>
+		> = computed(() => {
+			const completed: Record<string, IRaukkShipProfile> = {};
+
+			Object.keys(SHIP_PROFILE_PRESETS).forEach((profileId) => {
+				completed[profileId] = raukkCompleteShipProfile(
+					inertClone(
+						shipProfiles.value[profileId] ??
+							SHIP_PROFILE_PRESETS[profileId]
+					)
+				);
+			});
+
+			// an override of an id no preset carries — an imported
+			// payload may hold one — resolves the same way
+			Object.entries(shipProfiles.value).forEach(
+				([profileId, profile]) => {
+					if (completed[profileId] !== undefined) return;
+
+					completed[profileId] = raukkCompleteShipProfile(
+						inertClone(profile)
+					);
+				}
+			);
+
+			return completed;
+		});
+
+		/**
 		 * Gets a ship profile by id: the users override when one exists,
 		 * the shipped preset otherwise. An unknown id degrades to the
 		 * configured default profile and, should even that be gone, to
@@ -439,12 +488,12 @@ export const useRaukkSourcingStore = defineStore(
 		 */
 		function getShipProfile(profileId: string): IRaukkShipProfile {
 			const known: IRaukkShipProfile | undefined =
-				shipProfiles.value[profileId] ??
-				SHIP_PROFILE_PRESETS[profileId];
+				completedShipProfiles.value[profileId];
 
-			// a local storage blob written before the fuel burn rates
-			// existed carries a profile without them
-			if (known) return raukkCompleteShipProfile(inertClone(known));
+			// a profile is FLAT, every field a scalar: spreading the
+			// completed one hands out the same fresh, inert object the
+			// clone did, and callers keep owning what they get
+			if (known) return { ...known };
 
 			const fallbackId: string = shippingConfig.value.defaultProfileId;
 
@@ -988,6 +1037,148 @@ export const useRaukkSourcingStore = defineStore(
 				chainResults.value[chainId];
 
 			return found ? inertClone(found) : undefined;
+		}
+
+		/**
+		 * Key of the chain flow index, one DIRECTED lane. Length prefixed
+		 * so no pair of stop refs can collide on the separator, whatever
+		 * a user types into a chain stop.
+		 *
+		 * @param {string} fromStop Origin stop
+		 * @param {string} toStop Destination stop
+		 * @returns {string} Index Key
+		 */
+		function chainLaneKey(fromStop: string, toStop: string): string {
+			return `${fromStop.length}|${fromStop}|${toStop}`;
+		}
+
+		/**
+		 * Every stored chain flow, bucketed by the directed lane it runs
+		 * on. The scan {@link chainClaimedUnitsOn} did over ALL chain
+		 * results per call becomes one lookup plus the handful of flows
+		 * that really share the lane.
+		 *
+		 * Reads the result MAP, each results `flows` and of a flow only
+		 * its two endpoints — never `stale`, never `hired`, and not the
+		 * units either: a flow whose number moves keeps its bucket, and
+		 * the caller reading the number tracks it where it is read.
+		 *
+		 * Buckets keep the result and flow iteration order of the scan,
+		 * so the filtered order and the float summation order over them
+		 * are unchanged.
+		 */
+		const chainFlowsByLane: ComputedRef<
+			Map<string, IRaukkChainFlowCost[]>
+		> = computed(() => {
+			const index: Map<string, IRaukkChainFlowCost[]> = new Map();
+
+			Object.values(chainResults.value).forEach(
+				(result: IRaukkChainResult) =>
+					result.flows.forEach((flow: IRaukkChainFlowCost) => {
+						const key: string = chainLaneKey(
+							flow.fromStop,
+							flow.toStop
+						);
+						const known: IRaukkChainFlowCost[] | undefined =
+							index.get(key);
+
+						if (known) known.push(flow);
+						else index.set(key, [flow]);
+					})
+			);
+
+			return index;
+		});
+
+		/**
+		 * Units per day the chains already haul on one directed lane, over
+		 * the flows one named plan authored and one named plan produced.
+		 *
+		 * An absent `ownerPlanUuid` or `sourcePlanUuid` is a claim frozen
+		 * before the field existed and counts for every plan, which is the
+		 * behaviour those results were written under. Staleness is not
+		 * read, see the callers of this getter for why.
+		 *
+		 * @author raukk
+		 *
+		 * @param {string} ownerPlanUuid Plan whose flows count
+		 * @param {string} sourcePlanUuid Producing plan whose flows count
+		 * @param {string} fromStop Origin stop
+		 * @param {string} toStop Destination stop
+		 * @returns {Record<string, number>} Claimed units per ticker
+		 */
+		function chainClaimedUnitsOn(
+			ownerPlanUuid: string,
+			sourcePlanUuid: string,
+			fromStop: string,
+			toStop: string
+		): Record<string, number> {
+			const claimed: Record<string, number> = {};
+
+			(
+				chainFlowsByLane.value.get(chainLaneKey(fromStop, toStop)) ?? []
+			).forEach((flow: IRaukkChainFlowCost) => {
+				if (
+					flow.ownerPlanUuid !== undefined &&
+					flow.ownerPlanUuid !== ownerPlanUuid
+				)
+					return;
+
+				if (
+					flow.sourcePlanUuid !== undefined &&
+					flow.sourcePlanUuid !== sourcePlanUuid
+				)
+					return;
+
+				claimed[flow.ticker] =
+					(claimed[flow.ticker] ?? 0) + Math.max(flow.unitsPerDay, 0);
+			});
+
+			return claimed;
+		}
+
+		/**
+		 * Everything the own fleet consumes per day, fuel and repair
+		 * materials in one map.
+		 *
+		 * Read from the FROZEN state — the fuel burn each snapshot stores
+		 * and the damage the stored lanes and chain results took — never
+		 * from live numbers, the rule every account level rollup follows.
+		 * Scoped: a plan the account no longer operates flies nothing, so
+		 * its hulls burn nothing either.
+		 *
+		 * Memoized because it is ACCOUNT WIDE while its callers are per
+		 * plan: the ship price resolver of every snapshot computation asks
+		 * for it, and a loop block solve computes hundreds of snapshots
+		 * without touching a lane. Deps are the scoped snapshot record,
+		 * the `lanes` and `fuelUnitsPerDay` of those snapshots and the
+		 * chain results — the staleness a fleet load entry carries is a
+		 * lazy getter and is not read here, so a flag spray leaves it
+		 * cached.
+		 */
+		const shipDemandRollup: ComputedRef<IRaukkMaterialUnits> = computed(
+			() => {
+				const scoped: Record<string, IRaukkSnapshot> =
+					scopedSnapshotRecord.value;
+
+				return raukkShipSourcingDemand(
+					scoped,
+					raukkFleetLoadEntries(scoped, chainResults.value)
+				);
+			}
+		);
+
+		/**
+		 * The fleets daily material demand, a fresh copy of
+		 * {@link shipDemandRollup} per call — the map is flat, so the
+		 * spread hands over the same ownership the rollup did.
+		 *
+		 * @author raukk
+		 *
+		 * @returns {IRaukkMaterialUnits} Units per day, keyed by ticker
+		 */
+		function shipDemandPerDay(): IRaukkMaterialUnits {
+			return { ...shipDemandRollup.value };
 		}
 
 		/**
@@ -2495,6 +2686,8 @@ export const useRaukkSourcingStore = defineStore(
 			subscription,
 			getChain,
 			getChainResult,
+			chainClaimedUnitsOn,
+			shipDemandPerDay,
 			chainMemberPlans,
 			chainConflictOf,
 			assignedShipTypeId,
