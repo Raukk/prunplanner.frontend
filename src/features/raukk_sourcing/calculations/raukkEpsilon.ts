@@ -39,12 +39,12 @@ export const RAUKK_EPSILON_RELATIVE: number = 1e-6;
 export const RAUKK_EPSILON_EQUAL: number = 0.01;
 
 /**
- * ABSOLUTE floor below which an iterating loop counts as SETTLED.
+ * ABSOLUTE floor below which a recomputed loop value counts as SETTLED.
  *
  * Five hundredths, deliberately looser than {@link RAUKK_EPSILON_EQUAL}:
- * a settled pass must also count as materially unchanged, or the final
- * pass of a settled supply loop would re-flag the rest of the loop
- * stale and the loop never shows current.
+ * a settled recomputation must also count as materially unchanged, or a
+ * solved supply loop would re-flag the rest of the loop stale and the
+ * loop never shows current.
  *
  * Hybrid on the same terms as the equality floor, see
  * {@link raukkSettledWithin}: the looser floor must stay looser at every
@@ -102,17 +102,17 @@ export function raukkEqualWithin(first: number, second: number): boolean {
 }
 
 /**
- * Whether an iterating value has SETTLED between two passes.
+ * Whether a value has SETTLED between two computations.
  *
- * The same hybrid rule as {@link raukkEqualWithin} over the looser
- * {@link RAUKK_EPSILON_SETTLE} floor, so a settled pass always also
- * counts as materially unchanged — at every magnitude, since both
- * tolerances share the relative term.
+ * The tolerance a loop solve is verified at: the same hybrid rule as
+ * {@link raukkEqualWithin} over the looser {@link RAUKK_EPSILON_SETTLE}
+ * floor, so a settled value always also counts as materially unchanged —
+ * at every magnitude, since both tolerances share the relative term.
  *
  * @author raukk
  *
- * @param {number} previous Value of the previous pass
- * @param {number} next Value of the current pass
+ * @param {number} previous Value of the previous computation
+ * @param {number} next Value of the current computation
  * @returns {boolean} The value settled
  */
 export function raukkSettledWithin(previous: number, next: number): boolean {

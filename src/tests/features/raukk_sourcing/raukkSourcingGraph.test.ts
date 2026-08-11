@@ -10,6 +10,7 @@ import {
 	IRaukkDependencyGraph,
 	IRaukkRecomputePlanning,
 	orderUpstreamFirst,
+	orderUpstreamFirstBlocks,
 	reverseGraph,
 } from "@/features/raukk_sourcing/raukkSourcingGraph";
 
@@ -17,6 +18,7 @@ import {
 import {
 	IRaukkPlanConfig,
 	IRaukkSnapshot,
+	IRaukkSnapshotLane,
 	IRaukkTickerSource,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 
@@ -53,6 +55,29 @@ function makeSnapshot(
 const planConfig = (
 	sources: IRaukkPlanConfig["sources"]
 ): IRaukkPlanConfig => ({ repairDay: 90, sources });
+
+/** The same snapshot with ship fuel burnt on its own lanes */
+function burningFuel(snapshot: IRaukkSnapshot): IRaukkSnapshot {
+	return { ...snapshot, fuelUnitsPerDay: { FF: 1.5 } };
+}
+
+/** The same snapshot with the given lanes frozen onto it */
+function withLanes(
+	snapshot: IRaukkSnapshot,
+	lanes: Partial<IRaukkSnapshotLane>[]
+): IRaukkSnapshot {
+	return {
+		...snapshot,
+		lanes: lanes.map((lane) => ({
+			pairKey: "pair>CX",
+			shipTypeId: "SHIP",
+			tripsPerDay: 1,
+			roundTripMinutes: 120,
+			hired: false,
+			...lane,
+		})),
+	};
+}
 
 describe("raukkSourcingGraph", () => {
 	describe("expandAggregateSource", () => {
@@ -114,13 +139,16 @@ describe("raukkSourcingGraph", () => {
 			expect(buildDependencyGraph({}, snapshots).a).toStrictEqual([]);
 		});
 
-		it("edges every plan to a plan mode ship source", () => {
-			// the fleet is billed account wide: a's fuel price moves the
-			// numbers of every plan, not only of its own config
+		it("edges the burning plans to a plan mode ship source", () => {
+			// the fleet is billed account wide, but only a plan whose
+			// snapshot really burns fuel or wears hulls pays for it
 			const snapshots: Record<string, IRaukkSnapshot> = {
 				a: makeSnapshot("A", { FF: 10 }),
-				b: makeSnapshot("B", { ORE: 100 }),
-				c: makeSnapshot("C", { MET: 50 }),
+				b: burningFuel(makeSnapshot("B", { ORE: 100 })),
+				c: withLanes(makeSnapshot("C", { MET: 50 }), [
+					{ damagePerTrip: 0.002 },
+				]),
+				d: makeSnapshot("D", { RAT: 5 }),
 			};
 			const shipSources: Record<string, IRaukkTickerSource> = {
 				FF: { mode: "plan", sourcePlanUuid: "a" },
@@ -131,13 +159,38 @@ describe("raukkSourcingGraph", () => {
 			expect(graph.a).toStrictEqual([]);
 			expect(graph.b).toStrictEqual(["a"]);
 			expect(graph.c).toStrictEqual(["a"]);
+			// no fuel, no lanes: a snapshot computed with shipping off
+			expect(graph.d).toStrictEqual([]);
+		});
+
+		it("edges no plan whose lanes are hired or undamaged", () => {
+			const snapshots: Record<string, IRaukkSnapshot> = {
+				a: makeSnapshot("A", { FF: 10 }),
+				hired: withLanes(makeSnapshot("H", { ORE: 100 }), [
+					{ hired: true, damagePerTrip: 0.004 },
+				]),
+				zero: withLanes(makeSnapshot("Z", { MET: 50 }), [
+					{ damagePerTrip: 0 },
+				]),
+				old: withLanes(makeSnapshot("O", { RAT: 5 }), [{}]),
+			};
+
+			const graph = buildDependencyGraph({}, snapshots, {
+				FF: { mode: "plan", sourcePlanUuid: "a" },
+			});
+
+			expect(graph.hired).toStrictEqual([]);
+			expect(graph.zero).toStrictEqual([]);
+			// pre wear rollup snapshot, damage unknown rather than zero
+			expect(graph.old).toStrictEqual([]);
 		});
 
 		it("expands an aggregate ship source to all producers", () => {
 			const snapshots: Record<string, IRaukkSnapshot> = {
 				a: makeSnapshot("A", { FF: 10 }),
 				b: makeSnapshot("B", { FF: 5 }),
-				c: makeSnapshot("C", { MET: 50 }),
+				c: burningFuel(makeSnapshot("C", { MET: 50 })),
+				d: makeSnapshot("D", { RAT: 5 }),
 			};
 			const shipSources: Record<string, IRaukkTickerSource> = {
 				FF: { mode: "plan", sourcePlanUuid: "AGG_AVG" },
@@ -145,9 +198,12 @@ describe("raukkSourcingGraph", () => {
 
 			const graph = buildDependencyGraph({}, snapshots, shipSources);
 
-			expect(graph.a).toStrictEqual(["b"]);
-			expect(graph.b).toStrictEqual(["a"]);
+			// the producers burn nothing themselves, so the expansion
+			// stays narrowed as well
+			expect(graph.a).toStrictEqual([]);
+			expect(graph.b).toStrictEqual([]);
 			expect([...graph.c].sort()).toStrictEqual(["a", "b"]);
+			expect(graph.d).toStrictEqual([]);
 		});
 
 		it("ignores ship sources that name no plan", () => {
@@ -381,10 +437,11 @@ describe("raukkSourcingGraph", () => {
 	});
 
 	describe("ship sourcing scope", () => {
+		// every plan flies, so every plan pays the fleets bill
 		const snapshots: Record<string, IRaukkSnapshot> = {
-			a: makeSnapshot("A", { FF: 10 }),
-			b: makeSnapshot("B", { ORE: 100 }),
-			c: makeSnapshot("C", { MET: 50 }),
+			a: burningFuel(makeSnapshot("A", { FF: 10 })),
+			b: burningFuel(makeSnapshot("B", { ORE: 100 })),
+			c: burningFuel(makeSnapshot("C", { MET: 50 })),
 		};
 		const all = (): boolean => true;
 
@@ -424,9 +481,9 @@ describe("raukkSourcingGraph", () => {
 			// every plan depends on both and the two producers on each
 			// other: one loop covering the whole account
 			const producers: Record<string, IRaukkSnapshot> = {
-				a: makeSnapshot("A", { FF: 10 }),
-				b: makeSnapshot("B", { FF: 5 }),
-				c: makeSnapshot("C", { MET: 50 }),
+				a: burningFuel(makeSnapshot("A", { FF: 10 })),
+				b: burningFuel(makeSnapshot("B", { FF: 5 })),
+				c: burningFuel(makeSnapshot("C", { MET: 50 })),
 			};
 			const withShip = buildDependencyGraph({}, producers, {
 				FF: { mode: "plan", sourcePlanUuid: "AGG_MAX" },
@@ -644,6 +701,151 @@ describe("raukkSourcingGraph", () => {
 				"b",
 				"c",
 			]);
+		});
+	});
+
+	describe("orderUpstreamFirstBlocks", () => {
+		const all = (): boolean => true;
+
+		it("emits the acyclic set exactly as orderUpstreamFirst does", () => {
+			const graphs: IRaukkDependencyGraph[] = [
+				{},
+				{ a: [] },
+				{ a: [], b: ["a"], c: ["b"] },
+				{ a: [], b: ["a"], c: ["a"], d: ["b", "c"] },
+				{ a: [], b: ["a"], x: [], y: ["x"] },
+			];
+
+			graphs.forEach((graph) => {
+				const pending: string[] = Object.keys(graph);
+
+				expect(
+					orderUpstreamFirstBlocks(graph, pending, all).flat()
+				).toStrictEqual(orderUpstreamFirst(graph, pending));
+			});
+		});
+
+		it("emits one singleton block per plan of an acyclic set", () => {
+			const graph: IRaukkDependencyGraph = {
+				a: [],
+				b: ["a"],
+				c: ["b"],
+			};
+
+			expect(
+				orderUpstreamFirstBlocks(graph, ["c", "a", "b"], all)
+			).toStrictEqual([["a"], ["b"], ["c"]]);
+		});
+
+		it("pulls the whole loop in for one pending member", () => {
+			// l1 <-> l2, only l1 is pending: a partial system is not the
+			// system, both settle together
+			const graph: IRaukkDependencyGraph = {
+				s: [],
+				l1: ["l2", "s"],
+				l2: ["l1"],
+				z: ["l1"],
+			};
+
+			expect(orderUpstreamFirstBlocks(graph, ["l1"], all)).toStrictEqual([
+				["l1", "l2"],
+			]);
+		});
+
+		it("leaves a loop mate without a snapshot out of the block", () => {
+			const graph: IRaukkDependencyGraph = {
+				l1: ["l2"],
+				l2: ["l1"],
+			};
+
+			expect(
+				orderUpstreamFirstBlocks(graph, ["l1"], (uuid) => uuid !== "l2")
+			).toStrictEqual([["l1"]]);
+		});
+
+		it("emits nothing for a pending plan without a snapshot", () => {
+			// b is traversed for the ordering, never emitted
+			const graph: IRaukkDependencyGraph = {
+				a: [],
+				b: ["a"],
+				c: ["b"],
+			};
+
+			expect(
+				orderUpstreamFirstBlocks(
+					graph,
+					["a", "b", "c"],
+					(uuid) => uuid !== "b"
+				)
+			).toStrictEqual([["a"], ["c"]]);
+			expect(
+				orderUpstreamFirstBlocks(graph, ["a", "b"], () => false)
+			).toStrictEqual([]);
+		});
+
+		it("keeps two disjoint loops apart", () => {
+			const graph: IRaukkDependencyGraph = {
+				a: ["b"],
+				b: ["a"],
+				c: ["d"],
+				d: ["c"],
+				e: ["a", "c"],
+			};
+
+			expect(
+				orderUpstreamFirstBlocks(graph, ["a", "c", "e"], all)
+			).toStrictEqual([["a", "b"], ["c", "d"], ["e"]]);
+		});
+
+		it("never pulls in a plan that is no loop mate", () => {
+			// z draws from the loop and s feeds it, neither is pending
+			const graph: IRaukkDependencyGraph = {
+				s: [],
+				l1: ["l2", "s"],
+				l2: ["l1"],
+				z: ["l1"],
+			};
+			const blocks: string[][] = orderUpstreamFirstBlocks(
+				graph,
+				["l2"],
+				all
+			);
+
+			expect(blocks.flat().sort()).toStrictEqual(["l1", "l2"]);
+			expect(
+				orderUpstreamFirstBlocks(graph, ["s", "z"], all)
+			).toStrictEqual([["s"], ["z"]]);
+		});
+
+		it("is independent of key and adjacency insertion order", () => {
+			const first: IRaukkDependencyGraph = {
+				a: [],
+				b: ["a"],
+				c: ["a"],
+				d: ["b", "c"],
+			};
+			const second: IRaukkDependencyGraph = {
+				d: ["c", "b"],
+				c: ["a"],
+				b: ["a"],
+				a: [],
+			};
+
+			expect(
+				orderUpstreamFirstBlocks(first, ["d", "b", "c", "a"], all)
+			).toStrictEqual([["a"], ["b"], ["c"], ["d"]]);
+			expect(
+				orderUpstreamFirstBlocks(second, ["a", "c", "d", "b"], all)
+			).toStrictEqual([["a"], ["b"], ["c"], ["d"]]);
+		});
+
+		it("handles an empty set and unknown plans", () => {
+			const graph: IRaukkDependencyGraph = { a: [], b: ["a"] };
+
+			expect(orderUpstreamFirstBlocks(graph, [], all)).toStrictEqual([]);
+			expect(
+				orderUpstreamFirstBlocks(graph, ["unknown"], all)
+			).toStrictEqual([["unknown"]]);
 		});
 	});
 });

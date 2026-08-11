@@ -572,12 +572,11 @@ export function buildSourceOptions(
 /**
  * Largest absolute `costPerUnit` difference between two output sets.
  *
- * Convergence measure of the loop settling iterations: recomputing a
- * plan that is part of a supply loop (own repairs included) shifts its
- * output costs a little each pass, once the largest shift drops below
- * {@link RAUKK_EPSILON_SETTLE} the loop has settled. The measure is ȼ,
- * not a ratio (round 10): a settled loop is one whose numbers no longer
- * MOVE on screen, which a relative shift of a near-zero cost misreads.
+ * Agreement measure of two computations of one plan: a shift below
+ * {@link RAUKK_EPSILON_SETTLE} is one the numbers do not carry. The
+ * measure is ȼ, not a ratio (round 10): two agreeing computations are ones
+ * whose numbers do not MOVE on screen, which a relative shift of a
+ * near-zero cost misreads.
  *
  * A ticker appearing in only one of the two sets is a structural change
  * and never settles, reported as an infinite shift.
@@ -620,8 +619,9 @@ export function maxAbsoluteOutputDelta(
 /**
  * Whether the output costs of two passes have SETTLED.
  *
- * The convergence test of every loop iteration, per ticker rather than
- * over the largest shift alone: the tolerance is hybrid (see
+ * The verification test of every loop solve — does the solved point
+ * reproduce itself — per ticker rather than over the largest shift alone:
+ * the tolerance is hybrid (see
  * {@link raukkSettledWithin}) and therefore depends on the MAGNITUDE of
  * the ticker it judges, which a single pooled maximum cannot state. A
  * ȼ 40,000 output settling within a few hundredths is settled; the same

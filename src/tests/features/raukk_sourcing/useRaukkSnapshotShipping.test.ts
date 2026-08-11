@@ -409,8 +409,8 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				snapshot.flows?.filter((flow) => flow.fromStop === flow.toStop)
 			).toStrictEqual([]);
 
-			// and the freight is exactly the one of the same plan buying
-			// the ticker on the market: the self share added nothing
+			// and it pays NO inbound freight for those units, where the same
+			// plan buying the ticker at its exchange has them hauled in
 			store.setTickerSource("consumer", "ORE", {
 				mode: "market",
 				priceMode: "AVG30D",
@@ -420,10 +420,8 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 				context(planResult(1, 0))
 			);
 
-			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
-				market.outputs.ALO.breakdown.shipping,
-				10
-			);
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBe(0);
+			expect(market.outputs.ALO.breakdown.shipping).toBeGreaterThan(0);
 		});
 
 		it("embeds the shipping config and the shipping fraction", async () => {

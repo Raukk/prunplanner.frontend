@@ -202,15 +202,6 @@ export interface IRaukkPreparedSnapshot {
 	store(snapshot: IRaukkSnapshot): void;
 }
 
-/** Iteration cap of the self supply FALLBACK loop, see
- * {@link computePlanSnapshot} */
-const RAUKK_SELF_LOOP_MAX_ITERATIONS: number = 10;
-
-// The self supply loop is solved in closed form and only iterates when
-// that solve does not apply. Either way it settles within the hybrid
-// tolerance of {@link outputsSettled}, over the `RAUKK_EPSILON_SETTLE`
-// floor: an output whose ȼ per unit no longer moves at its own magnitude.
-
 /**
  * All tickers a plans sourcing numbers need prices for: everything
  * moving through its material I/O plus all construction materials of
@@ -1135,14 +1126,20 @@ async function loadRaukkPrices(params: {
  *
  * A plan may source from itself — own output feeding own repairs — which
  * makes its own output cost both an input and a result of its cost math.
- * That fixed point is solved EXACTLY rather than iterated: all cost math
- * is units × price and the allocation weights are unit based, so the map
- * from the self prices onto the computed ones is affine and one linear
+ * That fixed point is SOLVED or it is REPORTED, never iterated: all cost
+ * math is units × price and the allocation weights are unit based, so the
+ * map from the self prices onto the computed ones is affine and one linear
  * solve answers it (`calculations/raukkLoopSolve.ts`). The pipeline is
  * probed at trial prices through an override that writes nothing, then
- * evaluated once at the solution and verified there; only when that
- * verification fails does the old iteration take over. Cross plan loops
- * still settle by iterating, across chain recompute passes.
+ * evaluated once at the solution and verified there.
+ *
+ * A solve that does not apply — too many unknowns, a singular system, a
+ * non finite probe, a verification the solved point failed — keeps the
+ * SEED snapshot, the single honest computation this function already
+ * stored and exactly what an acyclic plan gets, and says so on the
+ * console. Nothing crawls towards a fixed point here. Repeated user
+ * triggered recomputes still walk a plan towards a piecewise fixed point
+ * on their own, which is the users doing and not this functions job.
  *
  * Aggregate draws are pre split into concrete producer uuids before
  * storing, the persisted `draws` keys are always plan uuids. The base
@@ -1163,7 +1160,13 @@ export async function computePlanSnapshot(
 	const prices: IRaukkPriceCaches = prepared.prices;
 	const computeOnce = prepared.computeOnce;
 
-	let snapshot: IRaukkSnapshot = computeOnce();
+	/*
+	 * The SEED: one honest computation at the current store state, stored
+	 * straight away. An acyclic plan is finished right here, and a self
+	 * supplying one whose fixed point cannot be solved keeps exactly this,
+	 * see {@link warnSelfLoopUnsolved}.
+	 */
+	const snapshot: IRaukkSnapshot = computeOnce();
 	prepared.store(snapshot);
 
 	/*
@@ -1187,96 +1190,105 @@ export async function computePlanSnapshot(
 					.filter((ticker) => snapshot.outputs[ticker] !== undefined)
 					.sort();
 
-	if (
-		unknowns.length > 0 &&
-		unknowns.length <= RAUKK_LOOP_SOLVE_MAX_UNKNOWNS
-	) {
-		/** One trial point as a producer price override of this plan */
-		const overrideOf = (
-			selfPrices: number[]
-		): IRaukkProducerPriceOverride => ({
-			[context.planUuid]: Object.fromEntries(
-				unknowns.map((ticker, index) => [ticker, selfPrices[index]])
-			),
-		});
+	if (unknowns.length === 0) return { snapshot, prices };
 
-		const solved: number[] | null = solveAffineFixedPoint(
-			(selfPrices: number[]) => {
-				const probe: IRaukkSnapshot = computeOnce(
-					overrideOf(selfPrices)
-				);
-
-				return unknowns.map(
-					(ticker) => probe.outputs[ticker]?.costPerUnit ?? Number.NaN
-				);
-			},
-			unknowns.map((ticker) => snapshot.outputs[ticker].costPerUnit)
+	if (unknowns.length > RAUKK_LOOP_SOLVE_MAX_UNKNOWNS) {
+		warnSelfLoopUnsolved(
+			context.planUuid,
+			`${unknowns.length} self supplied tickers are more than the ${RAUKK_LOOP_SOLVE_MAX_UNKNOWNS} the closed form solve attempts`
 		);
 
-		if (solved !== null) {
-			const final: IRaukkSnapshot = computeOnce(overrideOf(solved));
-
-			/*
-			 * VERIFICATION, and the one reason the iteration below still
-			 * exists: the solve assumes one affine map, and a discrete
-			 * decision inside the pipeline — an `AGG_MAX` argmax picking
-			 * another producer, an automatic hull pick — may flip between
-			 * two price points and split it into two. Evaluating at the
-			 * solved prices has to reproduce them within the very
-			 * tolerance the iteration would have stopped at; anything else
-			 * means the solved point is not a fixed point of the map that
-			 * actually applies there, and the iteration takes over.
-			 */
-			const predicted: Record<string, IRaukkOutputCost> = {};
-			const produced: Record<string, IRaukkOutputCost> = {};
-
-			unknowns.forEach((ticker, index) => {
-				const output: IRaukkOutputCost | undefined =
-					final.outputs[ticker];
-
-				// a ticker the solved point no longer produces at all is a
-				// structural change, which `outputsSettled` refuses below
-				if (output === undefined) return;
-
-				produced[ticker] = output;
-				predicted[ticker] = { ...output, costPerUnit: solved[index] };
-			});
-
-			if (
-				Object.keys(produced).length === unknowns.length &&
-				outputsSettled(predicted, produced)
-			) {
-				prepared.store(final);
-
-				return { snapshot: final, prices };
-			}
-		}
+		return { snapshot, prices };
 	}
+
+	/** One trial point as a producer price override of this plan */
+	const overrideOf = (selfPrices: number[]): IRaukkProducerPriceOverride => ({
+		[context.planUuid]: Object.fromEntries(
+			unknowns.map((ticker, index) => [ticker, selfPrices[index]])
+		),
+	});
+
+	const solved: number[] | null = solveAffineFixedPoint(
+		(selfPrices: number[]) => {
+			const probe: IRaukkSnapshot = computeOnce(overrideOf(selfPrices));
+
+			return unknowns.map(
+				(ticker) => probe.outputs[ticker]?.costPerUnit ?? Number.NaN
+			);
+		},
+		unknowns.map((ticker) => snapshot.outputs[ticker].costPerUnit)
+	);
+
+	if (solved === null) {
+		warnSelfLoopUnsolved(
+			context.planUuid,
+			"the system has no finite fixed point — a loop consuming 100 % of its own output has none — or a probe produced no finite number"
+		);
+
+		return { snapshot, prices };
+	}
+
+	const final: IRaukkSnapshot = computeOnce(overrideOf(solved));
 
 	/*
-	 * FALLBACK, reached when the closed form solve did not apply: more
-	 * unknowns than it attempts, a singular system (a loop consuming
-	 * 100 % of its own output has no finite fixed point), a probe that
-	 * produced no finite number, or a solved point the verification above
-	 * rejected. Rerun against the own stored value until the outputs
-	 * settle or the iteration cap is hit, exactly as before the solve.
+	 * VERIFICATION: the solve assumes ONE affine map, and a discrete
+	 * decision inside the pipeline — an `AGG_MAX` argmax picking another
+	 * producer, an automatic hull pick — may flip between two price points
+	 * and split it into two. Evaluating at the solved prices has to
+	 * reproduce them within the tolerance of {@link outputsSettled};
+	 * anything else means the solved point is not a fixed point of the map
+	 * that actually applies there.
 	 */
-	for (
-		let iteration = 1;
-		snapshot.draws[context.planUuid] !== undefined &&
-		iteration < RAUKK_SELF_LOOP_MAX_ITERATIONS;
-		iteration++
+	const predicted: Record<string, IRaukkOutputCost> = {};
+	const produced: Record<string, IRaukkOutputCost> = {};
+
+	unknowns.forEach((ticker, index) => {
+		const output: IRaukkOutputCost | undefined = final.outputs[ticker];
+
+		// a ticker the solved point no longer produces at all is a
+		// structural change, which the count check below refuses
+		if (output === undefined) return;
+
+		produced[ticker] = output;
+		predicted[ticker] = { ...output, costPerUnit: solved[index] };
+	});
+
+	if (
+		Object.keys(produced).length !== unknowns.length ||
+		!outputsSettled(predicted, produced)
 	) {
-		const next: IRaukkSnapshot = computeOnce();
-		const settled: boolean = outputsSettled(snapshot.outputs, next.outputs);
+		warnSelfLoopUnsolved(
+			context.planUuid,
+			"the solved point did not reproduce itself, a discrete decision flips between the two price points"
+		);
 
-		snapshot = next;
-		prepared.store(snapshot);
-
-		if (settled) break;
+		return { snapshot, prices };
 	}
 
-	return { snapshot, prices };
+	prepared.store(final);
+
+	return { snapshot: final, prices };
+}
+
+/**
+ * Reports a self supply fixed point the closed form solve did not deliver.
+ *
+ * The plan keeps its SEED snapshot — the one honest computation at the
+ * current prices, exactly what an acyclic plan gets — and the failure is
+ * surfaced instead of being crawled towards: a loop consuming 100 % of its
+ * own output has no finite fixed point, and no number of reruns would
+ * find one.
+ *
+ * @author raukk
+ *
+ * @param {string} planUuid Plan Uuid
+ * @param {string} reason Why the solve did not apply
+ * @returns {void}
+ */
+function warnSelfLoopUnsolved(planUuid: string, reason: string): void {
+	console.warn(
+		`[raukk] self supply loop of plan '${planUuid}' could not be solved: ${reason}; the single pass numbers are kept`
+	);
 }
 
 /**

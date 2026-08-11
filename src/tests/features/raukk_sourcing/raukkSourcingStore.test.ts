@@ -631,6 +631,108 @@ describe("Raukk Sourcing Store", () => {
 		});
 	});
 
+	describe("recomputeGraphInputs", () => {
+		/**
+		 * One empire holding the given plans, everything else out of the
+		 * accounts scope.
+		 *
+		 * @param {string[]} planUuids Plan Uuids
+		 */
+		function assignAll(planUuids: string[]): void {
+			usePlanningStore().setEmpires([
+				{
+					uuid: "empire",
+					name: "My Empire",
+					plans: planUuids.map((uuid) => ({
+						uuid,
+						plan_name: uuid,
+						planet_natural_id: "OT-580b",
+					})),
+				} as unknown as IPlanEmpireElement,
+			]);
+		}
+
+		beforeEach(() => {
+			store.setSnapshot(
+				"assigned",
+				makeSnapshot("Assigned", { ORE: 100 })
+			);
+			store.setSnapshot("dropped", makeSnapshot("Dropped", { ORE: 30 }));
+			store.setTickerSource("assigned", "RAT", {
+				mode: "plan",
+				sourcePlanUuid: "dropped",
+			});
+			store.setTickerSource("dropped", "RAT", {
+				mode: "plan",
+				sourcePlanUuid: "assigned",
+			});
+			assignAll(["assigned"]);
+		});
+
+		it("mirrors the sourcing scope", () => {
+			const { configs, snapshots } = store.recomputeGraphInputs();
+
+			expect(Object.keys(snapshots)).toStrictEqual(["assigned"]);
+			expect(Object.keys(configs)).toStrictEqual(["assigned"]);
+		});
+
+		it("answers with everything while unassigned sources are allowed", () => {
+			store.setShippingConfig({ allowUnassignedSources: true });
+
+			const { configs, snapshots } = store.recomputeGraphInputs();
+
+			expect(Object.keys(snapshots).sort()).toStrictEqual([
+				"assigned",
+				"dropped",
+			]);
+			expect(Object.keys(configs).sort()).toStrictEqual([
+				"assigned",
+				"dropped",
+			]);
+		});
+
+		it("unions the extra plan in from the full store", () => {
+			const { configs, snapshots } =
+				store.recomputeGraphInputs("dropped");
+
+			expect(Object.keys(snapshots).sort()).toStrictEqual([
+				"assigned",
+				"dropped",
+			]);
+			expect(Object.keys(configs).sort()).toStrictEqual([
+				"assigned",
+				"dropped",
+			]);
+			expect(snapshots.dropped.planName).toBe("Dropped");
+		});
+
+		it("keeps the config of an assigned plan that never computed", () => {
+			store.setTickerSource("fresh", "RAT", {
+				mode: "plan",
+				sourcePlanUuid: "assigned",
+			});
+			assignAll(["assigned", "fresh"]);
+
+			const { configs, snapshots } = store.recomputeGraphInputs();
+
+			expect(Object.keys(configs).sort()).toStrictEqual([
+				"assigned",
+				"fresh",
+			]);
+			expect(snapshots.fresh).toBeUndefined();
+		});
+
+		it("returns records the caller may not write back through", () => {
+			const { configs, snapshots } = store.recomputeGraphInputs();
+
+			delete configs.assigned;
+			delete snapshots.assigned;
+
+			expect(store.configs.assigned).toBeDefined();
+			expect(store.snapshots.assigned).toBeDefined();
+		});
+	});
+
 	describe("subscription", () => {
 		it("sums draws and computes the output share", () => {
 			store.setSnapshot("a", makeSnapshot("A", { ORE: 100 }));

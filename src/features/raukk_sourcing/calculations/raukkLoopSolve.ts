@@ -19,8 +19,9 @@
 // The one thing that is not affine is a DISCRETE decision downstream of
 // a price: an `AGG_MAX` argmax flipping to another producer, a hull pick
 // changing. Such a flip changes which affine map applies, so the caller
-// must verify the solved point reproduces itself and fall back to the
-// iteration when it does not.
+// must verify the solved point reproduces itself and REPORT the loop as
+// unsolved when it does not. Nothing iterates towards a fixed point any
+// more; a solve that does not apply is surfaced, not crawled at.
 
 /**
  * Relative pivot magnitude below which a system counts as singular.
@@ -41,9 +42,10 @@ export const RAUKK_LOOP_SOLVE_PIVOT_EPSILON: number = 1e-9;
  * Largest system the closed form solve is attempted for.
  *
  * The extraction costs one evaluation per unknown, and an evaluation is a
- * full snapshot computation — a loop with more unknowns than this is
- * cheaper to iterate than to solve exactly. No real plan comes close: the
- * unknowns are the tickers a plan draws from ITSELF.
+ * full snapshot computation — a loop with more unknowns than this costs
+ * more than the answer is worth, and the caller reports it unsolved. No
+ * real plan comes close: the unknowns are the tickers a plan draws from
+ * ITSELF.
  *
  * @author raukk
  */
@@ -61,8 +63,8 @@ export const RAUKK_LOOP_SOLVE_MAX_UNKNOWNS: number = 20;
  * Returns `null` rather than throwing whenever the answer would not be
  * trustworthy: a malformed system, a non finite entry, a pivot below
  * {@link RAUKK_LOOP_SOLVE_PIVOT_EPSILON} of the matrix scale (singular or
- * ill conditioned) or a non finite solution. Every caller has an
- * iterative fallback, so `null` means "iterate instead", never "fail".
+ * ill conditioned) or a non finite solution. `null` is the callers signal
+ * to keep its single pass numbers and report the loop unsolved.
  *
  * Neither `a` nor `b` is mutated.
  *
@@ -173,14 +175,15 @@ export function affinePerturbationDelta(base: number): number {
  * fixed point is then the solution of `(I − A)·p = b`.
  *
  * Cost is therefore `k + 1` evaluations and one k × k solve, against the
- * open ended iteration it replaces — and the answer is the exact fixed
- * point rather than whatever the iteration cap left behind.
+ * open ended iteration it replaced — and the answer is the exact fixed
+ * point rather than whatever an iteration cap would have left behind.
  *
  * Returns `null` when the map cannot be extracted (an evaluation of the
  * wrong length or a non finite value), when there are more unknowns than
  * {@link RAUKK_LOOP_SOLVE_MAX_UNKNOWNS} or when the linear solve fails —
  * `I − A` is singular exactly when the loop consumes 100 % of its own
- * output, which has no finite fixed point. Callers fall back to iterating.
+ * output, which has no finite fixed point at all — there is nothing for a
+ * caller to converge towards, and it reports the loop instead.
  *
  * The evaluator must be affine for the result to mean anything. It is on
  * the CALLER to verify the solved point by evaluating there once more:

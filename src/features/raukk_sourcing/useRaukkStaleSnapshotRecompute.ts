@@ -5,15 +5,16 @@ import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingSt
 
 // Composables
 import {
+	createBlockRecomputer,
+	IRaukkBlockRecomputer,
 	IRaukkChainError,
 	loadEmpireList,
-	recomputePlanSnapshot,
-} from "@/features/raukk_sourcing/useRaukkChainRecompute";
+} from "@/features/raukk_sourcing/useRaukkBlockRecompute";
 
 // Graph
 import {
 	buildDependencyGraph,
-	orderUpstreamFirst,
+	orderUpstreamFirstBlocks,
 } from "@/features/raukk_sourcing/raukkSourcingGraph";
 
 // raukk: what the FLEET consumes is sourced account wide, not per base
@@ -21,12 +22,23 @@ import { raukkEffectiveShipSources } from "@/features/raukk_sourcing/calculation
 
 // Types & Interfaces
 import { IPlanEmpireElement } from "@/stores/planningStore.types";
-import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
+import {
+	IRaukkPlanConfig,
+	IRaukkSnapshot,
+} from "@/features/raukk_sourcing/raukkSourcing.types";
+
+/** Graph inputs one sweep pass builds its dependency graph from */
+type IRaukkGraphInputs = {
+	configs: Record<string, IRaukkPlanConfig>;
+	snapshots: Record<string, IRaukkSnapshot>;
+};
 
 /** Total pass cap of one run, first pass included. A recompute whose
  * numbers materially changed re-flags its dependents stale; follow up
- * passes carry that cascade — and a settling supply loop — without
- * ever running away. The cap of the empire wide upkeep. */
+ * passes carry that staleness CASCADE down the dependency DAG. They are
+ * not loop settling — a supply loop is solved in one shot or reported —
+ * and an unsolved block leaves the sweep so no pass re-attempts it. The
+ * cap of the empire wide upkeep. */
 const RAUKK_STALE_SNAPSHOT_MAX_PASSES: number = 5;
 
 /**
@@ -40,12 +52,21 @@ const RAUKK_STALE_SNAPSHOT_MAX_PASSES: number = 5;
  * the plan or its empire is opened. This is that recompute, run from the
  * page that shows the consequence.
  *
- * Scope is the SCOPED snapshots — the plans the account still operates,
- * exactly the set `useRaukkFleet` rolls up — and of those only the ones
- * flagged stale: a current snapshot has nothing to gain from being
- * recomputed. Plans are ordered upstream first, so a source is refreshed
- * before everything drawing from it, and a failure is recorded per plan
- * without taking the run down.
+ * SCOPE, the mirror principle: the sweep works exactly the set the
+ * PRICING reads, {@link useRaukkSourcingStore.recomputeGraphInputs}, and
+ * of those only the ones flagged stale — a current snapshot has nothing
+ * to gain from being recomputed. The dependency graph, the snapshot
+ * predicate of the block ordering and the pending list all ask those same
+ * scoped inputs, so an out of scope producer named by a lingering config
+ * edge is never pulled into a pass. Staleness flags still cascade
+ * UNSCOPED, deliberately: an out of scope plan stays flagged and
+ * recomputes when it is opened, never during this account wide sweep.
+ *
+ * Plans are ordered upstream first as SCC BLOCKS, so a source is
+ * refreshed before everything drawing from it and a cross plan supply
+ * loop is solved as a unit — the WHOLE loop is recomputed even when only
+ * one member was stale, a refreshed source changes every price in the
+ * loop. A failure is recorded per plan without taking the run down.
  *
  * The chain RESULTS are a separate step: recomputing snapshots refreshes
  * the flows a chain is costed from, so a chain recompute belongs after
@@ -67,18 +88,25 @@ export function useRaukkStaleSnapshotRecompute() {
 
 	/**
 	 * Uuids of the operated plans whose stored snapshot is flagged
-	 * stale, minus the ones a pass already failed on.
+	 * stale, minus the ones a pass already failed on and minus everything
+	 * the sweep scope does not hold.
 	 *
 	 * @author raukk
 	 *
 	 * @param {Set<string>} failed Plans excluded after a failure
+	 * @param {Record<string, IRaukkSnapshot>} scoped Scoped snapshots
 	 * @returns {string[]} Plan Uuids
 	 */
-	function stalePlans(failed: Set<string>): string[] {
+	function stalePlans(
+		failed: Set<string>,
+		scoped: Record<string, IRaukkSnapshot>
+	): string[] {
 		return Object.entries(sourcingStore.scopedSnapshots())
 			.filter(
 				([planUuid, snapshot]: [string, IRaukkSnapshot]) =>
-					!failed.has(planUuid) && snapshot.stale === true
+					!failed.has(planUuid) &&
+					snapshot.stale === true &&
+					scoped[planUuid] !== undefined
 			)
 			.map(([planUuid]) => planUuid);
 	}
@@ -96,7 +124,8 @@ export function useRaukkStaleSnapshotRecompute() {
 		/** Plans a recompute failed for, excluded from later passes */
 		const failed: Set<string> = new Set();
 
-		let pending: string[] = stalePlans(failed);
+		let inputs: IRaukkGraphInputs = sourcingStore.recomputeGraphInputs();
+		let pending: string[] = stalePlans(failed, inputs.snapshots);
 
 		if (pending.length === 0) return;
 
@@ -109,52 +138,73 @@ export function useRaukkStaleSnapshotRecompute() {
 		try {
 			const empireList: IPlanEmpireElement[] = await loadEmpireList();
 
+			const runner: IRaukkBlockRecomputer = createBlockRecomputer({
+				empireList,
+				shipSources: raukkEffectiveShipSources(
+					sourcingStore.shipSourcing
+				),
+				planNameOf: (planUuid: string) =>
+					sourcingStore.snapshots[planUuid]?.planName ?? planUuid,
+				onCurrent: (planName: string) => (current.value = planName),
+				onDone: () => done.value++,
+				onTotalAdd: (count: number) => (total.value += count),
+				onError: (error: IRaukkChainError) => {
+					failed.add(error.planUuid);
+					errors.value.push(error);
+				},
+			});
+
+			// the passes carry the staleness CASCADE over the dependency DAG:
+			// a materially changed recompute re-flags its dependents, and
+			// they are worked in the next pass. Nothing here settles a loop
 			for (
 				let pass = 1;
 				pass <= RAUKK_STALE_SNAPSHOT_MAX_PASSES && pending.length > 0;
 				pass++
 			) {
-				const order: string[] = orderUpstreamFirst(
+				const blocks: string[][] = orderUpstreamFirstBlocks(
 					buildDependencyGraph(
-						sourcingStore.configs,
-						sourcingStore.snapshots,
+						inputs.configs,
+						inputs.snapshots,
 						raukkEffectiveShipSources(sourcingStore.shipSourcing)
 					),
-					pending
+					pending,
+					(planUuid: string) =>
+						inputs.snapshots[planUuid] !== undefined
 				);
 
-				for (const planUuid of order) {
-					// settled while the pass progressed
-					if (!stalePlans(failed).includes(planUuid)) continue;
+				// a loop block pulls its non stale members in, so the work of
+				// a pass is only known once the blocks are: count it up front
+				// and the total can never sit below the done count
+				total.value =
+					done.value +
+					blocks.reduce((sum, block) => sum + block.length, 0);
 
-					const planName: string =
-						sourcingStore.snapshots[planUuid]?.planName ?? planUuid;
+				for (const block of blocks) {
+					// a loop is recomputed as a unit, its non stale members
+					// included — a refreshed source moves every price in it.
+					// An UNSOLVED one leaves the sweep whole: the runner
+					// already surfaced the error, and a later cascade pass
+					// would only re-attempt a system that has no answer
+					if (block.length > 1) {
+						if (!(await runner.runLoopBlock(block)))
+							block.forEach((planUuid) => failed.add(planUuid));
 
-					current.value = planName;
-
-					try {
-						await recomputePlanSnapshot(planUuid, empireList);
-					} catch (error) {
-						failed.add(planUuid);
-
-						errors.value.push({
-							planUuid,
-							planName,
-							message:
-								error instanceof Error
-									? error.message
-									: "unknown error",
-						});
+						continue;
 					}
 
-					done.value++;
+					// settled while the pass progressed
+					if (
+						!stalePlans(failed, inputs.snapshots).includes(block[0])
+					)
+						continue;
 
-					// yield back to vue and update the progress display
-					await new Promise((resolve) => setTimeout(resolve, 0));
+					await runner.runSingleton(block[0]);
 				}
 
 				// a materially changed recompute re-flags its dependents
-				pending = stalePlans(failed);
+				inputs = sourcingStore.recomputeGraphInputs();
+				pending = stalePlans(failed, inputs.snapshots);
 				total.value = done.value + pending.length;
 			}
 		} finally {
