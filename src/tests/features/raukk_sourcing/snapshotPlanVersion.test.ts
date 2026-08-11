@@ -67,6 +67,29 @@ describe("snapshot plan version", () => {
 		);
 	});
 
+	it("records the version the COMPUTING side states, not the stored plan", () => {
+		const planningStore = usePlanningStore();
+		const sourcing = useRaukkSourcingStore();
+
+		// a newer plan reached the planning store while the view that
+		// computed these numbers still holds the previous version
+		planningStore.setPlan(makePlan({ plan_permits_used: 9 }));
+		sourcing.setSnapshot("plan-1", makeSnapshot(), "computed-from");
+
+		expect(sourcing.snapshots["plan-1"].planFingerprint).toBe(
+			"computed-from"
+		);
+
+		// so the newer version still registers as one these numbers do not
+		// describe, instead of having its staleness silently consumed
+		expect(
+			sourcing.markStaleIfPlanChanged(
+				"plan-1",
+				planContentFingerprint(makePlan({ plan_permits_used: 9 }))
+			)
+		).toBe(true);
+	});
+
 	it("flags the snapshot when a newer plan arrives from elsewhere", () => {
 		const planningStore = usePlanningStore();
 		const sourcing = useRaukkSourcingStore();

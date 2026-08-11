@@ -3,6 +3,12 @@ import { createPinia, setActivePinia } from "pinia";
 
 // Latch
 import { resetRaukkBlockSolveLatches } from "@/features/raukk_sourcing/raukkBlockSolveLatch";
+import {
+	beginRaukkSnapshotUpkeep,
+	endRaukkSnapshotUpkeep,
+	raukkSnapshotUpkeepBusy,
+	resetRaukkSnapshotUpkeep,
+} from "@/features/raukk_sourcing/raukkSnapshotUpkeepLatch";
 import { effectScope, EffectScope, nextTick, ref, Ref } from "vue";
 
 // the composable orchestrates loading, calculation and the snapshot
@@ -40,10 +46,14 @@ vi.mock("@/features/raukk_sourcing/useRaukkSnapshot", () => ({
 // Composables
 import { useRaukkEmpireAutoSnapshot } from "@/features/raukk_sourcing/useRaukkEmpireAutoSnapshot";
 
+// Composables
+import { planContentFingerprint } from "@/features/planning_data/usePlan";
+
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
 // Types & Interfaces
+import { IPlan } from "@/stores/planningStore.types";
 import {
 	IRaukkPlanConfig,
 	IRaukkSnapshot,
@@ -91,6 +101,7 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 		setActivePinia(createPinia());
 		// the unsolved block latch is module state and outlives one test
 		resetRaukkBlockSolveLatches();
+		resetRaukkSnapshotUpkeep();
 		sourcingStore = useRaukkSourcingStore();
 
 		mockExecute.mockReset();
@@ -262,7 +273,50 @@ describe("useRaukkEmpireAutoSnapshot", () => {
 			planetNaturalId: "PL-a",
 			cxUuid: "cx-empire-a",
 			planResult: { profit: 1 },
+			// the version these numbers were calculated from
+			planFingerprint: planContentFingerprint({
+				plan_name: "Plan a",
+				planet_natural_id: "PL-a",
+			} as IPlan),
 		});
+	});
+
+	it("waits for another account wide writer instead of running beside it", async () => {
+		beginRaukkSnapshotUpkeep();
+
+		mount();
+		await finishCalculation();
+
+		expect(mockComputePlanSnapshot).not.toHaveBeenCalled();
+
+		endRaukkSnapshotUpkeep();
+		await vi.advanceTimersByTimeAsync(1100);
+
+		// waited, never dropped: the plans of the empire are still computed
+		expect(
+			mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+		).toStrictEqual(["a", "b"]);
+	});
+
+	it("holds the upkeep latch while it runs", async () => {
+		let heldDuringRun: boolean = false;
+
+		mockComputePlanSnapshot.mockImplementation(
+			async (context: { planUuid: string; planName: string }) => {
+				heldDuringRun = raukkSnapshotUpkeepBusy();
+				sourcingStore.setSnapshot(
+					context.planUuid,
+					makeSnapshot(context.planName)
+				);
+				return {};
+			}
+		);
+
+		mount();
+		await finishCalculation();
+
+		expect(heldDuringRun).toBe(true);
+		expect(raukkSnapshotUpkeepBusy()).toBe(false);
 	});
 
 	it("leaves current snapshots alone", async () => {

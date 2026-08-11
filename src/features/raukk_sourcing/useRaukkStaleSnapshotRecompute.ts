@@ -13,6 +13,12 @@ import {
 // raukk: the sweep owns the chain step while it runs
 import { useRaukkAutoChainRefresh } from "@/features/raukk_sourcing/useRaukkAutoChainRefresh";
 
+// Latch
+import {
+	acquireRaukkSnapshotUpkeep,
+	endRaukkSnapshotUpkeep,
+} from "@/features/raukk_sourcing/raukkSnapshotUpkeepLatch";
+
 // Graph
 import {
 	buildDependencyGraph,
@@ -42,6 +48,37 @@ type IRaukkGraphInputs = {
  * and an unsolved block leaves the sweep so no pass re-attempts it. The
  * cap of the empire wide upkeep. */
 const RAUKK_STALE_SNAPSHOT_MAX_PASSES: number = 5;
+
+/**
+ * Plans this sweep would work: operated plans whose stored snapshot is
+ * flagged stale, minus the ones a pass already failed on and minus
+ * everything the sweep scope does not hold.
+ *
+ * The ONE definition of the sweeps pending set, exported so a caller
+ * deciding WHEN to sweep — {@link useRaukkAutoStaleSnapshotSweep} — asks
+ * the same question the run itself will, instead of a second one that can
+ * drift from it.
+ *
+ * @author raukk
+ *
+ * @param {Record<string, IRaukkSnapshot>} scoped Scoped snapshots, i.e.
+ * 		the `snapshots` half of `recomputeGraphInputs`
+ * @param {Set<string>} failed Plans excluded after a failure
+ * @returns {string[]} Plan Uuids
+ */
+export function raukkStalePlans(
+	scoped: Record<string, IRaukkSnapshot>,
+	failed: Set<string> = new Set()
+): string[] {
+	return Object.entries(useRaukkSourcingStore().scopedSnapshots())
+		.filter(
+			([planUuid, snapshot]: [string, IRaukkSnapshot]) =>
+				!failed.has(planUuid) &&
+				snapshot.stale === true &&
+				scoped[planUuid] !== undefined
+		)
+		.map(([planUuid]) => planUuid);
+}
 
 /**
  * Recomputes every STALE stored snapshot of the account.
@@ -95,48 +132,52 @@ export function useRaukkStaleSnapshotRecompute() {
 	const total: Ref<number> = ref(0);
 	const errors: Ref<IRaukkChainError[]> = ref([]);
 
-	/**
-	 * Uuids of the operated plans whose stored snapshot is flagged
-	 * stale, minus the ones a pass already failed on and minus everything
-	 * the sweep scope does not hold.
-	 *
-	 * @author raukk
-	 *
-	 * @param {Set<string>} failed Plans excluded after a failure
-	 * @param {Record<string, IRaukkSnapshot>} scoped Scoped snapshots
-	 * @returns {string[]} Plan Uuids
-	 */
+	/** Pending set of this run, see {@link raukkStalePlans} */
 	function stalePlans(
 		failed: Set<string>,
 		scoped: Record<string, IRaukkSnapshot>
 	): string[] {
-		return Object.entries(sourcingStore.scopedSnapshots())
-			.filter(
-				([planUuid, snapshot]: [string, IRaukkSnapshot]) =>
-					!failed.has(planUuid) &&
-					snapshot.stale === true &&
-					scoped[planUuid] !== undefined
-			)
-			.map(([planUuid]) => planUuid);
+		return raukkStalePlans(scoped, failed);
 	}
 
 	/**
 	 * Recomputes every stale snapshot, upstream first.
 	 *
+	 * Holds the snapshot upkeep latch for its duration: every other
+	 * account wide writer — the empire upkeep, the open plans own upkeep,
+	 * the automatic sweep — takes or gates on the same latch, so one base
+	 * is never simulated by two of them at once. A run waits for the latch
+	 * rather than skipping, the manual button must not silently do nothing.
+	 *
 	 * @author raukk
 	 *
-	 * @returns {Promise<void>}
+	 * @returns {Promise<boolean>} A run happened; false means there was
+	 * nothing pending or this composable was already running
 	 */
-	async function recomputeStaleSnapshots(): Promise<void> {
-		if (running.value) return;
+	async function recomputeStaleSnapshots(): Promise<boolean> {
+		if (running.value) return false;
 
 		/** Plans a recompute failed for, excluded from later passes */
 		const failed: Set<string> = new Set();
 
+		if (
+			stalePlans(failed, sourcingStore.recomputeGraphInputs().snapshots)
+				.length === 0
+		)
+			return false;
+
+		// no other account wide writer may hold the plans while this runs
+		await acquireRaukkSnapshotUpkeep();
+
+		// the pending set is read again behind the latch: whoever held it
+		// may well have recomputed what this run was armed for
 		let inputs: IRaukkGraphInputs = sourcingStore.recomputeGraphInputs();
 		let pending: string[] = stalePlans(failed, inputs.snapshots);
 
-		if (pending.length === 0) return;
+		if (pending.length === 0) {
+			endRaukkSnapshotUpkeep();
+			return false;
+		}
 
 		running.value = true;
 		current.value = undefined;
@@ -225,7 +266,10 @@ export function useRaukkStaleSnapshotRecompute() {
 			running.value = false;
 			current.value = undefined;
 			resume();
+			endRaukkSnapshotUpkeep();
 		}
+
+		return true;
 	}
 
 	return {

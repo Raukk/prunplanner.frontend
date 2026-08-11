@@ -13,6 +13,13 @@ vi.mock("@/features/raukk_sourcing/useRaukkSnapshot", () => ({
 // Composables
 import { useRaukkAutoSnapshot } from "@/features/raukk_sourcing/useRaukkAutoSnapshot";
 
+// Latch
+import {
+	beginRaukkSnapshotUpkeep,
+	endRaukkSnapshotUpkeep,
+	resetRaukkSnapshotUpkeep,
+} from "@/features/raukk_sourcing/raukkSnapshotUpkeepLatch";
+
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
@@ -45,10 +52,12 @@ describe("useRaukkAutoSnapshot", () => {
 	let planUuid: Ref<string | undefined>;
 	let planResult: Ref<IPlanResult>;
 	let disabled: Ref<boolean>;
+	let planFingerprint: Ref<string | undefined>;
 
 	beforeEach(() => {
 		vi.useFakeTimers();
 		setActivePinia(createPinia());
+		resetRaukkSnapshotUpkeep();
 		sourcingStore = useRaukkSourcingStore();
 
 		mockComputePlanSnapshot.mockReset();
@@ -57,6 +66,7 @@ describe("useRaukkAutoSnapshot", () => {
 		planUuid = ref<string | undefined>("plan-1");
 		planResult = ref({} as IPlanResult);
 		disabled = ref(false);
+		planFingerprint = ref<string | undefined>(undefined);
 	});
 
 	afterEach(() => {
@@ -75,6 +85,7 @@ describe("useRaukkAutoSnapshot", () => {
 				cxUuid: ref(undefined),
 				planResult,
 				disabled,
+				planFingerprint,
 			})
 		);
 	}
@@ -214,6 +225,66 @@ describe("useRaukkAutoSnapshot", () => {
 
 		// nothing further fires afterwards
 		await vi.advanceTimersByTimeAsync(2000);
+		expect(mockComputePlanSnapshot).toHaveBeenCalledTimes(1);
+	});
+
+	it("computes when the stored snapshot describes another plan version", async () => {
+		// e.g. a background revalidation brought a newer plan and the view
+		// remounted on it; the snapshot left behind is neither missing nor
+		// flagged, it just describes the version before
+		const snapshot: IRaukkSnapshot = makeSnapshot();
+		snapshot.planFingerprint = "version-1";
+		sourcingStore.setSnapshot("plan-1", snapshot, "version-1");
+
+		planFingerprint.value = "version-2";
+
+		mount();
+		await vi.advanceTimersByTimeAsync(1100);
+
+		expect(mockComputePlanSnapshot).toHaveBeenCalledTimes(1);
+		expect(mockComputePlanSnapshot.mock.calls[0][0]).toMatchObject({
+			planFingerprint: "version-2",
+		});
+	});
+
+	it("stays quiet when the snapshot describes the version on screen", async () => {
+		sourcingStore.setSnapshot("plan-1", makeSnapshot(), "version-1");
+		planFingerprint.value = "version-1";
+
+		mount();
+		await vi.advanceTimersByTimeAsync(1100);
+
+		expect(mockComputePlanSnapshot).not.toHaveBeenCalled();
+	});
+
+	it("computes when a stored snapshot of another version arrives later", async () => {
+		sourcingStore.setSnapshot("plan-1", makeSnapshot(), "version-1");
+		planFingerprint.value = "version-1";
+
+		mount();
+		await vi.advanceTimersByTimeAsync(1100);
+		expect(mockComputePlanSnapshot).not.toHaveBeenCalled();
+
+		// an account wide sweep recomputed this plan from the version the
+		// backend holds, which is not the one this view shows
+		sourcingStore.setSnapshot("plan-1", makeSnapshot(), "version-0");
+		await nextTick();
+		await vi.advanceTimersByTimeAsync(1100);
+
+		expect(mockComputePlanSnapshot).toHaveBeenCalledTimes(1);
+	});
+
+	it("waits out an account wide sweep instead of computing beside it", async () => {
+		beginRaukkSnapshotUpkeep();
+
+		mount();
+		await vi.advanceTimersByTimeAsync(1100);
+
+		expect(mockComputePlanSnapshot).not.toHaveBeenCalled();
+
+		endRaukkSnapshotUpkeep();
+		await vi.advanceTimersByTimeAsync(1100);
+
 		expect(mockComputePlanSnapshot).toHaveBeenCalledTimes(1);
 	});
 

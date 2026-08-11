@@ -2242,26 +2242,35 @@ export const useRaukkSourcingStore = defineStore(
 		 *
 		 * @param {string} planUuid Plan Uuid
 		 * @param {IRaukkSnapshot} snapshot Snapshot Data
+		 * @param {string | undefined} planFingerprint Version of the plan
+		 * 		these numbers were COMPUTED from, when the caller knows it
 		 */
-		function setSnapshot(planUuid: string, snapshot: IRaukkSnapshot): void {
+		function setSnapshot(
+			planUuid: string,
+			snapshot: IRaukkSnapshot,
+			planFingerprint?: string
+		): void {
 			const previous: IRaukkSnapshot | undefined =
 				snapshots.value[planUuid];
 
 			/*
-				Record which version of the plan these numbers describe.
-				The snapshot was just computed from the plan the query
-				cache wrote through to the planning store, so that is the
-				version, and `markStaleIfPlanChanged` can later tell that
-				a newer one arrived from somewhere else.
+				Which version of the plan these numbers describe, stated by
+				the COMPUTING side: an open plan view computes from its own
+				copy, so a version sitting in the planning store — a
+				background revalidation, an edit from another machine — is
+				not what the numbers describe, and stamping it would consume
+				the staleness flag `markStaleIfPlanChanged` raised for it.
+				The planning store answers only for callers that state
+				nothing.
 			*/
 			const plan = usePlanningStore().plans[planUuid];
 
 			snapshots.value[planUuid] = {
 				...inertClone(snapshot),
 				stale: false,
-				planFingerprint: plan
-					? planContentFingerprint(plan)
-					: undefined,
+				planFingerprint:
+					planFingerprint ??
+					(plan ? planContentFingerprint(plan) : undefined),
 			};
 
 			// dependents derive from the new draws as well

@@ -45,7 +45,12 @@
 	import { usePlanCalculation } from "@/features/planning/usePlanCalculation";
 	// raukk: automatic sourcing snapshot upkeep of the open plan
 	import { useRaukkAutoSnapshot } from "@/features/raukk_sourcing/useRaukkAutoSnapshot";
-	import { usePlan } from "@/features/planning_data/usePlan";
+	// raukk: recompute of the stale snapshots OTHER plans are sourced from
+	import { useRaukkAutoStaleSnapshotSweep } from "@/features/raukk_sourcing/useRaukkAutoStaleSnapshotSweep";
+	import {
+		planContentFingerprint,
+		usePlan,
+	} from "@/features/planning_data/usePlan";
 	import { usePlanPreferences } from "@/features/preferences/usePlanPreferences";
 	import { useHabOptimization } from "@/features/preferences/useHabOptimization";
 	const { habOptimizeForced, habOptimizeGoal, resolveAutoOptimizeHabs } =
@@ -248,6 +253,28 @@
 		planetNaturalId: computed(() => planetData.planet_natural_id),
 		cxUuid: refCXUuid,
 		planResult: result,
+		disabled: computed(() => props.disabled),
+		/*
+			The version the snapshot describes, taken from the SAVE PAYLOAD:
+			it is the content the backend would store for this view, so a
+			saved plan fingerprints identically on both sides and only real
+			unsaved edits differ. `refPlanData` may not be used here — its
+			`plan_name` is detached from the editor field.
+		*/
+		planFingerprint: computed(() =>
+			planContentFingerprint(backendData.value)
+		),
+	});
+
+	/*
+	 * raukk: the producer pool of this plans sourcing screen is read off
+	 * the STORED snapshots of every other plan, and a stale one keeps
+	 * serving the outputs it was computed with — a base that started
+	 * producing a new ticker would never appear here, its own chain edges
+	 * not existing yet. The account wide stale sweep is what fills that in,
+	 * debounced and guarded against the upkeep above.
+	 */
+	useRaukkAutoStaleSnapshotSweep({
 		disabled: computed(() => props.disabled),
 	});
 

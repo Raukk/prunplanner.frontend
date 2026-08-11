@@ -14,16 +14,31 @@ import { PLANET_COGCPROGRAM_TYPE } from "@/features/api/gameData.types";
 import { IPlan, PLAN_COGCPROGRAM_TYPE } from "@/stores/planningStore.types";
 
 /**
+ * The editable content of a plan, the only part a fingerprint reads.
+ * Stated structurally so a stored plan and a SAVE PAYLOAD — the same
+ * content on its way to the backend — fingerprint through one function.
+ */
+export type IPlanContent = Pick<
+	IPlan,
+	| "plan_name"
+	| "planet_natural_id"
+	| "plan_permits_used"
+	| "plan_corphq"
+	| "plan_cogc"
+	| "plan_data"
+>;
+
+/**
  * Stable fingerprint of a plans editable content. Deliberately excludes
  * `uuid` and `empires`: those differ between the plan, plan list and
  * empire plan endpoints without the plan itself having changed.
  *
  * @author jplacht
  *
- * @param {IPlan} plan Plan Data
+ * @param {IPlanContent} plan Plan Data
  * @returns {string} Fingerprint of the editable content
  */
-export function planContentFingerprint(plan: IPlan): string {
+export function planContentFingerprint(plan: IPlanContent): string {
 	return toCacheKey({
 		plan_name: plan.plan_name ?? "",
 		planet_natural_id: plan.planet_natural_id,

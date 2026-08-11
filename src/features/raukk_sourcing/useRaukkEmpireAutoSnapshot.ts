@@ -13,6 +13,12 @@ import {
 // raukk: the upkeep owns the chain step while it runs
 import { useRaukkAutoChainRefresh } from "@/features/raukk_sourcing/useRaukkAutoChainRefresh";
 
+// Latch
+import {
+	acquireRaukkSnapshotUpkeep,
+	endRaukkSnapshotUpkeep,
+} from "@/features/raukk_sourcing/raukkSnapshotUpkeepLatch";
+
 // Graph
 import {
 	buildDependencyGraph,
@@ -78,6 +84,11 @@ const RAUKK_EMPIRE_AUTO_SNAPSHOT_MAX_PASSES: number = 5;
  * which is what this upkeep exists for. Staleness flags still cascade
  * UNSCOPED, deliberately: an out of scope plan stays flagged and
  * recomputes when it is opened, never during an account wide sweep.
+ *
+ * The run holds the snapshot upkeep latch: every account wide writer
+ * takes or gates on it, so one base is never simulated by two of them at
+ * once. This one waits for its turn rather than skipping — the plans it
+ * is armed for are the ones the empire view is showing.
  *
  * Plans are walked as SCC BLOCKS: a cross plan supply loop is solved as a
  * unit, so the WHOLE loop is recomputed as soon as ANY member is pending
@@ -169,10 +180,24 @@ export function useRaukkEmpireAutoSnapshot(
 			});
 		}
 
+		if (
+			pendingPlans(sourcingStore.recomputeGraphInputs().snapshots)
+				.length === 0
+		)
+			return;
+
+		// no other account wide writer may hold these plans while this runs
+		await acquireRaukkSnapshotUpkeep();
+
+		// read again behind the latch: whoever held it may well have
+		// recomputed the very plans this run was armed for
 		let inputs: IRaukkGraphInputs = sourcingStore.recomputeGraphInputs();
 		let pending: string[] = pendingPlans(inputs.snapshots);
 
-		if (pending.length === 0) return;
+		if (pending.length === 0) {
+			endRaukkSnapshotUpkeep();
+			return;
+		}
 
 		running.value = true;
 		suspend();
@@ -257,6 +282,7 @@ export function useRaukkEmpireAutoSnapshot(
 		} finally {
 			running.value = false;
 			resume();
+			endRaukkSnapshotUpkeep();
 
 			if (rerunRequested) {
 				rerunRequested = false;

@@ -988,7 +988,32 @@ export function useQueryRepository() {
 				const session: number = queryStore.sessionGeneration;
 				const data = await callGetPlan(params.planUuid);
 				if (isCurrentSession(session)) {
+					/*
+						raukk: a mounted view reads this plan ONCE, when it
+						mounts, so a background revalidation bringing back
+						different content has to ask for a remount or the
+						screen keeps the version it opened with. A view
+						holding unsaved edits blocks that through its own
+						remount guard.
+
+						CONSTRAINT: the comparison holds a client built plan
+						— `PatchPlan` writes the accepted payload through —
+						against a backend response, so the post save refetch
+						can register as changed. It must stay blocked by the
+						editing views guard, i.e. `handleResetModified()` must
+						not run before `saveExistingPlan` returns.
+					*/
+					const stored: IPlan | undefined =
+						planningStore.plans[params.planUuid];
+
+					const changed: boolean =
+						stored !== undefined &&
+						planContentFingerprint(stored) !==
+							planContentFingerprint(data);
+
 					planningStore.setPlan(data);
+
+					if (changed) queryStore.requestRemount();
 
 					/*
 						raukk: the backend just told us what this plan
@@ -1148,7 +1173,38 @@ export function useQueryRepository() {
 				planUuid: string;
 				data: IPlanSaveData;
 			}) => {
+				const session: number = queryStore.sessionGeneration;
 				const data = await callSavePlan(params.planUuid, params.data);
+
+				/*
+					`GetPlan` hydrates a fresh page from the persisted
+					planning store, so the accepted save must reach that
+					store without depending on the refetch that follows it:
+					the refetch is one network call away from not happening,
+					and a reload before it would rebuild the pre save plan.
+
+					`empires` is carried over rather than derived: the save
+					payload states an `empire_uuid` at most, the membership
+					list belongs to the backend and is authoritative only
+					after the refetch. Everything the user edited is correct
+					immediately.
+				*/
+				if (isCurrentSession(session)) {
+					const stored: IPlan | undefined =
+						planningStore.plans[params.planUuid];
+
+					planningStore.setPlan({
+						uuid: params.planUuid,
+						plan_name: params.data.plan_name,
+						planet_natural_id: params.data.planet_natural_id,
+						plan_permits_used: params.data.plan_permits_used,
+						plan_corphq: params.data.plan_corphq,
+						plan_cogc: params.data.plan_cogc,
+						plan_data: inertClone(params.data.plan_data),
+						empires: stored?.empires,
+					});
+				}
+
 				// raukk: saved plan invalidates its own and all
 				// downstream snapshots
 				raukkSourcingStore.markStale(params.planUuid);
