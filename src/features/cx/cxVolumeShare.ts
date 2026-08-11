@@ -54,13 +54,26 @@ export const cxVolumeThresholdDefaults: ICXVolumeThresholds = {
  * Units per day of an output row that actually reach the exchange. The
  * plan's own consumption is already netted into `delta`; what other plans
  * draw has to come off on top of it, they never touch the market.
+ *
+ * A LOCALLY SOLD ticker reaches it with nothing at all. The ad sits on the
+ * plan's own planet and never enters the exchange's order book, so there
+ * is no share of its traded volume to warn about — whatever a counterpart
+ * still draws is the other term, and that one was never a market sale
+ * either. Flat for the whole ticker, exactly as its valuation is.
  * @author raukk
  *
  * @param {number} delta Netted material I/O delta of the row
  * @param {number} drawnPerDay Units per day other plans draw from the row
+ * @param {boolean} [locallySold] Whether the ticker carries a local sale ad
  * @returns {number} Units per day sold to the exchange, never negative
  */
-export function soldToCXPerDay(delta: number, drawnPerDay: number): number {
+export function soldToCXPerDay(
+	delta: number,
+	drawnPerDay: number,
+	locallySold: boolean = false
+): number {
+	if (locallySold) return 0;
+
 	return Math.max(0, delta - drawnPerDay);
 }
 
