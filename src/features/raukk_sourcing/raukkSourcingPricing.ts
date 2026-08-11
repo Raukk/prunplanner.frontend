@@ -15,6 +15,7 @@ import {
 // Types & Interfaces
 import { ICXData } from "@/stores/planningStore.types";
 import {
+	IRaukkChainFlow,
 	IRaukkOutputCost,
 	IRaukkSnapshot,
 	IRaukkTickerSource,
@@ -535,36 +536,28 @@ export function buildSourceOptions(
 			? ["AGG_AVG_MKT"]
 			: ["AGG_AVG", "AGG_MAX", "AGG_AVG_MKT"];
 
-	offered.forEach(
-		(aggregate) => {
-			const average: number = aggregateProducerPrice(
-				producers,
-				aggregate
-			);
+	offered.forEach((aggregate) => {
+		const average: number = aggregateProducerPrice(producers, aggregate);
 
-			options.push({
-				value: aggregate,
-				planName: aggregate,
-				planetNaturalId: "",
-				costPerUnit:
-					aggregate === "AGG_AVG_MKT" &&
-					input.marketPrice !== undefined
-						? blendMarketTopUp(average, input.marketPrice, coverage)
-						: average,
-				unitsPerDay: unitsTotal,
-				ownPct:
-					unitsTotal > 0
-						? input.prospectiveDrawPerDay / unitsTotal
-						: 0,
-				othersPct: unitsTotal > 0 ? othersTotal / unitsTotal : 0,
-				stale,
-				self: false,
-				aggregate: true,
-				baseFraction: aggregateBaseFraction(aggregate),
-				coverage: aggregate === "AGG_AVG_MKT" ? coverage : undefined,
-			});
-		}
-	);
+		options.push({
+			value: aggregate,
+			planName: aggregate,
+			planetNaturalId: "",
+			costPerUnit:
+				aggregate === "AGG_AVG_MKT" && input.marketPrice !== undefined
+					? blendMarketTopUp(average, input.marketPrice, coverage)
+					: average,
+			unitsPerDay: unitsTotal,
+			ownPct:
+				unitsTotal > 0 ? input.prospectiveDrawPerDay / unitsTotal : 0,
+			othersPct: unitsTotal > 0 ? othersTotal / unitsTotal : 0,
+			stale,
+			self: false,
+			aggregate: true,
+			baseFraction: aggregateBaseFraction(aggregate),
+			coverage: aggregate === "AGG_AVG_MKT" ? coverage : undefined,
+		});
+	});
 
 	return options;
 }
@@ -726,6 +719,85 @@ export function snapshotMateriallyChanged(
 			)
 				return true;
 		}
+	}
+
+	return false;
+}
+
+/**
+ * Lane identity of one frozen flow: owner, source, ticker, class and
+ * both endpoints — everything about a flow except HOW MUCH of it moves.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkChainFlow} flow Frozen plan flow
+ * @returns {string} Lane Key
+ */
+function flowLaneKey(flow: IRaukkChainFlow): string {
+	return [
+		flow.ownerPlanUuid ?? "",
+		flow.sourcePlanUuid ?? "",
+		flow.ticker,
+		flow.bucket ?? "",
+		flow.fromStop,
+		flow.toStop,
+	].join("|");
+}
+
+/**
+ * Determines whether the frozen FLOWS of two snapshots differ in
+ * anything the account level chain step consumes.
+ *
+ * The blind spot of {@link snapshotMateriallyChanged} stated as its own
+ * question: that one weighs the outputs and draws DOWNSTREAM PLANS
+ * consume, which the flows are not — a chain is costed from them, and a
+ * chain is not a plan. Backs the automatic chain refresh, which must not
+ * re-cost every loop because a plan recomputed to the same cargo.
+ *
+ * Units per lane, epsilon compared exactly as the material change of a
+ * snapshot is: several occurrences of one lane are summed, since the
+ * chain math cares how much rides it, not in how many pieces the
+ * snapshot froze it. Per unit weight and volume are material constants
+ * and are deliberately not compared.
+ *
+ * A snapshot GAINING or LOSING the field counts as changed: shipping
+ * having been switched writes flows where there were none, or drops
+ * them, and either way every chain claiming that plans cargo moves.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkSnapshot} previous Stored Snapshot
+ * @param {IRaukkSnapshot} next Fresh Snapshot
+ * @returns {boolean} Chain relevant cargo changed
+ */
+export function flowsMateriallyChanged(
+	previous: IRaukkSnapshot,
+	next: IRaukkSnapshot
+): boolean {
+	if ((previous.flows === undefined) !== (next.flows === undefined))
+		return true;
+
+	/** Units per day per lane, occurrences of one lane summed */
+	function unitsPerLane(flows: IRaukkChainFlow[]): Map<string, number> {
+		const units: Map<string, number> = new Map();
+
+		flows.forEach((flow) => {
+			const key: string = flowLaneKey(flow);
+
+			units.set(key, (units.get(key) ?? 0) + flow.unitsPerDay);
+		});
+
+		return units;
+	}
+
+	const before: Map<string, number> = unitsPerLane(previous.flows ?? []);
+	const after: Map<string, number> = unitsPerLane(next.flows ?? []);
+
+	const lanes: Set<string> = new Set([...before.keys(), ...after.keys()]);
+
+	for (const lane of lanes) {
+		if (!raukkEqualWithin(before.get(lane) ?? 0, after.get(lane) ?? 0))
+			return true;
 	}
 
 	return false;

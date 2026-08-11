@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
 // stores
@@ -15,7 +15,10 @@ import {
 import { RaukkLocalPriceSchema } from "@/features/raukk_sourcing/raukkSourcingStore.schemas";
 
 // Types & Interfaces
-import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
+import {
+	IRaukkChainFlow,
+	IRaukkSnapshot,
+} from "@/features/raukk_sourcing/raukkSourcing.types";
 import { IPlanEmpireElement } from "@/stores/planningStore.types";
 
 function makeSnapshot(
@@ -1524,6 +1527,171 @@ describe("Raukk Sourcing Store", () => {
 			expect(store.shippingConfig).toStrictEqual(
 				raukkDefaultShippingConfig()
 			);
+		});
+	});
+
+	describe("chain input notification", () => {
+		/** One flow of a snapshot, the account level chain step reads these */
+		function flow(unitsPerDay: number): IRaukkChainFlow {
+			return {
+				flowId: "a#0",
+				ownerPlanUuid: "a",
+				ticker: "ORE",
+				fromStop: "OT-580b",
+				toStop: "AI1",
+				unitsPerDay,
+				weightPerUnit: 1,
+				volumePerUnit: 1,
+			};
+		}
+
+		function withFlows(
+			snapshot: IRaukkSnapshot,
+			flows: IRaukkChainFlow[]
+		): IRaukkSnapshot {
+			return { ...snapshot, flows };
+		}
+
+		it("stays functional with nothing registered", () => {
+			expect(() =>
+				store.setChain({ chainId: "c1", stops: ["OT-580b", "AI1"] })
+			).not.toThrow();
+		});
+
+		it("notifies the registered listener and stops on unregister", () => {
+			const listener = vi.fn();
+			const unregister = store.onChainInputsChanged(listener);
+
+			store.setChain({ chainId: "c1", stops: ["OT-580b", "AI1"] });
+			expect(listener).toHaveBeenCalledTimes(1);
+
+			unregister();
+			store.deleteChain("c1");
+			expect(listener).toHaveBeenCalledTimes(1);
+		});
+
+		it("notifies every chain relevant mutation", () => {
+			const listener = vi.fn();
+			store.onChainInputsChanged(listener);
+
+			const calls: [string, () => void][] = [
+				[
+					"setChain",
+					() =>
+						store.setChain({
+							chainId: "c1",
+							stops: ["OT-580b", "AI1"],
+						}),
+				],
+				[
+					"setChainConfig",
+					() => store.setChainConfig({ autoCxSplit: true }),
+				],
+				["setDepot", () => store.setDepot("ZV-307c")],
+				["deleteDepot", () => store.deleteDepot("ZV-307c")],
+				[
+					"setAssignment",
+					() => store.setAssignment("chain:c1", "SHP_1"),
+				],
+				[
+					"setShipProfile",
+					() =>
+						store.setShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID, {
+							costPerParsec: 3,
+						}),
+				],
+				[
+					"resetShipProfile",
+					() => store.resetShipProfile(RAUKK_DEFAULT_SHIP_PROFILE_ID),
+				],
+				[
+					"setShipSourcingDefault",
+					() =>
+						store.setShipSourcingDefault("fuel", {
+							mode: "market",
+							priceMode: "BID",
+						}),
+				],
+				[
+					"setShipTickerSource",
+					() =>
+						store.setShipTickerSource("FF", {
+							mode: "market",
+							priceMode: "ASK",
+						}),
+				],
+				[
+					"setShippingConfig",
+					() => store.setShippingConfig({ enabled: true }),
+				],
+				["deleteChain", () => store.deleteChain("c1")],
+			];
+
+			calls.forEach(([name, mutate], index) => {
+				mutate();
+
+				expect(
+					listener,
+					`${name} did not notify`
+				).toHaveBeenCalledTimes(index + 1);
+			});
+		});
+
+		it("stays quiet for knobs no chain is costed from", () => {
+			store.setDepot("ZV-307c");
+
+			const listener = vi.fn();
+			store.onChainInputsChanged(listener);
+
+			// a rent patch of a KNOWN depot moves no anchor
+			store.setDepot("ZV-307c", { weeklyCostAic: 5000 });
+			// a lane pair assignment flies one plans own lane
+			store.setAssignment("a>CX", "SHP_1");
+			store.setFleetSpillover(false);
+
+			expect(listener).not.toHaveBeenCalled();
+		});
+
+		it("notifies a snapshot write only when its flows moved", () => {
+			const listener = vi.fn();
+			store.onChainInputsChanged(listener);
+
+			const base: IRaukkSnapshot = makeSnapshot("A", { ORE: 100 });
+
+			// first write of a plan: nothing to compare against
+			store.setSnapshot("a", withFlows(base, [flow(10)]));
+			expect(listener).toHaveBeenCalledTimes(1);
+
+			// same cargo, recomputed: the chains have nothing to re-cost
+			store.setSnapshot("a", withFlows(base, [flow(10)]));
+			expect(listener).toHaveBeenCalledTimes(1);
+
+			store.setSnapshot("a", withFlows(base, [flow(12)]));
+			expect(listener).toHaveBeenCalledTimes(2);
+
+			// losing the field is a change of its own
+			store.setSnapshot("a", base);
+			expect(listener).toHaveBeenCalledTimes(3);
+		});
+
+		it("survives a listener that throws", () => {
+			const warn = vi
+				.spyOn(console, "warn")
+				.mockImplementation(() => undefined);
+
+			store.onChainInputsChanged(() => {
+				throw new Error("listener blew up");
+			});
+			const second = vi.fn();
+			store.onChainInputsChanged(second);
+
+			expect(() =>
+				store.setChainConfig({ autoCxSplit: true })
+			).not.toThrow();
+			expect(second).toHaveBeenCalledTimes(1);
+			expect(warn).toHaveBeenCalled();
+
+			warn.mockRestore();
 		});
 	});
 

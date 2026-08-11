@@ -16,6 +16,7 @@
 		IRaukkChainComputeError,
 	} from "@/features/raukk_sourcing/useRaukkChainCompute";
 	import { useRaukkStaleSnapshotRecompute } from "@/features/raukk_sourcing/useRaukkStaleSnapshotRecompute";
+	import { useRaukkAutoChainRefresh } from "@/features/raukk_sourcing/useRaukkAutoChainRefresh";
 	import { useRaukkShippingOptions } from "@/features/raukk_sourcing/useRaukkShippingOptions";
 
 	// Components
@@ -54,6 +55,11 @@
 	const config: ComputedRef<IRaukkShippingConfig> = computed(
 		() => sourcingStore.shippingConfig
 	);
+
+	// raukk: this is the page every chain input is authored on, so the
+	// results follow the edits instead of waiting for a manual sweep.
+	// Idempotent and app lifetime, see the composable
+	useRaukkAutoChainRefresh().activate();
 
 	/**
 	 * Account level price resolver, universe priced: the page belongs to no

@@ -12,6 +12,7 @@
 	import { useRaukkLease } from "@/features/raukk_sourcing/useRaukkLease";
 	import { useRaukkSnapshot } from "@/features/raukk_sourcing/useRaukkSnapshot";
 	import { useRaukkChainRecompute } from "@/features/raukk_sourcing/useRaukkChainRecompute";
+	import { useRaukkAutoChainRefresh } from "@/features/raukk_sourcing/useRaukkAutoChainRefresh";
 	import { useRaukkShippingOptions } from "@/features/raukk_sourcing/useRaukkShippingOptions";
 
 	// Components
@@ -81,6 +82,10 @@
 			default: false,
 		},
 	});
+
+	// raukk: a plan snapshot written here is a chain input. Idempotent and
+	// app lifetime, see the composable
+	useRaukkAutoChainRefresh().activate();
 
 	const {
 		config,

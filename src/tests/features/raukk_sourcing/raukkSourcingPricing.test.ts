@@ -8,6 +8,7 @@ import {
 	buildInputRows,
 	buildSourceOptions,
 	createRaukkPriceResolver,
+	flowsMateriallyChanged,
 	formatSourceOptionLabel,
 	inputDemandPerDay,
 	isAggregateSource,
@@ -23,6 +24,7 @@ import { RAUKK_EPSILON_SETTLE } from "@/features/raukk_sourcing/calculations/rau
 // Types & Interfaces
 import { ICXData } from "@/stores/planningStore.types";
 import {
+	IRaukkChainFlow,
 	IRaukkSnapshot,
 	IRaukkTickerSource,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
@@ -1045,6 +1047,112 @@ describe("Raukk Sourcing Pricing", () => {
 			};
 
 			expect(snapshotMateriallyChanged(previous, next)).toBe(false);
+		});
+	});
+
+	describe("flowsMateriallyChanged", () => {
+		function withFlows(flows?: IRaukkChainFlow[]): IRaukkSnapshot {
+			return { ...snapshot(), flows };
+		}
+
+		function flow(
+			unitsPerDay: number,
+			overrides: Partial<IRaukkChainFlow> = {}
+		): IRaukkChainFlow {
+			return {
+				flowId: "a#0",
+				ownerPlanUuid: "a",
+				ticker: "RAT",
+				fromStop: "OT-580b",
+				toStop: "AI1",
+				unitsPerDay,
+				weightPerUnit: 1,
+				volumePerUnit: 1,
+				...overrides,
+			};
+		}
+
+		it("reports two flowless snapshots as unchanged", () => {
+			expect(flowsMateriallyChanged(withFlows(), withFlows())).toBe(
+				false
+			);
+		});
+
+		it("reports gaining and losing the field as changed", () => {
+			expect(
+				flowsMateriallyChanged(withFlows(), withFlows([flow(10)]))
+			).toBe(true);
+			expect(
+				flowsMateriallyChanged(withFlows([flow(10)]), withFlows())
+			).toBe(true);
+		});
+
+		it("ignores identical cargo", () => {
+			expect(
+				flowsMateriallyChanged(
+					withFlows([flow(10)]),
+					withFlows([flow(10)])
+				)
+			).toBe(false);
+		});
+
+		it("ignores the flow id and the per unit constants", () => {
+			expect(
+				flowsMateriallyChanged(
+					withFlows([flow(10)]),
+					withFlows([flow(10, { flowId: "a#7", weightPerUnit: 2 })])
+				)
+			).toBe(false);
+		});
+
+		it("detects moved units", () => {
+			expect(
+				flowsMateriallyChanged(
+					withFlows([flow(10)]),
+					withFlows([flow(12)])
+				)
+			).toBe(true);
+		});
+
+		it("detects a lane appearing and one vanishing", () => {
+			expect(
+				flowsMateriallyChanged(
+					withFlows([flow(10)]),
+					withFlows([flow(10), flow(4, { ticker: "DW" })])
+				)
+			).toBe(true);
+			expect(
+				flowsMateriallyChanged(
+					withFlows([flow(10)]),
+					withFlows([flow(10, { toStop: "NC1" })])
+				)
+			).toBe(true);
+		});
+
+		it("sums the occurrences of one lane", () => {
+			// two flows of one lane against one of the same size: what
+			// rides the loop is identical, so nothing is re-costed
+			expect(
+				flowsMateriallyChanged(
+					withFlows([flow(4), flow(6)]),
+					withFlows([flow(10)])
+				)
+			).toBe(false);
+		});
+
+		it("keeps the equality deadband", () => {
+			expect(
+				flowsMateriallyChanged(
+					withFlows([flow(50_000)]),
+					withFlows([flow(50_000.03)])
+				)
+			).toBe(false);
+			expect(
+				flowsMateriallyChanged(
+					withFlows([flow(10)]),
+					withFlows([flow(10.03)])
+				)
+			).toBe(true);
 		});
 	});
 

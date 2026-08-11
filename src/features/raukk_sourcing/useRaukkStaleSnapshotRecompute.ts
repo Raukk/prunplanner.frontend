@@ -10,6 +10,8 @@ import {
 	IRaukkChainError,
 	loadEmpireList,
 } from "@/features/raukk_sourcing/useRaukkBlockRecompute";
+// raukk: the sweep owns the chain step while it runs
+import { useRaukkAutoChainRefresh } from "@/features/raukk_sourcing/useRaukkAutoChainRefresh";
 
 // Graph
 import {
@@ -78,6 +80,13 @@ const RAUKK_STALE_SNAPSHOT_MAX_PASSES: number = 5;
  */
 export function useRaukkStaleSnapshotRecompute() {
 	const sourcingStore = useRaukkSourcingStore();
+	/*
+	 * raukk: every snapshot this sweep writes is a chain input. The
+	 * automatic refresh is suspended for the runs duration and re-costs
+	 * the chains once afterwards — this sweep deliberately does not run
+	 * the chain step itself, the page runs it as its own second step.
+	 */
+	const { suspend, resume } = useRaukkAutoChainRefresh();
 
 	const running: Ref<boolean> = ref(false);
 	/** Name of the plan currently being recomputed */
@@ -134,6 +143,7 @@ export function useRaukkStaleSnapshotRecompute() {
 		done.value = 0;
 		total.value = pending.length;
 		errors.value = [];
+		suspend();
 
 		try {
 			const empireList: IPlanEmpireElement[] = await loadEmpireList();
@@ -210,6 +220,7 @@ export function useRaukkStaleSnapshotRecompute() {
 		} finally {
 			running.value = false;
 			current.value = undefined;
+			resume();
 		}
 	}
 

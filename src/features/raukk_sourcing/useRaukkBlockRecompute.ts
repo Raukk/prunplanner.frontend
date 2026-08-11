@@ -27,9 +27,12 @@ import {
 // Loop solve
 import {
 	buildBlockUnknowns,
+	IRaukkBlockSolveOutcome,
 	IRaukkBlockUnknown,
+	RAUKK_BLOCK_UNSOLVED_REASON,
 	solveLoopBlock,
 } from "@/features/raukk_sourcing/raukkChainBlockSolve";
+import { RAUKK_LOOP_SOLVE_MAX_UNKNOWNS } from "@/features/raukk_sourcing/calculations/raukkLoopSolve";
 
 // Types & Interfaces
 import { IPlan, IPlanEmpireElement } from "@/stores/planningStore.types";
@@ -231,25 +234,55 @@ export function createBlockRecomputer(
 	 * computation at the operating point the block was entered at — and the
 	 * error says so rather than letting later passes crawl at it.
 	 *
+	 * The message states the ACTUAL reason, because each one has its own
+	 * remedy: a capped loop wants the cap raised or an edge broken, a
+	 * system without a finite fixed point wants a sourcing edge broken (a
+	 * cycle consumes at least its whole output), a flip wants the discrete
+	 * decision pinned — a concrete source instead of an aggregate, a fixed
+	 * hull assignment. Rerunning the sweep retries the solve at the fresher
+	 * operating point, which is the one legitimate move against a flip.
+	 *
 	 * @author raukk
 	 *
 	 * @param {string[]} members Member Plan Uuids of the block
+	 * @param {RAUKK_BLOCK_UNSOLVED_REASON} reason Why the solve failed
+	 * @param {number} unknownCount Size of the refused or failed system
 	 * @returns {void}
 	 */
-	function recordBlockUnsolved(members: string[]): void {
+	function recordBlockUnsolved(
+		members: string[],
+		reason: RAUKK_BLOCK_UNSOLVED_REASON,
+		unknownCount: number
+	): void {
 		const representative: string = members[0];
 
 		const names: string = members
 			.map((uuid) => options.planNameOf(uuid))
 			.join(", ");
 
+		const detail: Record<RAUKK_BLOCK_UNSOLVED_REASON, string> = {
+			"unknown-cap":
+				`was not attempted: its ${unknownCount} looping prices ` +
+				`exceed the solver cap of ${RAUKK_LOOP_SOLVE_MAX_UNKNOWNS}`,
+			"non-finite":
+				"could not be solved: a member computed no finite price",
+			"no-fixed-point":
+				"could not be solved: no finite fixed point exists — " +
+				"some cycle consumes at least its whole output, or a " +
+				"probe computed no finite price; break one sourcing " +
+				"edge of the loop",
+			"discrete-flip":
+				"could not be solved: a discrete decision (an aggregate " +
+				"source or a hull pick) flips at the solution; rerun to " +
+				"retry, or pin the source/hull",
+		};
+
 		options.onError?.({
 			planUuid: representative,
 			planName: options.planNameOf(representative),
 			message:
-				`supply loop of ${members.length} plans (${names}) could ` +
-				"not be solved (no finite fixed point or a discrete " +
-				"decision flip); single-pass numbers kept",
+				`supply loop of ${members.length} plans (${names}) ` +
+				`${detail[reason]}; single-pass numbers kept`,
 			blockMembers: [...members],
 		});
 	}
@@ -350,10 +383,10 @@ export function createBlockRecomputer(
 			options.shipSources
 		);
 
-		let solved: Record<string, IRaukkSnapshot> | null;
+		let outcome: IRaukkBlockSolveOutcome;
 
 		try {
-			solved = solveLoopBlock({
+			outcome = await solveLoopBlock({
 				members,
 				prepared,
 				provisional,
@@ -362,16 +395,28 @@ export function createBlockRecomputer(
 		} catch {
 			// a probe that threw is no worse than one that produced no
 			// finite number: the block stays unsolved either way
-			solved = null;
+			outcome = {
+				snapshots: null,
+				reason: "non-finite",
+				unknownCount: unknowns.length,
+			};
 		}
 
-		if (solved === null) {
-			recordBlockUnsolved(members);
+		if (outcome.snapshots === null) {
+			recordBlockUnsolved(members, outcome.reason, outcome.unknownCount);
 
 			return false;
 		}
 
-		const finals: Record<string, IRaukkSnapshot> = solved;
+		/*
+		 * Zero unknowns is a cycle of non price edges — lease links and the
+		 * like — whose provisional snapshots ARE the fixed point: they are
+		 * already stored, so there is nothing to commit and no error to
+		 * raise. The block counts solved.
+		 */
+		if (outcome.unknownCount === 0) return true;
+
+		const finals: Record<string, IRaukkSnapshot> = outcome.snapshots;
 
 		// the final computation per member is work the progress has to
 		// account for, the probes in between are not

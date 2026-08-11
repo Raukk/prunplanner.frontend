@@ -139,9 +139,9 @@ describe("Raukk Sourcing: Loop Solve", () => {
 	});
 
 	describe("solveAffineFixedPoint", () => {
-		it("solves the one unknown closed form c = b / (1 - a)", () => {
+		it("solves the one unknown closed form c = b / (1 - a)", async () => {
 			// f(p) = 30 + 0.25 p, fixed point 30 / 0.75 = 40
-			const solution: number[] | null = solveAffineFixedPoint(
+			const solution: number[] | null = await solveAffineFixedPoint(
 				affineMap([[0.25]], [30]),
 				[0]
 			);
@@ -150,27 +150,27 @@ describe("Raukk Sourcing: Loop Solve", () => {
 			expect((solution as number[])[0]).toBeCloseTo(40, 9);
 		});
 
-		it("is exact from any base point, the map being affine", () => {
+		it("is exact from any base point, the map being affine", async () => {
 			const evaluate = affineMap([[0.25]], [30]);
 
-			[0, 1, 40, 1e5, -250].forEach((base) => {
-				const solution: number[] | null = solveAffineFixedPoint(
+			for (const base of [0, 1, 40, 1e5, -250]) {
+				const solution: number[] | null = await solveAffineFixedPoint(
 					evaluate,
 					[base]
 				);
 
 				expect((solution as number[])[0]).toBeCloseTo(40, 6);
-			});
+			}
 		});
 
-		it("matches the analytic answer of a hand built 2x2 map", () => {
+		it("matches the analytic answer of a hand built 2x2 map", async () => {
 			/*
 			 * f(p) = b + A p with
 			 *   A = [[0.2, 0.1], [0.0, 0.5]], b = [10, 20]
 			 * (I - A) p = b solves to p2 = 20 / 0.5 = 40,
 			 * 0.8 p1 = 10 + 0.1 * 40 = 14 -> p1 = 17.5
 			 */
-			const solution: number[] | null = solveAffineFixedPoint(
+			const solution: number[] | null = await solveAffineFixedPoint(
 				affineMap(
 					[
 						[0.2, 0.1],
@@ -186,7 +186,22 @@ describe("Raukk Sourcing: Loop Solve", () => {
 			expect((solution as number[])[1]).toBeCloseTo(40, 9);
 		});
 
-		it("extracts with non unit deltas around a large base", () => {
+		it("awaits an asynchronous evaluator round by round", async () => {
+			// same 1x1 map as the closed form case, delivered via promises
+			const solution: number[] | null = await solveAffineFixedPoint(
+				async (prices: number[]) => {
+					await new Promise((resolve) => setTimeout(resolve, 0));
+
+					return [30 + 0.25 * prices[0]];
+				},
+				[0]
+			);
+
+			expect(solution).not.toBeNull();
+			expect((solution as number[])[0]).toBeCloseTo(40, 9);
+		});
+
+		it("extracts with non unit deltas around a large base", async () => {
 			const evaluate = vi.fn(
 				affineMap(
 					[
@@ -197,7 +212,7 @@ describe("Raukk Sourcing: Loop Solve", () => {
 				)
 			);
 
-			const solution: number[] | null = solveAffineFixedPoint(
+			const solution: number[] | null = await solveAffineFixedPoint(
 				evaluate,
 				[40000, 12345.678]
 			);
@@ -214,7 +229,7 @@ describe("Raukk Sourcing: Loop Solve", () => {
 			expect(at[1]).toBeCloseTo((solution as number[])[1], 6);
 		});
 
-		it("costs exactly one evaluation per unknown plus the base", () => {
+		it("costs exactly one evaluation per unknown plus the base", async () => {
 			const evaluate = vi.fn(
 				affineMap(
 					[
@@ -226,45 +241,51 @@ describe("Raukk Sourcing: Loop Solve", () => {
 				)
 			);
 
-			solveAffineFixedPoint(evaluate, [0, 0, 0]);
+			await solveAffineFixedPoint(evaluate, [0, 0, 0]);
 
 			expect(evaluate).toHaveBeenCalledTimes(4);
 		});
 
-		it("solves the empty system without evaluating at all", () => {
+		it("solves the empty system without evaluating at all", async () => {
 			const evaluate = vi.fn(() => []);
 
-			expect(solveAffineFixedPoint(evaluate, [])).toStrictEqual([]);
+			expect(await solveAffineFixedPoint(evaluate, [])).toStrictEqual(
+				[]
+			);
 			expect(evaluate).not.toHaveBeenCalled();
 		});
 
-		it("returns null on a 100 % self consuming loop", () => {
+		it("returns null on a 100 % self consuming loop", async () => {
 			// f(p) = 5 + p has no finite fixed point, I - A is singular
 			expect(
-				solveAffineFixedPoint(affineMap([[1]], [5]), [0])
+				await solveAffineFixedPoint(affineMap([[1]], [5]), [0])
 			).toBeNull();
 		});
 
-		it("returns null on a non finite or mis-sized evaluation", () => {
-			expect(solveAffineFixedPoint(() => [Number.NaN], [0])).toBeNull();
-			expect(solveAffineFixedPoint(() => [1, 2], [0])).toBeNull();
-			expect(solveAffineFixedPoint(() => [1], [Number.NaN])).toBeNull();
+		it("returns null on a non finite or mis-sized evaluation", async () => {
+			expect(
+				await solveAffineFixedPoint(() => [Number.NaN], [0])
+			).toBeNull();
+			expect(await solveAffineFixedPoint(() => [1, 2], [0])).toBeNull();
+			expect(
+				await solveAffineFixedPoint(() => [1], [Number.NaN])
+			).toBeNull();
 		});
 
-		it("refuses more unknowns than it attempts", () => {
+		it("refuses more unknowns than it attempts", async () => {
 			const evaluate = vi.fn(() => []);
 			const base: number[] = new Array<number>(
 				RAUKK_LOOP_SOLVE_MAX_UNKNOWNS + 1
 			).fill(1);
 
-			expect(solveAffineFixedPoint(evaluate, base)).toBeNull();
+			expect(await solveAffineFixedPoint(evaluate, base)).toBeNull();
 			expect(evaluate).not.toHaveBeenCalled();
 		});
 
-		it("does not mutate the base point", () => {
+		it("does not mutate the base point", async () => {
 			const base: number[] = [10, 20];
 
-			solveAffineFixedPoint(
+			await solveAffineFixedPoint(
 				affineMap(
 					[
 						[0.1, 0],

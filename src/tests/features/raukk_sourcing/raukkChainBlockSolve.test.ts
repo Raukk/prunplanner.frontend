@@ -6,6 +6,7 @@ import {
 	IRaukkBlockUnknown,
 	solveLoopBlock,
 } from "@/features/raukk_sourcing/raukkChainBlockSolve";
+import { RAUKK_LOOP_SOLVE_MAX_UNKNOWNS } from "@/features/raukk_sourcing/calculations/raukkLoopSolve";
 
 // Types & Interfaces
 import {
@@ -215,28 +216,26 @@ describe("solveLoopBlock", () => {
 		{ planUuid: "e", ticker: "FUEL" },
 	];
 
-	it("lands exactly on the analytic fixed point", () => {
-		const solved: Record<string, IRaukkSnapshot> | null = solveLoopBlock({
+	it("lands exactly on the analytic fixed point", async () => {
+		const outcome = await solveLoopBlock({
 			members: ["d", "e"],
 			prepared: affineBlock(0.2, 0.1),
 			provisional,
 			unknowns,
 		});
 
-		expect(solved).not.toBeNull();
-		expect(
-			(solved as Record<string, IRaukkSnapshot>).d.outputs.ORE.costPerUnit
-		).toBeCloseTo(analyticD, 10);
-		expect(
-			(solved as Record<string, IRaukkSnapshot>).e.outputs.FUEL
-				.costPerUnit
-		).toBeCloseTo(analyticE, 10);
+		expect(outcome.snapshots).not.toBeNull();
+		expect(outcome.unknownCount).toBe(2);
+
+		const solved = outcome.snapshots as Record<string, IRaukkSnapshot>;
+		expect(solved.d.outputs.ORE.costPerUnit).toBeCloseTo(analyticD, 10);
+		expect(solved.e.outputs.FUEL.costPerUnit).toBeCloseTo(analyticE, 10);
 	});
 
-	it("stores nothing itself", () => {
+	it("stores nothing itself", async () => {
 		const prepared = affineBlock(0.2, 0.1);
 
-		solveLoopBlock({
+		await solveLoopBlock({
 			members: ["d", "e"],
 			prepared,
 			provisional,
@@ -247,60 +246,77 @@ describe("solveLoopBlock", () => {
 		expect(prepared.e.store).not.toHaveBeenCalled();
 	});
 
-	it("returns null for a singular loop", () => {
+	it("reports a singular loop as having no fixed point", async () => {
 		// the cycle consumes 100 % of its own output, no finite fixed point
-		expect(
-			solveLoopBlock({
-				members: ["d", "e"],
-				prepared: affineBlock(1, 1),
-				provisional,
-				unknowns,
-			})
-		).toBeNull();
+		const outcome = await solveLoopBlock({
+			members: ["d", "e"],
+			prepared: affineBlock(1, 1),
+			provisional,
+			unknowns,
+		});
+
+		expect(outcome.snapshots).toBeNull();
+		expect(outcome.snapshots === null && outcome.reason).toBe(
+			"no-fixed-point"
+		);
+		expect(outcome.unknownCount).toBe(2);
 	});
 
-	it("returns null without unknowns", () => {
+	it("is trivially solved without unknowns", async () => {
+		// a cycle of non price edges — lease links — prices nothing in
+		// circles: the provisional snapshots ARE the fixed point
+		const outcome = await solveLoopBlock({
+			members: ["d", "e"],
+			prepared: affineBlock(0.2, 0.1),
+			provisional,
+			unknowns: [],
+		});
+
+		expect(outcome.unknownCount).toBe(0);
+		expect(outcome.snapshots).not.toBeNull();
 		expect(
-			solveLoopBlock({
-				members: ["d", "e"],
-				prepared: affineBlock(0.2, 0.1),
-				provisional,
-				unknowns: [],
-			})
-		).toBeNull();
+			(outcome.snapshots as Record<string, IRaukkSnapshot>).d
+		).toStrictEqual(provisional.d);
 	});
 
-	it("returns null above the unknown cap", () => {
+	it("reports the size of a loop above the unknown cap", async () => {
 		const many: IRaukkBlockUnknown[] = Array.from(
-			{ length: 21 },
+			{ length: RAUKK_LOOP_SOLVE_MAX_UNKNOWNS + 1 },
 			(_unused, index) => ({ planUuid: "d", ticker: `T${index}` })
 		);
 
-		expect(
-			solveLoopBlock({
-				members: ["d", "e"],
-				prepared: affineBlock(0.2, 0.1),
-				provisional,
-				unknowns: many,
-			})
-		).toBeNull();
+		const outcome = await solveLoopBlock({
+			members: ["d", "e"],
+			prepared: affineBlock(0.2, 0.1),
+			provisional,
+			unknowns: many,
+		});
+
+		expect(outcome.snapshots).toBeNull();
+		expect(outcome.snapshots === null && outcome.reason).toBe(
+			"unknown-cap"
+		);
+		expect(outcome.unknownCount).toBe(RAUKK_LOOP_SOLVE_MAX_UNKNOWNS + 1);
 	});
 
-	it("returns null when a probe stops producing an unknown", () => {
+	it("reports a probe that stops producing an unknown", async () => {
 		const prepared = affineBlock(0.2, 0.1);
 		prepared.e = makePrepared("e", {}, { d: { ORE: 1 } });
 
-		expect(
-			solveLoopBlock({
-				members: ["d", "e"],
-				prepared,
-				provisional,
-				unknowns,
-			})
-		).toBeNull();
+		const outcome = await solveLoopBlock({
+			members: ["d", "e"],
+			prepared,
+			provisional,
+			unknowns,
+		});
+
+		expect(outcome.snapshots).toBeNull();
+		expect(outcome.snapshots === null && outcome.reason).toBe(
+			"no-fixed-point"
+		);
 	});
 
-	it("returns null when the solved point does not reproduce itself", () => {
+	it("reports a solved point that does not reproduce itself", async () => {
 		const prepared = affineBlock(0.2, 0.1);
 
 		// a discrete decision flipping between the probes and the solution:
@@ -317,13 +333,16 @@ describe("solveLoopBlock", () => {
 			{ e: { FUEL: 1 } }
 		);
 
-		expect(
-			solveLoopBlock({
-				members: ["d", "e"],
-				prepared,
-				provisional,
-				unknowns,
-			})
-		).toBeNull();
+		const outcome = await solveLoopBlock({
+			members: ["d", "e"],
+			prepared,
+			provisional,
+			unknowns,
+		});
+
+		expect(outcome.snapshots).toBeNull();
+		expect(outcome.snapshots === null && outcome.reason).toBe(
+			"discrete-flip"
+		);
 	});
 });

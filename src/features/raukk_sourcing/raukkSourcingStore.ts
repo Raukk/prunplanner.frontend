@@ -15,7 +15,10 @@ import {
 } from "@/features/raukk_sourcing/raukkSourcingGraph";
 
 // Pricing
-import { snapshotMateriallyChanged } from "@/features/raukk_sourcing/raukkSourcingPricing";
+import {
+	flowsMateriallyChanged,
+	snapshotMateriallyChanged,
+} from "@/features/raukk_sourcing/raukkSourcingPricing";
 
 // Defaults
 import {
@@ -640,6 +643,61 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Listeners of {@link notifyChainInputsChanged}, registered by
+		 * whoever wants to hear that a chain input moved. Closure local and
+		 * deliberately no part of the returned state: it is a wiring, not
+		 * data, and nothing about it is persisted or exported.
+		 */
+		const chainInputListeners: Set<() => void> = new Set();
+
+		/**
+		 * Registers a listener for chain input changes.
+		 *
+		 * Wired as EXPLICIT calls in the mutating setters rather than as a
+		 * blanket subscription, exactly as {@link cascadeStale} is: what
+		 * moves a chain result is a decision of each setter — the depot
+		 * rent, the fleet spillover display and a plan recompute writing
+		 * identical flows all move nothing — and a `$subscribe` cannot tell
+		 * those apart.
+		 *
+		 * @author raukk
+		 *
+		 * @param {Function} listener Called after a chain input changed
+		 * @returns {Function} Unregisters the listener again
+		 */
+		function onChainInputsChanged(listener: () => void): () => void {
+			chainInputListeners.add(listener);
+
+			return () => {
+				chainInputListeners.delete(listener);
+			};
+		}
+
+		/**
+		 * Announces that something a chain result is costed from changed.
+		 *
+		 * A store with nothing registered is fully functional — the whole
+		 * point of a registry over a hard call into a composable — and a
+		 * listener that throws must not take the mutation that notified it
+		 * down with it, so a failure is logged and the next listener still
+		 * hears about the change.
+		 *
+		 * @author raukk
+		 */
+		function notifyChainInputsChanged(): void {
+			chainInputListeners.forEach((listener) => {
+				try {
+					listener();
+				} catch (error) {
+					console.warn(
+						"[raukk] chain input listener failed",
+						error instanceof Error ? error.message : error
+					);
+				}
+			});
+		}
+
+		/**
 		 * Patches the account global shipping configuration.
 		 *
 		 * Marks all snapshots stale, unless shipping was off before and
@@ -668,6 +726,11 @@ export const useRaukkSourcingStore = defineStore(
 
 			if (wasEnabled || shippingConfig.value.enabled || scopeChanged)
 				markAllStale();
+
+			// every knob of it prices a chain, the on/off switch included:
+			// the refresh has to hear the OFF transition to purge the
+			// derived results exactly once
+			notifyChainInputsChanged();
 		}
 
 		/**
@@ -689,6 +752,8 @@ export const useRaukkSourcingStore = defineStore(
 			};
 
 			if (shippingConfig.value.enabled) markAllStale();
+
+			notifyChainInputsChanged();
 		}
 
 		/**
@@ -704,6 +769,8 @@ export const useRaukkSourcingStore = defineStore(
 			delete shipProfiles.value[profileId];
 
 			if (shippingConfig.value.enabled) markAllStale();
+
+			notifyChainInputsChanged();
 		}
 
 		// chains, fleet and assignments
@@ -855,6 +922,7 @@ export const useRaukkSourcingStore = defineStore(
 			chains.value[chain.chainId] = inertClone(chain);
 
 			markChainStale(chain.chainId, previousMembers);
+			notifyChainInputsChanged();
 		}
 
 		/**
@@ -876,6 +944,7 @@ export const useRaukkSourcingStore = defineStore(
 			delete assignments.value[raukkChainAssignmentKey(chainId)];
 
 			members.forEach((planUuid) => markStale(planUuid));
+			notifyChainInputsChanged();
 		}
 
 		/**
@@ -1049,6 +1118,7 @@ export const useRaukkSourcingStore = defineStore(
 			};
 
 			markAllChainsStale();
+			notifyChainInputsChanged();
 		}
 
 		/**
@@ -1085,8 +1155,13 @@ export const useRaukkSourcingStore = defineStore(
 
 			const isOwned: boolean = fleet.value[shipTypeId].count > 0;
 
-			if (wasOwned !== isOwned && shippingConfig.value.enabled)
+			if (wasOwned !== isOwned && shippingConfig.value.enabled) {
 				markAllStale();
+
+				// ownership crossing zero moves the automatic hull picks
+				// of the derived chains, exactly like the staling says
+				notifyChainInputsChanged();
+			}
 		}
 
 		/**
@@ -1155,8 +1230,13 @@ export const useRaukkSourcingStore = defineStore(
 						: undefined,
 			};
 
-			// the anchor list only changed if the planet is new to it
-			if (known === undefined) markAllStale();
+			// the anchor list only changed if the planet is new to it — and
+			// the rent the patch may carry is no chain input at all, it is
+			// summed next to the chain costs at read time
+			if (known === undefined) {
+				markAllStale();
+				notifyChainInputsChanged();
+			}
 		}
 
 		/**
@@ -1176,6 +1256,7 @@ export const useRaukkSourcingStore = defineStore(
 			delete depots.value[key];
 
 			markAllStale();
+			notifyChainInputsChanged();
 		}
 
 		/**
@@ -1402,6 +1483,10 @@ export const useRaukkSourcingStore = defineStore(
 			markAllChainsStale();
 
 			if (shippingConfig.value.enabled) markAllStale();
+
+			// a moved route graph re-costs every chain: gate hops, STL
+			// serviceability and the split anchors all read it
+			notifyChainInputsChanged();
 		}
 
 		/**
@@ -1436,7 +1521,12 @@ export const useRaukkSourcingStore = defineStore(
 
 			delete fleet.value[shipTypeId];
 
-			if (wasOwned && shippingConfig.value.enabled) markAllStale();
+			if (wasOwned && shippingConfig.value.enabled) {
+				markAllStale();
+
+				// same crossing as `setFleetShip`: an owned hull vanished
+				notifyChainInputsChanged();
+			}
 		}
 
 		/**
@@ -1464,6 +1554,7 @@ export const useRaukkSourcingStore = defineStore(
 
 			if (chainId !== undefined) {
 				markChainStale(chainId);
+				notifyChainInputsChanged();
 				return;
 			}
 
@@ -1585,6 +1676,8 @@ export const useRaukkSourcingStore = defineStore(
 			shipSourcing.value = next;
 
 			markAllStale();
+			// the fuel and the repair bill are what a chain is costed with
+			notifyChainInputsChanged();
 		}
 
 		/**
@@ -1612,6 +1705,8 @@ export const useRaukkSourcingStore = defineStore(
 			shipSourcing.value = next;
 
 			markAllStale();
+			// see {@link setShipSourcingDefault}
+			notifyChainInputsChanged();
 		}
 
 		/**
@@ -1937,6 +2032,17 @@ export const useRaukkSourcingStore = defineStore(
 				JSON.stringify(snapshot.flows ?? null)
 			)
 				cascadeChainStale(planUuid);
+
+			/*
+			 * The automatic chain refresh is told only about cargo that
+			 * really MOVED: the upkeep recomputes on every plan view load
+			 * and an identical result must not re-cost every loop of the
+			 * account. Deliberately a weaker test than the byte comparison
+			 * of the staleness flag above — a flag is free, a refresh loads
+			 * prices — and the field appearing or vanishing counts.
+			 */
+			if (!previous || flowsMateriallyChanged(previous, snapshot))
+				notifyChainInputsChanged();
 		}
 
 		/**
@@ -2239,6 +2345,9 @@ export const useRaukkSourcingStore = defineStore(
 			setPlannedGate,
 			deletePlannedGate,
 			setAssignment,
+			// chain input notification
+			onChainInputsChanged,
+			notifyChainInputsChanged,
 			// import & export
 			exportJSON,
 			importJSON,
