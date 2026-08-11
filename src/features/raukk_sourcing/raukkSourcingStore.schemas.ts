@@ -433,6 +433,11 @@ export const RaukkSnapshotLaneSchema = z.object({
 	ownCostPerTrip: z.number().optional(),
 	ownDamagePerTrip: z.number().optional(),
 	unitsPerDay: z.number().optional(),
+	// absent on snapshots frozen before the per direction load was stored
+	weightOutPerDay: z.number().optional(),
+	volumeOutPerDay: z.number().optional(),
+	weightBackPerDay: z.number().optional(),
+	volumeBackPerDay: z.number().optional(),
 });
 
 /** One row of daily cargo, ticker and cargo class with its dimensions */
