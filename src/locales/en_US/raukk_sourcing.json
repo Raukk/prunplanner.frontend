@@ -142,6 +142,14 @@
 		"chain_error": "Chain '{name}': {message}",
 		"auto_chain_error": "Automatic chains: {message}"
 	},
+	"ship_filter": {
+		"label": "Flown By",
+		"all": "Every ship type",
+		"lanes": "{shown} of {total} lanes are flown by {ship}.",
+		"lanes_empty": "No lane is flown by {ship}. Its routes may all be chains — the Chains tab filters on the same selection — or the plans that would fly it are stale and still costed on the hull they last computed with.",
+		"chains": "{shown} of {total} chains are flown by {ship}.",
+		"chains_empty": "No chain is flown by {ship}. Its routes may all be lanes — the Transport tab filters on the same selection — or the chain results are stale and still costed on the hull they last computed with."
+	},
 	"transport": {
 		"title": "Transport",
 		"info": "Every stored lane of the account, with what your own fleet charges to fly it and what an LM transport ad would. Enter the ȼ per trip an ad asks for and the difference column states the two side by side: a hired lane pays that rate instead of the own fleet cost and drops out of the shipping fraction, the rate covering the whole lane and all of its legs. The comparison is OPERATING cost only — fuel, wear and the repair bill — and the cost it cannot show is the one that usually decides the question: a hull costs millions before it charges its first ȼ, and hiring is how you fly a lane without buying one. A lane that runs dearer hired is therefore not a mistake; it is what not owning that ship costs per unit. A lane is flown as one leg per cargo class riding it, each on its own cadence, so days per visit is listed per class. The ȼ are the ones the owning plan froze when it last computed — recompute a stale plan to refresh them.",
@@ -234,6 +242,7 @@
 		"drydock_cost": "Wear over all hulls of the type costs {daily} ȼ/day, already included in the lane and chain costs.",
 		"drydock_unknown": "At least one stored result of this type predates wear tracking, so the wear is unknown rather than zero. Recompute the plan snapshots and chains to fill it in.",
 		"assigned": "Routes",
+		"assigned_tooltip": "Lanes and chains this type flies. Click to list them: the Transport tab opens filtered to this hull, and the Chains tab filters on the same selection — a route counted here is one or the other. Hired work is not counted, someone else's ship flies it.",
 		"stale": "stale",
 		"stale_tooltip": "{stale} of {total} routes on this type come from stored results flagged stale: the assignment is what the LAST compute chose, and a fleet change stales the stored results without moving anything. Recompute the plan snapshots and the chains and the automatic pick reruns over the fleet you own now.",
 		"calibrate": "Calibrate",

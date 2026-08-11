@@ -166,6 +166,31 @@
 	);
 
 	/*
+	 * Routes by ship
+	 *
+	 * The fleet table counts the lanes and chains of one ship type, and
+	 * the two tables listing them sit in two other sections — so the
+	 * selection is the page's, not either section's: clicking a Routes
+	 * count opens the Transport tab already filtered, and tabbing over to
+	 * Chains shows the rest of the very same count. It survives a section
+	 * switch for exactly that reason, and is cleared by hand.
+	 */
+
+	const refShipFilter: Ref<string | null> = ref(null);
+
+	/**
+	 * Opens the lanes of one ship type: the fleet count is the way in.
+	 *
+	 * @author raukk
+	 *
+	 * @param {string} shipTypeId Ship Type Id
+	 */
+	function viewRoutes(shipTypeId: string): void {
+		refShipFilter.value = shipTypeId;
+		refSection.value = "transport";
+	}
+
+	/*
 	 * Chain result recomputation
 	 */
 
@@ -366,19 +391,24 @@
 
 		<RaukkFleetSection
 			v-else-if="refSection === 'fleet'"
-			:repair-bill-cost="repairBillCost" />
+			:repair-bill-cost="repairBillCost"
+			@view-routes="viewRoutes" />
 
 		<RaukkTransportSection
 			v-else-if="refSection === 'transport'"
 			:repair-bill-cost="repairBillCost"
-			:ship-type-options="shipTypeOptions" />
+			:ship-type-options="shipTypeOptions"
+			:ship-filter="refShipFilter"
+			@update:ship-filter="(v) => (refShipFilter = v)" />
 
 		<RaukkChainSection
 			v-else-if="refSection === 'chains'"
 			:fuel-prices="fuelPrices"
 			:repair-bill-cost="repairBillCost"
 			:ship-type-options="shipTypeOptions"
-			:storage-days="storageDays" />
+			:storage-days="storageDays"
+			:ship-filter="refShipFilter"
+			@update:ship-filter="(v) => (refShipFilter = v)" />
 
 		<RaukkHubSpokeSection v-else-if="refSection === 'hubspoke'" />
 

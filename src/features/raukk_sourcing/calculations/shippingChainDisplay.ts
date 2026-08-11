@@ -50,6 +50,15 @@ export interface IRaukkChainListRow {
 	stale: boolean;
 	splitApplied: boolean;
 	hired: boolean;
+	/**
+	 * Ship type the loop was COSTED with, null until it was computed.
+	 *
+	 * The stored result carries it, so this is what actually flew rather
+	 * than what the picker shows: an unpinned chain runs on its own
+	 * profile or the account default, and either only becomes visible
+	 * here. It is what the fleet page's route filter matches a chain on.
+	 */
+	profileId: string | null;
 	tripsPerDay: number | null;
 	dailyCost: number | null;
 	shippingFraction: number | null;
@@ -293,6 +302,7 @@ export function raukkChainListRows(
 				stale: result?.stale ?? true,
 				splitApplied: result?.splitApplied ?? false,
 				hired: result?.hired ?? chain.lmRatePerTrip !== undefined,
+				profileId: result?.profileId ?? null,
 				tripsPerDay: result?.tripsPerDay ?? null,
 				dailyCost: result?.dailyCost ?? null,
 				shippingFraction: result?.shippingFraction ?? null,
@@ -373,6 +383,7 @@ export function raukkAutoChainListRows(
 			stale: result.stale,
 			splitApplied: result.splitApplied,
 			hired: result.hired,
+			profileId: result.profileId,
 			tripsPerDay: result.tripsPerDay,
 			dailyCost: result.dailyCost,
 			shippingFraction: result.shippingFraction,
