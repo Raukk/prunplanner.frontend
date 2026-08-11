@@ -17,6 +17,9 @@ import {
 } from "@/features/raukk_sourcing/calculations/shippingRepair";
 import { RAUKK_FUEL_TICKERS } from "@/features/raukk_sourcing/calculations/shippingProfiles";
 
+// Functions
+import { isDanglingSource } from "@/features/raukk_sourcing/raukkSourcingPricing";
+
 // Types & Interfaces
 import { IRaukkMaterialUnits } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 import { IRaukkFleetLoadEntry } from "@/features/raukk_sourcing/calculations/shippingFleet";
@@ -108,22 +111,43 @@ export function raukkEmptyShipSourcing(): IRaukkShipSourcing {
  * sourced account wide, and answering for it would let a caller price a
  * plans production input at the fleets setting.
  *
+ * With a producer lookup given, an entry the pool cannot honour — a base
+ * that stopped making the ticker, a pool only aggregate over an empty
+ * pool, see {@link isDanglingSource} — is treated as no entry at all: an
+ * own one falls back to the group default, a group default the pool
+ * cannot honour either falls all the way through to the exchange price.
+ * The stored configuration is left alone, the heal is what the fleet is
+ * priced and what the table shows.
+ *
  * @author raukk
  *
  * @param {string} ticker Material ticker
  * @param {IRaukkShipSourcing} sourcing Account wide ship sourcing
+ * @param {Function} [producerUuidsOf] Plans producing a ticker
  * @returns {IRaukkShipTickerSource | undefined} Effective source
  */
 export function raukkShipTickerSource(
 	ticker: string,
-	sourcing: IRaukkShipSourcing
+	sourcing: IRaukkShipSourcing,
+	producerUuidsOf?: (ticker: string) => string[]
 ): IRaukkShipTickerSource | undefined {
 	const group: RAUKK_SHIP_SOURCE_GROUP | undefined =
 		raukkShipSourceGroupOf(ticker);
 
 	if (group === undefined) return undefined;
 
-	return sourcing.sources[ticker] ?? sourcing.defaults[group];
+	const own: IRaukkShipTickerSource | undefined = sourcing.sources[ticker];
+
+	if (own !== undefined && !isDanglingSource(ticker, own, producerUuidsOf))
+		return own;
+
+	const fallback: IRaukkShipTickerSource | undefined =
+		sourcing.defaults[group];
+
+	return fallback !== undefined &&
+		!isDanglingSource(ticker, fallback, producerUuidsOf)
+		? fallback
+		: undefined;
 }
 
 /**
@@ -138,16 +162,18 @@ export function raukkShipTickerSource(
  * @author raukk
  *
  * @param {IRaukkShipSourcing} sourcing Account wide ship sourcing
+ * @param {Function} [producerUuidsOf] Plans producing a ticker
  * @returns {Record<string, IRaukkTickerSource>} Sources per ticker
  */
 export function raukkEffectiveShipSources(
-	sourcing: IRaukkShipSourcing
+	sourcing: IRaukkShipSourcing,
+	producerUuidsOf?: (ticker: string) => string[]
 ): Record<string, IRaukkTickerSource> {
 	const effective: Record<string, IRaukkTickerSource> = {};
 
 	raukkShipSourcingTickers().forEach((ticker) => {
 		const source: IRaukkShipTickerSource | undefined =
-			raukkShipTickerSource(ticker, sourcing);
+			raukkShipTickerSource(ticker, sourcing, producerUuidsOf);
 
 		if (source !== undefined) effective[ticker] = source;
 	});
@@ -159,19 +185,35 @@ export function raukkEffectiveShipSources(
  * Tickers following their group default rather than an own entry, the
  * "(default)" marker of the sourcing table.
  *
+ * An own entry the pool cannot honour follows the default as much as an
+ * absent one does, matching what {@link raukkShipTickerSource} prices.
+ *
  * @author raukk
  *
  * @param {IRaukkShipSourcing} sourcing Account wide ship sourcing
+ * @param {Function} [producerUuidsOf] Plans producing a ticker
  * @returns {Set<string>} Tickers following a group default
  */
 export function raukkShipDefaultedTickers(
-	sourcing: IRaukkShipSourcing
+	sourcing: IRaukkShipSourcing,
+	producerUuidsOf?: (ticker: string) => string[]
 ): Set<string> {
 	const followed: Set<string> = new Set();
 
 	raukkShipSourcingTickers().forEach((ticker) => {
-		if (sourcing.sources[ticker] !== undefined) return;
-		if (raukkShipTickerSource(ticker, sourcing) === undefined) return;
+		const own: IRaukkShipTickerSource | undefined =
+			sourcing.sources[ticker];
+
+		if (
+			own !== undefined &&
+			!isDanglingSource(ticker, own, producerUuidsOf)
+		)
+			return;
+		if (
+			raukkShipTickerSource(ticker, sourcing, producerUuidsOf) ===
+			undefined
+		)
+			return;
 
 		followed.add(ticker);
 	});

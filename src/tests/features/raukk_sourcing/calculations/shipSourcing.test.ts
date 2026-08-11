@@ -122,6 +122,67 @@ describe("Raukk Ship Sourcing: effective sources", () => {
 		);
 	});
 
+	describe("sources the pool cannot honour", () => {
+		const emptyPool = (): string[] => [];
+		const pool = (): string[] => ["living-base"];
+
+		it("drops a ticker entry naming a base that stopped making it", () => {
+			const sourcing: IRaukkShipSourcing = {
+				defaults: { fuel: { mode: "market", priceMode: "ASK" } },
+				sources: { SF: { mode: "plan", sourcePlanUuid: "gone" } },
+			};
+
+			// back onto the group default, and marked as following it
+			expect(raukkShipTickerSource("SF", sourcing, pool)).toStrictEqual({
+				mode: "market",
+				priceMode: "ASK",
+			});
+			expect(raukkShipDefaultedTickers(sourcing, pool).has("SF")).toBe(
+				true
+			);
+		});
+
+		it("drops a pool only group default over an empty pool", () => {
+			const sourcing: IRaukkShipSourcing = {
+				defaults: { fuel: { mode: "plan", sourcePlanUuid: "AGG_AVG" } },
+				sources: {},
+			};
+
+			// nothing left to honour it: the exchange price takes over,
+			// which is what the resolver charged for it anyway
+			expect(
+				raukkShipTickerSource("FF", sourcing, emptyPool)
+			).toBeUndefined();
+			expect(
+				raukkEffectiveShipSources(sourcing, emptyPool).FF
+			).toBeUndefined();
+		});
+
+		it("keeps a pool only group default while a pool exists", () => {
+			const sourcing: IRaukkShipSourcing = {
+				defaults: { fuel: { mode: "plan", sourcePlanUuid: "AGG_AVG" } },
+				sources: {},
+			};
+
+			expect(raukkShipTickerSource("FF", sourcing, pool)).toStrictEqual({
+				mode: "plan",
+				sourcePlanUuid: "AGG_AVG",
+			});
+		});
+
+		it("keeps everything without a producer lookup", () => {
+			const sourcing: IRaukkShipSourcing = {
+				defaults: {},
+				sources: { SF: { mode: "plan", sourcePlanUuid: "gone" } },
+			};
+
+			expect(raukkShipTickerSource("SF", sourcing)).toStrictEqual({
+				mode: "plan",
+				sourcePlanUuid: "gone",
+			});
+		});
+	});
+
 	it("answers nothing for a ticker outside both groups", () => {
 		const sourcing: IRaukkShipSourcing = {
 			defaults: { fuel: { mode: "plan", sourcePlanUuid: "AGG_AVG" } },

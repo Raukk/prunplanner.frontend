@@ -175,10 +175,10 @@ describe("Raukk Sourcing Defaults", () => {
 			};
 
 			/** Only "living-base" still makes anything */
-			const isProducing = (
-				_ticker: string,
-				sourcePlanUuid: string
-			): boolean => sourcePlanUuid === "living-base";
+			const producerUuidsOf = (): string[] => ["living-base"];
+
+			/** Nothing is produced at all any more */
+			const emptyPool = (): string[] => [];
 
 			it("heals an entry whose producer is gone onto the default", () => {
 				expect(
@@ -186,7 +186,7 @@ describe("Raukk Sourcing Defaults", () => {
 						gone,
 						buckets,
 						{ workforce: AVERAGE },
-						isProducing
+						producerUuidsOf
 					).RAT
 				).toBe(AVERAGE);
 			});
@@ -201,12 +201,12 @@ describe("Raukk Sourcing Defaults", () => {
 						stored,
 						buckets,
 						{ workforce: AVERAGE },
-						isProducing
+						producerUuidsOf
 					).RAT
 				).toBe(stored.RAT);
 			});
 
-			it("never treats an aggregate as dangling", () => {
+			it("never treats the market top up as dangling", () => {
 				const stored: Record<string, IRaukkTickerSource> = {
 					RAT: TOP_UP,
 				};
@@ -216,9 +216,52 @@ describe("Raukk Sourcing Defaults", () => {
 						stored,
 						buckets,
 						{ workforce: AVERAGE },
-						isProducing
+						emptyPool
 					).RAT
 				).toBe(TOP_UP);
+			});
+
+			it("keeps a pool only aggregate while a pool exists", () => {
+				const stored: Record<string, IRaukkTickerSource> = {
+					RAT: AVERAGE,
+				};
+
+				expect(
+					resolveEffectiveSources(
+						stored,
+						buckets,
+						{},
+						producerUuidsOf
+					).RAT
+				).toBe(AVERAGE);
+			});
+
+			it("heals a pool only aggregate over an empty pool", () => {
+				const stored: Record<string, IRaukkTickerSource> = {
+					RAT: AVERAGE,
+				};
+
+				expect(
+					resolveEffectiveSources(
+						stored,
+						buckets,
+						{ workforce: TOP_UP },
+						emptyPool
+					).RAT
+				).toBe(TOP_UP);
+			});
+
+			it("heals a pool only bucket default onto the market top up", () => {
+				// the whole table of dead rows: nothing produces the
+				// ticker and the account default names the empty pool
+				expect(
+					resolveEffectiveSources(
+						{},
+						buckets,
+						{ workforce: AVERAGE },
+						emptyPool
+					).RAT
+				).toStrictEqual(RAUKK_BUILTIN_DEFAULT_SOURCE);
 			});
 
 			it("leaves stored entries alone without the producer check", () => {
@@ -234,7 +277,7 @@ describe("Raukk Sourcing Defaults", () => {
 					gone,
 					buckets,
 					{ workforce: AVERAGE },
-					isProducing
+					producerUuidsOf
 				);
 
 				expect(followed.has("RAT")).toBe(true);

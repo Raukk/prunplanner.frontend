@@ -145,7 +145,9 @@ export function useRaukkEmpireAutoSnapshot(
 		 * MISSING one is taken on empire membership — see the scope note
 		 * on the composable.
 		 */
-		function pendingPlans(scoped: Record<string, IRaukkSnapshot>): string[] {
+		function pendingPlans(
+			scoped: Record<string, IRaukkSnapshot>
+		): string[] {
 			return context.planUuids.value.filter((uuid): uuid is string => {
 				if (uuid === undefined || failed.has(uuid)) return false;
 
@@ -171,7 +173,8 @@ export function useRaukkEmpireAutoSnapshot(
 			const runner: IRaukkBlockRecomputer = createBlockRecomputer({
 				empireList,
 				shipSources: raukkEffectiveShipSources(
-					sourcingStore.shipSourcing
+					sourcingStore.shipSourcing,
+					sourcingStore.producerUuidsOf
 				),
 				planNameOf: (planUuid: string) =>
 					sourcingStore.snapshots[planUuid]?.planName ?? planUuid,
@@ -201,7 +204,10 @@ export function useRaukkEmpireAutoSnapshot(
 					buildDependencyGraph(
 						inputs.configs,
 						inputs.snapshots,
-						raukkEffectiveShipSources(sourcingStore.shipSourcing)
+						raukkEffectiveShipSources(
+							sourcingStore.shipSourcing,
+							sourcingStore.producerUuidsOf
+						)
 					),
 					pending,
 					// the SCOPED snapshots decide which loop mates join a

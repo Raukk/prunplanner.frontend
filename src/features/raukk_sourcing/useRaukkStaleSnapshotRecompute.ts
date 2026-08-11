@@ -141,7 +141,8 @@ export function useRaukkStaleSnapshotRecompute() {
 			const runner: IRaukkBlockRecomputer = createBlockRecomputer({
 				empireList,
 				shipSources: raukkEffectiveShipSources(
-					sourcingStore.shipSourcing
+					sourcingStore.shipSourcing,
+					sourcingStore.producerUuidsOf
 				),
 				planNameOf: (planUuid: string) =>
 					sourcingStore.snapshots[planUuid]?.planName ?? planUuid,
@@ -166,7 +167,10 @@ export function useRaukkStaleSnapshotRecompute() {
 					buildDependencyGraph(
 						inputs.configs,
 						inputs.snapshots,
-						raukkEffectiveShipSources(sourcingStore.shipSourcing)
+						raukkEffectiveShipSources(
+							sourcingStore.shipSourcing,
+							sourcingStore.producerUuidsOf
+						)
 					),
 					pending,
 					(planUuid: string) =>

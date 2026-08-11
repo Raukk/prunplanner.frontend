@@ -172,11 +172,16 @@ export function createRaukkShipPriceResolver(
 ): IRaukkPriceResolver {
 	const sourcingStore = useRaukkSourcingStore();
 
-	const sources: Record<string, IRaukkTickerSource> =
-		raukkEffectiveShipSources(sourcingStore.shipSourcing);
-
 	const getProducers = (ticker: string): IRaukkProducerOption[] =>
 		lookups.getProducers?.(ticker) ?? sourcingStore.producersOf(ticker);
+
+	// healed against the same pool the resolver prices from: an entry the
+	// pool cannot honour is priced at the exchange, and the table has to
+	// say so rather than name a base that stopped making the ticker
+	const sources: Record<string, IRaukkTickerSource> =
+		raukkEffectiveShipSources(sourcingStore.shipSourcing, (ticker) =>
+			getProducers(ticker).map((producer) => producer.planUuid)
+		);
 
 	/*
 	 * The market top up aggregate blends against a DEMAND, and the demand
@@ -266,9 +271,13 @@ export function useRaukkShipSourcing(lookups: IRaukkShipPriceLookups) {
 
 	const rows: ComputedRef<IRaukkShipSourcingRow[]> = computed(() => {
 		const effective: Record<string, IRaukkTickerSource> =
-			raukkEffectiveShipSources(sourcing.value);
+			raukkEffectiveShipSources(
+				sourcing.value,
+				sourcingStore.producerUuidsOf
+			);
 		const defaulted: Set<string> = raukkShipDefaultedTickers(
-			sourcing.value
+			sourcing.value,
+			sourcingStore.producerUuidsOf
 		);
 
 		return RAUKK_SHIP_SOURCE_GROUPS.flatMap((group) =>
