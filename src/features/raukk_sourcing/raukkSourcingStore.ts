@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref, Ref, watch } from "vue";
+import { computed, ComputedRef, ref, Ref, watch } from "vue";
 
 // Stores
 import { usePlanningStore } from "@/stores/planningStore";
@@ -111,7 +111,6 @@ import {
 	IRaukkSubscription,
 	IRaukkSubscriptionEntry,
 } from "@/features/raukk_sourcing/raukkSourcingStore.types";
-import { IPlanEmpireElement } from "@/stores/planningStore.types";
 
 /** Repair day used until a plan configures its own */
 const DEFAULT_REPAIR_DAY: RAUKK_REPAIR_DAY = 90;
@@ -281,15 +280,45 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {Record<string, IRaukkSnapshot>} Snapshots in scope
 		 */
 		function scopedSnapshots(): Record<string, IRaukkSnapshot> {
-			const empires: Record<string, IPlanEmpireElement> =
-				usePlanningStore().empires;
-
-			return raukkScopedSnapshots(
-				snapshots.value,
-				raukkEmpirePlanUuids(empires),
-				raukkEmpirePlanets(empires)
-			);
+			return scopedSnapshotRecord.value;
 		}
+
+		/**
+		 * Plan uuids of every empire, memoized.
+		 *
+		 * Depends on `planningStore.empires` alone — the scan walks the
+		 * empire plan lists and reads nothing of this store, so no sourcing
+		 * mutation invalidates it.
+		 */
+		const assignedPlanUuids: ComputedRef<Set<string>> = computed(() =>
+			raukkEmpirePlanUuids(usePlanningStore().empires)
+		);
+
+		/** Planets of every empire plan, memoized next to the uuids */
+		const operatedPlanets: ComputedRef<Set<string>> = computed(() =>
+			raukkEmpirePlanets(usePlanningStore().empires)
+		);
+
+		/**
+		 * Backing computed of {@link scopedSnapshots}, built once per
+		 * change instead of once per call.
+		 *
+		 * The scoping walk reads the snapshot MAP and each snapshots
+		 * `flows`, plus the two empire sets above — it never touches
+		 * `stale`, `draws` or `outputs` of a snapshot it passes through by
+		 * reference, so the stale flag sprays of a recompute sweep leave it
+		 * cached. Only a snapshot that really LOSES flows is shallow
+		 * copied, and that copy reads the whole snapshot.
+		 */
+		const scopedSnapshotRecord: ComputedRef<
+			Record<string, IRaukkSnapshot>
+		> = computed(() =>
+			raukkScopedSnapshots(
+				snapshots.value,
+				assignedPlanUuids.value,
+				operatedPlanets.value
+			)
+		);
 
 		/**
 		 * Snapshots the CROSS PLAN sourcing steps — the producer pool and
@@ -305,11 +334,23 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {Record<string, IRaukkSnapshot>} Snapshots in scope
 		 */
 		function sourcingScopedSnapshots(): Record<string, IRaukkSnapshot> {
-			if (shippingConfig.value.allowUnassignedSources === true)
-				return snapshots.value;
-
-			return scopedSnapshots();
+			return sourcingScopedSnapshotRecord.value;
 		}
+
+		/**
+		 * Backing computed of {@link sourcingScopedSnapshots}.
+		 *
+		 * Adds exactly one dependency to {@link scopedSnapshotRecord}:
+		 * `shippingConfig.allowUnassignedSources`. The other shipping knobs
+		 * are not read here, so changing a lane cost does not re-scope.
+		 */
+		const sourcingScopedSnapshotRecord: ComputedRef<
+			Record<string, IRaukkSnapshot>
+		> = computed(() =>
+			shippingConfig.value.allowUnassignedSources === true
+				? snapshots.value
+				: scopedSnapshotRecord.value
+		);
 
 		/**
 		 * Configs and snapshots a RECOMPUTE SWEEP may touch, the one
@@ -361,9 +402,7 @@ export const useRaukkSourcingStore = defineStore(
 			if (extraPlanUuid !== undefined && extraSnapshot !== undefined)
 				scopedSnaps[extraPlanUuid] = extraSnapshot;
 
-			const assigned: Set<string> = raukkEmpirePlanUuids(
-				usePlanningStore().empires
-			);
+			const assigned: Set<string> = assignedPlanUuids.value;
 
 			const scopedConfigs: Record<string, IRaukkPlanConfig> = {};
 
@@ -477,6 +516,75 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Key of the draw index, one producing plan and one ticker. ` `
+		 * separates because neither a uuid nor a ticker can contain it.
+		 *
+		 * @param {string} sourcePlanUuid Producing Plan Uuid
+		 * @param {string} ticker Material Ticker
+		 * @returns {string} Index Key
+		 */
+		function drawKey(sourcePlanUuid: string, ticker: string): string {
+			return `${sourcePlanUuid} ${ticker}`;
+		}
+
+		/**
+		 * Every draw in sourcing scope, indexed by the producer and ticker
+		 * it is held against — the read {@link subscription} does, turned
+		 * from a scan of all snapshots into one map lookup.
+		 *
+		 * Built once per change of {@link sourcingScopedSnapshotRecord} and
+		 * of the `draws` of the snapshots in it. Nothing else is read here,
+		 * `stale` least of all: a recompute sweep flagging half the account
+		 * leaves this index cached, and with it every material IO table
+		 * that only asks what is drawn from a row.
+		 *
+		 * Entries keep the snapshot iteration order the scan produced, so
+		 * both the listed order and the float summation order are the ones
+		 * callers saw before.
+		 */
+		const drawsByProducer: ComputedRef<
+			Map<string, IRaukkSubscriptionEntry[]>
+		> = computed(() => {
+			const index: Map<string, IRaukkSubscriptionEntry[]> = new Map();
+
+			Object.entries(sourcingScopedSnapshotRecord.value).forEach(
+				([planUuid, snapshot]) => {
+					Object.entries(snapshot.draws).forEach(
+						([sourcePlanUuid, byTicker]) => {
+							Object.entries(byTicker).forEach(
+								([ticker, unitsPerDay]) => {
+									if (
+										unitsPerDay === undefined ||
+										unitsPerDay === 0
+									)
+										return;
+
+									const key: string = drawKey(
+										sourcePlanUuid,
+										ticker
+									);
+									const known:
+										| IRaukkSubscriptionEntry[]
+										| undefined = index.get(key);
+
+									const entry: IRaukkSubscriptionEntry = {
+										planUuid,
+										unitsPerDay,
+									};
+
+									if (known) known.push(entry);
+									else index.set(key, [entry]);
+								}
+							);
+						}
+					);
+				}
+			);
+
+			return index;
+		});
+
+		/**
 		 * Aggregates all draws other plans hold against one source
 		 * plans output ticker. Oversubscription is allowed, the
 		 * percentage can therefore exceed 1.
@@ -494,20 +602,15 @@ export const useRaukkSourcingStore = defineStore(
 			sourcePlanUuid: string,
 			ticker: string
 		): IRaukkSubscription {
-			const byPlan: IRaukkSubscriptionEntry[] = [];
+			const byPlan: IRaukkSubscriptionEntry[] = (
+				drawsByProducer.value.get(drawKey(sourcePlanUuid, ticker)) ?? []
+			).map((entry) => ({ ...entry }));
+
 			let totalDrawnPerDay: number = 0;
 
-			Object.entries(sourcingScopedSnapshots()).forEach(
-				([planUuid, snapshot]) => {
-					const amount: number | undefined =
-						snapshot.draws[sourcePlanUuid]?.[ticker];
-
-					if (amount === undefined || amount === 0) return;
-
-					totalDrawnPerDay += amount;
-					byPlan.push({ planUuid, unitsPerDay: amount });
-				}
-			);
+			byPlan.forEach((entry) => {
+				totalDrawnPerDay += entry.unitsPerDay;
+			});
 
 			const sourceUnitsPerDay: number =
 				snapshots.value[sourcePlanUuid]?.outputs[ticker]?.unitsPerDay ??
@@ -536,13 +639,35 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {string[]} Lease Plan Uuids
 		 */
 		function leasesOf(hostPlanUuid: string): string[] {
-			return Object.entries(configs.value)
-				.filter(
-					([, config]) => config.leaseHostPlanUuid === hostPlanUuid
-				)
-				.map(([planUuid]) => planUuid)
-				.sort();
+			return [...(leasesByHost.value[hostPlanUuid] ?? [])];
 		}
+
+		/**
+		 * Lease plan uuids by host, the backing index of {@link leasesOf}.
+		 *
+		 * Reads the config MAP and the `leaseHostPlanUuid` of each config
+		 * and nothing else, so editing a plans sources, cadence or repair
+		 * day does not rebuild it. A fresh array is handed out per call —
+		 * callers hold their result across mutations that empty the index.
+		 */
+		const leasesByHost: ComputedRef<Record<string, string[]>> = computed(
+			() => {
+				const index: Record<string, string[]> = {};
+
+				Object.entries(configs.value).forEach(([planUuid, config]) => {
+					const host: string | undefined = config.leaseHostPlanUuid;
+
+					if (host === undefined) return;
+
+					if (index[host]) index[host].push(planUuid);
+					else index[host] = [planUuid];
+				});
+
+				Object.values(index).forEach((uuids) => uuids.sort());
+
+				return index;
+			}
+		);
 
 		/**
 		 * Planet a plan sits on, exactly as the snapshot pipeline resolves
@@ -688,10 +813,7 @@ export const useRaukkSourcingStore = defineStore(
 		 * @author raukk
 		 */
 		watch(
-			() =>
-				[...raukkEmpirePlanUuids(usePlanningStore().empires)]
-					.sort()
-					.join("|"),
+			() => [...assignedPlanUuids.value].sort().join("|"),
 			(current: string) => {
 				if (current === "") return;
 
