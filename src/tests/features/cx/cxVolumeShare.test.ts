@@ -46,6 +46,14 @@ describe("soldToCXPerDay", () => {
 	it("returns zero for an input row", () => {
 		expect(soldToCXPerDay(-42, 0)).toBe(0);
 	});
+
+	it("sells nothing to the exchange while the ticker is sold locally", () => {
+		// the ad sits on the plan's own planet and never enters the
+		// exchange's order book: no share of its volume to warn about
+		expect(soldToCXPerDay(136.1, 0, true)).toBe(0);
+		// flat for the whole ticker, drawn units included
+		expect(soldToCXPerDay(136.1, 40, true)).toBe(0);
+	});
 });
 
 describe("volumeWindow", () => {

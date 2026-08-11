@@ -78,10 +78,31 @@
 	);
 
 	/**
+	 * Whether an output ticker carries a local market sale ad on this
+	 * plan, read LIVE rather than off the frozen snapshot: the delta the
+	 * share is measured against is the live material I/O, so the flag it
+	 * is netted with has to be live too. The sourcing annotation next to
+	 * it reads the frozen copy for the opposite reason — it explains the
+	 * stored cost numbers, not a live quantity.
+	 * @author raukk
+	 */
+	function localSoldTicker(ticker: string): boolean {
+		if (!localPlanUuid.value) return false;
+
+		return (
+			raukkSourcingStore.configs[localPlanUuid.value]?.localSales?.[
+				ticker
+			] !== undefined
+		);
+	}
+
+	/**
 	 * Units per day of every output row that actually reach the exchange.
 	 * The row's delta already nets this base's own consumption, what other
 	 * plans draw through their sourcing configuration comes off on top of
-	 * it — those units never touch the market.
+	 * it — those units never touch the market. Neither does a ticker sold
+	 * on the plan's own local market, which reaches the exchange with
+	 * nothing whatsoever.
 	 * @author raukk
 	 */
 	const localVolumeRows: ComputedRef<ICXVolumeRow[]> = computed(() =>
@@ -96,7 +117,8 @@
 								localPlanUuid.value,
 								row.ticker
 							).totalDrawnPerDay
-						: 0
+						: 0,
+					localSoldTicker(row.ticker)
 				),
 			}))
 	);

@@ -60,12 +60,14 @@
 
 	/**
 	 * Planets the account plans on, as the candidate search takes them.
-	 * Read from the stored snapshots, the same source the chain editor
-	 * builds its stop list from.
+	 * Read from the SCOPED snapshots, the same source the chain editor
+	 * builds its stop list from: a depot is account level shipping, and a
+	 * planet only an unassigned plan stands on is not one the account
+	 * operates a warehouse at.
 	 */
 	const candidates: ComputedRef<IRaukkDepotCandidate[]> = computed(() =>
 		raukkDepotCandidates(
-			Object.values(sourcingStore.snapshots).map(
+			Object.values(sourcingStore.scopedSnapshots()).map(
 				(snapshot: IRaukkSnapshot) => ({
 					planetNaturalId: snapshot.planetNaturalId,
 					planName: snapshot.planName,

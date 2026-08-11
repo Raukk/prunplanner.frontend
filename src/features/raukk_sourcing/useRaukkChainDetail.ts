@@ -85,11 +85,16 @@ export function useRaukkChainDetail(
 		const resolvePrice: IRaukkShippingPriceResolver = (ticker: string) =>
 			fuelPrices.value[ticker] ?? 0;
 
+		// scoped, exactly as the stored chain result is costed: a member
+		// the user unassigned contributes no flows, or this live preview
+		// would disagree with the result the chain pass writes
+		const scoped: Record<string, IRaukkSnapshot> =
+			sourcingStore.scopedSnapshots();
+
 		const flows: IRaukkChainFlow[] = sourcingStore
 			.chainMemberPlans(chain.value.stops)
 			.flatMap((planUuid: string) => {
-				const snapshot: IRaukkSnapshot | undefined =
-					sourcingStore.snapshots[planUuid];
+				const snapshot: IRaukkSnapshot | undefined = scoped[planUuid];
 
 				return snapshot?.flows ?? [];
 			});

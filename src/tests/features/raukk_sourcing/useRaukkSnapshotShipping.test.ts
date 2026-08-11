@@ -24,6 +24,7 @@ import {
 
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
+import { usePlanningStore } from "@/stores/planningStore";
 import { materialsStore } from "@/database/stores";
 
 // test data
@@ -50,6 +51,7 @@ import {
 	IRaukkShipProfile,
 	IRaukkSnapshot,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
+import { IPlanEmpireElement } from "@/stores/planningStore.types";
 
 /** Antares III, one jump from the consumer and NOT via the exchange */
 const SOURCE_PLANET: string = "ZV-194a";
@@ -203,6 +205,32 @@ function sourceContext() {
 		cxUuid: undefined,
 		planResult: sourcePlanResult(),
 	};
+}
+
+/** Planet of every plan uuid the scope tests assign to an empire */
+const PLANET_OF: Record<string, string> = {
+	consumer: CONSUMER_PLANET,
+	source: SOURCE_PLANET,
+};
+
+/**
+ * Puts exactly these plans into one empire, which is what makes the
+ * account level scoping bite: an EMPTY assigned set means the empires
+ * are not loaded yet and every snapshot passes, so the other tests of
+ * this file are untouched by it.
+ */
+function assignEmpire(planUuids: string[]): void {
+	usePlanningStore().empires = {
+		e1: {
+			uuid: "e1",
+			name: "E1",
+			plans: planUuids.map((uuid) => ({
+				uuid,
+				plan_name: uuid,
+				planet_natural_id: PLANET_OF[uuid] ?? CONSUMER_PLANET,
+			})),
+		},
+	} as unknown as Record<string, IPlanEmpireElement>;
 }
 
 describe("Raukk Sourcing: Snapshot Shipping", () => {
@@ -1372,6 +1400,75 @@ describe("Raukk Sourcing: Snapshot Shipping", () => {
 
 			// nothing is market bound excess here, every unit is drawn and
 			// consumed elsewhere: the lane ships exactly as before
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				10
+			);
+		});
+
+		it("stops shipping it once the drawing plan is unassigned", async () => {
+			// the same draw as above, from a plan belonging to no empire
+			store.setSnapshot("other", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Other",
+				planetNaturalId: "ZV-307c",
+				outputs: {},
+				draws: { consumer: { ALO: 100 } },
+			});
+
+			assignEmpire(["consumer"]);
+
+			store.setLocalSale("consumer", "ALO", {
+				basis: "MANUAL",
+				value: 180,
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			/*
+			 * A base the account does not operate holds no cargo on one it
+			 * does: the draw disappears with its plan, every ALO unit is
+			 * market bound excess again and sells on the own planet. Only
+			 * the 100 t of ORE are left, at 0.1 trips a day — the very
+			 * number the unclaimed LM sold case above pays.
+			 *
+			 * `subscription` answers from the same scoped set, so the two
+			 * halves of the draw still cancel; reading the raw snapshots
+			 * here left the whole 300 t flying for nobody.
+			 */
+			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
+				(0.1 * (2 * CX_TO_CONSUMER * 10)) / 100,
+				10
+			);
+		});
+
+		it("keeps shipping it while unassigned sources are allowed", async () => {
+			store.setSnapshot("other", {
+				computedAt: "2026-01-01T00:00:00.000Z",
+				stale: false,
+				planName: "Other",
+				planetNaturalId: "ZV-307c",
+				outputs: {},
+				draws: { consumer: { ALO: 100 } },
+			});
+
+			assignEmpire(["consumer"]);
+			store.setShippingConfig({ allowUnassignedSources: true });
+
+			store.setLocalSale("consumer", "ALO", {
+				basis: "MANUAL",
+				value: 180,
+			});
+
+			const { snapshot } = await computePlanSnapshot(
+				context(planResult(1, 3))
+			);
+
+			// the toggle governs both halves at once: the draw counts
+			// again and the lane carries it again
 			expect(snapshot.outputs.ALO.breakdown.shipping).toBeCloseTo(
 				(0.3 * (2 * CX_TO_CONSUMER * 10)) / 100,
 				10

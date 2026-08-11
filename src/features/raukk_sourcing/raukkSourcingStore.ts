@@ -11,7 +11,9 @@ import { inertClone } from "@/util/data";
 // Graph
 import {
 	buildDependencyGraph,
+	collectDependencies,
 	collectDependents,
+	IRaukkDependencyGraph,
 } from "@/features/raukk_sourcing/raukkSourcingGraph";
 
 // Pricing
@@ -657,6 +659,51 @@ export const useRaukkSourcingStore = defineStore(
 				result.stale = true;
 			});
 		}
+
+		/**
+		 * The empire assignment the stored snapshots were computed under,
+		 * as the sorted uuid list of {@link raukkEmpirePlanUuids}.
+		 * `undefined` until the empires are loaded — a fresh page has its
+		 * sourcing state from local storage long before the plan lists
+		 * arrive, and an empty set filters nothing at all.
+		 */
+		let assignedSeen: string | undefined = undefined;
+
+		/**
+		 * Stales the whole store when the account changes which plans it
+		 * operates.
+		 *
+		 * Assignment is an account global input exactly like the shipping
+		 * configuration: it decides which snapshots the hub/spoke half,
+		 * the chain pass, the fleet rollup and the producer pool may see,
+		 * so unassigning ONE base moves the numbers of every base that
+		 * traded with it — in both directions. The dependency graph cannot
+		 * carry that: a producer does not depend on its consumer, and the
+		 * plan whose assignment changed may have no edge left at all.
+		 *
+		 * The first non-empty set is the page load and stales nothing: the
+		 * stored snapshots were computed under it. Every change after that
+		 * is the user editing the management screen.
+		 *
+		 * @author raukk
+		 */
+		watch(
+			() =>
+				[...raukkEmpirePlanUuids(usePlanningStore().empires)]
+					.sort()
+					.join("|"),
+			(current: string) => {
+				if (current === "") return;
+
+				const previous: string | undefined = assignedSeen;
+				assignedSeen = current;
+
+				if (previous === undefined || previous === current) return;
+
+				markAllStale();
+			},
+			{ immediate: true }
+		);
 
 		/**
 		 * Listeners of {@link notifyChainInputsChanged}, registered by
@@ -2144,17 +2191,25 @@ export const useRaukkSourcingStore = defineStore(
 		 * @param {string} planUuid Plan Uuid
 		 */
 		function deletePlanData(planUuid: string): void {
-			const dependents: string[] = collectDependents(
-				buildDependencyGraph(
-					configs.value,
-					snapshots.value,
-					raukkEffectiveShipSources(
-						shipSourcing.value,
-						producerUuidsOf
-					)
-				),
-				planUuid
+			const graph: IRaukkDependencyGraph = buildDependencyGraph(
+				configs.value,
+				snapshots.value,
+				raukkEffectiveShipSources(shipSourcing.value, producerUuidsOf)
 			);
+
+			const dependents: string[] = collectDependents(graph, planUuid);
+
+			/*
+			 * The PRODUCERS the plan drew from go stale as well, and the
+			 * edge runs the other way round: what a counterpart draws is
+			 * put back onto the producers own exchange lane by the
+			 * hub/spoke half, so a draw disappearing changes the producers
+			 * cargo, its freight and its ship time. Nothing else would ever
+			 * touch them — a producer does not DEPEND on its consumer — so
+			 * without this their frozen snapshots keep flying cargo for a
+			 * base that no longer exists.
+			 */
+			const upstream: string[] = collectDependencies(graph, planUuid);
 
 			/*
 			 * Leases of a deleted HOST lose their link: a dangling uuid would
@@ -2189,11 +2244,11 @@ export const useRaukkSourcingStore = defineStore(
 				if (lease) lease.stale = true;
 			});
 
-			dependents.forEach((dependentUuid) => {
-				const dependent: IRaukkSnapshot | undefined =
-					snapshots.value[dependentUuid];
+			[...dependents, ...upstream].forEach((staleUuid) => {
+				const affected: IRaukkSnapshot | undefined =
+					snapshots.value[staleUuid];
 
-				if (dependent) dependent.stale = true;
+				if (affected) affected.stale = true;
 			});
 		}
 
