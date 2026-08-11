@@ -1208,7 +1208,7 @@ export async function computePlanSnapshot(
 		),
 	});
 
-	const solved: number[] | null = solveAffineFixedPoint(
+	const solved: number[] | null = await solveAffineFixedPoint(
 		(selfPrices: number[]) => {
 			const probe: IRaukkSnapshot = computeOnce(overrideOf(selfPrices));
 

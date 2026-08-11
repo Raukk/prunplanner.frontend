@@ -41,15 +41,18 @@ export const RAUKK_LOOP_SOLVE_PIVOT_EPSILON: number = 1e-9;
 /**
  * Largest system the closed form solve is attempted for.
  *
- * The extraction costs one evaluation per unknown, and an evaluation is a
- * full snapshot computation — a loop with more unknowns than this costs
- * more than the answer is worth, and the caller reports it unsolved. No
- * real plan comes close: the unknowns are the tickers a plan draws from
- * ITSELF.
+ * A real empire loop is BIG: fourteen plans trading a couple of tickers
+ * each put dozens of (producer, ticker) pairs on the cycle, and an
+ * earlier cap of 20 refused such loops without even trying. The genuine
+ * costs are k + 1 evaluation ROUNDS of the members synchronous cost math
+ * — the solve yields between rounds, so the UI stays live — and one
+ * k × k elimination, which at 100 unknowns is microseconds. The cap
+ * exists only as a runaway guard for a degenerate graph, far above any
+ * loop a real account produces.
  *
  * @author raukk
  */
-export const RAUKK_LOOP_SOLVE_MAX_UNKNOWNS: number = 20;
+export const RAUKK_LOOP_SOLVE_MAX_UNKNOWNS: number = 100;
 
 /**
  * Solves the dense linear system `a·x = b` by Gaussian elimination with
@@ -191,16 +194,24 @@ export function affinePerturbationDelta(base: number): number {
  * pick) can flip between two price points, and the two sides of such a
  * flip are two different affine maps.
  *
+ * The evaluator may be asynchronous: each round is awaited, so a caller
+ * whose single round is heavy — every member of a large loop computed
+ * once — can yield back to the event loop between rounds and keep the UI
+ * responsive through a big extraction. A plain synchronous evaluator
+ * works unchanged.
+ *
  * @author raukk
  *
- * @param {(prices: number[]) => number[]} evaluate Affine evaluator
+ * @param {(prices: number[]) => number[] | Promise<number[]>} evaluate
+ * Affine evaluator
  * @param {number[]} base Base point the map is extracted around
- * @returns {number[] | null} Fixed point, or null when not solvable
+ * @returns {Promise<number[] | null>} Fixed point, or null when not
+ * solvable
  */
-export function solveAffineFixedPoint(
-	evaluate: (prices: number[]) => number[],
+export async function solveAffineFixedPoint(
+	evaluate: (prices: number[]) => number[] | Promise<number[]>,
 	base: number[]
-): number[] | null {
+): Promise<number[] | null> {
 	const size: number = base.length;
 
 	if (size === 0) return [];
@@ -208,8 +219,8 @@ export function solveAffineFixedPoint(
 	if (!base.every((value) => Number.isFinite(value))) return null;
 
 	/** One evaluation, rejected unless it is k finite numbers */
-	function evaluationAt(prices: number[]): number[] | null {
-		const values: number[] = evaluate(prices);
+	async function evaluationAt(prices: number[]): Promise<number[] | null> {
+		const values: number[] = await evaluate(prices);
 
 		if (values.length !== size) return null;
 		if (!values.every((value) => Number.isFinite(value))) return null;
@@ -217,7 +228,7 @@ export function solveAffineFixedPoint(
 		return values;
 	}
 
-	const atBase: number[] | null = evaluationAt([...base]);
+	const atBase: number[] | null = await evaluationAt([...base]);
 	if (atBase === null) return null;
 
 	/** Column j of A: how every value answers unknown j, exactly */
@@ -229,7 +240,7 @@ export function solveAffineFixedPoint(
 		const probe: number[] = [...base];
 		probe[unknown] += delta;
 
-		const atProbe: number[] | null = evaluationAt(probe);
+		const atProbe: number[] | null = await evaluationAt(probe);
 		if (atProbe === null) return null;
 
 		columns.push(

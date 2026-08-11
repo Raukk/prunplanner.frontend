@@ -321,7 +321,11 @@ describe("useRaukkBlockRecompute", () => {
 			expect(errors[0].planName).toBe("D");
 			expect(errors[0].blockMembers).toStrictEqual(["d", "e"]);
 			expect(errors[0].message).toBe(
-				"supply loop of 2 plans (D, E) could not be solved (no finite fixed point or a discrete decision flip); single-pass numbers kept"
+				"supply loop of 2 plans (D, E) could not be solved: no " +
+					"finite fixed point exists — some cycle consumes at " +
+					"least its whole output, or a probe computed no finite " +
+					"price; break one sourcing edge of the loop; " +
+					"single-pass numbers kept"
 			);
 		});
 
