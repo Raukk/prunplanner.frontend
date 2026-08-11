@@ -39,6 +39,9 @@ import { createRaukkSliceComputeEnv } from "@/features/raukk_sourcing/calculatio
 import { raukkComputeSnapshotOnce } from "@/features/raukk_sourcing/calculations/raukkComputeCore";
 import { raukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations/gatePlanning";
 
+// Util
+import { inertClone } from "@/util/data";
+
 // Stores
 import { useRaukkSourcingStore } from "@/features/raukk_sourcing/raukkSourcingStore";
 
@@ -188,13 +191,13 @@ function ensureSolveWorker(): Worker | undefined {
  * @returns {IPlanResult} Projection, inert
  */
 export function raukkProjectPlanResult(planResult: IPlanResult): IPlanResult {
-	return {
+	return inertClone({
 		materialio: planResult.materialio,
 		workforceMaterialIO: planResult.workforceMaterialIO,
 		productionMaterialIO: planResult.productionMaterialIO,
 		storage: planResult.storage,
 		production: planResult.production,
-	} as IPlanResult;
+	} as IPlanResult);
 }
 
 /**
@@ -375,8 +378,15 @@ export async function raukkSolveBlock(
 					requestId: nextRequestId++,
 					members: run.members,
 					coreInputs,
-					provisional: run.provisional,
-					unknowns: run.unknowns,
+					/*
+					 * Cloned inert like the slice: a provisional snapshot
+					 * came straight out of the live pipeline and may embed
+					 * reactive proxies — lease cargo most of all — which
+					 * structured clone rejects, and a DataCloneError here
+					 * would silently retire the worker for good.
+					 */
+					provisional: inertClone(run.provisional),
+					unknowns: inertClone(run.unknowns),
 					slice,
 					plannedGateLinks: raukkPlannedGateLinks(
 						Object.values(useRaukkSourcingStore().plannedGates)
