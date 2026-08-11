@@ -8,6 +8,17 @@ import {
 } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 
 /**
+ * Repair day a plan without a stored configuration is computed at.
+ *
+ * Lives here rather than in the store so the frozen compute slice — which
+ * must not import Pinia — answers `getConfig` for an unconfigured plan
+ * with exactly the value the store does.
+ *
+ * @author raukk
+ */
+export const RAUKK_DEFAULT_REPAIR_DAY: RAUKK_REPAIR_DAY = 90;
+
+/**
  * Repair material amount of a single building at a given day.
  *
  * Mirrors `calculateAmountAtDay` of

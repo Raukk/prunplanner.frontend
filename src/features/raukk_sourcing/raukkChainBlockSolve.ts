@@ -26,10 +26,7 @@ import {
 } from "@/features/raukk_sourcing/raukkSourcingPricing";
 
 // Types & Interfaces
-import {
-	IRaukkPreparedSnapshot,
-	IRaukkProducerPriceOverride,
-} from "@/features/raukk_sourcing/useRaukkSnapshot";
+import { IRaukkProducerPriceOverride } from "@/features/raukk_sourcing/calculations/raukkComputeCore";
 import {
 	IRaukkOutputCost,
 	IRaukkSnapshot,
@@ -44,16 +41,38 @@ export interface IRaukkBlockUnknown {
 	ticker: string;
 }
 
+/**
+ * The one thing a solve needs of a member: computing it once, at trial
+ * prices, writing nothing.
+ *
+ * Narrower than the prepared pipeline on purpose — a worker holds no
+ * pipeline at all, only the pure core over a frozen slice, and both
+ * satisfy exactly this.
+ */
+export interface IRaukkBlockProbe {
+	computeOnce(priceOverride?: IRaukkProducerPriceOverride): IRaukkSnapshot;
+}
+
 /** Everything one block solve runs against */
 export interface IRaukkBlockSolveInput {
 	/** Member plan uuids of the block */
 	members: string[];
-	/** Prepared pipeline per member, probed at trial prices */
-	prepared: Record<string, IRaukkPreparedSnapshot>;
+	/** Probe per member, evaluated at trial prices */
+	prepared: Record<string, IRaukkBlockProbe>;
 	/** Freshly computed snapshot per member, the solves base point */
 	provisional: Record<string, IRaukkSnapshot>;
 	/** Prices to solve for, see {@link buildBlockUnknowns} */
 	unknowns: IRaukkBlockUnknown[];
+	/**
+	 * Hand the event loop back between evaluation rounds.
+	 *
+	 * The default and what every MAIN THREAD solve wants: one round is
+	 * every member computed once, synchronous math a large loop repeats
+	 * k + 1 times, and yielding lets the UI paint between rounds instead
+	 * of freezing for the whole extraction. A solve inside a WORKER owns
+	 * its thread and turns it off — there is nothing there to paint.
+	 */
+	yieldBetweenRounds?: boolean;
 }
 
 /**
@@ -215,6 +234,7 @@ export async function solveLoopBlock(
 	input: IRaukkBlockSolveInput
 ): Promise<IRaukkBlockSolveOutcome> {
 	const { members, prepared, provisional, unknowns } = input;
+	const yieldBetweenRounds: boolean = input.yieldBetweenRounds !== false;
 
 	if (unknowns.length === 0)
 		return { snapshots: { ...provisional }, unknownCount: 0 };
@@ -259,8 +279,7 @@ export async function solveLoopBlock(
 		const override: IRaukkProducerPriceOverride = overrideOf(prices);
 
 		members.forEach((memberUuid) => {
-			const pipeline: IRaukkPreparedSnapshot | undefined =
-				prepared[memberUuid];
+			const pipeline: IRaukkBlockProbe | undefined = prepared[memberUuid];
 			if (pipeline === undefined) return;
 
 			computed[memberUuid] = pipeline.computeOnce(override);
@@ -271,10 +290,10 @@ export async function solveLoopBlock(
 
 	const solved: number[] | null = await solveAffineFixedPoint(
 		async (prices) => {
-			// one round is every member computed once, synchronous math a
-			// large loop repeats k + 1 times — yield first so the UI paints
-			// between rounds instead of freezing for the whole extraction
-			await new Promise((resolve) => setTimeout(resolve, 0));
+			// see `yieldBetweenRounds`: the main thread paints between
+			// rounds, a worker owns its thread and runs them back to back
+			if (yieldBetweenRounds)
+				await new Promise((resolve) => setTimeout(resolve, 0));
 
 			const probe: Record<string, IRaukkSnapshot> = evaluateAll(prices);
 

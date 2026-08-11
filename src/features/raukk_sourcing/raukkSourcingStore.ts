@@ -77,6 +77,14 @@ import {
 	raukkGateUpgradesFit,
 } from "@/features/raukk_sourcing/calculations/gateCosts";
 import { setRaukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations/routeDistance";
+import { RAUKK_DEFAULT_REPAIR_DAY } from "@/features/raukk_sourcing/calculations/repairCapitalCost";
+import {
+	raukkChainClaimedUnitsOn,
+	raukkChainLaneIndex,
+	raukkDrawIndex,
+	raukkProducersOf,
+	raukkSubscriptionOf,
+} from "@/features/raukk_sourcing/calculations/raukkStoreIndexes";
 // raukk: only plans assigned to an empire take part account wide
 import {
 	raukkEmpirePlanUuids,
@@ -115,9 +123,6 @@ import {
 	IRaukkSubscription,
 	IRaukkSubscriptionEntry,
 } from "@/features/raukk_sourcing/raukkSourcingStore.types";
-
-/** Repair day used until a plan configures its own */
-const DEFAULT_REPAIR_DAY: RAUKK_REPAIR_DAY = 90;
 
 /**
  * Preset ship profiles by id, built once. The store persists user
@@ -252,7 +257,7 @@ export const useRaukkSourcingStore = defineStore(
 
 			if (findConfig) return inertClone(findConfig);
 
-			return { repairDay: DEFAULT_REPAIR_DAY, sources: {} };
+			return { repairDay: RAUKK_DEFAULT_REPAIR_DAY, sources: {} };
 		}
 
 		/**
@@ -534,21 +539,7 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {IRaukkProducerOption[]} Producing Plans
 		 */
 		function producersOf(ticker: string): IRaukkProducerOption[] {
-			return Object.entries(sourcingScopedSnapshots())
-				.filter(([, snapshot]) => snapshot.outputs[ticker])
-				.map(([planUuid, snapshot]) => {
-					const output = snapshot.outputs[ticker];
-
-					return {
-						planUuid,
-						planName: snapshot.planName,
-						planetNaturalId: snapshot.planetNaturalId,
-						costPerUnit: output.costPerUnit,
-						unitsPerDay: output.unitsPerDay,
-						stale: snapshot.stale,
-						computedAt: snapshot.computedAt,
-					};
-				});
+			return raukkProducersOf(sourcingScopedSnapshots(), ticker);
 		}
 
 		/**
@@ -562,18 +553,6 @@ export const useRaukkSourcingStore = defineStore(
 		 */
 		function producerUuidsOf(ticker: string): string[] {
 			return producersOf(ticker).map((producer) => producer.planUuid);
-		}
-
-		/**
-		 * Key of the draw index, one producing plan and one ticker. `|`
-		 * separates because neither a uuid nor a ticker can contain it.
-		 *
-		 * @param {string} sourcePlanUuid Producing Plan Uuid
-		 * @param {string} ticker Material Ticker
-		 * @returns {string} Index Key
-		 */
-		function drawKey(sourcePlanUuid: string, ticker: string): string {
-			return `${sourcePlanUuid}|${ticker}`;
 		}
 
 		/**
@@ -593,45 +572,7 @@ export const useRaukkSourcingStore = defineStore(
 		 */
 		const drawsByProducer: ComputedRef<
 			Map<string, IRaukkSubscriptionEntry[]>
-		> = computed(() => {
-			const index: Map<string, IRaukkSubscriptionEntry[]> = new Map();
-
-			Object.entries(sourcingScopedSnapshotRecord.value).forEach(
-				([planUuid, snapshot]) => {
-					Object.entries(snapshot.draws).forEach(
-						([sourcePlanUuid, byTicker]) => {
-							Object.entries(byTicker).forEach(
-								([ticker, unitsPerDay]) => {
-									if (
-										unitsPerDay === undefined ||
-										unitsPerDay === 0
-									)
-										return;
-
-									const key: string = drawKey(
-										sourcePlanUuid,
-										ticker
-									);
-									const known:
-										| IRaukkSubscriptionEntry[]
-										| undefined = index.get(key);
-
-									const entry: IRaukkSubscriptionEntry = {
-										planUuid,
-										unitsPerDay,
-									};
-
-									if (known) known.push(entry);
-									else index.set(key, [entry]);
-								}
-							);
-						}
-					);
-				}
-			);
-
-			return index;
-		});
+		> = computed(() => raukkDrawIndex(sourcingScopedSnapshotRecord.value));
 
 		/**
 		 * Aggregates all draws other plans hold against one source
@@ -651,28 +592,12 @@ export const useRaukkSourcingStore = defineStore(
 			sourcePlanUuid: string,
 			ticker: string
 		): IRaukkSubscription {
-			const byPlan: IRaukkSubscriptionEntry[] = (
-				drawsByProducer.value.get(drawKey(sourcePlanUuid, ticker)) ?? []
-			).map((entry) => ({ ...entry }));
-
-			let totalDrawnPerDay: number = 0;
-
-			byPlan.forEach((entry) => {
-				totalDrawnPerDay += entry.unitsPerDay;
-			});
-
-			const sourceUnitsPerDay: number =
-				snapshots.value[sourcePlanUuid]?.outputs[ticker]?.unitsPerDay ??
-				0;
-
-			return {
-				totalDrawnPerDay,
-				byPlan,
-				pctOfOutput:
-					sourceUnitsPerDay > 0
-						? totalDrawnPerDay / sourceUnitsPerDay
-						: 0,
-			};
+			return raukkSubscriptionOf(
+				drawsByProducer.value,
+				snapshots.value,
+				sourcePlanUuid,
+				ticker
+			);
 		}
 
 		/**
@@ -1040,19 +965,6 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
-		 * Key of the chain flow index, one DIRECTED lane. Length prefixed
-		 * so no pair of stop refs can collide on the separator, whatever
-		 * a user types into a chain stop.
-		 *
-		 * @param {string} fromStop Origin stop
-		 * @param {string} toStop Destination stop
-		 * @returns {string} Index Key
-		 */
-		function chainLaneKey(fromStop: string, toStop: string): string {
-			return `${fromStop.length}|${fromStop}|${toStop}`;
-		}
-
-		/**
 		 * Every stored chain flow, bucketed by the directed lane it runs
 		 * on. The scan {@link chainClaimedUnitsOn} did over ALL chain
 		 * results per call becomes one lookup plus the handful of flows
@@ -1069,26 +981,7 @@ export const useRaukkSourcingStore = defineStore(
 		 */
 		const chainFlowsByLane: ComputedRef<
 			Map<string, IRaukkChainFlowCost[]>
-		> = computed(() => {
-			const index: Map<string, IRaukkChainFlowCost[]> = new Map();
-
-			Object.values(chainResults.value).forEach(
-				(result: IRaukkChainResult) =>
-					result.flows.forEach((flow: IRaukkChainFlowCost) => {
-						const key: string = chainLaneKey(
-							flow.fromStop,
-							flow.toStop
-						);
-						const known: IRaukkChainFlowCost[] | undefined =
-							index.get(key);
-
-						if (known) known.push(flow);
-						else index.set(key, [flow]);
-					})
-			);
-
-			return index;
-		});
+		> = computed(() => raukkChainLaneIndex(chainResults.value));
 
 		/**
 		 * Units per day the chains already haul on one directed lane, over
@@ -1113,28 +1006,13 @@ export const useRaukkSourcingStore = defineStore(
 			fromStop: string,
 			toStop: string
 		): Record<string, number> {
-			const claimed: Record<string, number> = {};
-
-			(
-				chainFlowsByLane.value.get(chainLaneKey(fromStop, toStop)) ?? []
-			).forEach((flow: IRaukkChainFlowCost) => {
-				if (
-					flow.ownerPlanUuid !== undefined &&
-					flow.ownerPlanUuid !== ownerPlanUuid
-				)
-					return;
-
-				if (
-					flow.sourcePlanUuid !== undefined &&
-					flow.sourcePlanUuid !== sourcePlanUuid
-				)
-					return;
-
-				claimed[flow.ticker] =
-					(claimed[flow.ticker] ?? 0) + Math.max(flow.unitsPerDay, 0);
-			});
-
-			return claimed;
+			return raukkChainClaimedUnitsOn(
+				chainFlowsByLane.value,
+				ownerPlanUuid,
+				sourcePlanUuid,
+				fromStop,
+				toStop
+			);
 		}
 
 		/**
@@ -1964,7 +1842,7 @@ export const useRaukkSourcingStore = defineStore(
 		function ensureConfig(planUuid: string): IRaukkPlanConfig {
 			if (!configs.value[planUuid])
 				configs.value[planUuid] = {
-					repairDay: DEFAULT_REPAIR_DAY,
+					repairDay: RAUKK_DEFAULT_REPAIR_DAY,
 					sources: {},
 				};
 

@@ -30,8 +30,8 @@ import {
 	IRaukkBlockSolveOutcome,
 	IRaukkBlockUnknown,
 	RAUKK_BLOCK_UNSOLVED_REASON,
-	solveLoopBlock,
 } from "@/features/raukk_sourcing/raukkChainBlockSolve";
+import { raukkSolveBlock } from "@/features/raukk_sourcing/raukkBlockSolveRunner";
 import { RAUKK_LOOP_SOLVE_MAX_UNKNOWNS } from "@/features/raukk_sourcing/calculations/raukkLoopSolve";
 
 // raukk: a block with no answer must not be re-solved every navigation
@@ -476,9 +476,20 @@ export function createBlockRecomputer(
 		let outcome: IRaukkBlockSolveOutcome;
 
 		try {
-			outcome = await solveLoopBlock({
+			/*
+			 * The k + 1 evaluation rounds leave the main thread here, see
+			 * `raukkBlockSolveRunner`: everything they read is frozen into
+			 * one slice — legitimate because the provisional snapshots above
+			 * are already stored and a solve writes nothing — and a worker
+			 * runs the whole solve over it. Without a worker the prepared
+			 * pipelines are probed on this thread, as they always were.
+			 */
+			outcome = await raukkSolveBlock({
 				members,
 				prepared,
+				coreInputs: Object.fromEntries(
+					members.map((uuid) => [uuid, prepared[uuid].coreInput])
+				),
 				provisional,
 				unknowns,
 			});

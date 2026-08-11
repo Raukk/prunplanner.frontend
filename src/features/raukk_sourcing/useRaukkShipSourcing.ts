@@ -8,10 +8,14 @@ import { usePrice } from "@/features/cx/usePrice";
 import { useExchangeData } from "@/database/services/useExchangeData";
 
 // Pricing
+import { buildSourceOptions } from "@/features/raukk_sourcing/raukkSourcingPricing";
+
+// Compute core & environment
 import {
-	buildSourceOptions,
-	createRaukkPriceResolver,
-} from "@/features/raukk_sourcing/raukkSourcingPricing";
+	IRaukkShipPriceLookups,
+	raukkShipPriceResolver,
+} from "@/features/raukk_sourcing/calculations/raukkComputeCore";
+import { createRaukkStoreComputeEnv } from "@/features/raukk_sourcing/raukkComputeEnv";
 
 // Calculations
 import {
@@ -38,24 +42,6 @@ import {
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import { IRaukkProducerOption } from "@/features/raukk_sourcing/raukkSourcingStore.types";
 import { IRaukkSourceOption } from "@/features/raukk_sourcing/raukkSourcingUi.types";
-
-/** Prices the account wide ship resolver falls back to */
-export interface IRaukkShipPriceLookups {
-	/** Exchange price of the ticker, the "no source configured" answer */
-	getDefaultPrice: (ticker: string) => number;
-	/** Raw exchange data, backs the explicit price modes. Without it a
-	 * configured market mode resolves to 0, as everywhere else. */
-	getExchange?: (ticker: string) => IRaukkExchangePrices | undefined;
-	/**
-	 * Producers of a ticker, the stores own list by default.
-	 *
-	 * The seam the snapshot probes substitute: a loop solve prices a plan
-	 * at TRIAL producer prices, and a lane fuelled or repaired out of a
-	 * plan inside that loop has to move with them. Every account level
-	 * caller leaves it out and reads the store.
-	 */
-	getProducers?: (ticker: string) => IRaukkProducerOption[];
-}
 
 /** Raw prices of everything the fleet consumes, no source applied */
 export interface IRaukkShipPriceCaches {
@@ -166,56 +152,7 @@ export function raukkShipDemandPerDay(): IRaukkMaterialUnits {
 export function createRaukkShipPriceResolver(
 	lookups: IRaukkShipPriceLookups
 ): IRaukkPriceResolver {
-	const sourcingStore = useRaukkSourcingStore();
-
-	const getProducers = (ticker: string): IRaukkProducerOption[] =>
-		lookups.getProducers?.(ticker) ?? sourcingStore.producersOf(ticker);
-
-	// healed against the same pool the resolver prices from: an entry the
-	// pool cannot honour is priced at the exchange, and the table has to
-	// say so rather than name a base that stopped making the ticker
-	const sources: Record<string, IRaukkTickerSource> =
-		raukkEffectiveShipSources(sourcingStore.shipSourcing, (ticker) =>
-			getProducers(ticker).map((producer) => producer.planUuid)
-		);
-
-	/*
-	 * The market top up aggregate blends against a DEMAND, and the demand
-	 * for fuel and repair materials is the fleets, not any one bases:
-	 * coverage is computed once for the whole account. "Others" is
-	 * therefore everything drawn from the producer pool that is NOT that
-	 * fleet demand — what the fleet burns on the plans OWN lanes, fuel and
-	 * repair bill alike, is already stored as a draw on those plans
-	 * snapshots and would otherwise be counted twice.
-	 *
-	 * The subtraction stays a `max(0, …)` because the two sets are not
-	 * equal: the demand also contains the CHAIN burn, which no plan owns
-	 * and which therefore books no draw anywhere. Subtracting it from the
-	 * stored draws can only UNDERSTATE "others" — never double count it —
-	 * and the clamp keeps that at zero rather than negative.
-	 */
-	const demand: IRaukkMaterialUnits = raukkShipDemandPerDay();
-
-	function othersDrawn(ticker: string): number {
-		const drawn: number = getProducers(ticker).reduce(
-			(sum, producer) =>
-				sum +
-				sourcingStore.subscription(producer.planUuid, ticker)
-					.totalDrawnPerDay,
-			0
-		);
-
-		return Math.max(0, drawn - (demand[ticker] ?? 0));
-	}
-
-	return createRaukkPriceResolver({
-		sources,
-		getExchange: (ticker: string) => lookups.getExchange?.(ticker),
-		getDefaultPrice: lookups.getDefaultPrice,
-		getProducers,
-		getDemand: (ticker: string) => demand[ticker] ?? 0,
-		getOthersDrawn: othersDrawn,
-	});
+	return raukkShipPriceResolver(createRaukkStoreComputeEnv(), lookups);
 }
 
 /** One row of the account wide ship sourcing table */
@@ -363,3 +300,5 @@ export function useRaukkShipSourcing(lookups: IRaukkShipPriceLookups) {
 		groupOf,
 	};
 }
+
+export type { IRaukkShipPriceLookups } from "@/features/raukk_sourcing/calculations/raukkComputeCore";
