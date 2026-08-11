@@ -227,6 +227,30 @@ export function createBlockRecomputer(
 	const prepared: Record<string, IRaukkPreparedSnapshot> = {};
 
 	/**
+	 * Plan contexts of this run, keyed by plan uuid.
+	 *
+	 * `buildPlanSnapshotContext` runs the whole base simulation, which
+	 * depends on the plan, its empire and its CX alone — never on a
+	 * snapshot — so a staleness cascade re-flagging a plan in pass 3
+	 * changes nothing about its base numbers. One computation per plan
+	 * per run, under exactly the lifetime assumption the prepared
+	 * pipelines above already document. The promise is cached rather
+	 * than its value so concurrent callers share one attempt.
+	 */
+	const contexts: Map<string, Promise<IRaukkPlanSnapshotContext>> = new Map();
+
+	function contextOf(planUuid: string): Promise<IRaukkPlanSnapshotContext> {
+		let context = contexts.get(planUuid);
+
+		if (!context) {
+			context = buildPlanSnapshotContext(planUuid, options.empireList);
+			contexts.set(planUuid, context);
+		}
+
+		return context;
+	}
+
+	/**
 	 * Loop blocks this run already attempted, by
 	 * {@link raukkBlockLatchKey}.
 	 *
@@ -331,7 +355,7 @@ export function createBlockRecomputer(
 		setCurrent(planUuid);
 
 		try {
-			await recomputePlanSnapshot(planUuid, options.empireList);
+			await computePlanSnapshot(await contextOf(planUuid));
 		} catch (error) {
 			recordError(planUuid, error);
 		}
@@ -411,7 +435,7 @@ export function createBlockRecomputer(
 
 			try {
 				prepared[uuid] = await preparePlanSnapshot(
-					await buildPlanSnapshotContext(uuid, options.empireList)
+					await contextOf(uuid)
 				);
 			} catch (error) {
 				recordError(uuid, error);
