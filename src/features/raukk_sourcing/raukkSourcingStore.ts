@@ -516,7 +516,7 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
-		 * Key of the draw index, one producing plan and one ticker. ` `
+		 * Key of the draw index, one producing plan and one ticker. `|`
 		 * separates because neither a uuid nor a ticker can contain it.
 		 *
 		 * @param {string} sourcePlanUuid Producing Plan Uuid
@@ -524,7 +524,7 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {string} Index Key
 		 */
 		function drawKey(sourcePlanUuid: string, ticker: string): string {
-			return `${sourcePlanUuid} ${ticker}`;
+			return `${sourcePlanUuid}|${ticker}`;
 		}
 
 		/**
