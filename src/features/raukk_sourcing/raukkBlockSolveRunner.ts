@@ -28,7 +28,7 @@
 //
 // WHAT FALLS BACK: no `Worker` global (Vitest, an old browser), worker
 // construction throwing, the worker reporting its own failure, a message
-// error, or no answer inside {@link RAUKK_SOLVE_WORKER_TIMEOUT_MS}. Each
+// error, or silence past {@link RAUKK_SOLVE_WORKER_STALL_MS}. Each
 // of those runs the block synchronously instead and logs ONCE per
 // process, because a permanently worker-less environment must not print
 // a line per block.
@@ -61,18 +61,22 @@ import {
 	IRaukkComputeSlice,
 } from "@/features/raukk_sourcing/calculations/raukkComputeEnv.types";
 import {
+	IRaukkSolveWorkerProgress,
 	IRaukkSolveWorkerRequest,
 	IRaukkSolveWorkerResponse,
 } from "@/features/raukk_sourcing/raukkSolveWorker.types";
 import { IRaukkSnapshot } from "@/features/raukk_sourcing/raukkSourcing.types";
 
 /**
- * How long a block solve may take in the worker before it counts as
- * failed. Generous on purpose: the cap of the solver is large and a real
- * extraction of a big loop is seconds of math, so this is a deadlock
- * guard and nothing else.
+ * How long the worker may stay SILENT before it counts as dead. An
+ * inactivity watchdog, not a solve budget: the worker pings once per
+ * evaluation round, and a large loop is legitimately minutes of rounds
+ * — killing a healthy worker on a fixed clock would then redo those
+ * minutes synchronously on the main thread, the one outcome worse than
+ * either path alone. One round is every member computed once, far
+ * inside this bound; only a genuinely wedged worker goes quiet longer.
  */
-export const RAUKK_SOLVE_WORKER_TIMEOUT_MS: number = 60_000;
+export const RAUKK_SOLVE_WORKER_STALL_MS: number = 60_000;
 
 /** Everything one block solve is handed, whichever executor runs it */
 export interface IRaukkBlockSolveRun {
@@ -301,6 +305,7 @@ function askSolveWorker(
 ): Promise<IRaukkSolveWorkerResponse> {
 	return new Promise<IRaukkSolveWorkerResponse>((resolve, reject) => {
 		let settled: boolean = false;
+		let timer: ReturnType<typeof setTimeout> | undefined = undefined;
 
 		const finish = (): void => {
 			settled = true;
@@ -309,11 +314,35 @@ function askSolveWorker(
 			clearTimeout(timer);
 		};
 
+		/** (Re)arms the inactivity watchdog, see the stall constant */
+		const armWatchdog = (): void => {
+			clearTimeout(timer);
+
+			timer = setTimeout(() => {
+				if (settled) return;
+
+				finish();
+				reject(
+					new Error(
+						`no sign of life within ${RAUKK_SOLVE_WORKER_STALL_MS} ms`
+					)
+				);
+			}, RAUKK_SOLVE_WORKER_STALL_MS);
+		};
+
 		const onMessage = (
-			event: MessageEvent<IRaukkSolveWorkerResponse>
+			event: MessageEvent<
+				IRaukkSolveWorkerResponse | IRaukkSolveWorkerProgress
+			>
 		): void => {
 			// a reply of an abandoned solve must never be adopted
 			if (settled || event.data?.requestId !== request.requestId) return;
+
+			// a round ping proves the solve alive, however long it takes
+			if ("progress" in event.data) {
+				armWatchdog();
+				return;
+			}
 
 			finish();
 			resolve(event.data);
@@ -326,16 +355,7 @@ function askSolveWorker(
 			reject(new Error(event.message || "worker error"));
 		};
 
-		const timer = setTimeout(() => {
-			if (settled) return;
-
-			finish();
-			reject(
-				new Error(
-					`no answer within ${RAUKK_SOLVE_WORKER_TIMEOUT_MS} ms`
-				)
-			);
-		}, RAUKK_SOLVE_WORKER_TIMEOUT_MS);
+		armWatchdog();
 
 		worker.addEventListener("message", onMessage);
 		worker.addEventListener("error", onError);

@@ -41,6 +41,19 @@ export interface IRaukkSolveWorkerRequest {
 	plannedGateLinks: IRaukkGateLink[];
 }
 
+/**
+ * Liveness ping, one per evaluation round.
+ *
+ * A large loop is legitimately minutes of rounds, so the main thread
+ * must not judge the worker on a fixed clock — it watches for these
+ * instead and only gives up on SILENCE. Also what a progress display
+ * would render, would one exist.
+ */
+export interface IRaukkSolveWorkerProgress {
+	requestId: number;
+	progress: { round: number; of: number };
+}
+
 /** What one block solve delivered, mirroring `IRaukkBlockSolveOutcome` */
 export type IRaukkSolveWorkerResponse =
 	| {

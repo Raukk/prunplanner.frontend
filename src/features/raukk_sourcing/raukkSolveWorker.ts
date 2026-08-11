@@ -29,6 +29,7 @@ import {
 	IRaukkPriceCaches,
 } from "@/features/raukk_sourcing/calculations/raukkComputeEnv.types";
 import {
+	IRaukkSolveWorkerProgress,
 	IRaukkSolveWorkerRequest,
 	IRaukkSolveWorkerResponse,
 } from "@/features/raukk_sourcing/raukkSolveWorker.types";
@@ -43,7 +44,8 @@ import {
  * @returns {Promise<IRaukkSolveWorkerResponse>} Outcome
  */
 export async function raukkSolveWorkerHandle(
-	request: IRaukkSolveWorkerRequest
+	request: IRaukkSolveWorkerRequest,
+	postProgress: (ping: IRaukkSolveWorkerProgress) => void = () => {}
 ): Promise<IRaukkSolveWorkerResponse> {
 	// the routing layer is a module singleton the store seeds on the main
 	// thread; here the message is the only source of planned links
@@ -78,6 +80,13 @@ export async function raukkSolveWorkerHandle(
 		unknowns: request.unknowns,
 		// this thread paints nothing, so the rounds run back to back
 		yieldBetweenRounds: false,
+		// one liveness ping per round, see the progress type: the main
+		// thread gives up on silence, never on a long solve
+		onRound: (round: number, of: number) =>
+			postProgress({
+				requestId: request.requestId,
+				progress: { round, of },
+			}),
 	});
 
 	return outcome.snapshots === null
@@ -111,7 +120,11 @@ if (
 		const request: IRaukkSolveWorkerRequest = event.data;
 
 		try {
-			self.postMessage(await raukkSolveWorkerHandle(request));
+			self.postMessage(
+				await raukkSolveWorkerHandle(request, (ping) =>
+					self.postMessage(ping)
+				)
+			);
 		} catch (error) {
 			const response: IRaukkSolveWorkerResponse = {
 				requestId: request?.requestId ?? -1,

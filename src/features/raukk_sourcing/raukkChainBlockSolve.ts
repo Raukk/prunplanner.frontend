@@ -73,6 +73,17 @@ export interface IRaukkBlockSolveInput {
 	 * its thread and turns it off — there is nothing there to paint.
 	 */
 	yieldBetweenRounds?: boolean;
+	/**
+	 * Called at the start of every evaluation round.
+	 *
+	 * A large loop is minutes of rounds; the worker turns these into
+	 * liveness pings so the main thread can tell a long solve from a
+	 * dead one, instead of killing a healthy worker on a fixed clock.
+	 * `of` is the k + 1 rounds the elimination needs — the verification
+	 * rounds after it report beyond that rather than lying about the
+	 * total.
+	 */
+	onRound?: (round: number, of: number) => void;
 }
 
 /**
@@ -273,8 +284,13 @@ export async function solveLoopBlock(
 		return override;
 	};
 
+	/** Rounds run so far, `evaluateAll` counts them for {@link onRound} */
+	let round: number = 0;
+
 	/** Every member computed once at the given trial prices */
 	const evaluateAll = (prices: number[]): Record<string, IRaukkSnapshot> => {
+		input.onRound?.(++round, unknowns.length + 1);
+
 		const computed: Record<string, IRaukkSnapshot> = {};
 		const override: IRaukkProducerPriceOverride = overrideOf(prices);
 
