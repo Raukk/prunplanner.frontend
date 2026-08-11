@@ -1379,6 +1379,17 @@ export const useQueryStore = defineStore(
 		let intervalId: ReturnType<typeof setInterval> | null = null;
 
 		/**
+		 * Caps the fetches one watcher tick may run at once. Schedule
+		 * anchored expiry deliberately lines entries up on shared
+		 * boundaries — every exchange at its rollover, planets on a
+		 * common COGC program end — so a tick can find dozens expired
+		 * together, and without a limit it would burst them all at the
+		 * backend in one go. Duplicate queueing across ticks is harmless:
+		 * `execute` dedupes against in-flight work when the slot runs.
+		 */
+		const statusRefreshLimit = pLimit(REFRESH_CONCURRENCY);
+
+		/**
 		 * Iterates over cache entries and triggers refresh if
 		 * marked as to be automatically refetched.
 		 *
@@ -1413,12 +1424,14 @@ export const useQueryStore = defineStore(
 						queryRepository.repository[entry.definitionName as K];
 
 					if (definition && definition.autoRefetch) {
-						execute(
-							entry.definitionName as K,
-							entry.params as ParamsOfDefinition<
-								IQueryRepository[K]
-							>
-						);
+						statusRefreshLimit(() =>
+							execute(
+								entry.definitionName as K,
+								entry.params as ParamsOfDefinition<
+									IQueryRepository[K]
+								>
+							)
+						).catch((err) => console.error(err));
 					} else if (
 						!(entry.hasData === true || entry.data !== null) ||
 						now - entry.timestamp > CACHE_GC_MS
