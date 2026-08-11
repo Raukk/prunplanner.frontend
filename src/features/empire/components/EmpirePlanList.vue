@@ -11,6 +11,8 @@
 	// Components
 	// raukk: lease link of a plan, shown next to its name
 	import RaukkLeaseBadge from "@/features/raukk_sourcing/components/RaukkLeaseBadge.vue";
+	// raukk: flags plans that are not running 5 or 6 experts
+	import EmpireExpertFlag from "@/features/empire/components/EmpireExpertFlag.vue";
 
 	// Util
 	import { formatNumber } from "@/util/numbers";
@@ -125,6 +127,7 @@
 						{{ rowData.name }}
 					</router-link>
 					<RaukkLeaseBadge :plan-uuid="rowData.uuid" />
+					<EmpireExpertFlag :experts="rowData.experts" />
 				</div>
 			</template>
 		</XNDataTableColumn>

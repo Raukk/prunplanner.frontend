@@ -14,6 +14,8 @@ interface IEmpirePlanListData {
 	// days to earn back the construction cost, negative or non-finite
 	// when the plan does not turn a profit
 	roi: number;
+	// total experts assigned over all expertise types
+	experts: number;
 }
 
 interface IEmpireMaterialIOPlanet {
