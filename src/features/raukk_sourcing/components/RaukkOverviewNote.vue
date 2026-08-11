@@ -12,8 +12,8 @@
 
 	// Calculations
 	import {
-		IRaukkShipTimeEntry,
-		raukkShipTimeByType,
+		IRaukkShipTimeBucketEntry,
+		raukkShipTimeByBucket,
 	} from "@/features/raukk_sourcing/calculations/shippingCadenceDisplay";
 	import { raukkShipTypeLabel } from "@/features/raukk_sourcing/calculations/shippingFleetDisplay";
 
@@ -98,15 +98,17 @@
 	});
 
 	/**
-	 * Ship time per hull type of the plans own lanes, busiest first.
-	 * Empty while shipping is off, on pre-shipping snapshots and when
-	 * every lane is hired — the note then renders no ship time line.
+	 * Ship time of the plans own lanes, per cargo bucket and inside it
+	 * per hull type, busiest first. Empty while shipping is off, on
+	 * pre-shipping snapshots and when every lane is hired — the note then
+	 * renders no ship time line.
 	 * @author raukk
 	 */
-	const localShipTime: ComputedRef<IRaukkShipTimeEntry[]> = computed(() =>
-		localSnapshot.value?.lanes
-			? raukkShipTimeByType(localSnapshot.value.lanes)
-			: []
+	const localShipTime: ComputedRef<IRaukkShipTimeBucketEntry[]> = computed(
+		() =>
+			localSnapshot.value?.lanes
+				? raukkShipTimeByBucket(localSnapshot.value.lanes)
+				: []
 	);
 
 	const localComputedAt: ComputedRef<string> = computed(() =>
@@ -153,18 +155,37 @@
 						})
 					}}
 				</div>
-				<div v-for="entry in localShipTime" :key="entry.shipTypeId">
-					{{
-						$t("raukk_overview.line_ship_time", {
-							ship: raukkShipTypeLabel(entry.shipTypeId),
-							perTrip: formatNumber(entry.hoursPerTrip),
-							visitDays:
-								entry.visitDays === null
-									? "—"
-									: formatNumber(entry.visitDays),
-							perDay: formatNumber(entry.hoursPerDay),
-						})
-					}}
+				<div
+					v-for="group in localShipTime"
+					:key="group.bucket ?? 'RAUKKBUCKET#none'">
+					<span
+						v-for="(entry, index) in group.entries"
+						:key="entry.shipTypeId">
+						{{
+							$t("raukk_overview.line_ship_time", {
+								bucket:
+									group.bucket === undefined
+										? $t("raukk_overview.bucket_unknown")
+										: $t(
+												`raukk_sourcing.buckets.${group.bucket}`
+											),
+								ship: raukkShipTypeLabel(entry.shipTypeId),
+								perTrip: formatNumber(entry.hoursPerTrip),
+								visitDays:
+									entry.visitDays === null
+										? "—"
+										: formatNumber(entry.visitDays),
+								perDay: formatNumber(entry.hoursPerDay),
+							})
+						}}
+						<!-- a bucket flying two hull types is a split leg
+						set, and the reader has to see both on its line -->
+						<span
+							v-if="index < group.entries.length - 1"
+							class="text-amber-400">
+							{{ $t("raukk_overview.ship_time_split") }}
+						</span>
+					</span>
 				</div>
 			</div>
 		</template>

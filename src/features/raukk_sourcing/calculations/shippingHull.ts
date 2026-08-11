@@ -21,17 +21,26 @@ import { IRaukkCadence } from "@/features/raukk_sourcing/calculations/shippingCa
  * weight hull (WCB, 3000 t / 1000 m³): its volume bays would ride empty
  * in any balanced hull.
  *
- * @author raukk
- */
-export const RAUKK_DENSITY_WEIGHT_BIASED: number = 2.5;
-
-/**
- * Tonnes per m³ up to which cargo counts as BULKY and belongs into a
- * volume hull (VCB, 1000 t / 3000 m³).
+ * The band is set at twice the weight of its volume rather than at the
+ * WCBs own 3:1 shape, and deliberately WIDER than the volume band below.
+ * The WCB is the workhorse most fleets actually own, while the balanced
+ * band's only large hull is the HCB — rare and roughly twice the price —
+ * so cargo sitting between the two classes is better flown weight biased
+ * than promoted into a hull the account probably has one of at most.
  *
  * @author raukk
  */
-export const RAUKK_DENSITY_VOLUME_BIASED: number = 0.4;
+export const RAUKK_DENSITY_WEIGHT_BIASED: number = 2;
+
+/**
+ * Tonnes per m³ up to which cargo counts as BULKY and belongs into a
+ * volume hull (VCB, 1000 t / 3000 m³): one third, the VCBs own shape, so
+ * only cargo whose volume really is three times its weight leaves the
+ * balanced band on the light side.
+ *
+ * @author raukk
+ */
+export const RAUKK_DENSITY_VOLUME_BIASED: number = 1 / 3;
 
 /**
  * The heavy hull, the only one the promotion below ever reaches for.
@@ -187,7 +196,8 @@ function heavyHull(picks: IRaukkHullPick[]): IRaukkHullPick | undefined {
  *    class is economical: from {@link RAUKK_DENSITY_WEIGHT_BIASED} up a
  *    weight hull (WCB), up to {@link RAUKK_DENSITY_VOLUME_BIASED} a
  *    volume hull (VCB), and only in the balanced band between them do the
- *    balanced hulls — the HCB included — earn their premium. A class the
+ *    balanced hulls — the HCB included — earn their premium. The two
+ *    bands are asymmetric on purpose, see the constants. A class the
  *    candidates hold nothing of simply does not restrict anything.
  *  - SIZE. Within that class the SMALLEST hull that still covers a whole
  *    cadence period in one trip wins: it is the cheapest hull that flies
@@ -272,10 +282,8 @@ export function raukkSmallestCandidate(
 	if (candidates.length === 0) return null;
 
 	return [...candidates].sort((a, b) => {
-		const holdA: number =
-			a.profile.cargoWeight * a.profile.cargoVolume;
-		const holdB: number =
-			b.profile.cargoWeight * b.profile.cargoVolume;
+		const holdA: number = a.profile.cargoWeight * a.profile.cargoVolume;
+		const holdB: number = b.profile.cargoWeight * b.profile.cargoVolume;
 
 		if (holdA !== holdB) return holdA - holdB;
 		if (a.profile.cargoWeight !== b.profile.cargoWeight)

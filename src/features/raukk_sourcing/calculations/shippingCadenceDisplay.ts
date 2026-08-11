@@ -7,6 +7,7 @@
 
 // Types & Interfaces
 import { IRaukkSnapshotLane } from "@/features/raukk_sourcing/raukkSourcing.types";
+import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
 
 /**
  * Days between two visits, next to the trip rate that produced them.
@@ -153,4 +154,77 @@ export function raukkShipTimeByType(
 				right.hoursPerDay - left.hoursPerDay ||
 				left.shipTypeId.localeCompare(right.shipTypeId)
 		);
+}
+
+/**
+ * Ship time of one cargo bucket, the hull types flying it.
+ *
+ * `bucket` is `undefined` for legs frozen before the cadence split, which
+ * carry no bucket of their own; they are reported as one unlabelled group
+ * rather than folded into a bucket they were never assigned to.
+ */
+export interface IRaukkShipTimeBucketEntry {
+	bucket: RAUKK_CARGO_BUCKET | undefined;
+	entries: IRaukkShipTimeEntry[];
+}
+
+/**
+ * Order the buckets are reported in: what the base sells and buys to run,
+ * then what its people consume, then what its buildings wear out. Tightest
+ * cadence cap first, which is also the order the cargo matters in.
+ *
+ * @author raukk
+ */
+export const RAUKK_SHIP_TIME_BUCKET_ORDER: RAUKK_CARGO_BUCKET[] = [
+	"production",
+	"workforce",
+	"repair",
+];
+
+/**
+ * Splits the frozen lane legs of one snapshot into ship time per cargo
+ * bucket, and inside each bucket per hull type.
+ *
+ * The three buckets fly on three different rhythms — production at the
+ * in/out cap, consumables at the workforce cap, repair materials at the
+ * plans repair cycle — so a single rolled up interval mixes schedules
+ * that have nothing to do with each other. Reporting them apart is what
+ * makes "one ship, every N days" a statement about a real visit again,
+ * and it is what shows a bucket flying on TWO hull types: more than one
+ * entry under a bucket means its legs did not agree on a hull.
+ *
+ * Buckets nothing flies for are absent — {@link raukkShipTimeByType}
+ * already drops hired and empty legs, and a bucket left with none of them
+ * has no schedule to state.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkSnapshotLane[]} lanes Frozen lane legs of one snapshot
+ * @returns {IRaukkShipTimeBucketEntry[]} Ship time per bucket
+ */
+export function raukkShipTimeByBucket(
+	lanes: IRaukkSnapshotLane[]
+): IRaukkShipTimeBucketEntry[] {
+	const lanesByBucket: Map<
+		RAUKK_CARGO_BUCKET | undefined,
+		IRaukkSnapshotLane[]
+	> = new Map();
+
+	lanes.forEach((lane) => {
+		const bucket: RAUKK_CARGO_BUCKET | undefined = lane.bucket;
+
+		lanesByBucket.set(bucket, [...(lanesByBucket.get(bucket) ?? []), lane]);
+	});
+
+	const ordered: (RAUKK_CARGO_BUCKET | undefined)[] = [
+		...RAUKK_SHIP_TIME_BUCKET_ORDER,
+		undefined,
+	];
+
+	return ordered
+		.map((bucket) => ({
+			bucket,
+			entries: raukkShipTimeByType(lanesByBucket.get(bucket) ?? []),
+		}))
+		.filter((group) => group.entries.length > 0);
 }
