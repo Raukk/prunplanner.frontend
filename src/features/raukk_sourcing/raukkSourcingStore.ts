@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref, Ref, watch } from "vue";
+import { computed, ComputedRef, ref, Ref, watch } from "vue";
 
 // Stores
 import { usePlanningStore } from "@/stores/planningStore";
@@ -31,7 +31,9 @@ import {
 import {
 	raukkEffectiveShipSources,
 	raukkEmptyShipSourcing,
+	raukkShipSourcingDemand,
 } from "@/features/raukk_sourcing/calculations/shipSourcing";
+import { raukkFleetLoadEntries } from "@/features/raukk_sourcing/calculations/oversubReport";
 
 // Schemas
 import {
@@ -75,6 +77,14 @@ import {
 	raukkGateUpgradesFit,
 } from "@/features/raukk_sourcing/calculations/gateCosts";
 import { setRaukkPlannedGateLinks } from "@/features/raukk_sourcing/calculations/routeDistance";
+import { RAUKK_DEFAULT_REPAIR_DAY } from "@/features/raukk_sourcing/calculations/repairCapitalCost";
+import {
+	raukkChainClaimedUnitsOn,
+	raukkChainLaneIndex,
+	raukkDrawIndex,
+	raukkProducersOf,
+	raukkSubscriptionOf,
+} from "@/features/raukk_sourcing/calculations/raukkStoreIndexes";
 // raukk: only plans assigned to an empire take part account wide
 import {
 	raukkEmpirePlanUuids,
@@ -87,6 +97,7 @@ import {
 	IRaukkCadenceOverrides,
 	IRaukkChain,
 	IRaukkChainConfig,
+	IRaukkChainFlowCost,
 	IRaukkChainResult,
 	IRaukkDepot,
 	IRaukkFleetShip,
@@ -105,16 +116,13 @@ import {
 	RAUKK_SOURCE_BUCKET,
 } from "@/features/raukk_sourcing/raukkSourcing.types";
 import { RAUKK_CARGO_BUCKET } from "@/features/raukk_sourcing/calculations/shipping.types";
+import { IRaukkMaterialUnits } from "@/features/raukk_sourcing/calculations/raukkCalculations.types";
 import {
 	IRaukkExportPayload,
 	IRaukkProducerOption,
 	IRaukkSubscription,
 	IRaukkSubscriptionEntry,
 } from "@/features/raukk_sourcing/raukkSourcingStore.types";
-import { IPlanEmpireElement } from "@/stores/planningStore.types";
-
-/** Repair day used until a plan configures its own */
-const DEFAULT_REPAIR_DAY: RAUKK_REPAIR_DAY = 90;
 
 /**
  * Preset ship profiles by id, built once. The store persists user
@@ -249,7 +257,7 @@ export const useRaukkSourcingStore = defineStore(
 
 			if (findConfig) return inertClone(findConfig);
 
-			return { repairDay: DEFAULT_REPAIR_DAY, sources: {} };
+			return { repairDay: RAUKK_DEFAULT_REPAIR_DAY, sources: {} };
 		}
 
 		/**
@@ -281,15 +289,45 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {Record<string, IRaukkSnapshot>} Snapshots in scope
 		 */
 		function scopedSnapshots(): Record<string, IRaukkSnapshot> {
-			const empires: Record<string, IPlanEmpireElement> =
-				usePlanningStore().empires;
-
-			return raukkScopedSnapshots(
-				snapshots.value,
-				raukkEmpirePlanUuids(empires),
-				raukkEmpirePlanets(empires)
-			);
+			return scopedSnapshotRecord.value;
 		}
+
+		/**
+		 * Plan uuids of every empire, memoized.
+		 *
+		 * Depends on `planningStore.empires` alone — the scan walks the
+		 * empire plan lists and reads nothing of this store, so no sourcing
+		 * mutation invalidates it.
+		 */
+		const assignedPlanUuids: ComputedRef<Set<string>> = computed(() =>
+			raukkEmpirePlanUuids(usePlanningStore().empires)
+		);
+
+		/** Planets of every empire plan, memoized next to the uuids */
+		const operatedPlanets: ComputedRef<Set<string>> = computed(() =>
+			raukkEmpirePlanets(usePlanningStore().empires)
+		);
+
+		/**
+		 * Backing computed of {@link scopedSnapshots}, built once per
+		 * change instead of once per call.
+		 *
+		 * The scoping walk reads the snapshot MAP and each snapshots
+		 * `flows`, plus the two empire sets above — it never touches
+		 * `stale`, `draws` or `outputs` of a snapshot it passes through by
+		 * reference, so the stale flag sprays of a recompute sweep leave it
+		 * cached. Only a snapshot that really LOSES flows is shallow
+		 * copied, and that copy reads the whole snapshot.
+		 */
+		const scopedSnapshotRecord: ComputedRef<
+			Record<string, IRaukkSnapshot>
+		> = computed(() =>
+			raukkScopedSnapshots(
+				snapshots.value,
+				assignedPlanUuids.value,
+				operatedPlanets.value
+			)
+		);
 
 		/**
 		 * Snapshots the CROSS PLAN sourcing steps — the producer pool and
@@ -305,11 +343,23 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {Record<string, IRaukkSnapshot>} Snapshots in scope
 		 */
 		function sourcingScopedSnapshots(): Record<string, IRaukkSnapshot> {
-			if (shippingConfig.value.allowUnassignedSources === true)
-				return snapshots.value;
-
-			return scopedSnapshots();
+			return sourcingScopedSnapshotRecord.value;
 		}
+
+		/**
+		 * Backing computed of {@link sourcingScopedSnapshots}.
+		 *
+		 * Adds exactly one dependency to {@link scopedSnapshotRecord}:
+		 * `shippingConfig.allowUnassignedSources`. The other shipping knobs
+		 * are not read here, so changing a lane cost does not re-scope.
+		 */
+		const sourcingScopedSnapshotRecord: ComputedRef<
+			Record<string, IRaukkSnapshot>
+		> = computed(() =>
+			shippingConfig.value.allowUnassignedSources === true
+				? snapshots.value
+				: scopedSnapshotRecord.value
+		);
 
 		/**
 		 * Configs and snapshots a RECOMPUTE SWEEP may touch, the one
@@ -361,9 +411,7 @@ export const useRaukkSourcingStore = defineStore(
 			if (extraPlanUuid !== undefined && extraSnapshot !== undefined)
 				scopedSnaps[extraPlanUuid] = extraSnapshot;
 
-			const assigned: Set<string> = raukkEmpirePlanUuids(
-				usePlanningStore().empires
-			);
+			const assigned: Set<string> = assignedPlanUuids.value;
 
 			const scopedConfigs: Record<string, IRaukkPlanConfig> = {};
 
@@ -389,6 +437,51 @@ export const useRaukkSourcingStore = defineStore(
 		}
 
 		/**
+		 * Every ship profile the store knows by id, the users override
+		 * on top of the preset and completed — the resolution
+		 * {@link getShipProfile} used to redo per call.
+		 *
+		 * Completing is what a local storage blob written before the fuel
+		 * burn rates existed needs: such a profile carries none, and the
+		 * shipped calibration of its own hull fills them in.
+		 *
+		 * Reads the override MAP and the overrides themselves, nothing
+		 * else — no snapshot, no config, so only editing the calibration
+		 * table rebuilds it. The hull pick of a plan lists every profile
+		 * and then asks for each one again, twice over per snapshot
+		 * computation, and pays a spread each now rather than a deep
+		 * clone of a reactive object.
+		 */
+		const completedShipProfiles: ComputedRef<
+			Record<string, IRaukkShipProfile>
+		> = computed(() => {
+			const completed: Record<string, IRaukkShipProfile> = {};
+
+			Object.keys(SHIP_PROFILE_PRESETS).forEach((profileId) => {
+				completed[profileId] = raukkCompleteShipProfile(
+					inertClone(
+						shipProfiles.value[profileId] ??
+							SHIP_PROFILE_PRESETS[profileId]
+					)
+				);
+			});
+
+			// an override of an id no preset carries — an imported
+			// payload may hold one — resolves the same way
+			Object.entries(shipProfiles.value).forEach(
+				([profileId, profile]) => {
+					if (completed[profileId] !== undefined) return;
+
+					completed[profileId] = raukkCompleteShipProfile(
+						inertClone(profile)
+					);
+				}
+			);
+
+			return completed;
+		});
+
+		/**
 		 * Gets a ship profile by id: the users override when one exists,
 		 * the shipped preset otherwise. An unknown id degrades to the
 		 * configured default profile and, should even that be gone, to
@@ -400,12 +493,12 @@ export const useRaukkSourcingStore = defineStore(
 		 */
 		function getShipProfile(profileId: string): IRaukkShipProfile {
 			const known: IRaukkShipProfile | undefined =
-				shipProfiles.value[profileId] ??
-				SHIP_PROFILE_PRESETS[profileId];
+				completedShipProfiles.value[profileId];
 
-			// a local storage blob written before the fuel burn rates
-			// existed carries a profile without them
-			if (known) return raukkCompleteShipProfile(inertClone(known));
+			// a profile is FLAT, every field a scalar: spreading the
+			// completed one hands out the same fresh, inert object the
+			// clone did, and callers keep owning what they get
+			if (known) return { ...known };
 
 			const fallbackId: string = shippingConfig.value.defaultProfileId;
 
@@ -446,21 +539,7 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {IRaukkProducerOption[]} Producing Plans
 		 */
 		function producersOf(ticker: string): IRaukkProducerOption[] {
-			return Object.entries(sourcingScopedSnapshots())
-				.filter(([, snapshot]) => snapshot.outputs[ticker])
-				.map(([planUuid, snapshot]) => {
-					const output = snapshot.outputs[ticker];
-
-					return {
-						planUuid,
-						planName: snapshot.planName,
-						planetNaturalId: snapshot.planetNaturalId,
-						costPerUnit: output.costPerUnit,
-						unitsPerDay: output.unitsPerDay,
-						stale: snapshot.stale,
-						computedAt: snapshot.computedAt,
-					};
-				});
+			return raukkProducersOf(sourcingScopedSnapshots(), ticker);
 		}
 
 		/**
@@ -475,6 +554,25 @@ export const useRaukkSourcingStore = defineStore(
 		function producerUuidsOf(ticker: string): string[] {
 			return producersOf(ticker).map((producer) => producer.planUuid);
 		}
+
+		/**
+		 * Every draw in sourcing scope, indexed by the producer and ticker
+		 * it is held against — the read {@link subscription} does, turned
+		 * from a scan of all snapshots into one map lookup.
+		 *
+		 * Built once per change of {@link sourcingScopedSnapshotRecord} and
+		 * of the `draws` of the snapshots in it. Nothing else is read here,
+		 * `stale` least of all: a recompute sweep flagging half the account
+		 * leaves this index cached, and with it every material IO table
+		 * that only asks what is drawn from a row.
+		 *
+		 * Entries keep the snapshot iteration order the scan produced, so
+		 * both the listed order and the float summation order are the ones
+		 * callers saw before.
+		 */
+		const drawsByProducer: ComputedRef<
+			Map<string, IRaukkSubscriptionEntry[]>
+		> = computed(() => raukkDrawIndex(sourcingScopedSnapshotRecord.value));
 
 		/**
 		 * Aggregates all draws other plans hold against one source
@@ -494,33 +592,12 @@ export const useRaukkSourcingStore = defineStore(
 			sourcePlanUuid: string,
 			ticker: string
 		): IRaukkSubscription {
-			const byPlan: IRaukkSubscriptionEntry[] = [];
-			let totalDrawnPerDay: number = 0;
-
-			Object.entries(sourcingScopedSnapshots()).forEach(
-				([planUuid, snapshot]) => {
-					const amount: number | undefined =
-						snapshot.draws[sourcePlanUuid]?.[ticker];
-
-					if (amount === undefined || amount === 0) return;
-
-					totalDrawnPerDay += amount;
-					byPlan.push({ planUuid, unitsPerDay: amount });
-				}
+			return raukkSubscriptionOf(
+				drawsByProducer.value,
+				snapshots.value,
+				sourcePlanUuid,
+				ticker
 			);
-
-			const sourceUnitsPerDay: number =
-				snapshots.value[sourcePlanUuid]?.outputs[ticker]?.unitsPerDay ??
-				0;
-
-			return {
-				totalDrawnPerDay,
-				byPlan,
-				pctOfOutput:
-					sourceUnitsPerDay > 0
-						? totalDrawnPerDay / sourceUnitsPerDay
-						: 0,
-			};
 		}
 
 		/**
@@ -536,13 +613,35 @@ export const useRaukkSourcingStore = defineStore(
 		 * @returns {string[]} Lease Plan Uuids
 		 */
 		function leasesOf(hostPlanUuid: string): string[] {
-			return Object.entries(configs.value)
-				.filter(
-					([, config]) => config.leaseHostPlanUuid === hostPlanUuid
-				)
-				.map(([planUuid]) => planUuid)
-				.sort();
+			return [...(leasesByHost.value[hostPlanUuid] ?? [])];
 		}
+
+		/**
+		 * Lease plan uuids by host, the backing index of {@link leasesOf}.
+		 *
+		 * Reads the config MAP and the `leaseHostPlanUuid` of each config
+		 * and nothing else, so editing a plans sources, cadence or repair
+		 * day does not rebuild it. A fresh array is handed out per call —
+		 * callers hold their result across mutations that empty the index.
+		 */
+		const leasesByHost: ComputedRef<Record<string, string[]>> = computed(
+			() => {
+				const index: Record<string, string[]> = {};
+
+				Object.entries(configs.value).forEach(([planUuid, config]) => {
+					const host: string | undefined = config.leaseHostPlanUuid;
+
+					if (host === undefined) return;
+
+					if (index[host]) index[host].push(planUuid);
+					else index[host] = [planUuid];
+				});
+
+				Object.values(index).forEach((uuids) => uuids.sort());
+
+				return index;
+			}
+		);
 
 		/**
 		 * Planet a plan sits on, exactly as the snapshot pipeline resolves
@@ -688,10 +787,7 @@ export const useRaukkSourcingStore = defineStore(
 		 * @author raukk
 		 */
 		watch(
-			() =>
-				[...raukkEmpirePlanUuids(usePlanningStore().empires)]
-					.sort()
-					.join("|"),
+			() => [...assignedPlanUuids.value].sort().join("|"),
 			(current: string) => {
 				if (current === "") return;
 
@@ -866,6 +962,101 @@ export const useRaukkSourcingStore = defineStore(
 				chainResults.value[chainId];
 
 			return found ? inertClone(found) : undefined;
+		}
+
+		/**
+		 * Every stored chain flow, bucketed by the directed lane it runs
+		 * on. The scan {@link chainClaimedUnitsOn} did over ALL chain
+		 * results per call becomes one lookup plus the handful of flows
+		 * that really share the lane.
+		 *
+		 * Reads the result MAP, each results `flows` and of a flow only
+		 * its two endpoints — never `stale`, never `hired`, and not the
+		 * units either: a flow whose number moves keeps its bucket, and
+		 * the caller reading the number tracks it where it is read.
+		 *
+		 * Buckets keep the result and flow iteration order of the scan,
+		 * so the filtered order and the float summation order over them
+		 * are unchanged.
+		 */
+		const chainFlowsByLane: ComputedRef<
+			Map<string, IRaukkChainFlowCost[]>
+		> = computed(() => raukkChainLaneIndex(chainResults.value));
+
+		/**
+		 * Units per day the chains already haul on one directed lane, over
+		 * the flows one named plan authored and one named plan produced.
+		 *
+		 * An absent `ownerPlanUuid` or `sourcePlanUuid` is a claim frozen
+		 * before the field existed and counts for every plan, which is the
+		 * behaviour those results were written under. Staleness is not
+		 * read, see the callers of this getter for why.
+		 *
+		 * @author raukk
+		 *
+		 * @param {string} ownerPlanUuid Plan whose flows count
+		 * @param {string} sourcePlanUuid Producing plan whose flows count
+		 * @param {string} fromStop Origin stop
+		 * @param {string} toStop Destination stop
+		 * @returns {Record<string, number>} Claimed units per ticker
+		 */
+		function chainClaimedUnitsOn(
+			ownerPlanUuid: string,
+			sourcePlanUuid: string,
+			fromStop: string,
+			toStop: string
+		): Record<string, number> {
+			return raukkChainClaimedUnitsOn(
+				chainFlowsByLane.value,
+				ownerPlanUuid,
+				sourcePlanUuid,
+				fromStop,
+				toStop
+			);
+		}
+
+		/**
+		 * Everything the own fleet consumes per day, fuel and repair
+		 * materials in one map.
+		 *
+		 * Read from the FROZEN state — the fuel burn each snapshot stores
+		 * and the damage the stored lanes and chain results took — never
+		 * from live numbers, the rule every account level rollup follows.
+		 * Scoped: a plan the account no longer operates flies nothing, so
+		 * its hulls burn nothing either.
+		 *
+		 * Memoized because it is ACCOUNT WIDE while its callers are per
+		 * plan: the ship price resolver of every snapshot computation asks
+		 * for it, and a loop block solve computes hundreds of snapshots
+		 * without touching a lane. Deps are the scoped snapshot record,
+		 * the `lanes` and `fuelUnitsPerDay` of those snapshots and the
+		 * chain results — the staleness a fleet load entry carries is a
+		 * lazy getter and is not read here, so a flag spray leaves it
+		 * cached.
+		 */
+		const shipDemandRollup: ComputedRef<IRaukkMaterialUnits> = computed(
+			() => {
+				const scoped: Record<string, IRaukkSnapshot> =
+					scopedSnapshotRecord.value;
+
+				return raukkShipSourcingDemand(
+					scoped,
+					raukkFleetLoadEntries(scoped, chainResults.value)
+				);
+			}
+		);
+
+		/**
+		 * The fleets daily material demand, a fresh copy of
+		 * {@link shipDemandRollup} per call — the map is flat, so the
+		 * spread hands over the same ownership the rollup did.
+		 *
+		 * @author raukk
+		 *
+		 * @returns {IRaukkMaterialUnits} Units per day, keyed by ticker
+		 */
+		function shipDemandPerDay(): IRaukkMaterialUnits {
+			return { ...shipDemandRollup.value };
 		}
 
 		/**
@@ -1651,7 +1842,7 @@ export const useRaukkSourcingStore = defineStore(
 		function ensureConfig(planUuid: string): IRaukkPlanConfig {
 			if (!configs.value[planUuid])
 				configs.value[planUuid] = {
-					repairDay: DEFAULT_REPAIR_DAY,
+					repairDay: RAUKK_DEFAULT_REPAIR_DAY,
 					sources: {},
 				};
 
@@ -2373,6 +2564,8 @@ export const useRaukkSourcingStore = defineStore(
 			subscription,
 			getChain,
 			getChainResult,
+			chainClaimedUnitsOn,
+			shipDemandPerDay,
 			chainMemberPlans,
 			chainConflictOf,
 			assignedShipTypeId,
@@ -2429,7 +2622,12 @@ export const useRaukkSourcingStore = defineStore(
 		};
 	},
 	{
-		persist: {
+		// raukk: NOT the persistedstate plugin. That one serializes the
+		// complete picked state on every single mutation, and a recompute
+		// sweep mutates thousands of times — key and payload shape are
+		// identical, the write is coalesced. See util/debouncedPersist.ts
+		debouncedPersist: {
+			delay: 1000,
 			// refs missing from this list silently never persist
 			pick: [
 				"configs",

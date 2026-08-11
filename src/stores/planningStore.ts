@@ -23,6 +23,30 @@ import {
 	IFIOStorageElement,
 } from "@/features/api/gameData.types";
 
+/**
+ * Writes a value into a ref only when it differs from what the ref
+ * already holds, compared by JSON shape.
+ *
+ * The bulk setters below are fed by background revalidations that
+ * mostly confirm what the store already has. Swapping equal data still
+ * fires every watcher on the ref — the plan calculations deep watch
+ * `cxs`, the sourcing scans read `empires` — and re-serializes the
+ * persisted store, so an unchanged payload must be a no-op. A false
+ * mismatch (key order, a Date that JSON renders differently) only
+ * costs the old behavior.
+ *
+ * @author raukk
+ *
+ * @template T Value type
+ * @param {Ref<T>} target Ref written to
+ * @param {T} value Incoming value
+ */
+function assignIfChanged<T>(target: Ref<T>, value: T): void {
+	if (JSON.stringify(target.value) === JSON.stringify(value)) return;
+
+	target.value = value;
+}
+
 export const usePlanningStore = defineStore(
 	"prunplanner_planning",
 	() => {
@@ -71,11 +95,13 @@ export const usePlanningStore = defineStore(
 		 * @param {IPlanEmpireElement[]} empireList Empire Data
 		 */
 		function setEmpires(empireList: IPlanEmpireElement[]): void {
-			empires.value = {};
 			// store by Empire.uuid
+			const next: IEmpireRecord = {};
 			empireList.forEach((e) => {
-				empires.value[e.uuid] = inertClone(e);
+				next[e.uuid] = inertClone(e);
 			});
+
+			assignIfChanged(empires, next);
 		}
 
 		/**
@@ -129,12 +155,13 @@ export const usePlanningStore = defineStore(
 		 * @param {ICX[]} data CX Data List
 		 */
 		function setCXs(data: ICX[]): void {
-			cxs.value = {};
-
 			// store by CX.uuid
+			const next: ICXRecord = {};
 			data.forEach((c) => {
-				cxs.value[c.uuid] = inertClone(c);
+				next[c.uuid] = inertClone(c);
 			});
+
+			assignIfChanged(cxs, next);
 		}
 
 		function setCX(cxUuid: string, cxName: string, data: ICXData): void {
@@ -151,12 +178,17 @@ export const usePlanningStore = defineStore(
 		 * @param {IFIOStorage} data FIO Storage Data
 		 */
 		function setFIOStorageData(data: IFIOStorage): void {
-			fio_storage_planets.value = data.storage_data.planets;
-			fio_storage_warehouses.value = data.storage_data.warehouses;
-			fio_storage_ships.value = data.storage_data.ships;
-			fio_sites_planets.value = data.sites_data;
+			// refetched every few minutes and mostly unchanged; assigned
+			// piecewise so one moved storage does not swap the others
+			assignIfChanged(fio_storage_planets, data.storage_data.planets);
+			assignIfChanged(
+				fio_storage_warehouses,
+				data.storage_data.warehouses
+			);
+			assignIfChanged(fio_storage_ships, data.storage_data.ships);
+			assignIfChanged(fio_sites_planets, data.sites_data);
 
-			fio_storage_timestamp.value = data.last_modified;
+			assignIfChanged(fio_storage_timestamp, data.last_modified);
 		}
 
 		/**
@@ -166,10 +198,12 @@ export const usePlanningStore = defineStore(
 		 * @param {IShared[]} data Shared Data List
 		 */
 		function setSharedList(data: IShared[]): void {
-			shared.value = {};
+			const next: ISharedRecord = {};
 			data.forEach((s) => {
-				shared.value[s.plan] = inertClone(s);
+				next[s.plan] = inertClone(s);
 			});
+
+			assignIfChanged(shared, next);
 		}
 
 		/**

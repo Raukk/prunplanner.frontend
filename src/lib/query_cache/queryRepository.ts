@@ -170,6 +170,42 @@ async function writeThroughStore<T extends object, K extends keyof T & string>(
 }
 
 /**
+ * Writes fetched planets to IndexedDB and reloads the shared in-memory
+ * planet map only when one of them actually changed.
+ *
+ * `setManyIfChanged` cannot serve here: its fingerprint describes one
+ * whole-store payload per store, while planets arrive one or a few at a
+ * time. Comparing each fetched planet against the stored copy instead
+ * keeps an unchanged refetch — the common case, planet data turns over
+ * on its COGC schedule — from force-swapping the map every reader
+ * resolves through and invalidating every computed built on it.
+ *
+ * @author raukk
+ *
+ * @async
+ * @param {IPlanet[]} data Fetched planets
+ * @returns {Promise<void>}
+ */
+async function writeThroughPlanets(data: IPlanet[]): Promise<void> {
+	const db = useDB(planetsStore);
+	await db.preload();
+
+	let changed: boolean = false;
+	for (const planet of data) {
+		const existing = await db.get(planet.planet_natural_id);
+		if (!existing || JSON.stringify(existing) !== JSON.stringify(planet)) {
+			changed = true;
+			break;
+		}
+	}
+
+	if (!changed) return;
+
+	await planetsStore.setMany(data);
+	await db.preload(true);
+}
+
+/**
  * Rebuilds a payload from IndexedDB, falling back to the snapshot
  * bundled at build time when nothing is stored yet.
  *
@@ -497,8 +533,7 @@ export function useQueryRepository() {
 				const data: IPlanet = await callDataPlanet(
 					params.planetNaturalId
 				);
-				await planetsStore.set(data);
-				await useDB(planetsStore).preload(true);
+				await writeThroughPlanets([data]);
 
 				return data;
 			},
@@ -529,8 +564,7 @@ export function useQueryRepository() {
 					);
 
 					// set in indexeddb
-					await planetsStore.setMany(data);
-					await useDB(planetsStore).preload(true);
+					await writeThroughPlanets(data);
 
 					// set plans individually
 					data.forEach((p) => {
@@ -579,8 +613,7 @@ export function useQueryRepository() {
 			fetchFn: async (params: { searchId: string }) => {
 				const data = await callDataPlanetSearchSingle(params.searchId);
 
-				await planetsStore.setMany(data);
-				await useDB(planetsStore).preload(true);
+				await writeThroughPlanets(data);
 
 				return data;
 			},
@@ -598,8 +631,7 @@ export function useQueryRepository() {
 			fetchFn: async (params: { searchData: IPlanetSearchAdvanced }) => {
 				const data = await callDataPlanetSearch(params.searchData);
 
-				await planetsStore.setMany(data);
-				await useDB(planetsStore).preload(true);
+				await writeThroughPlanets(data);
 
 				return data;
 			},

@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
+// Latch
+import { resetRaukkBlockSolveLatches } from "@/features/raukk_sourcing/raukkBlockSolveLatch";
+
 // the composable orchestrates loading, calculation and the snapshot
 // pipeline, all three are mocked: this tests the orchestration itself
 const mockExecute = vi.fn();
@@ -20,7 +23,10 @@ vi.mock("@/features/cx/useCXData", () => ({
 }));
 
 vi.mock("@/features/planning/usePlanCalculation", () => ({
-	usePlanCalculation: async () => ({ calculate: mockCalculate }),
+	usePlanCalculation: async () => ({
+		calculate: mockCalculate,
+		dispose: () => {},
+	}),
 }));
 
 vi.mock("@/features/raukk_sourcing/useRaukkSnapshot", () => ({
@@ -95,6 +101,8 @@ describe("useRaukkStaleSnapshotRecompute", () => {
 
 	beforeEach(() => {
 		setActivePinia(createPinia());
+		// the unsolved block latch is module state and outlives one test
+		resetRaukkBlockSolveLatches();
 		sourcingStore = useRaukkSourcingStore();
 
 		mockExecute.mockReset();
@@ -138,22 +146,24 @@ describe("useRaukkStaleSnapshotRecompute", () => {
 	 * from: every stored plan minus the excluded ones.
 	 */
 	function installScope(exclude: string[] = []): void {
-		(sourcingStore as unknown as IScopedStore).recomputeGraphInputs = () => {
-			const inScope = (uuid: string): boolean => !exclude.includes(uuid);
+		(sourcingStore as unknown as IScopedStore).recomputeGraphInputs =
+			() => {
+				const inScope = (uuid: string): boolean =>
+					!exclude.includes(uuid);
 
-			return {
-				configs: Object.fromEntries(
-					Object.entries(sourcingStore.configs).filter(([uuid]) =>
-						inScope(uuid)
-					)
-				),
-				snapshots: Object.fromEntries(
-					Object.entries(sourcingStore.snapshots).filter(([uuid]) =>
-						inScope(uuid)
-					)
-				),
+				return {
+					configs: Object.fromEntries(
+						Object.entries(sourcingStore.configs).filter(([uuid]) =>
+							inScope(uuid)
+						)
+					),
+					snapshots: Object.fromEntries(
+						Object.entries(sourcingStore.snapshots).filter(
+							([uuid]) => inScope(uuid)
+						)
+					),
+				};
 			};
-		};
 	}
 
 	/** Prepares the members of a supply loop as hand written affine maps */
@@ -186,7 +196,9 @@ describe("useRaukkStaleSnapshotRecompute", () => {
 						override?: IRaukkProducerPriceOverride
 					): IRaukkSnapshot => {
 						const drawn: number =
-							override?.[member.from.uuid]?.[member.from.ticker] ??
+							override?.[member.from.uuid]?.[
+								member.from.ticker
+							] ??
 							sourcingStore.snapshots[member.from.uuid]?.outputs[
 								member.from.ticker
 							]?.costPerUnit ??

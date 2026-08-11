@@ -30,9 +30,18 @@ import {
 	IRaukkBlockSolveOutcome,
 	IRaukkBlockUnknown,
 	RAUKK_BLOCK_UNSOLVED_REASON,
-	solveLoopBlock,
 } from "@/features/raukk_sourcing/raukkChainBlockSolve";
+import { raukkSolveBlock } from "@/features/raukk_sourcing/raukkBlockSolveRunner";
 import { RAUKK_LOOP_SOLVE_MAX_UNKNOWNS } from "@/features/raukk_sourcing/calculations/raukkLoopSolve";
+
+// raukk: a block with no answer must not be re-solved every navigation
+import {
+	clearRaukkBlockLatch,
+	latchRaukkBlockUnsolved,
+	raukkBlockLatchKey,
+	raukkBlockSolveFingerprint,
+	raukkBlockSolveLatched,
+} from "@/features/raukk_sourcing/raukkBlockSolveLatch";
 
 // Types & Interfaces
 import { IPlan, IPlanEmpireElement } from "@/stores/planningStore.types";
@@ -95,14 +104,19 @@ export async function buildPlanSnapshotContext(
 	const empireUuid: string | undefined = plan.empires?.[0]?.uuid;
 	const cxUuid: string | undefined = findEmpireCXUuid(empireUuid);
 
-	const { calculate } = await usePlanCalculation(
+	const { calculate, dispose } = await usePlanCalculation(
 		toRef(plan),
 		ref(empireUuid),
 		ref(empireList),
 		ref(cxUuid)
 	);
 
-	const planResult: IPlanResult = await calculate();
+	let planResult: IPlanResult;
+	try {
+		planResult = await calculate();
+	} finally {
+		dispose();
+	}
 
 	return {
 		planUuid,
@@ -212,6 +226,43 @@ export function createBlockRecomputer(
 	 */
 	const prepared: Record<string, IRaukkPreparedSnapshot> = {};
 
+	/**
+	 * Plan contexts of this run, keyed by plan uuid.
+	 *
+	 * `buildPlanSnapshotContext` runs the whole base simulation, which
+	 * depends on the plan, its empire and its CX alone — never on a
+	 * snapshot — so a staleness cascade re-flagging a plan in pass 3
+	 * changes nothing about its base numbers. One computation per plan
+	 * per run, under exactly the lifetime assumption the prepared
+	 * pipelines above already document. The promise is cached rather
+	 * than its value so concurrent callers share one attempt.
+	 */
+	const contexts: Map<string, Promise<IRaukkPlanSnapshotContext>> = new Map();
+
+	function contextOf(planUuid: string): Promise<IRaukkPlanSnapshotContext> {
+		let context = contexts.get(planUuid);
+
+		if (!context) {
+			context = buildPlanSnapshotContext(planUuid, options.empireList);
+			contexts.set(planUuid, context);
+		}
+
+		return context;
+	}
+
+	/**
+	 * Loop blocks this run already attempted, by
+	 * {@link raukkBlockLatchKey}.
+	 *
+	 * The unsolved latch is consulted for the FIRST attempt of a run only.
+	 * A second attempt within one run is the chain recomputes freight pass,
+	 * which re-runs the block at fresher chain results — the one input the
+	 * fingerprint deliberately ignores — so latching it out would silently
+	 * drop the documented one round freight retry. Across runs the latch
+	 * holds, which is the whole point of it.
+	 */
+	const attempted: Set<string> = new Set();
+
 	/** Reports the plan being worked on, when the caller listens */
 	const setCurrent = (planUuid: string): void =>
 		options.onCurrent?.(options.planNameOf(planUuid));
@@ -304,7 +355,7 @@ export function createBlockRecomputer(
 		setCurrent(planUuid);
 
 		try {
-			await recomputePlanSnapshot(planUuid, options.empireList);
+			await computePlanSnapshot(await contextOf(planUuid));
 		} catch (error) {
 			recordError(planUuid, error);
 		}
@@ -330,6 +381,11 @@ export function createBlockRecomputer(
 	 * {@link recordBlockUnsolved}: an unsolved loop is an error the run
 	 * surfaces, never something later passes converge.
 	 *
+	 * An unsolved block is LATCHED, see
+	 * {@link raukkBlockSolveFingerprint}: the next run skips it whole while
+	 * its inputs are unchanged, which is what keeps one unsolvable loop from
+	 * re-simulating the account on every navigation.
+	 *
 	 * @author raukk
 	 *
 	 * @param {string[]} members Member Plan Uuids of the block
@@ -337,6 +393,39 @@ export function createBlockRecomputer(
 	 * verified; false means the provisional single pass numbers stand
 	 */
 	async function runLoopBlock(members: string[]): Promise<boolean> {
+		const latchKey: string = raukkBlockLatchKey(members);
+
+		/*
+		 * The fingerprint is taken BEFORE anything is computed or stored,
+		 * so the value a failing run latches is the one the next run reads
+		 * back: the provisional snapshots this run writes are members of the
+		 * block, and the fingerprint holds no member snapshot.
+		 */
+		const fingerprint: string = raukkBlockSolveFingerprint(
+			members,
+			options.shipSources
+		);
+
+		/*
+		 * Known unsolvable at exactly these inputs: skip the block WHOLE.
+		 * Not merely the solve — the provisional computations are what
+		 * cascade staleness onto the members and notify the chain refresh,
+		 * i.e. the two edges that feed this block back to itself. No error
+		 * either; the failure was reported when the latch was armed.
+		 */
+		if (
+			!attempted.has(latchKey) &&
+			raukkBlockSolveLatched(members, fingerprint)
+		) {
+			// the members are accounted for all the same, or the progress
+			// display would never reach its total
+			members.forEach(() => options.onDone?.());
+
+			return false;
+		}
+
+		attempted.add(latchKey);
+
 		const failed: Set<string> = new Set();
 
 		for (const uuid of members) {
@@ -346,7 +435,7 @@ export function createBlockRecomputer(
 
 			try {
 				prepared[uuid] = await preparePlanSnapshot(
-					await buildPlanSnapshotContext(uuid, options.empireList)
+					await contextOf(uuid)
 				);
 			} catch (error) {
 				recordError(uuid, error);
@@ -361,7 +450,8 @@ export function createBlockRecomputer(
 
 			if (!failed.has(uuid))
 				try {
-					const snapshot: IRaukkSnapshot = prepared[uuid].computeOnce();
+					const snapshot: IRaukkSnapshot =
+						prepared[uuid].computeOnce();
 
 					prepared[uuid].store(snapshot);
 					provisional[uuid] = snapshot;
@@ -386,9 +476,20 @@ export function createBlockRecomputer(
 		let outcome: IRaukkBlockSolveOutcome;
 
 		try {
-			outcome = await solveLoopBlock({
+			/*
+			 * The k + 1 evaluation rounds leave the main thread here, see
+			 * `raukkBlockSolveRunner`: everything they read is frozen into
+			 * one slice — legitimate because the provisional snapshots above
+			 * are already stored and a solve writes nothing — and a worker
+			 * runs the whole solve over it. Without a worker the prepared
+			 * pipelines are probed on this thread, as they always were.
+			 */
+			outcome = await raukkSolveBlock({
 				members,
 				prepared,
+				coreInputs: Object.fromEntries(
+					members.map((uuid) => [uuid, prepared[uuid].coreInput])
+				),
 				provisional,
 				unknowns,
 			});
@@ -403,10 +504,16 @@ export function createBlockRecomputer(
 		}
 
 		if (outcome.snapshots === null) {
+			// stop later runs re-simulating a system with no answer until
+			// one of its inputs really moves
+			latchRaukkBlockUnsolved(members, fingerprint);
 			recordBlockUnsolved(members, outcome.reason, outcome.unknownCount);
 
 			return false;
 		}
+
+		// the block has an answer here, so nothing may skip it again
+		clearRaukkBlockLatch(members);
 
 		/*
 		 * Zero unknowns is a cycle of non price edges — lease links and the

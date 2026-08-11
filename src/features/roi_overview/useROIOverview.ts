@@ -106,13 +106,21 @@ export async function useROIOverview(
 				undefined,
 				cxUuid
 			);
-			const result = await calculation.calculate();
+			let result: Awaited<ReturnType<typeof calculation.calculate>>;
+			let overviewData: Awaited<
+				ReturnType<typeof calculation.calculateOverview>
+			>;
+			try {
+				result = await calculation.calculate();
 
-			const overviewData = await calculation.calculateOverview(
-				result.materialio,
-				result.production,
-				result.infrastructure
-			);
+				overviewData = await calculation.calculateOverview(
+					result.materialio,
+					result.production,
+					result.infrastructure
+				);
+			} finally {
+				calculation.dispose();
+			}
 
 			itemResults.push({
 				buildingTicker: optimal.ticker,

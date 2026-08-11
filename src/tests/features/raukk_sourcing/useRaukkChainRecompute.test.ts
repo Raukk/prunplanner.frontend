@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
+// Latch
+import { resetRaukkBlockSolveLatches } from "@/features/raukk_sourcing/raukkBlockSolveLatch";
+
 // the composable orchestrates loading, calculation and the snapshot
 // pipeline, all three are mocked: this tests the orchestration itself
 const mockExecute = vi.fn();
@@ -20,7 +23,10 @@ vi.mock("@/features/cx/useCXData", () => ({
 }));
 
 vi.mock("@/features/planning/usePlanCalculation", () => ({
-	usePlanCalculation: async () => ({ calculate: mockCalculate }),
+	usePlanCalculation: async () => ({
+		calculate: mockCalculate,
+		dispose: () => {},
+	}),
 }));
 
 vi.mock("@/features/raukk_sourcing/useRaukkSnapshot", () => ({
@@ -105,6 +111,8 @@ describe("useRaukkChainRecompute", () => {
 
 	beforeEach(() => {
 		setActivePinia(createPinia());
+		// the unsolved block latch is module state and outlives one test
+		resetRaukkBlockSolveLatches();
 		sourcingStore = useRaukkSourcingStore();
 
 		mockExecute.mockReset();
@@ -484,7 +492,8 @@ describe("useRaukkChainRecompute", () => {
 			solvableLoop.map((member) => ({ ...member, slope: 1 }))
 		);
 
-		const { recomputeChain, done, total, errors } = useRaukkChainRecompute();
+		const { recomputeChain, done, total, errors } =
+			useRaukkChainRecompute();
 		await recomputeChain("d");
 
 		// the two passes are pass 1 and the freight pass, nothing more: the
@@ -600,10 +609,9 @@ describe("useRaukkChainRecompute", () => {
 			expect(total.value).toBe(4);
 
 			// and it still lands on the analytic fixed point
-			expect(sourcingStore.snapshots.d.outputs.ORE.costPerUnit).toBeCloseTo(
-				110 / 0.98,
-				10
-			);
+			expect(
+				sourcingStore.snapshots.d.outputs.ORE.costPerUnit
+			).toBeCloseTo(110 / 0.98, 10);
 		});
 
 		it("runs exactly two passes with shipping enabled", async () => {
@@ -666,7 +674,9 @@ describe("useRaukkChainRecompute", () => {
 			await recomputeChain("b");
 
 			expect(
-				mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+				mockComputePlanSnapshot.mock.calls.map(
+					(call) => call[0].planUuid
+				)
 			).toStrictEqual(["a", "b"]);
 			expect(total.value).toBe(2);
 		});
@@ -680,7 +690,9 @@ describe("useRaukkChainRecompute", () => {
 			// the started plan is unioned into the scope, its out of scope
 			// dependent is not pulled back in with it
 			expect(
-				mockComputePlanSnapshot.mock.calls.map((call) => call[0].planUuid)
+				mockComputePlanSnapshot.mock.calls.map(
+					(call) => call[0].planUuid
+				)
 			).toStrictEqual(["a", "b"]);
 		});
 	});

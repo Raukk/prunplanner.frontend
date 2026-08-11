@@ -194,74 +194,83 @@ export function useResourceROIOverview(cxUuid: Ref<string | undefined>) {
 		// artificially set cogc to resource extraction
 		definition.value.plan_cogc = "RESOURCE_EXTRACTION";
 
-		const { handleCreateBuilding, calculateOverview, calculate } =
+		const { handleCreateBuilding, calculateOverview, calculate, dispose } =
 			await usePlanCalculation(definition, undefined, undefined, cxUuid);
 
-		// create building
-		await handleCreateBuilding(optimal.ticker);
-		const resultData = await calculate();
+		try {
+			// create building
+			await handleCreateBuilding(optimal.ticker);
+			const resultData = await calculate();
 
-		for (const productionBuilding of resultData.production.buildings) {
-			if (
-				productionBuilding.recipeOptions
-					.map((e) => e.outputs.map((m) => m.material_ticker))
-					.flat()
-					.includes(materialTicker)
-			) {
-				// manipulate definition daata
+			for (const productionBuilding of resultData.production.buildings) {
+				if (
+					productionBuilding.recipeOptions
+						.map((e) => e.outputs.map((m) => m.material_ticker))
+						.flat()
+						.includes(materialTicker)
+				) {
+					// manipulate definition daata
 
-				definition.value.plan_data.buildings[0].amount = optimal.amount;
-				definition.value.plan_data.buildings[0].active_recipes = [
-					{
-						recipeid: `${productionBuilding.name}#${materialTicker}`,
-						amount: 1,
-					},
-				];
+					definition.value.plan_data.buildings[0].amount =
+						optimal.amount;
+					definition.value.plan_data.buildings[0].active_recipes = [
+						{
+							recipeid: `${productionBuilding.name}#${materialTicker}`,
+							amount: 1,
+						},
+					];
 
-				const newResult = await calculate();
+					const newResult = await calculate();
 
-				// find daily yield from material i/o for given materialticker
-				const dailyYield: number =
-					newResult.materialio.find(
-						(f) => f.ticker === materialTicker
-					)?.output ?? 0;
+					// find daily yield from material i/o for given materialticker
+					const dailyYield: number =
+						newResult.materialio.find(
+							(f) => f.ticker === materialTicker
+						)?.output ?? 0;
 
-				const overviewData = await calculateOverview(
-					newResult.materialio,
-					newResult.production,
-					newResult.infrastructure
-				);
+					const overviewData = await calculateOverview(
+						newResult.materialio,
+						newResult.production,
+						newResult.infrastructure
+					);
 
-				// all matches, push the result
-				results.push({
-					planetNaturalId: planet.planet_natural_id,
-					planetName: planetNames.value[planet.planet_natural_id],
-					buildingTicker: productionBuilding.name,
-					dailyYield,
-					percentMaxDailyYield: 0,
-					cogm: newResult.production.buildings[0].activeRecipes[0]
-						.cogm,
-					outputProfit:
-						newResult.production.buildings[0].activeRecipes[0].cogm
-							?.totalProfit ?? 0,
-					dailyProfit: overviewData.profit,
-					planCost: overviewData.totalConstructionCost,
-					planROI: overviewData.roi,
-					planArea: newResult.area.areaUsed,
-					planProfitArea:
-						overviewData.profit / newResult.area.areaUsed,
-					planetSurface: surface,
-					planetGravity: gravity,
-					planetPressure: pressure,
-					planetTemperature: temperature,
-					planetCOGC: planet.active_cogc_program_type,
-					planetInfrastructures: infrastructures,
-					distanceAI1: planetDistanceMap[planet.planet_natural_id][0],
-					distanceCI1: planetDistanceMap[planet.planet_natural_id][1],
-					distanceIC1: planetDistanceMap[planet.planet_natural_id][2],
-					distanceNC1: planetDistanceMap[planet.planet_natural_id][3],
-				});
+					// all matches, push the result
+					results.push({
+						planetNaturalId: planet.planet_natural_id,
+						planetName: planetNames.value[planet.planet_natural_id],
+						buildingTicker: productionBuilding.name,
+						dailyYield,
+						percentMaxDailyYield: 0,
+						cogm: newResult.production.buildings[0].activeRecipes[0]
+							.cogm,
+						outputProfit:
+							newResult.production.buildings[0].activeRecipes[0]
+								.cogm?.totalProfit ?? 0,
+						dailyProfit: overviewData.profit,
+						planCost: overviewData.totalConstructionCost,
+						planROI: overviewData.roi,
+						planArea: newResult.area.areaUsed,
+						planProfitArea:
+							overviewData.profit / newResult.area.areaUsed,
+						planetSurface: surface,
+						planetGravity: gravity,
+						planetPressure: pressure,
+						planetTemperature: temperature,
+						planetCOGC: planet.active_cogc_program_type,
+						planetInfrastructures: infrastructures,
+						distanceAI1:
+							planetDistanceMap[planet.planet_natural_id][0],
+						distanceCI1:
+							planetDistanceMap[planet.planet_natural_id][1],
+						distanceIC1:
+							planetDistanceMap[planet.planet_natural_id][2],
+						distanceNC1:
+							planetDistanceMap[planet.planet_natural_id][3],
+					});
+				}
 			}
+		} finally {
+			dispose();
 		}
 
 		return results;

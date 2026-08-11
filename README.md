@@ -95,8 +95,9 @@ pnpm run test:ui
 | VITE_GAME_DATA_STALE_MINUTES_BUILDINGS | int    | 1440                             |
 | VITE_GAME_DATA_STALE_MINUTES_RECIPES   | int    | 1440                             |
 | VITE_GAME_DATA_STALE_MINUTES_MATERIALS | int    | 1440                             |
-| VITE_GAME_DATA_STALE_MINUTES_EXCHANGES | int    | 60                               |
+| VITE_GAME_DATA_STALE_MINUTES_EXCHANGES | int    | 1440                             |
 | VITE_GAME_DATA_STALE_MINUTES_PLANETS   | int    | 720                              |
+| VITE_GAME_DATA_STALE_MINUTES_PLANET_SCHEDULED | int | 10080                       |
 
 `POSTHOG_KEY` is not a `VITE_` variable: it is baked into `/env.js` at deploy time (`netlify.toml`, `docker-compose.yaml`). The dev server generates that file on the fly from the ambient `POSTHOG_KEY`, which is normally unset locally, so analytics stay off.
 
