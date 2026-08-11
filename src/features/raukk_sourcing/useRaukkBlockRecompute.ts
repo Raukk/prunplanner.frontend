@@ -95,14 +95,19 @@ export async function buildPlanSnapshotContext(
 	const empireUuid: string | undefined = plan.empires?.[0]?.uuid;
 	const cxUuid: string | undefined = findEmpireCXUuid(empireUuid);
 
-	const { calculate } = await usePlanCalculation(
+	const { calculate, dispose } = await usePlanCalculation(
 		toRef(plan),
 		ref(empireUuid),
 		ref(empireList),
 		ref(cxUuid)
 	);
 
-	const planResult: IPlanResult = await calculate();
+	let planResult: IPlanResult;
+	try {
+		planResult = await calculate();
+	} finally {
+		dispose();
+	}
 
 	return {
 		planUuid,
@@ -361,7 +366,8 @@ export function createBlockRecomputer(
 
 			if (!failed.has(uuid))
 				try {
-					const snapshot: IRaukkSnapshot = prepared[uuid].computeOnce();
+					const snapshot: IRaukkSnapshot =
+						prepared[uuid].computeOnce();
 
 					prepared[uuid].store(snapshot);
 					provisional[uuid] = snapshot;

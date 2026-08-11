@@ -1,4 +1,15 @@
-import { computed, ComputedRef, ref, Ref, toRaw, toRef, watch } from "vue";
+import {
+	computed,
+	ComputedRef,
+	effectScope,
+	getCurrentScope,
+	onScopeDispose,
+	ref,
+	Ref,
+	toRaw,
+	toRef,
+	watch,
+} from "vue";
 
 // Stores
 import { usePlanningStore } from "@/stores/planningStore";
@@ -95,15 +106,43 @@ export async function usePlanCalculation(
 	const planningDataStore = usePlanningStore();
 	const { getPlanet } = usePlanetData();
 
+	/*
+		Both watchers below live in this detached scope, not the caller's.
+		The composable is async, so anything registered after its first
+		await escapes Vue's automatic scope tracking anyway — and the
+		batch callers (empire rollup, snapshot upkeep, ROI sweeps) create
+		one instance per plan per run from plain functions, where leaked
+		deep watchers on the plan and the cx store accumulate forever and
+		re-run full calculations on every cx write.
+	*/
+	const scope = effectScope(true);
+
+	/**
+	 * Stops this instance's watchers. Batch callers must call this once
+	 * done with `calculate`; component callers are covered automatically
+	 * when their setup scope disposes.
+	 *
+	 * @author raukk
+	 */
+	function dispose(): void {
+		scope.stop();
+	}
+
+	// entered synchronously, so a component's setup scope is still
+	// active here and tears this instance down with the component
+	if (getCurrentScope()) onScopeDispose(dispose);
+
 	const refreshKey: Ref<number> = ref(0);
 
 	// watches external data to trigger a recalculation
-	watch(
-		() => planningDataStore.cxs,
-		() => {
-			refreshKey.value++;
-		},
-		{ deep: true }
+	scope.run(() =>
+		watch(
+			() => planningDataStore.cxs,
+			() => {
+				refreshKey.value++;
+			},
+			{ deep: true }
+		)
 	);
 
 	// data references
@@ -1071,19 +1110,22 @@ export async function usePlanCalculation(
 	// - plan data
 	// - refresh key (cx updates)
 	// - empire change
-	watch(
-		[plan, refreshKey, empireUuid],
-		async () => {
-			try {
-				result.value = await calculate();
-			} catch (err) {
-				console.error(err);
-			}
-		},
-		{ immediate: true, deep: true }
+	scope.run(() =>
+		watch(
+			[plan, refreshKey, empireUuid],
+			async () => {
+				try {
+					result.value = await calculate();
+				} catch (err) {
+					console.error(err);
+				}
+			},
+			{ immediate: true, deep: true }
+		)
 	);
 
 	return {
+		dispose,
 		existing,
 		saveable,
 		result,

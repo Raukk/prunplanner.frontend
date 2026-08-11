@@ -21,7 +21,10 @@ vi.mock("@/features/cx/useCXData", () => ({
 }));
 
 vi.mock("@/features/planning/usePlanCalculation", () => ({
-	usePlanCalculation: async () => ({ calculate: mockCalculate }),
+	usePlanCalculation: async () => ({
+		calculate: mockCalculate,
+		dispose: () => {},
+	}),
 }));
 
 vi.mock("@/features/raukk_sourcing/useRaukkSnapshot", () => ({

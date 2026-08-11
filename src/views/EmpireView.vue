@@ -158,7 +158,7 @@
 				// note, calculation depends on empire + cx, so a plan is
 				// only calculated properly within this context
 
-				const cacheKey: string = `${plan.uuid}#${selectedCXUuid.value}#${selectedCXUuid.value}`;
+				const cacheKey: string = `${plan.uuid}#${selectedEmpireUuid.value}#${selectedCXUuid.value}`;
 
 				if (cacheCalculatedPlans.has(cacheKey)) {
 					calculatedPlans.value[plan.uuid!] =
@@ -167,19 +167,26 @@
 				} else {
 					await Promise.resolve();
 
-					const { calculate } = await usePlanCalculation(
+					const { calculate, dispose } = await usePlanCalculation(
 						toRef(plan),
 						selectedEmpireUuid,
 						refEmpireList,
 						selectedCXUuid
 					);
 
-					const result = await calculate();
-					calculatedPlans.value[plan.uuid!] = result;
+					try {
+						const result = await calculate();
+						calculatedPlans.value[plan.uuid!] = result;
+					} finally {
+						dispose();
+					}
 					progressCurrent.value++;
 
 					// cache
-					cacheCalculatedPlans.set(cacheKey, result);
+					cacheCalculatedPlans.set(
+						cacheKey,
+						calculatedPlans.value[plan.uuid!]
+					);
 					// yield back to vue and update DOM
 					await new Promise((r) => setTimeout(r, 0));
 				}
