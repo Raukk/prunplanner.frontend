@@ -10,6 +10,8 @@ import {
 	IRaukkChainError,
 	loadEmpireList,
 } from "@/features/raukk_sourcing/useRaukkBlockRecompute";
+// raukk: the upkeep owns the chain step while it runs
+import { useRaukkAutoChainRefresh } from "@/features/raukk_sourcing/useRaukkAutoChainRefresh";
 
 // Graph
 import {
@@ -104,6 +106,13 @@ export function useRaukkEmpireAutoSnapshot(
 	context: IRaukkEmpireAutoSnapshotContext
 ): Readonly<Ref<boolean>> {
 	const sourcingStore = useRaukkSourcingStore();
+	/*
+	 * raukk: every snapshot this upkeep writes is a chain input. The
+	 * automatic refresh is suspended for the runs duration and re-costs
+	 * the chains once afterwards, over the flows the whole run produced
+	 * rather than after every single plan.
+	 */
+	const { suspend, resume } = useRaukkAutoChainRefresh();
 
 	let timer: ReturnType<typeof setTimeout> | undefined = undefined;
 	const running: Ref<boolean> = ref(false);
@@ -145,7 +154,9 @@ export function useRaukkEmpireAutoSnapshot(
 		 * MISSING one is taken on empire membership — see the scope note
 		 * on the composable.
 		 */
-		function pendingPlans(scoped: Record<string, IRaukkSnapshot>): string[] {
+		function pendingPlans(
+			scoped: Record<string, IRaukkSnapshot>
+		): string[] {
 			return context.planUuids.value.filter((uuid): uuid is string => {
 				if (uuid === undefined || failed.has(uuid)) return false;
 
@@ -164,6 +175,7 @@ export function useRaukkEmpireAutoSnapshot(
 		if (pending.length === 0) return;
 
 		running.value = true;
+		suspend();
 
 		try {
 			const empireList: IPlanEmpireElement[] = await loadEmpireList();
@@ -240,6 +252,7 @@ export function useRaukkEmpireAutoSnapshot(
 			}
 		} finally {
 			running.value = false;
+			resume();
 
 			if (rerunRequested) {
 				rerunRequested = false;

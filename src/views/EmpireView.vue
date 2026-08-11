@@ -24,6 +24,8 @@
 	import { useMaterialIOUtil } from "@/features/planning/util/materialIO.util";
 	// raukk: background computation of missing sourcing snapshots
 	import { useRaukkEmpireAutoSnapshot } from "@/features/raukk_sourcing/useRaukkEmpireAutoSnapshot";
+	// raukk: chain results follow their inputs instead of a manual sweep
+	import { useRaukkAutoChainRefresh } from "@/features/raukk_sourcing/useRaukkAutoChainRefresh";
 	import { usePreferences } from "@/features/preferences/usePreferences";
 	const { combineEmpireMaterialIO, empireMaterialIOState } =
 		await useMaterialIOUtil();
@@ -117,6 +119,11 @@
 		planUuids: empirePlanUuids,
 		calculating: isCalculating,
 	});
+
+	// raukk: keeps the stored chain results current while their inputs
+	// move. Idempotent and app lifetime — the other sourcing views
+	// activate it too, and it outlives whichever of them mounted first
+	useRaukkAutoChainRefresh().activate();
 
 	/**
 	 * Calculates all given plans
