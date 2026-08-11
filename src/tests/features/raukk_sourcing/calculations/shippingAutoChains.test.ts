@@ -28,6 +28,7 @@ import {
 	raukkIsAutoChainId,
 	raukkOrderChainStops,
 	raukkUnclaimedFlows,
+	mergeChainIdCollisions,
 } from "@/features/raukk_sourcing/calculations/shippingAutoChains";
 
 // Types & Interfaces
@@ -167,6 +168,77 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 					"AA-003c",
 				])
 			);
+		});
+
+		it("merges chains that resolved to one id, order preserved", () => {
+			const stops: string[] = ["AA-001a", "AA-002b"];
+
+			const chainOf = (
+				flows: IRaukkChainFlow[],
+				capDays: number,
+				members: string[]
+			): IRaukkAutoChain => ({
+				chainId: raukkAutoChainId(
+					"production",
+					RAUKK_AUTO_CHAIN_DIRECT,
+					stops
+				),
+				bucket: "production",
+				cxCode: RAUKK_AUTO_CHAIN_DIRECT,
+				stops,
+				parsecs: 4,
+				flows,
+				capDays,
+				memberPlanUuids: members,
+			});
+
+			const stripped: IRaukkAutoChain = chainOf(
+				[flow("ORE", "AA-001a", "AA-002b", 100)],
+				14,
+				["owner"]
+			);
+			const direct: IRaukkAutoChain = chainOf(
+				[
+					flow(
+						"ALO",
+						"AA-002b",
+						"AA-001a",
+						50,
+						1,
+						1,
+						"production",
+						"b"
+					),
+				],
+				30,
+				["b"]
+			);
+			const other: IRaukkAutoChain = {
+				...chainOf([], 30, []),
+				chainId: raukkAutoChainId("production", "CX1", [
+					"CX1",
+					...stops,
+				]),
+			};
+
+			const merged: IRaukkAutoChain[] = mergeChainIdCollisions([
+				stripped,
+				other,
+				direct,
+			]);
+
+			expect(merged.map((chain) => chain.chainId)).toStrictEqual([
+				stripped.chainId,
+				other.chainId,
+			]);
+			// both cargo sets ride the one lap, the tightest cadence wins
+			expect(
+				merged[0].flows.map((claimed) => claimed.ticker)
+			).toStrictEqual(["ORE", "ALO"]);
+			expect(merged[0].capDays).toBe(14);
+			expect(merged[0].memberPlanUuids).toStrictEqual(["b", "owner"]);
+			// the first occurrence keeps its stop order and parsecs
+			expect(merged[0].stops).toStrictEqual(stops);
 		});
 	});
 
@@ -1007,7 +1079,9 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 		function lanes(
 			given: IRaukkChainFlow[] = flows
 		): IRaukkHubSpokeLaneRow[] {
-			return raukkHubSpokeLanes(raukkHubSpokeRows(given, true, cxSystems));
+			return raukkHubSpokeLanes(
+				raukkHubSpokeRows(given, true, cxSystems)
+			);
 		}
 
 		it("folds a base pair's materials onto one line", () => {
@@ -1055,7 +1129,8 @@ describe("Raukk Sourcing: Automatic Chains", () => {
 			const members: number = rows
 				.filter(
 					(row) =>
-						row.fromStop === "AA-001a" && row.bucket === "production"
+						row.fromStop === "AA-001a" &&
+						row.bucket === "production"
 				)
 				.reduce((sum, row) => sum + row.share, 0);
 

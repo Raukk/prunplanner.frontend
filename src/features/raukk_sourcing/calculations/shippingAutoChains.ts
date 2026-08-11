@@ -1403,7 +1403,55 @@ export function raukkBuildAutoChains(
 		);
 	});
 
-	return chains;
+	return mergeChainIdCollisions(chains);
+}
+
+/**
+ * Merges derived chains that resolved to the same id.
+ *
+ * A regional loop whose exchange was stripped and a cross region direct
+ * loop over the same bases both name `auto:<bucket>:direct:<stops>`;
+ * their flow pools are disjoint — regional groups here, the cross
+ * region group there — so on collision both cargo sets belong on the
+ * one physical lap and dropping either, which a keyed store would do
+ * silently, loses shipments. The first occurrence keeps its stop order
+ * and parsecs; ids are content stable, so equal ids guarantee equal
+ * bucket and stop set.
+ *
+ * With a consistent `anchorOf` the two paths cannot name one stop set
+ * today — a region holds equal anchors, the direct group differing ones
+ * — so this is the guard of an invariant the keyed result store simply
+ * assumes, not a reachable repair. Exported for its test alone.
+ *
+ * @author raukk
+ *
+ * @param {IRaukkAutoChain[]} chains Derived chains, collisions included
+ * @returns {IRaukkAutoChain[]} Chains with unique ids, order preserved
+ */
+export function mergeChainIdCollisions(
+	chains: IRaukkAutoChain[]
+): IRaukkAutoChain[] {
+	const byId: Map<string, IRaukkAutoChain> = new Map();
+
+	chains.forEach((chain) => {
+		const known: IRaukkAutoChain | undefined = byId.get(chain.chainId);
+
+		if (known === undefined) {
+			byId.set(chain.chainId, chain);
+			return;
+		}
+
+		byId.set(chain.chainId, {
+			...known,
+			flows: [...known.flows, ...chain.flows],
+			capDays: Math.min(known.capDays, chain.capDays),
+			memberPlanUuids: Array.from(
+				new Set([...known.memberPlanUuids, ...chain.memberPlanUuids])
+			).sort(),
+		});
+	});
+
+	return Array.from(byId.values());
 }
 
 /**
