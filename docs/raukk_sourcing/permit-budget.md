@@ -265,6 +265,30 @@ Any base that would sit under half full is bought instead:
 
 LST is consolidated instead: 5 of its 6 extractors share the TIO base on XG-326a, and the last sixth is bought for about 169 k per gate.
 
+## Metallurgy build-out, complete
+
+All 33 metallurgy permits are planned in GateBuilder as of 2026-08-12. Every base reads 166.92 % efficiency, which is COGC 1.25 x five experts 1.284 x the Moria metallurgy faction 1.04. Plans hold one distinct mix each; identical bases are cloned in the app.
+
+| Planet | Plans | Bases | Contents |
+| --- | --- | --- | --- |
+| Hearth QJ-149a | GATE AL smelter A | 4 | 21x SME aluminium |
+| Crucible QJ-149b | GATE AL smelter B | 3 | 21x SME aluminium |
+| LS-934b | GATE FE smelter, GATE FEO iron ore | 2 + 1 | 21x SME iron, 14x EXT ore |
+| SE-648a | GATE STL steel | 2 | 21x SME steel |
+| Vulcan ZV-759b | 3 SME plans | 3 | 21x SME each: CU, CU+LI, LI |
+| ZV-194c | 3 SME plans | 3 | LI+TI, TI+SI, SI+AU |
+| Kiros KI-401b | 2 SME plans | 2 | AU+CF, CF+RE |
+| Deimos ZV-759c | 3 GF plans | 6 | RG x3, RG+GL, GL x2 |
+| Arrakis KW-358c | 4 GF plans | 4 | GL, GL+LIT, LIT, LIT+NG |
+| KI-439d | 5 FS plans | 5 | HCC, HCC+MFK, MFK+BRO, BRO+BCO, and a six-recipe tail base |
+| Midas ZV-194d | 2 ASM plans | 2 | ALR+WRH, WRH+CTF+WAL+AST |
+
+Packing mixed products into shared bases rather than one product per base saved three permits on the SME group alone, taking it from 11 bases to 8.
+
+Two products were dropped as too small to justify a base and are bought instead: **S** at 1 smelter, and one of the 14 RE smelters, leaving rhenium at 93 % coverage.
+
+Deimos, Arrakis and KI-439d each need more than three bases, so they require the 6-base allowance.
+
 ## Verified extractor bases
 
 One single-permit base per top-5 extraction planet was created and saved in the GateBuilder empire on 2026-08-12, filled to the area limit, each with five Resource Extraction experts and the planet's RES COGC. All read 160.50 % efficiency in-app.
