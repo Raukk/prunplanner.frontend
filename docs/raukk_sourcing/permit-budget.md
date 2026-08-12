@@ -161,6 +161,53 @@ Changes from the earlier assignment, all using the worlds supplied 2026-08-12:
 
 TIO on a METALLURGY world such as Kiros KI-401b would allow smelting titanium on site, trading the 1.25 extraction bonus for the same bonus on the smelter. Worth costing once the production planets are assigned, since the SME count is the larger of the two.
 
+## Faction bonus, and why it shrinks as you build
+
+The extraction faction switch is OUTSIDEREGION, worth RESOURCE_EXTRACTION 0.02 ([bonusCalculations.ts:87-91](../../src/features/planning/calculations/bonusCalculations.ts#L87-L91)). It is not a flat 2 %: the multiplier is `2 * (-2 * (permits_used / permits_total) + 3)` ([bonusCalculations.ts:174-178](../../src/features/planning/calculations/bonusCalculations.ts#L174-L178)), so the bonus **decays as the empire fills its permits**.
+
+| Permits used / total | Multiplier | Faction bonus | Total extraction efficiency |
+| --- | --- | --- | --- |
+| 1 / 20 | 5.80 | 1.1160 | 1.7912 |
+| 5 / 20 | 5.00 | 1.1000 | 1.7655 |
+| 10 / 20 | 4.00 | 1.0800 | 1.7334 |
+| 20 / 20 | 2.00 | **1.0400** | **1.6692** |
+
+The saved plans currently read 179.12 % because the GateBuilder empire has one permit used of twenty. A fully built-out player is at 4 %, which is the figure planning uses, so the in-app numbers are optimistic by about 7 % until the empire is full. All permit counts in this doc use the 4 % case.
+
+The faction bonus applies regardless of the planet's COGC: the METALLURGY-COGC extractor worlds read 143.29 %, which is experts 1.284 x faction 1.116 with no 1.25.
+
+## Highest-draw raw resources
+
+Ranked by bases needed, 15-day cadence, 4 % faction case. This is where the extraction effort actually goes.
+
+| Rank | Planet | Resource | Extractors | Area | Bases |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Nascent QJ-149c | ALO | 49x EXT | 1,519 | **4** |
+| 2 | KI-439b | HAL | 43x EXT | 1,333 | **3** |
+| 3 | IA-335d | BER | 35x EXT | 1,085 | **3** |
+| 4 | SE-648c | O, TCO | 68x RIG, 1x EXT | 915 | 2 |
+| 5 | Bathys XG-452b | H2O | 60x RIG | 780 | 2 |
+| 6 | Halcyon YK-005d | MGS | 23x EXT | 713 | 2 |
+| 7 | AJ-135e | NE | 30x COL | 600 | 2 |
+| 8 | LG-430b | CUO, BRM | 16x EXT | 496 | 2 |
+| 9 | XG-326a | LST, TIO | 16x EXT | 496 | 2 |
+| 10 | GY-252a | LIO | 15x EXT | 465 | 1 |
+| 11 | Midas ZV-194d | AUO | 13x EXT | 403 | 1 |
+| 12 | WU-070b | SIO | 12x EXT | 372 | 1 |
+| 13 | SE-110d | FEO | 12x EXT | 372 | 1 |
+| 14 | Hyalos WU-070a | TAI | 11x EXT | 341 | 1 |
+| 15 | Aratora LS-231b | BTS | 17x RIG | 221 | 1 |
+| 16 | GY-694c | ZIR | 1x EXT | 31 | 1 |
+| 17 | SO-122d | SCR | 1x EXT | 31 | 1 |
+
+**ALO, HAL and BER are 10 of the 30 extraction permits between them.** Aluminium ore is the single biggest draw at 4 bases, driven by 23,770 units of AL per gate. Beryl is expensive in permits for a different reason: IA-335d yields only 12.24/day, the weakest deposit in the set, so 35 extractors are needed for 707/day.
+
+The bottom four planets are one extractor each and could be folded into a neighbouring base if a shared planet ever carries them.
+
+### XG-326a consolidation
+
+Adding SIO to XG-326a alongside LST and TIO does **not** save a permit. It would need 6 + 10 + 19 = 35 extractors, 1,085 area, 3 bases; the split of XG-326a at 2 plus WU-070b at 1 is also 3. WU-070b is the better home for silicon regardless: its 52.12 deposit needs 12 extractors against XG-326a's 19 for the same output, so it is cheaper to build and to run.
+
 ## Verified extractor bases
 
 One single-permit base per top-5 extraction planet was created and saved in the GateBuilder empire on 2026-08-12, filled to the area limit, each with five Resource Extraction experts and the planet's RES COGC. All read 160.50 % efficiency in-app.
