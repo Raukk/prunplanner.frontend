@@ -29,7 +29,9 @@ await page.locator("div.pselect").filter({ hasText: "Select Building & Add to Pl
 await page.locator("body > div.z-5000").getByText("SME (Smelter)", { exact: true }).first().click();
 ```
 
-Options are labelled `TICKER (Full Name)`, so `getByText("INC", { exact: true })` finds nothing; match `INC (Incinerator)`.
+Options are labelled `TICKER (Full Name)`, so `getByText("INC", { exact: true })` finds nothing; match `INC (Incinerator)`. The names do not follow `gamedata_buildings.building_name` either: FS is `fineSmithy` in the data but **`FS (Metalist Studio)`** in the UI. Read the labels out of the dropdown rather than deriving them.
+
+**The dropdown omits building types already in the plan.** To add more of a type that is already there, edit that row's Qty and add a recipe to it; the type will not be offered again.
 
 **The recipe picker is an `n-popover`, not a select** ([PlanProductionRecipe.vue:154-166](../src/features/planning/components/PlanProductionRecipe.vue#L154-L166)). Click the output-tile area to open it, then pick a **table row**:
 

@@ -337,6 +337,39 @@ Two corrections landed together: habitation above, which raises area, and the pe
 
 A 15-day cadence is **7 players** rather than the 8 estimated earlier, and 100 permits now buys roughly a 22-day cadence rather than 30.
 
+## Construction build-out, complete
+
+25 bases across 9 worlds, all saved in GateBuilder at 170.13 % efficiency, which is COGC 1.25 x five experts 1.284 x the NEO construction faction 1.06.
+
+| Planet | Bases | Contents |
+| --- | --- | --- |
+| Nike ZV-194a | 3 | 9x PP4/RSH each |
+| Prometheus ZV-194b | 3 | PP4 RSH and TSH |
+| Black Mesa ZV-759j | 3 | PP3/PSH with PP2/LBH |
+| Aceland QJ-684b | 3 | PP2/LBH, PP2/LSE, PP4/TRS |
+| ZV-759a | 3 | PP2/LSE, PP4/ASE, PP3/RBH |
+| Lom Palanka QJ-684a | 3 | PP3 RBH, HSE, RSE with PP1/BBH |
+| QJ-149e | 3 | PP4 ATA and ABH, PP3/RTA |
+| Hekaton LS-231c | 3 | PP1 BBH and BSE, PP4/ADE, PP2 LDE and LTA |
+| IA-151a | 1 | the WEL tail plus repair surplus |
+
+## Repair surplus
+
+Asked for a few percent of extra B-fabs and L-fabs for repairs. **It is already there**, because building counts are rounded up to whole buildings and that rounding overproduces:
+
+| Item | Surplus from rounding |
+| --- | --- |
+| BSE | 8.6 % |
+| LTA | 8.3 % |
+| LDE | 7.5 % |
+| BBH | 4.7 % |
+| LSE | 3.5 % |
+| LBH | 2.1 % |
+
+Only LBH and LSE fell short of 5 %. One extra PP2 for each was added to the IA-151a base, taking LBH to 6.2 % and LSE to 7.9 %. Total cost: nothing, since that base had 100 area spare.
+
+**BDE and BTA are not produced at all** — the gate needs none of either, so any repair stock is new production and needs a target quantity. BDE is `PP1#150xPE=>1xBDE` and BTA is `PP1#1xFE 50xPE=>1xBTA`, both cheap in inputs since PE is 11.6 per unit. TRU and the R-fabs are bought, as agreed.
+
 ## Verified extractor bases
 
 One single-permit base per top-5 extraction planet was created and saved in the GateBuilder empire on 2026-08-12, filled to the area limit, each with five Resource Extraction experts and the planet's RES COGC. All read 160.50 % efficiency in-app.
