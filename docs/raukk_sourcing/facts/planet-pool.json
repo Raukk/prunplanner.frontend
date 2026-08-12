@@ -1,0 +1,401 @@
+{
+	"sourceDoc": "planet-pool.md",
+	"recorded": "2026-08-12, transcribed from a planet table screenshot; duplicate rows collapsed",
+	"completeness": "partial list",
+	"baseRules": {
+		"basesPerPlanet": 3,
+		"permitsPerBase": 3,
+		"areaByPermitCount": {
+			"1": 500,
+			"2": 750,
+			"3": 1000
+		},
+		"derived": {
+			"maxAreaPerBase": 1000,
+			"maxAreaPerPlanet": 3000,
+			"permitsForFullyExpandedBase": 3,
+			"permitsForFullyExpandedPlanet": 9,
+			"marginalAreaPerPermit": [
+				500,
+				250,
+				250
+			]
+		},
+		"notRecorded": "empire-wide permit budget"
+	},
+	"planets": {
+		"columns": [
+			"name",
+			"system",
+			"cogc"
+		],
+		"rows": [
+			[
+				null,
+				"ZV-639b",
+				"ELEC"
+			],
+			[
+				null,
+				"SE-648c",
+				"RES"
+			],
+			[
+				null,
+				"QJ-382a",
+				"MFG"
+			],
+			[
+				null,
+				"LS-014b",
+				"ELEC"
+			],
+			[
+				null,
+				"KI-840c",
+				"CHEM"
+			],
+			[
+				"Deimos",
+				"ZV-759c",
+				"METAL"
+			],
+			[
+				"Vulcan",
+				"ZV-759b",
+				"METAL"
+			],
+			[
+				"Hephaestus",
+				"ZV-307c",
+				"MFG"
+			],
+			[
+				"Bober",
+				"ZV-307b",
+				"CHEM"
+			],
+			[
+				"Midas",
+				"ZV-194d",
+				"METAL"
+			],
+			[
+				"Nike",
+				"ZV-194a",
+				"CONST"
+			],
+			[
+				"Ganymede",
+				"YK-649c",
+				"AGRI"
+			],
+			[
+				"Norwick",
+				"YK-649b",
+				"FOOD"
+			],
+			[
+				"Hyalos",
+				"WU-070a",
+				"METAL"
+			],
+			[
+				"Ice Station Alpha",
+				"SE-110c",
+				"RES"
+			],
+			[
+				"Origo",
+				"QJ-650c",
+				"CHEM"
+			],
+			[
+				"Nascent",
+				"QJ-149c",
+				"RES"
+			],
+			[
+				"Crucible",
+				"QJ-149b",
+				"METAL"
+			],
+			[
+				"Hearth",
+				"QJ-149a",
+				"METAL"
+			],
+			[
+				"Griffonstone",
+				"LS-300c",
+				"CHEM"
+			],
+			[
+				"Etherwind",
+				"KW-688c",
+				"RES"
+			],
+			[
+				"Kiros",
+				"KI-401b",
+				"METAL"
+			],
+			[
+				"Nemesis",
+				"JS-299a",
+				"AGRI"
+			],
+			[
+				"Selene",
+				"IY-816c",
+				"METAL"
+			]
+		]
+	},
+	"cogcCounts": {
+		"METAL": 8,
+		"CHEM": 4,
+		"RES": 4,
+		"ELEC": 2,
+		"MFG": 2,
+		"AGRI": 2,
+		"CONST": 1,
+		"FOOD": 1
+	},
+	"notRecorded": [
+		"non-H2O planet resources, gravity, pressure, temperature, surface type",
+		"empire-wide permit budget",
+		"which planets already carry bases"
+	],
+	"planetData": {
+		"source": "POST /data/planets/multiple/, fetched 2026-08-12",
+		"farmEfficiencyFormula": "1 + fertility * (10/33); fertility === -1 means farms cannot run",
+		"columns": [
+			"system",
+			"name",
+			"fertility",
+			"farmEfficiency",
+			"h2oType",
+			"h2oDailyPerExtractor",
+			"h2oConcentration"
+		],
+		"rows": [
+			[
+				"IY-816c",
+				"Selene",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"JS-299a",
+				"Nemesis",
+				0.2272,
+				1.0688,
+				"LIQUID",
+				30.2,
+				0.4313
+			],
+			[
+				"KI-401b",
+				"Kiros",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"KI-840c",
+				"KI-840c",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"KW-688c",
+				"Etherwind",
+				-0.7,
+				0.7879,
+				"LIQUID",
+				42,
+				0.6
+			],
+			[
+				"LS-014b",
+				"LS-014b",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"LS-300c",
+				"Griffonstone",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"QJ-149a",
+				"Hearth",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"QJ-149b",
+				"Crucible",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"QJ-149c",
+				"Nascent",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"QJ-382a",
+				"QJ-382a",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"QJ-650c",
+				"Origo",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"SE-110c",
+				"Ice Station Alpha",
+				-1,
+				0,
+				"LIQUID",
+				45.5,
+				0.65
+			],
+			[
+				"SE-648c",
+				"SE-648c",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"WU-070a",
+				"Hyalos",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"YK-649b",
+				"Norwick",
+				-1,
+				0,
+				"MINERAL",
+				6.4,
+				0.0918
+			],
+			[
+				"YK-649c",
+				"Ganymede",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"ZV-194a",
+				"Nike",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"ZV-194d",
+				"Midas",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"ZV-307b",
+				"Bober",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"ZV-307c",
+				"Hephaestus",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"ZV-639b",
+				"ZV-639b",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"ZV-759b",
+				"Vulcan",
+				-1,
+				0,
+				null,
+				null,
+				null
+			],
+			[
+				"ZV-759c",
+				"Deimos",
+				-0.34,
+				0.897,
+				"LIQUID",
+				14,
+				0.2
+			]
+		]
+	}
+}

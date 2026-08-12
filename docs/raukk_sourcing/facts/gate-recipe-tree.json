@@ -1,0 +1,2605 @@
+{
+	"sourceDoc": "gate-recipe-tree.md",
+	"generated": "from the app IndexedDB gamedata_recipes/gamedata_materials snapshot, 404 recipes / 370 materials",
+	"policy": {
+		"rawDefinition": "a material no recipe produces; these come out of an extractor (EXT/COL/RIG)",
+		"byproducts": "credit against basket demand, capped at actual demand (decided, not yet implemented)",
+		"recipeSelection": "unresolved for the ambiguous materials below; awaiting per-material picks"
+	},
+	"roots": {
+		"build": {
+			"SEA": 5000,
+			"LIT": 680,
+			"PSH": 1000,
+			"RSH": 900,
+			"TSH": 900,
+			"TRU": 4000,
+			"ABH": 640,
+			"ADE": 440,
+			"ASE": 600,
+			"ATA": 440,
+			"HSE": 160,
+			"LBH": 700,
+			"LDE": 280,
+			"LSE": 700,
+			"LTA": 140,
+			"RBH": 320,
+			"RDE": 80,
+			"RSE": 320,
+			"RTA": 80,
+			"ADS": 8,
+			"COM": 8,
+			"CBL": 360,
+			"SP": 9200,
+			"GWS": 4,
+			"SST": 1,
+			"SPT": 2300,
+			"TRS": 110,
+			"IMM": 8
+		},
+		"upkeep10x": {
+			"ALR": 100,
+			"WRH": 40,
+			"SEA": 400,
+			"POW": 40,
+			"SP": 100,
+			"SPT": 400
+		}
+	},
+	"closure": {
+		"materialCount": 171,
+		"rawCount": 26,
+		"raw": [
+			"ALO",
+			"AMM",
+			"AUO",
+			"BER",
+			"BRM",
+			"BTS",
+			"CUO",
+			"FEO",
+			"GAL",
+			"H",
+			"H2O",
+			"HAL",
+			"HE",
+			"LES",
+			"LIO",
+			"LST",
+			"MGS",
+			"N",
+			"NE",
+			"REO",
+			"SCR",
+			"TAI",
+			"TCO",
+			"TIO",
+			"TS",
+			"ZIR"
+		],
+		"ambiguousCount": 16
+	},
+	"ambiguous": {
+		"C": [
+			"INC#4xGRN=>4xC",
+			"INC#4xHCP 2xGRN 2xMAI=>4xC",
+			"INC#4xHCP 2xGRN=>4xC",
+			"INC#4xHCP 2xMAI=>4xC",
+			"INC#4xHCP=>4xC",
+			"INC#4xMAI=>4xC"
+		],
+		"GRN": [
+			"FRM#1xH2O=>4xGRN",
+			"FRM#4xH2O=>4xGRN"
+		],
+		"MAI": [
+			"FRM#4xH2O=>12xMAI",
+			"HYF#20xH2O 2xNS=>12xMAI"
+		],
+		"HCP": [
+			"FRM#2xH2O=>4xHCP",
+			"HYF#14xH2O 1xNS=>8xHCP"
+		],
+		"SI": [
+			"SME#3xSIO 1xAL=>1xSI",
+			"SME#3xSIO 1xC 1xO 1xFLX=>1xSI",
+			"SME#3xSIO 1xC 1xO=>1xSI",
+			"SME#4xTS 1xO 1xAL=>1xSI"
+		],
+		"AL": [
+			"AML#2xBER=>1xBE 1xAL 1xSIO",
+			"SME#6xALO 1xC 1xO=>3xAL",
+			"SME#6xALO 1xO 1xC 1xFLX=>4xAL"
+		],
+		"SIO": [
+			"AML#2xBER=>1xBE 1xAL 1xSIO",
+			"AML#2xZIR 4xNA=>1xZR 2xSIO",
+			"AML#2xZIR=>1xZR 2xSIO"
+		],
+		"RG": [
+			"GF#10xGL 15xPG 1xSEN=>10xRG",
+			"GF#10xGL 15xPG=>10xRG"
+		],
+		"GL": [
+			"GF#2xSIO 1xNA 1xFLX=>12xGL",
+			"GF#2xSIO 1xNA 1xSEN=>10xGL",
+			"GF#2xSIO 1xNA=>10xGL"
+		],
+		"TI": [
+			"SME#4xTIO 1xC 1xO 1xNA=>2xTI",
+			"SME#4xTIO 1xC 1xO=>2xTI"
+		],
+		"TA": [
+			"AML#2xTAI 4xNA=>1xTA 1xFE",
+			"AML#2xTAI=>1xTA 1xFE"
+		],
+		"FE": [
+			"AML#2xTAI 4xNA=>1xTA 1xFE",
+			"AML#2xTAI=>1xTA 1xFE",
+			"SME#6xFEO 1xC 1xO 1xFLX=>4xFE",
+			"SME#6xFEO 1xC 1xO=>3xFE"
+		],
+		"BBH": [
+			"PP1#2xFE 1xLST=>1xBBH",
+			"PP2#2xAL 1xLST=>1xBBH"
+		],
+		"BSE": [
+			"PP1#1xFE 2xLST=>1xBSE",
+			"PP2#1xAL 2xLST=>1xBSE"
+		],
+		"RE": [
+			"SME#8xREO 1xC 1xO 1xFLX=>5xRE",
+			"SME#8xREO 1xC 1xO=>4xRE"
+		],
+		"ZR": [
+			"AML#2xZIR 4xNA=>1xZR 2xSIO",
+			"AML#2xZIR=>1xZR 2xSIO"
+		]
+	},
+	"byproductRecipes": {
+		"TNP#1xTCO=>1xTC 1xO": [
+			"1xO",
+			"1xTC"
+		],
+		"AML#2xBER=>1xBE 1xAL 1xSIO": [
+			"1xBE",
+			"1xSIO",
+			"1xAL"
+		],
+		"AML#2xZIR 4xNA=>1xZR 2xSIO": [
+			"1xZR",
+			"2xSIO"
+		],
+		"CHP#3xHAL 1xH2O=>2xNA 1xCL": [
+			"1xCL",
+			"2xNA"
+		],
+		"AML#2xZIR=>1xZR 2xSIO": [
+			"1xZR",
+			"2xSIO"
+		],
+		"AML#2xTAI 4xNA=>1xTA 1xFE": [
+			"1xFE",
+			"1xTA"
+		],
+		"AML#2xTAI=>1xTA 1xFE": [
+			"1xTA",
+			"1xFE"
+		]
+	},
+	"recipes": {
+		"AAR": [
+			{
+				"recipe_id": "ELP#1xKV 2xAU 4xPCB 6xSWF=>3xAAR",
+				"building": "ELP",
+				"hours": 16.08,
+				"inputs": [
+					"1xKV",
+					"2xAU",
+					"4xPCB",
+					"6xSWF"
+				],
+				"outputs": [
+					"3xAAR"
+				]
+			}
+		],
+		"ABH": [
+			{
+				"recipe_id": "PP4#2xRBH 125xNR=>2xABH",
+				"building": "PP4",
+				"hours": 16.8,
+				"inputs": [
+					"125xNR",
+					"2xRBH"
+				],
+				"outputs": [
+					"2xABH"
+				]
+			}
+		],
+		"ACS": [
+			{
+				"recipe_id": "APF#1xWAI 1xSAR 1xFC 10xTHF=>1xACS",
+				"building": "APF",
+				"hours": 14.4,
+				"inputs": [
+					"1xSAR",
+					"1xWAI",
+					"10xTHF",
+					"1xFC"
+				],
+				"outputs": [
+					"1xACS"
+				]
+			}
+		],
+		"ADE": [
+			{
+				"recipe_id": "PP4#2xLDE 2xKV=>2xADE",
+				"building": "PP4",
+				"hours": 14.4,
+				"inputs": [
+					"2xKV",
+					"2xLDE"
+				],
+				"outputs": [
+					"2xADE"
+				]
+			}
+		],
+		"ADS": [
+			{
+				"recipe_id": "APF#1xBWS 8xTRA 1xOS=>1xADS",
+				"building": "APF",
+				"hours": 24,
+				"inputs": [
+					"1xOS",
+					"1xBWS",
+					"8xTRA"
+				],
+				"outputs": [
+					"1xADS"
+				]
+			}
+		],
+		"AFR": [
+			{
+				"recipe_id": "FS#1xZR 1xAL=>1xAFR",
+				"building": "FS",
+				"hours": 14.4,
+				"inputs": [
+					"1xZR",
+					"1xAL"
+				],
+				"outputs": [
+					"1xAFR"
+				]
+			}
+		],
+		"AL": [
+			{
+				"recipe_id": "AML#2xBER=>1xBE 1xAL 1xSIO",
+				"building": "AML",
+				"hours": 2.4,
+				"inputs": [
+					"2xBER"
+				],
+				"outputs": [
+					"1xBE",
+					"1xSIO",
+					"1xAL"
+				]
+			},
+			{
+				"recipe_id": "SME#6xALO 1xC 1xO=>3xAL",
+				"building": "SME",
+				"hours": 12,
+				"inputs": [
+					"1xO",
+					"6xALO",
+					"1xC"
+				],
+				"outputs": [
+					"3xAL"
+				]
+			},
+			{
+				"recipe_id": "SME#6xALO 1xO 1xC 1xFLX=>4xAL",
+				"building": "SME",
+				"hours": 14.4,
+				"inputs": [
+					"1xC",
+					"1xO",
+					"1xFLX",
+					"6xALO"
+				],
+				"outputs": [
+					"4xAL"
+				]
+			}
+		],
+		"ALR": [
+			{
+				"recipe_id": "ASM#5xRE 1xAL=>6xALR",
+				"building": "ASM",
+				"hours": 12,
+				"inputs": [
+					"5xRE",
+					"1xAL"
+				],
+				"outputs": [
+					"6xALR"
+				]
+			}
+		],
+		"ASE": [
+			{
+				"recipe_id": "PP4#1xRSE 2xTI=>1xASE",
+				"building": "PP4",
+				"hours": 13.2,
+				"inputs": [
+					"2xTI",
+					"1xRSE"
+				],
+				"outputs": [
+					"1xASE"
+				]
+			}
+		],
+		"AST": [
+			{
+				"recipe_id": "ASM#1xAL 3xTI=>4xAST",
+				"building": "ASM",
+				"hours": 9.6,
+				"inputs": [
+					"3xTI",
+					"1xAL"
+				],
+				"outputs": [
+					"4xAST"
+				]
+			}
+		],
+		"ATA": [
+			{
+				"recipe_id": "PP4#1xRTA 1xNG=>1xATA",
+				"building": "PP4",
+				"hours": 13.2,
+				"inputs": [
+					"1xNG",
+					"1xRTA"
+				],
+				"outputs": [
+					"1xATA"
+				]
+			}
+		],
+		"AU": [
+			{
+				"recipe_id": "SME#1xC 3xAUO=>2xAU",
+				"building": "SME",
+				"hours": 10.8,
+				"inputs": [
+					"3xAUO",
+					"1xC"
+				],
+				"outputs": [
+					"2xAU"
+				]
+			}
+		],
+		"BAI": [
+			{
+				"recipe_id": "SD#=>1xBAI",
+				"building": "SD",
+				"hours": 48,
+				"inputs": [],
+				"outputs": [
+					"1xBAI"
+				]
+			}
+		],
+		"BBH": [
+			{
+				"recipe_id": "PP1#2xFE 1xLST=>1xBBH",
+				"building": "PP1",
+				"hours": 7.92,
+				"inputs": [
+					"2xFE",
+					"1xLST"
+				],
+				"outputs": [
+					"1xBBH"
+				]
+			},
+			{
+				"recipe_id": "PP2#2xAL 1xLST=>1xBBH",
+				"building": "PP2",
+				"hours": 6,
+				"inputs": [
+					"1xLST",
+					"2xAL"
+				],
+				"outputs": [
+					"1xBBH"
+				]
+			}
+		],
+		"BCO": [
+			{
+				"recipe_id": "FS#1xCU 300xPE=>10xBCO",
+				"building": "FS",
+				"hours": 7.2,
+				"inputs": [
+					"1xCU",
+					"300xPE"
+				],
+				"outputs": [
+					"10xBCO"
+				]
+			}
+		],
+		"BE": [
+			{
+				"recipe_id": "AML#2xBER=>1xBE 1xAL 1xSIO",
+				"building": "AML",
+				"hours": 2.4,
+				"inputs": [
+					"2xBER"
+				],
+				"outputs": [
+					"1xBE",
+					"1xSIO",
+					"1xAL"
+				]
+			}
+		],
+		"BFR": [
+			{
+				"recipe_id": "FS#1xSTL 1xAL=>1xBFR",
+				"building": "FS",
+				"hours": 12,
+				"inputs": [
+					"1xSTL",
+					"1xAL"
+				],
+				"outputs": [
+					"1xBFR"
+				]
+			}
+		],
+		"BGC": [
+			{
+				"recipe_id": "FS#1xBGO 300xPE=>10xBGC",
+				"building": "FS",
+				"hours": 7.2,
+				"inputs": [
+					"1xBGO",
+					"300xPE"
+				],
+				"outputs": [
+					"10xBGC"
+				]
+			}
+		],
+		"BGO": [
+			{
+				"recipe_id": "FS#4xAU 1xFE=>5xBGO",
+				"building": "FS",
+				"hours": 9.6,
+				"inputs": [
+					"4xAU",
+					"1xFE"
+				],
+				"outputs": [
+					"5xBGO"
+				]
+			}
+		],
+		"BMF": [
+			{
+				"recipe_id": "ELP#1xTPU 1xFAN 1xMB 1xDCL=>1xBMF",
+				"building": "ELP",
+				"hours": 16.8,
+				"inputs": [
+					"1xFAN",
+					"1xDCL",
+					"1xTPU",
+					"1xMB"
+				],
+				"outputs": [
+					"1xBMF"
+				]
+			}
+		],
+		"BRO": [
+			{
+				"recipe_id": "FS#1xAL 2xCU=>3xBRO",
+				"building": "FS",
+				"hours": 9.6,
+				"inputs": [
+					"1xAL",
+					"2xCU"
+				],
+				"outputs": [
+					"3xBRO"
+				]
+			}
+		],
+		"BSE": [
+			{
+				"recipe_id": "PP1#1xFE 2xLST=>1xBSE",
+				"building": "PP1",
+				"hours": 6,
+				"inputs": [
+					"1xFE",
+					"2xLST"
+				],
+				"outputs": [
+					"1xBSE"
+				]
+			},
+			{
+				"recipe_id": "PP2#1xAL 2xLST=>1xBSE",
+				"building": "PP2",
+				"hours": 5.28,
+				"inputs": [
+					"1xAL",
+					"2xLST"
+				],
+				"outputs": [
+					"1xBSE"
+				]
+			}
+		],
+		"BWS": [
+			{
+				"recipe_id": "ELP#1xMB 1xDCM 1xHD=>1xBWS",
+				"building": "ELP",
+				"hours": 12,
+				"inputs": [
+					"1xMB",
+					"1xHD",
+					"1xDCM"
+				],
+				"outputs": [
+					"1xBWS"
+				]
+			}
+		],
+		"C": [
+			{
+				"recipe_id": "INC#4xGRN=>4xC",
+				"building": "INC",
+				"hours": 24,
+				"inputs": [
+					"4xGRN"
+				],
+				"outputs": [
+					"4xC"
+				]
+			},
+			{
+				"recipe_id": "INC#4xHCP 2xGRN 2xMAI=>4xC",
+				"building": "INC",
+				"hours": 7.92,
+				"inputs": [
+					"2xMAI",
+					"4xHCP",
+					"2xGRN"
+				],
+				"outputs": [
+					"4xC"
+				]
+			},
+			{
+				"recipe_id": "INC#4xHCP 2xGRN=>4xC",
+				"building": "INC",
+				"hours": 15.84,
+				"inputs": [
+					"2xGRN",
+					"4xHCP"
+				],
+				"outputs": [
+					"4xC"
+				]
+			},
+			{
+				"recipe_id": "INC#4xHCP 2xMAI=>4xC",
+				"building": "INC",
+				"hours": 15.84,
+				"inputs": [
+					"4xHCP",
+					"2xMAI"
+				],
+				"outputs": [
+					"4xC"
+				]
+			},
+			{
+				"recipe_id": "INC#4xHCP=>4xC",
+				"building": "INC",
+				"hours": 24,
+				"inputs": [
+					"4xHCP"
+				],
+				"outputs": [
+					"4xC"
+				]
+			},
+			{
+				"recipe_id": "INC#4xMAI=>4xC",
+				"building": "INC",
+				"hours": 24,
+				"inputs": [
+					"4xMAI"
+				],
+				"outputs": [
+					"4xC"
+				]
+			}
+		],
+		"CAP": [
+			{
+				"recipe_id": "CLR#1xSI 1xFE=>15xCAP",
+				"building": "CLR",
+				"hours": 9.6,
+				"inputs": [
+					"1xFE",
+					"1xSI"
+				],
+				"outputs": [
+					"15xCAP"
+				]
+			}
+		],
+		"CBL": [
+			{
+				"recipe_id": "ECA#12xLI 12xBE 60xHCC 150xPG=>1xCBL",
+				"building": "ECA",
+				"hours": 12,
+				"inputs": [
+					"12xLI",
+					"60xHCC",
+					"150xPG",
+					"12xBE"
+				],
+				"outputs": [
+					"1xCBL"
+				]
+			}
+		],
+		"CBM": [
+			{
+				"recipe_id": "ECA#8xLI 8xBE 40xBGC 120xPG=>1xCBM",
+				"building": "ECA",
+				"hours": 9.6,
+				"inputs": [
+					"8xLI",
+					"40xBGC",
+					"120xPG",
+					"8xBE"
+				],
+				"outputs": [
+					"1xCBM"
+				]
+			}
+		],
+		"CF": [
+			{
+				"recipe_id": "SME#4xAL 1xSI 2xO=>1xCF",
+				"building": "SME",
+				"hours": 9.6,
+				"inputs": [
+					"2xO",
+					"1xSI",
+					"4xAL"
+				],
+				"outputs": [
+					"1xCF"
+				]
+			}
+		],
+		"CL": [
+			{
+				"recipe_id": "CHP#3xHAL 1xH2O=>2xNA 1xCL",
+				"building": "CHP",
+				"hours": 13.92,
+				"inputs": [
+					"3xHAL",
+					"1xH2O"
+				],
+				"outputs": [
+					"1xCL",
+					"2xNA"
+				]
+			}
+		],
+		"COM": [
+			{
+				"recipe_id": "APF#1xBWS 1xAAR 4xRAD=>1xCOM",
+				"building": "APF",
+				"hours": 18,
+				"inputs": [
+					"4xRAD",
+					"1xBWS",
+					"1xAAR"
+				],
+				"outputs": [
+					"1xCOM"
+				]
+			}
+		],
+		"CTF": [
+			{
+				"recipe_id": "ASM#2xWAL 1xSI 1xO=>1xCTF",
+				"building": "ASM",
+				"hours": 9.6,
+				"inputs": [
+					"1xO",
+					"2xWAL",
+					"1xSI"
+				],
+				"outputs": [
+					"1xCTF"
+				]
+			}
+		],
+		"CU": [
+			{
+				"recipe_id": "SME#5xCUO 10xO 1xSIO=>3xCU",
+				"building": "SME",
+				"hours": 12,
+				"inputs": [
+					"10xO",
+					"1xSIO",
+					"5xCUO"
+				],
+				"outputs": [
+					"3xCU"
+				]
+			}
+		],
+		"DA": [
+			{
+				"recipe_id": "SE#1xSAL 1xLD 1xROM 1xSA=>1xDA",
+				"building": "SE",
+				"hours": 36,
+				"inputs": [
+					"1xLD",
+					"1xSA",
+					"1xROM",
+					"1xSAL"
+				],
+				"outputs": [
+					"1xDA"
+				]
+			}
+		],
+		"DCL": [
+			{
+				"recipe_id": "PPF#2xPSL 2xMFK 40xPG=>2xDCL",
+				"building": "PPF",
+				"hours": 16.8,
+				"inputs": [
+					"2xMFK",
+					"40xPG",
+					"2xPSL"
+				],
+				"outputs": [
+					"2xDCL"
+				]
+			}
+		],
+		"DCM": [
+			{
+				"recipe_id": "PPF#2xPSM 8xSFK 20xPG=>2xDCM",
+				"building": "PPF",
+				"hours": 12,
+				"inputs": [
+					"8xSFK",
+					"2xPSM",
+					"20xPG"
+				],
+				"outputs": [
+					"2xDCM"
+				]
+			}
+		],
+		"DCS": [
+			{
+				"recipe_id": "PPF#4xSFK 10xPG 1xPSS=>2xDCS",
+				"building": "PPF",
+				"hours": 7.2,
+				"inputs": [
+					"10xPG",
+					"4xSFK",
+					"1xPSS"
+				],
+				"outputs": [
+					"2xDCS"
+				]
+			}
+		],
+		"DD": [
+			{
+				"recipe_id": "SE#1xNF 1xLD=>1xDD",
+				"building": "SE",
+				"hours": 48,
+				"inputs": [
+					"1xLD",
+					"1xNF"
+				],
+				"outputs": [
+					"1xDD"
+				]
+			}
+		],
+		"DV": [
+			{
+				"recipe_id": "SE#=>1xDV",
+				"building": "SE",
+				"hours": 36,
+				"inputs": [],
+				"outputs": [
+					"1xDV"
+				]
+			}
+		],
+		"EES": [
+			{
+				"recipe_id": "EEP#1xES 4xREA 4xFLX=>1xEES",
+				"building": "EEP",
+				"hours": 28.8,
+				"inputs": [
+					"4xFLX",
+					"4xREA",
+					"1xES"
+				],
+				"outputs": [
+					"1xEES"
+				]
+			}
+		],
+		"EPO": [
+			{
+				"recipe_id": "POL#1xC 1xH 1xCL 1xO=>50xEPO",
+				"building": "POL",
+				"hours": 24,
+				"inputs": [
+					"1xO",
+					"1xC",
+					"1xH",
+					"1xCL"
+				],
+				"outputs": [
+					"50xEPO"
+				]
+			}
+		],
+		"ES": [
+			{
+				"recipe_id": "EEP#1xLES=>10xES",
+				"building": "EEP",
+				"hours": 12,
+				"inputs": [
+					"1xLES"
+				],
+				"outputs": [
+					"10xES"
+				]
+			}
+		],
+		"ETC": [
+			{
+				"recipe_id": "TNP#1xTC 4xREA 4xFLX=>1xETC",
+				"building": "TNP",
+				"hours": 19.2,
+				"inputs": [
+					"4xFLX",
+					"4xREA",
+					"1xTC"
+				],
+				"outputs": [
+					"1xETC"
+				]
+			}
+		],
+		"FAN": [
+			{
+				"recipe_id": "MCA#1xAL 8xDCS 2xSFK=>8xFAN",
+				"building": "MCA",
+				"hours": 4.8,
+				"inputs": [
+					"2xSFK",
+					"1xAL",
+					"8xDCS"
+				],
+				"outputs": [
+					"8xFAN"
+				]
+			}
+		],
+		"FC": [
+			{
+				"recipe_id": "WEL#1xAL 1xBSE 1xHE=>1xFC",
+				"building": "WEL",
+				"hours": 9.6,
+				"inputs": [
+					"1xAL",
+					"1xHE",
+					"1xBSE"
+				],
+				"outputs": [
+					"1xFC"
+				]
+			}
+		],
+		"FE": [
+			{
+				"recipe_id": "AML#2xTAI 4xNA=>1xTA 1xFE",
+				"building": "AML",
+				"hours": 14.4,
+				"inputs": [
+					"4xNA",
+					"2xTAI"
+				],
+				"outputs": [
+					"1xFE",
+					"1xTA"
+				]
+			},
+			{
+				"recipe_id": "AML#2xTAI=>1xTA 1xFE",
+				"building": "AML",
+				"hours": 15.6,
+				"inputs": [
+					"2xTAI"
+				],
+				"outputs": [
+					"1xTA",
+					"1xFE"
+				]
+			},
+			{
+				"recipe_id": "SME#6xFEO 1xC 1xO 1xFLX=>4xFE",
+				"building": "SME",
+				"hours": 14.4,
+				"inputs": [
+					"6xFEO",
+					"1xO",
+					"1xC",
+					"1xFLX"
+				],
+				"outputs": [
+					"4xFE"
+				]
+			},
+			{
+				"recipe_id": "SME#6xFEO 1xC 1xO=>3xFE",
+				"building": "SME",
+				"hours": 12,
+				"inputs": [
+					"1xC",
+					"1xO",
+					"6xFEO"
+				],
+				"outputs": [
+					"3xFE"
+				]
+			}
+		],
+		"FFC": [
+			{
+				"recipe_id": "APF#5xW 1xWAI 1xDA 1xBMF=>1xFFC",
+				"building": "APF",
+				"hours": 60,
+				"inputs": [
+					"1xWAI",
+					"1xBMF",
+					"1xDA",
+					"5xW"
+				],
+				"outputs": [
+					"1xFFC"
+				]
+			}
+		],
+		"FIR": [
+			{
+				"recipe_id": "ECA#4xEES 8xAFR 10xCTF 1xACS 1xRCS 10xWAL=>1xFIR",
+				"building": "ECA",
+				"hours": 84,
+				"inputs": [
+					"10xCTF",
+					"8xAFR",
+					"4xEES",
+					"1xACS",
+					"1xRCS",
+					"10xWAL"
+				],
+				"outputs": [
+					"1xFIR"
+				]
+			}
+		],
+		"FLX": [
+			{
+				"recipe_id": "CHP#1xLST=>10xFLX",
+				"building": "CHP",
+				"hours": 12,
+				"inputs": [
+					"1xLST"
+				],
+				"outputs": [
+					"10xFLX"
+				]
+			}
+		],
+		"GL": [
+			{
+				"recipe_id": "GF#2xSIO 1xNA 1xFLX=>12xGL",
+				"building": "GF",
+				"hours": 17.28,
+				"inputs": [
+					"2xSIO",
+					"1xNA",
+					"1xFLX"
+				],
+				"outputs": [
+					"12xGL"
+				]
+			},
+			{
+				"recipe_id": "GF#2xSIO 1xNA 1xSEN=>10xGL",
+				"building": "GF",
+				"hours": 12,
+				"inputs": [
+					"1xNA",
+					"1xSEN",
+					"2xSIO"
+				],
+				"outputs": [
+					"10xGL"
+				]
+			},
+			{
+				"recipe_id": "GF#2xSIO 1xNA=>10xGL",
+				"building": "GF",
+				"hours": 14.4,
+				"inputs": [
+					"2xSIO",
+					"1xNA"
+				],
+				"outputs": [
+					"10xGL"
+				]
+			}
+		],
+		"GRN": [
+			{
+				"recipe_id": "FRM#1xH2O=>4xGRN",
+				"building": "FRM",
+				"hours": 12,
+				"inputs": [
+					"1xH2O"
+				],
+				"outputs": [
+					"4xGRN"
+				]
+			},
+			{
+				"recipe_id": "FRM#4xH2O=>4xGRN",
+				"building": "FRM",
+				"hours": 9,
+				"inputs": [
+					"4xH2O"
+				],
+				"outputs": [
+					"4xGRN"
+				]
+			}
+		],
+		"GWS": [
+			{
+				"recipe_id": "AAF#1000xSPT 4xTRS 1xSST 2xTOR 1xSNM 10xSAR=>1xGWS",
+				"building": "AAF",
+				"hours": 192,
+				"inputs": [
+					"4xTRS",
+					"1xSNM",
+					"10xSAR",
+					"2xTOR",
+					"1000xSPT",
+					"1xSST"
+				],
+				"outputs": [
+					"1xGWS"
+				]
+			}
+		],
+		"HCC": [
+			{
+				"recipe_id": "FS#1xRGO 300xPE=>10xHCC",
+				"building": "FS",
+				"hours": 7.2,
+				"inputs": [
+					"300xPE",
+					"1xRGO"
+				],
+				"outputs": [
+					"10xHCC"
+				]
+			}
+		],
+		"HCP": [
+			{
+				"recipe_id": "FRM#2xH2O=>4xHCP",
+				"building": "FRM",
+				"hours": 12,
+				"inputs": [
+					"2xH2O"
+				],
+				"outputs": [
+					"4xHCP"
+				]
+			},
+			{
+				"recipe_id": "HYF#14xH2O 1xNS=>8xHCP",
+				"building": "HYF",
+				"hours": 9.6,
+				"inputs": [
+					"14xH2O",
+					"1xNS"
+				],
+				"outputs": [
+					"8xHCP"
+				]
+			}
+		],
+		"HD": [
+			{
+				"recipe_id": "MCA#1xRG 5xDCS 5xLDI=>5xHD",
+				"building": "MCA",
+				"hours": 16.08,
+				"inputs": [
+					"5xDCS",
+					"1xRG",
+					"5xLDI"
+				],
+				"outputs": [
+					"5xHD"
+				]
+			}
+		],
+		"HSE": [
+			{
+				"recipe_id": "PP3#2xLSE 1xTCS=>2xHSE",
+				"building": "PP3",
+				"hours": 9.6,
+				"inputs": [
+					"2xLSE",
+					"1xTCS"
+				],
+				"outputs": [
+					"2xHSE"
+				]
+			}
+		],
+		"IMM": [
+			{
+				"recipe_id": "SL#1xDA 1xDD=>1xIMM",
+				"building": "SL",
+				"hours": 36,
+				"inputs": [
+					"1xDA",
+					"1xDD"
+				],
+				"outputs": [
+					"1xIMM"
+				]
+			}
+		],
+		"KV": [
+			{
+				"recipe_id": "WPL#75xPG 5xTCL=>1xKV",
+				"building": "WPL",
+				"hours": 19.2,
+				"inputs": [
+					"5xTCL",
+					"75xPG"
+				],
+				"outputs": [
+					"1xKV"
+				]
+			}
+		],
+		"LBH": [
+			{
+				"recipe_id": "PP2#35xPE 3xAL=>1xLBH",
+				"building": "PP2",
+				"hours": 6,
+				"inputs": [
+					"35xPE",
+					"3xAL"
+				],
+				"outputs": [
+					"1xLBH"
+				]
+			}
+		],
+		"LD": [
+			{
+				"recipe_id": "SD#=>1xLD",
+				"building": "SD",
+				"hours": 36,
+				"inputs": [],
+				"outputs": [
+					"1xLD"
+				]
+			}
+		],
+		"LDE": [
+			{
+				"recipe_id": "PP2#3xAL 1xNL=>1xLDE",
+				"building": "PP2",
+				"hours": 6,
+				"inputs": [
+					"3xAL",
+					"1xNL"
+				],
+				"outputs": [
+					"1xLDE"
+				]
+			}
+		],
+		"LDI": [
+			{
+				"recipe_id": "CLR#1xGAL 1xSI=>6xLDI",
+				"building": "CLR",
+				"hours": 8.4,
+				"inputs": [
+					"1xGAL",
+					"1xSI"
+				],
+				"outputs": [
+					"6xLDI"
+				]
+			}
+		],
+		"LI": [
+			{
+				"recipe_id": "SME#10xLIO 4xHAL=>4xLI",
+				"building": "SME",
+				"hours": 15.84,
+				"inputs": [
+					"4xHAL",
+					"10xLIO"
+				],
+				"outputs": [
+					"4xLI"
+				]
+			}
+		],
+		"LIT": [
+			{
+				"recipe_id": "GF#16xNE 8xRG=>1xLIT",
+				"building": "GF",
+				"hours": 19.2,
+				"inputs": [
+					"8xRG",
+					"16xNE"
+				],
+				"outputs": [
+					"1xLIT"
+				]
+			}
+		],
+		"LSE": [
+			{
+				"recipe_id": "PP2#120xPG 3xAL=>1xLSE",
+				"building": "PP2",
+				"hours": 6,
+				"inputs": [
+					"120xPG",
+					"3xAL"
+				],
+				"outputs": [
+					"1xLSE"
+				]
+			}
+		],
+		"LTA": [
+			{
+				"recipe_id": "PP2#1xAL 5xGL=>1xLTA",
+				"building": "PP2",
+				"hours": 6,
+				"inputs": [
+					"1xAL",
+					"5xGL"
+				],
+				"outputs": [
+					"1xLTA"
+				]
+			}
+		],
+		"MAI": [
+			{
+				"recipe_id": "FRM#4xH2O=>12xMAI",
+				"building": "FRM",
+				"hours": 33.6,
+				"inputs": [
+					"4xH2O"
+				],
+				"outputs": [
+					"12xMAI"
+				]
+			},
+			{
+				"recipe_id": "HYF#20xH2O 2xNS=>12xMAI",
+				"building": "HYF",
+				"hours": 19.2,
+				"inputs": [
+					"2xNS",
+					"20xH2O"
+				],
+				"outputs": [
+					"12xMAI"
+				]
+			}
+		],
+		"MB": [
+			{
+				"recipe_id": "MCA#4xRAM 4xMPC 4xPSM 4xSFK=>4xMB",
+				"building": "MCA",
+				"hours": 7.2,
+				"inputs": [
+					"4xRAM",
+					"4xMPC",
+					"4xPSM",
+					"4xSFK"
+				],
+				"outputs": [
+					"4xMB"
+				]
+			}
+		],
+		"MFK": [
+			{
+				"recipe_id": "FS#1xSTL=>8xMFK",
+				"building": "FS",
+				"hours": 2.88,
+				"inputs": [
+					"1xSTL"
+				],
+				"outputs": [
+					"8xMFK"
+				]
+			}
+		],
+		"MG": [
+			{
+				"recipe_id": "BMP#1xMGS=>6xMG",
+				"building": "BMP",
+				"hours": 2.88,
+				"inputs": [
+					"1xMGS"
+				],
+				"outputs": [
+					"6xMG"
+				]
+			}
+		],
+		"MLI": [
+			{
+				"recipe_id": "SD#=>1xMLI",
+				"building": "SD",
+				"hours": 72,
+				"inputs": [],
+				"outputs": [
+					"1xMLI"
+				]
+			}
+		],
+		"MPC": [
+			{
+				"recipe_id": "SCA#10xSWF 10xTRN 10xBCO=>10xMPC",
+				"building": "SCA",
+				"hours": 10.08,
+				"inputs": [
+					"10xSWF",
+					"10xBCO",
+					"10xTRN"
+				],
+				"outputs": [
+					"10xMPC"
+				]
+			}
+		],
+		"MTC": [
+			{
+				"recipe_id": "CLR#2xNCS=>2xMTC",
+				"building": "CLR",
+				"hours": 9.6,
+				"inputs": [
+					"2xNCS"
+				],
+				"outputs": [
+					"2xMTC"
+				]
+			}
+		],
+		"MWF": [
+			{
+				"recipe_id": "CLR#2xSI 2xAL=>20xMWF",
+				"building": "CLR",
+				"hours": 12,
+				"inputs": [
+					"2xAL",
+					"2xSI"
+				],
+				"outputs": [
+					"20xMWF"
+				]
+			}
+		],
+		"NA": [
+			{
+				"recipe_id": "CHP#3xHAL 1xH2O=>2xNA 1xCL",
+				"building": "CHP",
+				"hours": 13.92,
+				"inputs": [
+					"3xHAL",
+					"1xH2O"
+				],
+				"outputs": [
+					"1xCL",
+					"2xNA"
+				]
+			}
+		],
+		"NCS": [
+			{
+				"recipe_id": "CLR#1xC=>100xNCS",
+				"building": "CLR",
+				"hours": 14.4,
+				"inputs": [
+					"1xC"
+				],
+				"outputs": [
+					"100xNCS"
+				]
+			}
+		],
+		"NF": [
+			{
+				"recipe_id": "SD#=>1xNF",
+				"building": "SD",
+				"hours": 36,
+				"inputs": [],
+				"outputs": [
+					"1xNF"
+				]
+			}
+		],
+		"NFI": [
+			{
+				"recipe_id": "CLR#10xC 2xSI=>1200xNFI",
+				"building": "CLR",
+				"hours": 19.2,
+				"inputs": [
+					"10xC",
+					"2xSI"
+				],
+				"outputs": [
+					"1200xNFI"
+				]
+			}
+		],
+		"NG": [
+			{
+				"recipe_id": "GF#10xGL 10xNCS=>10xNG",
+				"building": "GF",
+				"hours": 28.8,
+				"inputs": [
+					"10xNCS",
+					"10xGL"
+				],
+				"outputs": [
+					"10xNG"
+				]
+			}
+		],
+		"NL": [
+			{
+				"recipe_id": "WPL#50xPG=>1xNL",
+				"building": "WPL",
+				"hours": 12,
+				"inputs": [
+					"50xPG"
+				],
+				"outputs": [
+					"1xNL"
+				]
+			}
+		],
+		"NN": [
+			{
+				"recipe_id": "SE#1xBAI 1xMLI=>1xNN",
+				"building": "SE",
+				"hours": 36,
+				"inputs": [
+					"1xMLI",
+					"1xBAI"
+				],
+				"outputs": [
+					"1xNN"
+				]
+			}
+		],
+		"NR": [
+			{
+				"recipe_id": "LAB#50xEPO 75xNCS=>50xNR",
+				"building": "LAB",
+				"hours": 19.2,
+				"inputs": [
+					"75xNCS",
+					"50xEPO"
+				],
+				"outputs": [
+					"50xNR"
+				]
+			}
+		],
+		"NS": [
+			{
+				"recipe_id": "CHP#2xH2O 2xN 1xLST=>4xNS",
+				"building": "CHP",
+				"hours": 4.8,
+				"inputs": [
+					"1xLST",
+					"2xN",
+					"2xH2O"
+				],
+				"outputs": [
+					"4xNS"
+				]
+			}
+		],
+		"O": [
+			{
+				"recipe_id": "TNP#1xTCO=>1xTC 1xO",
+				"building": "TNP",
+				"hours": 16.32,
+				"inputs": [
+					"1xTCO"
+				],
+				"outputs": [
+					"1xO",
+					"1xTC"
+				]
+			}
+		],
+		"OS": [
+			{
+				"recipe_id": "SE#1xLD 1xWM 1xROM=>1xOS",
+				"building": "SE",
+				"hours": 48,
+				"inputs": [
+					"1xLD",
+					"1xROM",
+					"1xWM"
+				],
+				"outputs": [
+					"1xOS"
+				]
+			}
+		],
+		"PCB": [
+			{
+				"recipe_id": "SCA#10xSWF 5xBCO 60xPE 1xBGO=>5xPCB",
+				"building": "SCA",
+				"hours": 6.72,
+				"inputs": [
+					"10xSWF",
+					"5xBCO",
+					"1xBGO",
+					"60xPE"
+				],
+				"outputs": [
+					"5xPCB"
+				]
+			}
+		],
+		"PE": [
+			{
+				"recipe_id": "BMP#1xC 2xH=>200xPE",
+				"building": "BMP",
+				"hours": 6.72,
+				"inputs": [
+					"1xC",
+					"2xH"
+				],
+				"outputs": [
+					"200xPE"
+				]
+			}
+		],
+		"PFG": [
+			{
+				"recipe_id": "AAF#2xFIR 2xRAG 2xCBM 1xFFC=>1xPFG",
+				"building": "AAF",
+				"hours": 144,
+				"inputs": [
+					"1xFFC",
+					"2xRAG",
+					"2xFIR",
+					"2xCBM"
+				],
+				"outputs": [
+					"1xPFG"
+				]
+			}
+		],
+		"PG": [
+			{
+				"recipe_id": "POL#1xH 1xC 1xMG=>50xPG",
+				"building": "POL",
+				"hours": 8.4,
+				"inputs": [
+					"1xC",
+					"1xH",
+					"1xMG"
+				],
+				"outputs": [
+					"50xPG"
+				]
+			}
+		],
+		"POW": [
+			{
+				"recipe_id": "ECA#1xNCS 4xLI=>1xPOW",
+				"building": "ECA",
+				"hours": 4.8,
+				"inputs": [
+					"1xNCS",
+					"4xLI"
+				],
+				"outputs": [
+					"1xPOW"
+				]
+			}
+		],
+		"PSH": [
+			{
+				"recipe_id": "PP3#1xTI 250xNFI=>1xPSH",
+				"building": "PP3",
+				"hours": 9.6,
+				"inputs": [
+					"250xNFI",
+					"1xTI"
+				],
+				"outputs": [
+					"1xPSH"
+				]
+			}
+		],
+		"PSL": [
+			{
+				"recipe_id": "PPF#40xPG=>1xPSL",
+				"building": "PPF",
+				"hours": 14.4,
+				"inputs": [
+					"40xPG"
+				],
+				"outputs": [
+					"1xPSL"
+				]
+			}
+		],
+		"PSM": [
+			{
+				"recipe_id": "PPF#20xPG=>1xPSM",
+				"building": "PPF",
+				"hours": 9.6,
+				"inputs": [
+					"20xPG"
+				],
+				"outputs": [
+					"1xPSM"
+				]
+			}
+		],
+		"PSS": [
+			{
+				"recipe_id": "PPF#10xPG=>1xPSS",
+				"building": "PPF",
+				"hours": 4.8,
+				"inputs": [
+					"10xPG"
+				],
+				"outputs": [
+					"1xPSS"
+				]
+			}
+		],
+		"RAD": [
+			{
+				"recipe_id": "EDM#1xDCS 1xSFK 1xPOW=>1xRAD",
+				"building": "EDM",
+				"hours": 4.8,
+				"inputs": [
+					"1xPOW",
+					"1xSFK",
+					"1xDCS"
+				],
+				"outputs": [
+					"1xRAD"
+				]
+			}
+		],
+		"RAG": [
+			{
+				"recipe_id": "ECA#4xETC 4xBFR 6xCF 1xACS 1xRCS 8xAST=>1xRAG",
+				"building": "ECA",
+				"hours": 60,
+				"inputs": [
+					"4xBFR",
+					"4xETC",
+					"1xRCS",
+					"6xCF",
+					"8xAST",
+					"1xACS"
+				],
+				"outputs": [
+					"1xRAG"
+				]
+			}
+		],
+		"RAM": [
+			{
+				"recipe_id": "SCA#6xPSS 6xCAP 6xBCO=>6xRAM",
+				"building": "SCA",
+				"hours": 10.08,
+				"inputs": [
+					"6xBCO",
+					"6xCAP",
+					"6xPSS"
+				],
+				"outputs": [
+					"6xRAM"
+				]
+			}
+		],
+		"RBH": [
+			{
+				"recipe_id": "PP3#1xBBH 1xSTL 50xEPO=>1xRBH",
+				"building": "PP3",
+				"hours": 9.6,
+				"inputs": [
+					"50xEPO",
+					"1xSTL",
+					"1xBBH"
+				],
+				"outputs": [
+					"1xRBH"
+				]
+			}
+		],
+		"RCS": [
+			{
+				"recipe_id": "APF#1xBWS 1xOS 1xSAR 1xDA=>1xRCS",
+				"building": "APF",
+				"hours": 48,
+				"inputs": [
+					"1xBWS",
+					"1xOS",
+					"1xDA",
+					"1xSAR"
+				],
+				"outputs": [
+					"1xRCS"
+				]
+			}
+		],
+		"RDE": [
+			{
+				"recipe_id": "PP3#1xLDE 100xEPO 1xKV=>2xRDE",
+				"building": "PP3",
+				"hours": 16.8,
+				"inputs": [
+					"100xEPO",
+					"1xLDE",
+					"1xKV"
+				],
+				"outputs": [
+					"2xRDE"
+				]
+			}
+		],
+		"RE": [
+			{
+				"recipe_id": "SME#8xREO 1xC 1xO 1xFLX=>5xRE",
+				"building": "SME",
+				"hours": 19.2,
+				"inputs": [
+					"1xC",
+					"1xO",
+					"8xREO",
+					"1xFLX"
+				],
+				"outputs": [
+					"5xRE"
+				]
+			},
+			{
+				"recipe_id": "SME#8xREO 1xC 1xO=>4xRE",
+				"building": "SME",
+				"hours": 19.2,
+				"inputs": [
+					"8xREO",
+					"1xC",
+					"1xO"
+				],
+				"outputs": [
+					"4xRE"
+				]
+			}
+		],
+		"REA": [
+			{
+				"recipe_id": "CHP#25xBRM=>10xREA",
+				"building": "CHP",
+				"hours": 16.8,
+				"inputs": [
+					"25xBRM"
+				],
+				"outputs": [
+					"10xREA"
+				]
+			}
+		],
+		"RG": [
+			{
+				"recipe_id": "GF#10xGL 15xPG 1xSEN=>10xRG",
+				"building": "GF",
+				"hours": 27.6,
+				"inputs": [
+					"10xGL",
+					"15xPG",
+					"1xSEN"
+				],
+				"outputs": [
+					"10xRG"
+				]
+			},
+			{
+				"recipe_id": "GF#10xGL 15xPG=>10xRG",
+				"building": "GF",
+				"hours": 31.2,
+				"inputs": [
+					"10xGL",
+					"15xPG"
+				],
+				"outputs": [
+					"10xRG"
+				]
+			}
+		],
+		"RGO": [
+			{
+				"recipe_id": "FS#4xAU 1xCU=>5xRGO",
+				"building": "FS",
+				"hours": 9.6,
+				"inputs": [
+					"4xAU",
+					"1xCU"
+				],
+				"outputs": [
+					"5xRGO"
+				]
+			}
+		],
+		"ROM": [
+			{
+				"recipe_id": "SCA#10xPSS 10xBGC 10xSI=>10xROM",
+				"building": "SCA",
+				"hours": 7.2,
+				"inputs": [
+					"10xPSS",
+					"10xBGC",
+					"10xSI"
+				],
+				"outputs": [
+					"10xROM"
+				]
+			}
+		],
+		"RSE": [
+			{
+				"recipe_id": "PP3#2xBSE 1xSTL 225xEPO=>2xRSE",
+				"building": "PP3",
+				"hours": 16.8,
+				"inputs": [
+					"2xBSE",
+					"225xEPO",
+					"1xSTL"
+				],
+				"outputs": [
+					"2xRSE"
+				]
+			}
+		],
+		"RSH": [
+			{
+				"recipe_id": "PP4#1xTA 1xSTL 1xLST=>1xRSH",
+				"building": "PP4",
+				"hours": 21.6,
+				"inputs": [
+					"1xTA",
+					"1xSTL",
+					"1xLST"
+				],
+				"outputs": [
+					"1xRSH"
+				]
+			}
+		],
+		"RTA": [
+			{
+				"recipe_id": "PP3#1xLTA 6xRG=>1xRTA",
+				"building": "PP3",
+				"hours": 9.6,
+				"inputs": [
+					"1xLTA",
+					"6xRG"
+				],
+				"outputs": [
+					"1xRTA"
+				]
+			}
+		],
+		"S": [
+			{
+				"recipe_id": "SME#1xSCR 1xO=>6xS",
+				"building": "SME",
+				"hours": 7.2,
+				"inputs": [
+					"1xSCR",
+					"1xO"
+				],
+				"outputs": [
+					"6xS"
+				]
+			}
+		],
+		"SA": [
+			{
+				"recipe_id": "SD#=>1xSA",
+				"building": "SD",
+				"hours": 24,
+				"inputs": [],
+				"outputs": [
+					"1xSA"
+				]
+			}
+		],
+		"SAL": [
+			{
+				"recipe_id": "SD#=>1xSAL",
+				"building": "SD",
+				"hours": 24,
+				"inputs": [],
+				"outputs": [
+					"1xSAL"
+				]
+			}
+		],
+		"SAR": [
+			{
+				"recipe_id": "ELP#16xSEN 4xPCB=>1xSAR",
+				"building": "ELP",
+				"hours": 16.08,
+				"inputs": [
+					"4xPCB",
+					"16xSEN"
+				],
+				"outputs": [
+					"1xSAR"
+				]
+			}
+		],
+		"SDM": [
+			{
+				"recipe_id": "APF#10xTRS 1xSTS=>1xSDM",
+				"building": "APF",
+				"hours": 24,
+				"inputs": [
+					"1xSTS",
+					"10xTRS"
+				],
+				"outputs": [
+					"1xSDM"
+				]
+			}
+		],
+		"SEA": [
+			{
+				"recipe_id": "BMP#1xS 1xSI 30xPG=>30xSEA",
+				"building": "BMP",
+				"hours": 7.2,
+				"inputs": [
+					"30xPG",
+					"1xS",
+					"1xSI"
+				],
+				"outputs": [
+					"30xSEA"
+				]
+			}
+		],
+		"SEN": [
+			{
+				"recipe_id": "SCA#20xTRN 10xH 10xN=>20xSEN",
+				"building": "SCA",
+				"hours": 6.96,
+				"inputs": [
+					"10xN",
+					"20xTRN",
+					"10xH"
+				],
+				"outputs": [
+					"20xSEN"
+				]
+			}
+		],
+		"SFK": [
+			{
+				"recipe_id": "FS#1xFE=>16xSFK",
+				"building": "FS",
+				"hours": 2.88,
+				"inputs": [
+					"1xFE"
+				],
+				"outputs": [
+					"16xSFK"
+				]
+			}
+		],
+		"SI": [
+			{
+				"recipe_id": "SME#3xSIO 1xAL=>1xSI",
+				"building": "SME",
+				"hours": 3.6,
+				"inputs": [
+					"1xAL",
+					"3xSIO"
+				],
+				"outputs": [
+					"1xSI"
+				]
+			},
+			{
+				"recipe_id": "SME#3xSIO 1xC 1xO 1xFLX=>1xSI",
+				"building": "SME",
+				"hours": 2.88,
+				"inputs": [
+					"1xO",
+					"1xFLX",
+					"1xC",
+					"3xSIO"
+				],
+				"outputs": [
+					"1xSI"
+				]
+			},
+			{
+				"recipe_id": "SME#3xSIO 1xC 1xO=>1xSI",
+				"building": "SME",
+				"hours": 4.8,
+				"inputs": [
+					"3xSIO",
+					"1xC",
+					"1xO"
+				],
+				"outputs": [
+					"1xSI"
+				]
+			},
+			{
+				"recipe_id": "SME#4xTS 1xO 1xAL=>1xSI",
+				"building": "SME",
+				"hours": 2.88,
+				"inputs": [
+					"4xTS",
+					"1xO",
+					"1xAL"
+				],
+				"outputs": [
+					"1xSI"
+				]
+			}
+		],
+		"SIO": [
+			{
+				"recipe_id": "AML#2xBER=>1xBE 1xAL 1xSIO",
+				"building": "AML",
+				"hours": 2.4,
+				"inputs": [
+					"2xBER"
+				],
+				"outputs": [
+					"1xBE",
+					"1xSIO",
+					"1xAL"
+				]
+			},
+			{
+				"recipe_id": "AML#2xZIR 4xNA=>1xZR 2xSIO",
+				"building": "AML",
+				"hours": 12,
+				"inputs": [
+					"2xZIR",
+					"4xNA"
+				],
+				"outputs": [
+					"1xZR",
+					"2xSIO"
+				]
+			},
+			{
+				"recipe_id": "AML#2xZIR=>1xZR 2xSIO",
+				"building": "AML",
+				"hours": 14.4,
+				"inputs": [
+					"2xZIR"
+				],
+				"outputs": [
+					"1xZR",
+					"2xSIO"
+				]
+			}
+		],
+		"SNM": [
+			{
+				"recipe_id": "SL#1xWAI 1xDV 1xIMM=>2xSNM",
+				"building": "SL",
+				"hours": 48,
+				"inputs": [
+					"1xWAI",
+					"1xIMM",
+					"1xDV"
+				],
+				"outputs": [
+					"2xSNM"
+				]
+			}
+		],
+		"SOL": [
+			{
+				"recipe_id": "ECA#2xCU 2xSI 4xBCO 1xBRO=>12xSOL",
+				"building": "ECA",
+				"hours": 4.8,
+				"inputs": [
+					"2xSI",
+					"2xCU",
+					"1xBRO",
+					"4xBCO"
+				],
+				"outputs": [
+					"12xSOL"
+				]
+			}
+		],
+		"SP": [
+			{
+				"recipe_id": "ECA#8xGL 24xSOL=>12xSP",
+				"building": "ECA",
+				"hours": 7.2,
+				"inputs": [
+					"8xGL",
+					"24xSOL"
+				],
+				"outputs": [
+					"12xSP"
+				]
+			}
+		],
+		"SPT": [
+			{
+				"recipe_id": "CLF#1xKV 10xMTC=>100xSPT",
+				"building": "CLF",
+				"hours": 12,
+				"inputs": [
+					"10xMTC",
+					"1xKV"
+				],
+				"outputs": [
+					"100xSPT"
+				]
+			}
+		],
+		"SST": [
+			{
+				"recipe_id": "AAF#1xPFG 1xSDM 200xWRH=>1xSST",
+				"building": "AAF",
+				"hours": 48,
+				"inputs": [
+					"1xSDM",
+					"200xWRH",
+					"1xPFG"
+				],
+				"outputs": [
+					"1xSST"
+				]
+			}
+		],
+		"STL": [
+			{
+				"recipe_id": "SME#2xFE 8xO=>2xSTL",
+				"building": "SME",
+				"hours": 8.4,
+				"inputs": [
+					"2xFE",
+					"8xO"
+				],
+				"outputs": [
+					"2xSTL"
+				]
+			}
+		],
+		"STS": [
+			{
+				"recipe_id": "AAF#1xWAI 1xTPU=>1xSTS",
+				"building": "AAF",
+				"hours": 48,
+				"inputs": [
+					"1xWAI",
+					"1xTPU"
+				],
+				"outputs": [
+					"1xSTS"
+				]
+			}
+		],
+		"SWF": [
+			{
+				"recipe_id": "CLR#1xSI 1xAL=>30xSWF",
+				"building": "CLR",
+				"hours": 12,
+				"inputs": [
+					"1xAL",
+					"1xSI"
+				],
+				"outputs": [
+					"30xSWF"
+				]
+			}
+		],
+		"TA": [
+			{
+				"recipe_id": "AML#2xTAI 4xNA=>1xTA 1xFE",
+				"building": "AML",
+				"hours": 14.4,
+				"inputs": [
+					"4xNA",
+					"2xTAI"
+				],
+				"outputs": [
+					"1xFE",
+					"1xTA"
+				]
+			},
+			{
+				"recipe_id": "AML#2xTAI=>1xTA 1xFE",
+				"building": "AML",
+				"hours": 15.6,
+				"inputs": [
+					"2xTAI"
+				],
+				"outputs": [
+					"1xTA",
+					"1xFE"
+				]
+			}
+		],
+		"TC": [
+			{
+				"recipe_id": "TNP#1xTCO=>1xTC 1xO",
+				"building": "TNP",
+				"hours": 16.32,
+				"inputs": [
+					"1xTCO"
+				],
+				"outputs": [
+					"1xO",
+					"1xTC"
+				]
+			}
+		],
+		"TCL": [
+			{
+				"recipe_id": "LAB#1xCL 1xO 1xH=>3xTCL",
+				"building": "LAB",
+				"hours": 14.4,
+				"inputs": [
+					"1xH",
+					"1xCL",
+					"1xO"
+				],
+				"outputs": [
+					"3xTCL"
+				]
+			}
+		],
+		"TCS": [
+			{
+				"recipe_id": "TNP#1xTC=>3xTCS",
+				"building": "TNP",
+				"hours": 12,
+				"inputs": [
+					"1xTC"
+				],
+				"outputs": [
+					"3xTCS"
+				]
+			}
+		],
+		"THF": [
+			{
+				"recipe_id": "LAB#4xAMM 4xH2O 4xNA=>20xTHF",
+				"building": "LAB",
+				"hours": 24,
+				"inputs": [
+					"4xH2O",
+					"4xAMM",
+					"4xNA"
+				],
+				"outputs": [
+					"20xTHF"
+				]
+			}
+		],
+		"THP": [
+			{
+				"recipe_id": "WEL#2xBE 2xCF 1xHE=>4xTHP",
+				"building": "WEL",
+				"hours": 4.32,
+				"inputs": [
+					"2xBE",
+					"2xCF",
+					"1xHE"
+				],
+				"outputs": [
+					"4xTHP"
+				]
+			}
+		],
+		"TI": [
+			{
+				"recipe_id": "SME#4xTIO 1xC 1xO 1xNA=>2xTI",
+				"building": "SME",
+				"hours": 12,
+				"inputs": [
+					"1xC",
+					"1xNA",
+					"4xTIO",
+					"1xO"
+				],
+				"outputs": [
+					"2xTI"
+				]
+			},
+			{
+				"recipe_id": "SME#4xTIO 1xC 1xO=>2xTI",
+				"building": "SME",
+				"hours": 18,
+				"inputs": [
+					"1xC",
+					"4xTIO",
+					"1xO"
+				],
+				"outputs": [
+					"2xTI"
+				]
+			}
+		],
+		"TOR": [
+			{
+				"recipe_id": "WEL#200xALR 40xHE=>1xTOR",
+				"building": "WEL",
+				"hours": 96,
+				"inputs": [
+					"200xALR",
+					"40xHE"
+				],
+				"outputs": [
+					"1xTOR"
+				]
+			}
+		],
+		"TPU": [
+			{
+				"recipe_id": "SCA#4xMWF 4xTRN 4xCAP 4xHCC=>4xTPU",
+				"building": "SCA",
+				"hours": 15.6,
+				"inputs": [
+					"4xCAP",
+					"4xTRN",
+					"4xMWF",
+					"4xHCC"
+				],
+				"outputs": [
+					"4xTPU"
+				]
+			}
+		],
+		"TRA": [
+			{
+				"recipe_id": "CLR#1xCAP 1xSWF 1xTRN=>1xTRA",
+				"building": "CLR",
+				"hours": 4.8,
+				"inputs": [
+					"1xSWF",
+					"1xCAP",
+					"1xTRN"
+				],
+				"outputs": [
+					"1xTRA"
+				]
+			}
+		],
+		"TRN": [
+			{
+				"recipe_id": "CLR#1xAL 1xSI=>10xTRN",
+				"building": "CLR",
+				"hours": 6,
+				"inputs": [
+					"1xAL",
+					"1xSI"
+				],
+				"outputs": [
+					"10xTRN"
+				]
+			}
+		],
+		"TRS": [
+			{
+				"recipe_id": "PP4#4xPSH 8xHSE 100xMFK=>1xTRS",
+				"building": "PP4",
+				"hours": 48,
+				"inputs": [
+					"4xPSH",
+					"8xHSE",
+					"100xMFK"
+				],
+				"outputs": [
+					"1xTRS"
+				]
+			}
+		],
+		"TRU": [
+			{
+				"recipe_id": "WEL#2xAL 1xHE=>6xTRU",
+				"building": "WEL",
+				"hours": 4.8,
+				"inputs": [
+					"2xAL",
+					"1xHE"
+				],
+				"outputs": [
+					"6xTRU"
+				]
+			}
+		],
+		"TSH": [
+			{
+				"recipe_id": "PP4#150xPE 2xLBH 2xTHP=>1xTSH",
+				"building": "PP4",
+				"hours": 14.4,
+				"inputs": [
+					"2xTHP",
+					"2xLBH",
+					"150xPE"
+				],
+				"outputs": [
+					"1xTSH"
+				]
+			}
+		],
+		"W": [
+			{
+				"recipe_id": "AML#5xBTS=>1xW",
+				"building": "AML",
+				"hours": 14.4,
+				"inputs": [
+					"5xBTS"
+				],
+				"outputs": [
+					"1xW"
+				]
+			}
+		],
+		"WAI": [
+			{
+				"recipe_id": "SL#1xNN 1xROM=>1xWAI",
+				"building": "SL",
+				"hours": 48,
+				"inputs": [
+					"1xNN",
+					"1xROM"
+				],
+				"outputs": [
+					"1xWAI"
+				]
+			}
+		],
+		"WAL": [
+			{
+				"recipe_id": "ASM#1xW 3xAL=>4xWAL",
+				"building": "ASM",
+				"hours": 9.6,
+				"inputs": [
+					"3xAL",
+					"1xW"
+				],
+				"outputs": [
+					"4xWAL"
+				]
+			}
+		],
+		"WM": [
+			{
+				"recipe_id": "SD#=>1xWM",
+				"building": "SD",
+				"hours": 48,
+				"inputs": [],
+				"outputs": [
+					"1xWM"
+				]
+			}
+		],
+		"WRH": [
+			{
+				"recipe_id": "ASM#4xRE 2xW=>6xWRH",
+				"building": "ASM",
+				"hours": 14.4,
+				"inputs": [
+					"2xW",
+					"4xRE"
+				],
+				"outputs": [
+					"6xWRH"
+				]
+			}
+		],
+		"ZR": [
+			{
+				"recipe_id": "AML#2xZIR 4xNA=>1xZR 2xSIO",
+				"building": "AML",
+				"hours": 12,
+				"inputs": [
+					"2xZIR",
+					"4xNA"
+				],
+				"outputs": [
+					"1xZR",
+					"2xSIO"
+				]
+			},
+			{
+				"recipe_id": "AML#2xZIR=>1xZR 2xSIO",
+				"building": "AML",
+				"hours": 14.4,
+				"inputs": [
+					"2xZIR"
+				],
+				"outputs": [
+					"1xZR",
+					"2xSIO"
+				]
+			}
+		]
+	}
+}
