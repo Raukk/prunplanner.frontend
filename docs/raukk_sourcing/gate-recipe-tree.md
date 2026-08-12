@@ -4,6 +4,8 @@ Every recipe needed to build one gate plus its upgrades, and to cover ten upkeep
 
 Raw resource means no recipe produces it: it comes out of an extractor (EXT, COL or RIG), so it is where the tree bottoms out. ALO is the type case, aluminium ore straight from an extractor.
 
+**Correction, 2026-08-12:** that definition undercounts. Extraction is not represented in `gamedata_recipes`, so a material that is both extractable and craftable looks craft-only. Two materials in this closure are affected, **SIO** and **O**, and both should be extracted rather than crafted — see [recipe-picks.md](recipe-picks.md). They are the only two of the 24 materials observed as planet deposits that also carry recipes. The 26-material raw list below should be read as 28 with SIO and O added.
+
 ## Scope
 
 | | Count |

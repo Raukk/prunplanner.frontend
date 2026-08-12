@@ -4,30 +4,29 @@
 	"rankingMetric": "profitPerArea, because permits are the constraint",
 	"toolLimitation": "RIG/EXT/COL/FRM excluded by useROIOverview.ts:28-31, so all FRM recipes are missing; GRN has no rows, MAI and HCP show only their HYF recipe",
 	"picks": {
-		"clear": {
-			"TI": "SME#4xTIO 1xC 1xO 1xNA=>2xTI",
-			"SIO": "AML#2xZIR 4xNA=>1xZR 2xSIO",
-			"ZR": "AML#2xZIR 4xNA=>1xZR 2xSIO",
+		"final": {
+			"FE": "SME#6xFEO 1xC 1xO 1xFLX=>4xFE",
+			"AL": "SME#6xALO 1xO 1xC 1xFLX=>4xAL",
+			"SI": "SME#3xSIO 1xC 1xO 1xFLX=>1xSI",
 			"RE": "SME#8xREO 1xC 1xO 1xFLX=>5xRE",
-			"BSE": "PP1#1xFE 2xLST=>1xBSE",
-			"BBH": "PP1#2xFE 1xLST=>1xBBH"
+			"GL": "GF#2xSIO 1xNA 1xFLX=>12xGL",
+			"TI": "SME#4xTIO 1xC 1xO 1xNA=>2xTI",
+			"TA": "AML#2xTAI 4xNA=>1xTA 1xFE",
+			"ZR": "AML#2xZIR 4xNA=>1xZR 2xSIO",
+			"RG": "GF#10xGL 15xPG=>10xRG",
+			"MAI": "HYF#20xH2O 2xNS=>12xMAI",
+			"HCP": "HYF#14xH2O 1xNS=>8xHCP"
 		},
-		"metricConflict": [
-			"AL",
-			"FE",
-			"TA"
-		],
-		"close": [
-			"C",
-			"RG",
-			"GL",
-			"SI"
-		],
-		"noToolData": [
-			"GRN",
-			"MAI",
-			"HCP"
-		]
+		"extractNotCraft": {
+			"SIO": "all 3 recipes are AML; common deposit",
+			"O": "only recipe is TNP#1xTCO byproduct; deposit on every AGRI planet"
+		},
+		"stillOpen": {
+			"C": "mix by planet availability; top two within 0.1% on ROI",
+			"BSE": "PP1 iron vs PP2 aluminium; AL price spiking and falling, do not add an FE planet just for this",
+			"BBH": "same as BSE",
+			"GRN": "FRM only, so Verdant only"
+		}
 	},
 	"cogcByBuilding": {
 		"INC": "RESOURCE_EXTRACTION",
@@ -506,5 +505,12 @@
 		"GRN": {
 			"error": "no option GRN"
 		}
-	}
+	},
+	"rules": [
+		"always take the FLX recipe where one exists",
+		"AML only for a primary resource with no other source; AML is 45 area and expensive",
+		"skip recipes needing SEN",
+		"extract, do not craft, anything with a planet deposit"
+	],
+	"rawClassificationCorrection": "gate-recipe-tree.md defines raw as no-recipe, which misses SIO and O; those are the only two of 24 observed deposit materials that also have recipes"
 }
