@@ -208,6 +208,63 @@ The bottom four planets are one extractor each and could be folded into a neighb
 
 Adding SIO to XG-326a alongside LST and TIO does **not** save a permit. It would need 6 + 10 + 19 = 35 extractors, 1,085 area, 3 bases; the split of XG-326a at 2 plus WU-070b at 1 is also 3. WU-070b is the better home for silicon regardless: its 52.12 deposit needs 12 extractors against XG-326a's 19 for the same output, so it is cheaper to build and to run.
 
+## Empire check against the 15-day plan
+
+All 15 extraction plans sit in the GateBuilder empire, one per planet. Read back from the empire Material I/O on 2026-08-12, scaled by the number of bases each planet needs. Every material clears 90 %.
+
+| Material | Need/day | One base gives | Bases | Projected/day | Coverage |
+| --- | --- | --- | --- | --- | --- |
+| H2O | 4,922 | 3,202 | 2 | 6,403 | 130 % |
+| O | 3,819 | 2,196 | 2 | 4,391 | 115 % |
+| ALO | 2,377 | 783 | 4 | 3,130 | 132 % |
+| HAL | 1,278 | 489 | 3 | 1,468 | 115 % |
+| SIO | 1,023 | 1,120 | 1 | 1,120 | 109 % |
+| LIO | 781 | 884 | 1 | 884 | 113 % |
+| FEO | 747 | 835 | 1 | 835 | 112 % |
+| NE | 725 | 614 | 2 | 1,228 | 169 % |
+| BER | 707 | 329 | 3 | 987 | 140 % |
+| CUO | 581 | 655 | 1 | 655 | 113 % |
+| LST | 431 | 391 | 1 | 391 | 91 % |
+| TIO | 395 | 427 | 1 | 427 | 108 % |
+| AUO | 183 | 220 | 1 | 220 | 121 % |
+| BTS | 149 | 163 | 1 | 163 | 110 % |
+| TAI | 120 | 145 | 1 | 145 | 121 % |
+| MGS | 95 | 69 | 2 | 139 | 145 % |
+
+The empire figures include the 11.6 % faction bonus of a near-empty empire. At a fully built-out 4 % the outputs fall about 7 %, which turns 91 % LST into roughly 85 % and 109 % SIO into 101 %. Only LST is close enough to matter, and it is already partly bought.
+
+## Trimming the overproduction
+
+Dropping one base and buying the shortfall, ranked by cost. The bar is roughly 2 M per permit, from the early-permit price.
+
+| Change | Coverage after | Shortfall per gate | Cost per gate | Verdict |
+| --- | --- | --- | --- | --- |
+| MGS 2 to 1 | 73 % | 390 | 97,512 | take it |
+| ALO 4 to 3 | 99 % | 441 | 114,673 | take it |
+| NE 2 to 1 | 85 % | 1,668 | 623,682 | take it |
+| BER 3 to 2 | 93 % | 735 | 727,452 | take it |
+| H2O 2 to 1 | 65 % | 25,802 | 1,493,947 | take it |
+| HAL 3 to 2 | 77 % | 4,485 | 1,556,364 | marginal |
+| O 2 to 1 | 57 % | 24,347 | 2,605,134 | keep the base |
+
+Taking the first six saves **6 permits for 4.61 M per gate**, bringing extraction from 28 to **22 permits**. ALO 4 to 3 is the standout: 99 % coverage retained for 114 k.
+
+Oxygen is the one to keep at two bases: buying the gap costs 2.6 M per gate, above the permit price, and it is 19 % of the oxygen market.
+
+## Bought out under the half-full rule
+
+Any base that would sit under half full is bought instead:
+
+| Material | Units per gate | Cost per gate | Permits saved |
+| --- | --- | --- | --- |
+| ZIR | 160 | 65,600 | 1 |
+| SCR | 30 | 7,200 | 1 |
+| TCO | 301 | 226,954 | 1 |
+| BRM | 800 | 204,000 | 2 |
+| **Total** | | **503,754** | **5** |
+
+LST is consolidated instead: 5 of its 6 extractors share the TIO base on XG-326a, and the last sixth is bought for about 169 k per gate.
+
 ## Verified extractor bases
 
 One single-permit base per top-5 extraction planet was created and saved in the GateBuilder empire on 2026-08-12, filled to the area limit, each with five Resource Extraction experts and the planet's RES COGC. All read 160.50 % efficiency in-app.
