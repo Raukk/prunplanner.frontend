@@ -90,6 +90,14 @@ Area is not the only axis, and on the others FRM is the cheaper building:
 
 HYF buys half the area at the price of a much heavier bill of materials, MHL and TRU in particular, plus settlers, which need HB2 rather than HB1. Its upkeep is also higher. This analysis prices none of that: it counts area and nothing else. A permit-constrained build wants HYF; a materials- or upkeep-constrained one may not.
 
+## Standing assumptions set 2026-08-12
+
+- **Ship water in, do not extract it locally.** Shipping is cheap and fertility is the scarce thing, so area on a fertile or AGRI planet should go to production, not to a RIG. Pulling from a planet with better deposits is preferred. The water-free column above is therefore the default case, and the water-extracted columns apply only when a base has spare area too small for another producer.
+- **Ignore planets with an infinite exchange distance.** They need a special drive and sit at the map edge. That drops Tropica (GH-459c) and Aranya (BN-299d) from [agri-planets.md](agri-planets.md).
+- **Do not build against COGC.** The bonus is large enough that going against it is reserved for rare cases or a small fraction of a base to save a permit.
+
+The COGC rule bites hardest on carbon: HYF is AGRICULTURE and INC is RESOURCE_EXTRACTION, so a carbon chain cannot sit COGC-aligned on one planet. RESOURCE_EXTRACTION COGC also tends not to appear on planets with good deposits, so the INC half trades COGC against ore quality. Splitting HYF and INC across two planets keeps both bonuses at the cost of shipping the HCP or MAI between them; with shipping assumed cheap, splitting is the better default, and a half-and-half base is the fallback when the good AGRI planets run out.
+
 ## Caveats
 
 - No COGC bonus is applied. A RES COGC on the extraction planet or an AGRI COGC would shift the comparison, and 4 of the 24 planets are RES.

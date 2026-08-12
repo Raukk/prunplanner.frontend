@@ -34,7 +34,13 @@ Sorted by fertility, best first.
 | Aranya | BN-299d | 94.18 % | -0.192 | 20.13 | 8.27 HE, 12.49 O |
 | Lemuria | AJ-768a | 85.09 % | -0.492 | 13.58 | 11.54 O |
 
-Every one of the 14 has extractable water, so a farm site can also run its own RIG. Verdant sits mid-table on fertility at 108.07 %, giving up 4 points against Saladin, but it is the only one where 3 bases are possible, which is worth far more than 4 points of efficiency.
+Every one of the 14 has extractable water, but the standing rule as of 2026-08-12 is to **ship water in rather than extract it here**: shipping is cheap, fertility is scarce, so area on these planets belongs to producers, not to a RIG. On-site water is a fallback for leftover area too small for another producer.
+
+Verdant sits mid-table on fertility at 108.07 %, giving up 4 points against Saladin, but it is the only one where 3 bases are possible, which is worth far more than 4 points of efficiency.
+
+**Tropica (GH-459c) and Aranya (BN-299d) are excluded from consideration**, both showing infinite distance to all four exchanges. They need a special drive and sit at the map edge. That leaves 12 candidates.
+
+These planets matter for hydroponics as well as farms: HYF carries AGRICULTURE expertise, the same COGC as FRM, so an AGRI planet with no fertility at all is still the right home for a HYF.
 
 Six planets are below 100 %, meaning a farm there produces less than the base rate.
 

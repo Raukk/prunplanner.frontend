@@ -1,0 +1,510 @@
+{
+	"sourceDoc": "recipe-picks.md",
+	"scraped": "2026-08-12 from the app Recipe ROI tool at this account exchange preference",
+	"rankingMetric": "profitPerArea, because permits are the constraint",
+	"toolLimitation": "RIG/EXT/COL/FRM excluded by useROIOverview.ts:28-31, so all FRM recipes are missing; GRN has no rows, MAI and HCP show only their HYF recipe",
+	"picks": {
+		"clear": {
+			"TI": "SME#4xTIO 1xC 1xO 1xNA=>2xTI",
+			"SIO": "AML#2xZIR 4xNA=>1xZR 2xSIO",
+			"ZR": "AML#2xZIR 4xNA=>1xZR 2xSIO",
+			"RE": "SME#8xREO 1xC 1xO 1xFLX=>5xRE",
+			"BSE": "PP1#1xFE 2xLST=>1xBSE",
+			"BBH": "PP1#2xFE 1xLST=>1xBBH"
+		},
+		"metricConflict": [
+			"AL",
+			"FE",
+			"TA"
+		],
+		"close": [
+			"C",
+			"RG",
+			"GL",
+			"SI"
+		],
+		"noToolData": [
+			"GRN",
+			"MAI",
+			"HCP"
+		]
+	},
+	"cogcByBuilding": {
+		"INC": "RESOURCE_EXTRACTION",
+		"RIG": "RESOURCE_EXTRACTION",
+		"EXT": "RESOURCE_EXTRACTION",
+		"COL": "RESOURCE_EXTRACTION",
+		"HYF": "AGRICULTURE",
+		"FRM": "AGRICULTURE",
+		"SME": "METALLURGY",
+		"GF": "METALLURGY",
+		"AML": "CHEMISTRY",
+		"CHP": "CHEMISTRY",
+		"PP1": "CONSTRUCTION",
+		"PP2": "CONSTRUCTION"
+	},
+	"roiRows": {
+		"C": [
+			{
+				"building": "INC",
+				"setup": "32x INC, 13x HB1, 1x STO",
+				"output": "4x C",
+				"inputs": "4x GRN",
+				"cogc": "Resource Extraction",
+				"planCost": 1370823.67,
+				"dailyProfit": 113875.7,
+				"profitPerArea": 232.4,
+				"roiDays": 12.04
+			},
+			{
+				"building": "INC",
+				"setup": "32x INC, 13x HB1, 1x STO",
+				"output": "4x C",
+				"inputs": "2x MAI 4x HCP 2x GRN",
+				"cogc": "Resource Extraction",
+				"planCost": 1370823.67,
+				"dailyProfit": 108739.56,
+				"profitPerArea": 221.92,
+				"roiDays": 12.61
+			},
+			{
+				"building": "INC",
+				"setup": "32x INC, 13x HB1, 1x STO",
+				"output": "4x C",
+				"inputs": "2x GRN 4x HCP",
+				"cogc": "Resource Extraction",
+				"planCost": 1370823.67,
+				"dailyProfit": 117332.96,
+				"profitPerArea": 239.46,
+				"roiDays": 11.68
+			},
+			{
+				"building": "INC",
+				"setup": "32x INC, 13x HB1, 1x STO",
+				"output": "4x C",
+				"inputs": "4x HCP 2x MAI",
+				"cogc": "Resource Extraction",
+				"planCost": 1370823.67,
+				"dailyProfit": 115354.28,
+				"profitPerArea": 235.42,
+				"roiDays": 11.88
+			},
+			{
+				"building": "INC",
+				"setup": "32x INC, 13x HB1, 1x STO",
+				"output": "4x C",
+				"inputs": "4x HCP",
+				"cogc": "Resource Extraction",
+				"planCost": 1370823.67,
+				"dailyProfit": 117405.32,
+				"profitPerArea": 239.6,
+				"roiDays": 11.68
+			},
+			{
+				"building": "INC",
+				"setup": "32x INC, 13x HB1, 1x STO",
+				"output": "4x C",
+				"inputs": "4x MAI",
+				"cogc": "Resource Extraction",
+				"planCost": 1370823.67,
+				"dailyProfit": 111263.85,
+				"profitPerArea": 227.07,
+				"roiDays": 12.32
+			}
+		],
+		"FE": [
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "4x FE",
+				"inputs": "6x FEO 1x O 1x C 1x FLX",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 89680,
+				"profitPerArea": 181.17,
+				"roiDays": 14.1
+			},
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "3x FE",
+				"inputs": "1x C 1x O 6x FEO",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 58396.41,
+				"profitPerArea": 117.97,
+				"roiDays": 21.66
+			},
+			{
+				"building": "AML",
+				"setup": "8x AML, 2x HB3, 3x HB4, 1x STO",
+				"output": "1x FE 1x TA",
+				"inputs": "4x NA 2x TAI",
+				"cogc": "Chemistry",
+				"planCost": 12218037.19,
+				"dailyProfit": 222166.1,
+				"profitPerArea": 466.74,
+				"roiDays": 55
+			},
+			{
+				"building": "AML",
+				"setup": "8x AML, 2x HB3, 3x HB4, 1x STO",
+				"output": "1x TA 1x FE",
+				"inputs": "2x TAI",
+				"cogc": "Chemistry",
+				"planCost": 12218037.19,
+				"dailyProfit": 196360.31,
+				"profitPerArea": 412.52,
+				"roiDays": 62.22
+			}
+		],
+		"SI": [
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "1x SI",
+				"inputs": "1x AL 3x SIO",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 150101.07,
+				"profitPerArea": 303.23,
+				"roiDays": 8.43
+			},
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "1x SI",
+				"inputs": "1x O 1x FLX 1x C 3x SIO",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 140783.51,
+				"profitPerArea": 284.41,
+				"roiDays": 8.98
+			},
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "1x SI",
+				"inputs": "3x SIO 1x C 1x O",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 119105.94,
+				"profitPerArea": 240.62,
+				"roiDays": 10.62
+			},
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "1x SI",
+				"inputs": "4x TS 1x O 1x AL",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": -708307.7,
+				"profitPerArea": -1430.92,
+				"roiDays": -1.79
+			}
+		],
+		"AL": [
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "3x AL",
+				"inputs": "1x O 6x ALO 1x C",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 51593.83,
+				"profitPerArea": 104.23,
+				"roiDays": 24.51
+			},
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "4x AL",
+				"inputs": "1x C 1x O 1x FLX 6x ALO",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 97628.75,
+				"profitPerArea": 197.23,
+				"roiDays": 12.96
+			},
+			{
+				"building": "AML",
+				"setup": "8x AML, 2x HB3, 3x HB4, 1x STO",
+				"output": "1x BE 1x SIO 1x AL",
+				"inputs": "2x BER",
+				"cogc": "Chemistry",
+				"planCost": 12218037.19,
+				"dailyProfit": 126282.36,
+				"profitPerArea": 265.3,
+				"roiDays": 96.75
+			}
+		],
+		"SIO": [
+			{
+				"building": "AML",
+				"setup": "8x AML, 2x HB3, 3x HB4, 1x STO",
+				"output": "1x BE 1x SIO 1x AL",
+				"inputs": "2x BER",
+				"cogc": "Chemistry",
+				"planCost": 12218037.19,
+				"dailyProfit": 126282.36,
+				"profitPerArea": 265.3,
+				"roiDays": 96.75
+			},
+			{
+				"building": "AML",
+				"setup": "8x AML, 2x HB3, 3x HB4, 1x STO",
+				"output": "1x ZR 2x SIO",
+				"inputs": "2x ZIR 4x NA",
+				"cogc": "Chemistry",
+				"planCost": 12218037.19,
+				"dailyProfit": 265012.35,
+				"profitPerArea": 556.75,
+				"roiDays": 46.1
+			},
+			{
+				"building": "AML",
+				"setup": "8x AML, 2x HB3, 3x HB4, 1x STO",
+				"output": "1x ZR 2x SIO",
+				"inputs": "2x ZIR",
+				"cogc": "Chemistry",
+				"planCost": 12218037.19,
+				"dailyProfit": 199758.86,
+				"profitPerArea": 419.66,
+				"roiDays": 61.16
+			}
+		],
+		"GL": [
+			{
+				"building": "GF",
+				"setup": "12x GF, 10x HB2, 1x STO",
+				"output": "12x GL",
+				"inputs": "2x SIO 1x NA 1x FLX",
+				"cogc": "Metallurgy",
+				"planCost": 1794353.95,
+				"dailyProfit": 85379.07,
+				"profitPerArea": 176.4,
+				"roiDays": 21.02
+			},
+			{
+				"building": "GF",
+				"setup": "12x GF, 10x HB2, 1x STO",
+				"output": "10x GL",
+				"inputs": "1x NA 1x SEN 2x SIO",
+				"cogc": "Metallurgy",
+				"planCost": 1794353.95,
+				"dailyProfit": 86067.85,
+				"profitPerArea": 177.83,
+				"roiDays": 20.85
+			},
+			{
+				"building": "GF",
+				"setup": "12x GF, 10x HB2, 1x STO",
+				"output": "10x GL",
+				"inputs": "2x SIO 1x NA",
+				"cogc": "Metallurgy",
+				"planCost": 1794353.95,
+				"dailyProfit": 91319.71,
+				"profitPerArea": 188.68,
+				"roiDays": 19.65
+			}
+		],
+		"MAI": [
+			{
+				"building": "HYF",
+				"setup": "21x HYF, 8x HB1, 4x HB2, 1x HBB, 1x STO",
+				"output": "12x MAI",
+				"inputs": "2x NS 20x H2O",
+				"cogc": "Agriculture",
+				"planCost": 3494053.41,
+				"dailyProfit": 120932.57,
+				"profitPerArea": 243.33,
+				"roiDays": 28.89
+			}
+		],
+		"HCP": [
+			{
+				"building": "HYF",
+				"setup": "21x HYF, 8x HB1, 4x HB2, 1x HBB, 1x STO",
+				"output": "8x HCP",
+				"inputs": "14x H2O 1x NS",
+				"cogc": "Agriculture",
+				"planCost": 3494053.41,
+				"dailyProfit": 164375.61,
+				"profitPerArea": 330.74,
+				"roiDays": 21.26
+			}
+		],
+		"RG": [
+			{
+				"building": "GF",
+				"setup": "12x GF, 10x HB2, 1x STO",
+				"output": "10x RG",
+				"inputs": "10x GL 15x PG 1x SEN",
+				"cogc": "Metallurgy",
+				"planCost": 1794353.95,
+				"dailyProfit": 116952.24,
+				"profitPerArea": 241.64,
+				"roiDays": 15.34
+			},
+			{
+				"building": "GF",
+				"setup": "12x GF, 10x HB2, 1x STO",
+				"output": "10x RG",
+				"inputs": "10x GL 15x PG",
+				"cogc": "Metallurgy",
+				"planCost": 1794353.95,
+				"dailyProfit": 110955.73,
+				"profitPerArea": 229.25,
+				"roiDays": 16.17
+			}
+		],
+		"TI": [
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "2x TI",
+				"inputs": "1x C 1x NA 4x TIO 1x O",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 83778.11,
+				"profitPerArea": 169.25,
+				"roiDays": 15.1
+			},
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "2x TI",
+				"inputs": "1x C 4x TIO 1x O",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 49400.16,
+				"profitPerArea": 99.8,
+				"roiDays": 25.6
+			}
+		],
+		"TA": [
+			{
+				"building": "AML",
+				"setup": "8x AML, 2x HB3, 3x HB4, 1x STO",
+				"output": "1x FE 1x TA",
+				"inputs": "4x NA 2x TAI",
+				"cogc": "Chemistry",
+				"planCost": 12218037.19,
+				"dailyProfit": 222166.1,
+				"profitPerArea": 466.74,
+				"roiDays": 55
+			},
+			{
+				"building": "AML",
+				"setup": "8x AML, 2x HB3, 3x HB4, 1x STO",
+				"output": "1x TA 1x FE",
+				"inputs": "2x TAI",
+				"cogc": "Chemistry",
+				"planCost": 12218037.19,
+				"dailyProfit": 196360.31,
+				"profitPerArea": 412.52,
+				"roiDays": 62.22
+			}
+		],
+		"BBH": [
+			{
+				"building": "PP1",
+				"setup": "16x PP1, 13x HB1, 1x STO",
+				"output": "1x BBH",
+				"inputs": "2x FE 1x LST",
+				"cogc": "Construction",
+				"planCost": 1003854.62,
+				"dailyProfit": 15712.3,
+				"profitPerArea": 33.15,
+				"roiDays": 63.89
+			},
+			{
+				"building": "PP2",
+				"setup": "15x PP2, 3x HB1, 3x HB2, 1x HBB, 1x STO",
+				"output": "1x BBH",
+				"inputs": "1x LST 2x AL",
+				"cogc": "Construction",
+				"planCost": 1140329.55,
+				"dailyProfit": -21731.03,
+				"profitPerArea": -43.9,
+				"roiDays": -52.47
+			}
+		],
+		"BSE": [
+			{
+				"building": "PP1",
+				"setup": "16x PP1, 13x HB1, 1x STO",
+				"output": "1x BSE",
+				"inputs": "1x FE 2x LST",
+				"cogc": "Construction",
+				"planCost": 1003854.62,
+				"dailyProfit": 21004.08,
+				"profitPerArea": 44.31,
+				"roiDays": 47.79
+			},
+			{
+				"building": "PP2",
+				"setup": "15x PP2, 3x HB1, 3x HB2, 1x HBB, 1x STO",
+				"output": "1x BSE",
+				"inputs": "1x AL 2x LST",
+				"cogc": "Construction",
+				"planCost": 1140329.55,
+				"dailyProfit": -2033.49,
+				"profitPerArea": -4.11,
+				"roiDays": -560.77
+			}
+		],
+		"RE": [
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "5x RE",
+				"inputs": "1x C 1x O 8x REO 1x FLX",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 389522.95,
+				"profitPerArea": 786.92,
+				"roiDays": 3.25
+			},
+			{
+				"building": "SME",
+				"setup": "20x SME, 10x HB1, 2x STO",
+				"output": "4x RE",
+				"inputs": "8x REO 1x C 1x O",
+				"cogc": "Metallurgy",
+				"planCost": 1264811.65,
+				"dailyProfit": 305490.18,
+				"profitPerArea": 617.15,
+				"roiDays": 4.14
+			}
+		],
+		"ZR": [
+			{
+				"building": "AML",
+				"setup": "8x AML, 2x HB3, 3x HB4, 1x STO",
+				"output": "1x ZR 2x SIO",
+				"inputs": "2x ZIR 4x NA",
+				"cogc": "Chemistry",
+				"planCost": 12218037.19,
+				"dailyProfit": 265012.35,
+				"profitPerArea": 556.75,
+				"roiDays": 46.1
+			},
+			{
+				"building": "AML",
+				"setup": "8x AML, 2x HB3, 3x HB4, 1x STO",
+				"output": "1x ZR 2x SIO",
+				"inputs": "2x ZIR",
+				"cogc": "Chemistry",
+				"planCost": 12218037.19,
+				"dailyProfit": 199758.86,
+				"profitPerArea": 419.66,
+				"roiDays": 61.16
+			}
+		],
+		"GRN": {
+			"error": "no option GRN"
+		}
+	}
+}
