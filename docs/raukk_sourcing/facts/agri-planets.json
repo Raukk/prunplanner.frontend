@@ -1,0 +1,37 @@
+{
+	"sourceDoc": "agri-planets.md",
+	"recorded": "2026-08-12, transcribed from a planet search screenshot of all Agriculture COGC planets",
+	"fertilityNote": "the app's Fertility percent is the farm efficiency multiplier; rawFertility = (percent - 100) / 100 * 3.3, inverting 1 + fertility * (10/33) from src/features/planning/calculations/bonusCalculations.ts:233",
+	"availability": {
+		"rule": "almost all AGRI planets are full; a full planet takes only a player's first base, and a player has one first base",
+		"maxBasesAcrossFullAgriPlanets": 1,
+		"exception": { "planet": "YI-715b", "name": "Verdant", "maxBases": 3, "reason": "not quite full yet" },
+		"otherNotFullPlanets": "one or two exist but are far enough out to be impractical"
+	},
+	"planets": {
+		"columns": ["name", "system", "farmEfficiencyPercent", "rawFertility", "h2oDailyPerExtractor", "otherResources", "ai1", "ci1", "ic1", "nc1", "infrastructure"],
+		"rows": [
+			["Saladin", "PG-899b", 112.18, 0.402, 44.86, { "O": 11.34 }, 28, 20, 25, 19, ["ADM", "COGC", "LM", "WAR"]],
+			["Promitor", "VH-331a", 112.12, 0.4, 36.4, { "HAL": 3.5, "N": 1.8, "O": 15 }, 8, 12, 0, 6, ["ADM", "COGC", "LM", "WAR"]],
+			["Pyrgos", "CH-771a", 111.98, 0.395, 45.23, { "AMM": 2.46, "O": 6.85 }, 15, 7, 15, 9, ["ADM", "COGC", "LM", "WAR"]],
+			["Tropica", "GH-459c", 109.09, 0.3, 36.96, { "AMM": 3.81, "O": 21.31 }, null, null, null, null, ["ADM", "COGC"]],
+			["Verdant", "YI-715b", 108.07, 0.266, 36.67, { "O": 31.21 }, 17, 11, 11, 5, ["ADM", "COGC", "LM", "SHY", "WAR"]],
+			["Nemesis", "JS-299a", 106.88, 0.227, 30.19, { "O": 18.64, "SCR": 18.09 }, 11, 4, 14, 8, ["ADM", "COGC", "LM", "SHY", "WAR"]],
+			["Proxion", "UV-796b", 106.67, 0.22, 8.4, { "LST": 21.7, "O": 12.6 }, 10, 1, 12, 6, ["ADM", "COGC", "LM", "SHY", "WAR"]],
+			["Talosia", "DC-823b", 103.29, 0.109, 36.15, { "FEO": 1.38, "O": 27.62 }, 24, 19, 28, 23, ["ADM", "COGC", "LM", "WAR"]],
+			["Poseidon", "HM-049b", 100.06, 0.002, 38.27, { "AMM": 2.65, "O": 8.63, "SIO": 37.38 }, 14, 9, 18, 13, ["ADM", "COGC", "LM", "WAR"]],
+			["Demeter", "KI-446b", 99.57, -0.014, 30.32, { "O": 14.46 }, 5, 13, 13, 16, ["ADM", "COGC", "LM", "WAR"]],
+			["Cantium", "HM-910c", 98.75, -0.041, 29.91, { "BOR": 2.89, "O": 6.83, "SIO": 26.75 }, 15, 10, 19, 14, ["ADM", "COGC", "LM", "WAR"]],
+			["Harmonia", "ZV-896b", 96.86, -0.104, 25.71, { "H": 2.3, "O": 7.23 }, 2, 8, 10, 11, ["ADM", "COGC", "LM", "SHY", "WAR"]],
+			["Aranya", "BN-299d", 94.18, -0.192, 20.13, { "HE": 8.27, "O": 12.49 }, null, null, null, null, ["ADM", "COGC", "LM", "WAR"]],
+			["Lemuria", "AJ-768a", 85.09, -0.492, 13.58, { "O": 11.54 }, 12, 17, 6, 12, ["ADM", "COGC", "LM", "WAR"]]
+		],
+		"exchangeDistanceNote": "jumps to each exchange; null means no route was found (shown as infinity in the app)"
+	},
+	"common": {
+		"cogcProgram": "Agriculture",
+		"environment": "MCG",
+		"allHaveExtractableWater": true,
+		"belowBaseRateCount": 6
+	}
+}

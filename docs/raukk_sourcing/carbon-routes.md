@@ -62,9 +62,22 @@ The extreme is the pure farm route `INC#4xGRN=>4xC`, which needs only 100 H2O/da
 
 FRM is the only building that produces GRN, both GRN recipes are FRM recipes, and FRM cannot run at fertility -1. So the three carbon recipes that take GRN — `INC#4xGRN`, `INC#4xHCP 2xGRN`, `INC#4xHCP 2xGRN 2xMAI` — are impossible on 21 of the 24 planets in the pool, and viable above break-even on exactly one, Nemesis. MAI and HCP each have an HYF route, so the other three recipes go anywhere with water.
 
-That makes the GRN-bearing recipes a structural bet on a single planet, not just a slightly worse option. Nemesis has 3 bases available and its own water at 30.2/day.
+That makes the GRN-bearing recipes a structural bet on a single planet, not just a slightly worse option.
 
-Fertility and AGRI COGC are independent in this pool, which cuts both ways: Ganymede carries AGRI with fertility -1 so its COGC cannot help a farm, while Nemesis carries AGRI and is the one fertile planet.
+Across the full AGRI planet list in [agri-planets.md](agri-planets.md) the bet narrows further: almost every AGRI planet is full and can host only a player's first base, so **Verdant (YI-715b) is the only farm site that supports more than one base**, at 3. Verdant runs at 108.07 % farm efficiency with its own water at 36.67/day. Better-fertility planets exist, Saladin at 112.18 % being the best, but they allow a single base at most.
+
+Rerunning on Verdant's numbers, farms still lose:
+
+| Rank | Recipe | Farms? | Total area |
+| --- | --- | --- | --- |
+| 1 | `INC#4xHCP 2xMAI=>4xC` | no | **532.9** |
+| 2 | `INC#4xHCP=>4xC` | no | 538.3 |
+| 4 | `INC#4xHCP 2xGRN 2xMAI=>4xC` | yes, 4.34 FRM | 585.7 |
+| 5 | `INC#4xHCP 2xGRN=>4xC` | yes, 4.34 FRM | 587.5 |
+
+Same ~10 % penalty as on Nemesis. Note though that at 100 C/day every variant still lands in 2 single-permit bases, so the farm penalty costs area without yet costing a permit. It only starts costing permits at higher output.
+
+Fertility and AGRI COGC are independent, which cuts both ways: Ganymede carries AGRI at fertility -1 so its COGC cannot help a farm, while several high-fertility planets are full.
 
 ## HYF costs more to build and run than FRM
 
