@@ -1,0 +1,180 @@
+{
+	"sourceDoc": "gate-material-totals.md",
+	"scope": "one gate plus upgrades, plus ten upkeep cycles",
+	"method": "fixed point over recipe run counts; a multi-output recipe runs once to cover all its outputs, so runs = max over outputs, not sum; co-products reduce extraction",
+	"picks": "docs/raukk_sourcing/recipe-picks.md, plus GRN via FRM#4xH2O=>4xGRN (faster, water is cheap)",
+	"resolvedByThisRollup": {
+		"BSE": "PP1#1xFE 2xLST=>1xBSE",
+		"BBH": "PP1#2xFE 1xLST=>1xBBH",
+		"reason": "4,614 FE is required for STL and small consumers regardless, so an FE supply exists and the rule says use PP1"
+	},
+	"noKnownSource": {
+		"NE": 10880,
+		"BER": 10600,
+		"REO": 3376,
+		"BTS": 2233,
+		"LES": 4
+	},
+	"variants": {
+		"hydroponic carbon, iron structurals": {
+			"picks": {
+				"C": "INC#4xHCP=>4xC",
+				"BSE": "PP1#1xFE 2xLST=>1xBSE",
+				"BBH": "PP1#2xFE 1xLST=>1xBBH"
+			},
+			"extracted": {
+				"H2O": 73828,
+				"O": 57280,
+				"ALO": 35654,
+				"H": 24929,
+				"HAL": 19166,
+				"SIO": 15343,
+				"LIO": 11720,
+				"FEO": 11211,
+				"NE": 10880,
+				"BER": 10600,
+				"CUO": 8711,
+				"LST": 6471,
+				"TIO": 5928,
+				"REO": 3376,
+				"N": 3018,
+				"AUO": 2740,
+				"BTS": 2233,
+				"TAI": 1800,
+				"HE": 1457,
+				"MGS": 1430,
+				"BRM": 800,
+				"TCO": 301,
+				"ZIR": 160,
+				"AMM": 40,
+				"SCR": 30,
+				"GAL": 6,
+				"LES": 4
+			},
+			"byproductCreditsApplied": {
+				"FE": 900,
+				"AL": 5300,
+				"NA": 2668
+			},
+			"feDemand": {
+				"STL": 4561,
+				"BBH": 1920,
+				"BSE": 940,
+				"CAP": 8,
+				"SFK": 23,
+				"BGO": 23
+			},
+			"feTotal": 7474,
+			"coProductOffset": {
+				"O": 301,
+				"SIO": 5460
+			}
+		},
+		"hydroponic carbon, aluminium structurals": {
+			"picks": {
+				"C": "INC#4xHCP=>4xC",
+				"BSE": "PP2#1xAL 2xLST=>1xBSE",
+				"BBH": "PP2#2xAL 1xLST=>1xBBH"
+			},
+			"extracted": {
+				"H2O": 73828,
+				"O": 57280,
+				"ALO": 39944,
+				"H": 24929,
+				"HAL": 19166,
+				"SIO": 15343,
+				"LIO": 11720,
+				"NE": 10880,
+				"BER": 10600,
+				"CUO": 8711,
+				"FEO": 6921,
+				"LST": 6471,
+				"TIO": 5928,
+				"REO": 3376,
+				"N": 3018,
+				"AUO": 2740,
+				"BTS": 2233,
+				"TAI": 1800,
+				"HE": 1457,
+				"MGS": 1430,
+				"BRM": 800,
+				"TCO": 301,
+				"ZIR": 160,
+				"AMM": 40,
+				"SCR": 30,
+				"GAL": 6,
+				"LES": 4
+			},
+			"byproductCreditsApplied": {
+				"FE": 900,
+				"AL": 5300,
+				"NA": 2668
+			},
+			"feDemand": {
+				"STL": 4561,
+				"CAP": 8,
+				"SFK": 23,
+				"BGO": 23
+			},
+			"feTotal": 4614,
+			"coProductOffset": {
+				"O": 301,
+				"SIO": 5460
+			}
+		},
+		"fast farm carbon, iron structurals": {
+			"picks": {
+				"C": "INC#4xHCP 2xGRN 2xMAI=>4xC",
+				"BSE": "PP1#1xFE 2xLST=>1xBSE",
+				"BBH": "PP1#2xFE 1xLST=>1xBBH"
+			},
+			"extracted": {
+				"H2O": 126144,
+				"O": 57280,
+				"ALO": 35654,
+				"H": 24929,
+				"HAL": 19166,
+				"SIO": 15343,
+				"LIO": 11720,
+				"FEO": 11211,
+				"NE": 10880,
+				"BER": 10600,
+				"CUO": 8711,
+				"LST": 7264,
+				"TIO": 5928,
+				"N": 4603,
+				"REO": 3376,
+				"AUO": 2740,
+				"BTS": 2233,
+				"TAI": 1800,
+				"HE": 1457,
+				"MGS": 1430,
+				"BRM": 800,
+				"TCO": 301,
+				"ZIR": 160,
+				"AMM": 40,
+				"SCR": 30,
+				"GAL": 6,
+				"LES": 4
+			},
+			"byproductCreditsApplied": {
+				"FE": 900,
+				"AL": 5300,
+				"NA": 2668
+			},
+			"feDemand": {
+				"STL": 4561,
+				"BBH": 1920,
+				"BSE": 940,
+				"CAP": 8,
+				"SFK": 23,
+				"BGO": 23
+			},
+			"feTotal": 7474,
+			"coProductOffset": {
+				"O": 301,
+				"SIO": 5460
+			}
+		}
+	}
+}
