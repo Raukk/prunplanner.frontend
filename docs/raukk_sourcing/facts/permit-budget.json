@@ -1,0 +1,439 @@
+{
+	"sourceDoc": "permit-budget.md",
+	"model": {
+		"cogc": 1.25,
+		"experts5": 1.284,
+		"usableAreaPerSinglePermitBase": 475,
+		"baseCoreArea": 25,
+		"maxBasesPerPlanet": 3,
+		"exception": "6 bases allowed on the largest extractor worlds (oxygen, aluminium, water), agreed 2026-08-12"
+	},
+	"permitsByCadence": {
+		"5": {
+			"extraction": 79,
+			"production": 356,
+			"total": 435
+		},
+		"10": {
+			"extraction": 46,
+			"production": 189,
+			"total": 235
+		},
+		"15": {
+			"extraction": 33,
+			"production": 135,
+			"total": 168
+		},
+		"20": {
+			"extraction": 28,
+			"production": 104,
+			"total": 132
+		},
+		"25": {
+			"extraction": 26,
+			"production": 90,
+			"total": 116
+		},
+		"30": {
+			"extraction": 23,
+			"production": 77,
+			"total": 100
+		},
+		"40": {
+			"extraction": 22,
+			"production": 66,
+			"total": 88
+		},
+		"60": {
+			"extraction": 20,
+			"production": 50,
+			"total": 70
+		}
+	},
+	"buySetSweepAt15Days": [
+		{
+			"buy": "none extra",
+			"permits": 168,
+			"costPerGateMillions": 10
+		},
+		{
+			"buy": "PE,PG,NA,FLX,NS",
+			"permits": 150,
+			"costPerGateMillions": 53
+		},
+		{
+			"buy": "+C",
+			"permits": 138,
+			"costPerGateMillions": 82
+		},
+		{
+			"buy": "+C,GL",
+			"permits": 134,
+			"costPerGateMillions": 89
+		},
+		{
+			"buy": "+C,GL,SI",
+			"permits": 132,
+			"costPerGateMillions": 94
+		},
+		{
+			"buy": "+C,GL,SI,AL",
+			"permits": 121,
+			"costPerGateMillions": 118
+		}
+	],
+	"valueOfAPermit": "2.3M per permit per gate when trading the full buy set against self-sufficiency at 15 days",
+	"recommendation": {
+		"cadenceDays": 15,
+		"permitTarget": 168,
+		"purchases": "gases, REO, and trivial materials only, ~10M per gate"
+	},
+	"reoAssumption": {
+		"pricePerUnit": 2000,
+		"unitsPerGate": 3376,
+		"costPerGate": 6752000,
+		"note": "order book holds 2,870 units at 1,980-2,000; direct contract needed at volume"
+	},
+	"extractionPlan15Days": [
+		{
+			"t": "H2O",
+			"perDay": 4921.866666666667,
+			"planet": "Bathys XG-452b",
+			"rate": 79.72035000000001,
+			"ext": 62,
+			"area": 806,
+			"permits": 2,
+			"building": "RIG"
+		},
+		{
+			"t": "O",
+			"perDay": 3818.6666666666665,
+			"planet": "SE-648c",
+			"rate": 54.66630000000001,
+			"ext": 70,
+			"area": 910,
+			"permits": 2,
+			"building": "RIG"
+		},
+		{
+			"t": "ALO",
+			"perDay": 2376.9333333333334,
+			"planet": "Nascent QJ-149c",
+			"rate": 46.7697,
+			"ext": 51,
+			"area": 1581,
+			"permits": 4,
+			"building": "EXT"
+		},
+		{
+			"t": "HAL",
+			"perDay": 1277.7333333333333,
+			"planet": "KI-439b",
+			"rate": 29.2431,
+			"ext": 44,
+			"area": 1364,
+			"permits": 3,
+			"building": "EXT"
+		},
+		{
+			"t": "SIO",
+			"perDay": 1022.8666666666667,
+			"planet": "WU-070b",
+			"rate": 83.65259999999999,
+			"ext": 13,
+			"area": 403,
+			"permits": 1,
+			"building": "EXT"
+		},
+		{
+			"t": "LIO",
+			"perDay": 781.3333333333334,
+			"planet": "KI-439b",
+			"rate": 44.34615,
+			"ext": 18,
+			"area": 558,
+			"permits": 2,
+			"building": "EXT"
+		},
+		{
+			"t": "FEO",
+			"perDay": 747.4,
+			"planet": "SE-110d",
+			"rate": 62.35425,
+			"ext": 12,
+			"area": 372,
+			"permits": 1,
+			"building": "EXT"
+		},
+		{
+			"t": "NE",
+			"perDay": 725.3333333333334,
+			"planet": "AJ-135e",
+			"rate": 23.93055,
+			"ext": 31,
+			"area": 620,
+			"permits": 2,
+			"building": "COL"
+		},
+		{
+			"t": "BER",
+			"perDay": 706.6666666666666,
+			"planet": "IA-335d",
+			"rate": 19.645200000000003,
+			"ext": 36,
+			"area": 1116,
+			"permits": 3,
+			"building": "EXT"
+		},
+		{
+			"t": "CUO",
+			"perDay": 580.7333333333333,
+			"planet": "KI-840c",
+			"rate": 31.458000000000002,
+			"ext": 19,
+			"area": 589,
+			"permits": 2,
+			"building": "EXT"
+		},
+		{
+			"t": "LST",
+			"perDay": 431.4,
+			"planet": "Aratora LS-231b",
+			"rate": 79.23885,
+			"ext": 6,
+			"area": 186,
+			"permits": 1,
+			"building": "EXT"
+		},
+		{
+			"t": "TIO",
+			"perDay": 395.2,
+			"planet": "SE-648c",
+			"rate": 31.313550000000003,
+			"ext": 13,
+			"area": 403,
+			"permits": 1,
+			"building": "EXT"
+		},
+		{
+			"t": "AUO",
+			"perDay": 182.66666666666666,
+			"planet": "Midas ZV-194d",
+			"rate": 15.20256,
+			"ext": 13,
+			"area": 403,
+			"permits": 1,
+			"building": "EXT"
+		},
+		{
+			"t": "BTS",
+			"perDay": 148.86666666666667,
+			"planet": "Aratora LS-231b",
+			"rate": 8.61885,
+			"ext": 18,
+			"area": 234,
+			"permits": 1,
+			"building": "RIG"
+		},
+		{
+			"t": "TAI",
+			"perDay": 120,
+			"planet": "Hyalos WU-070a",
+			"rate": 11.83848,
+			"ext": 11,
+			"area": 341,
+			"permits": 1,
+			"building": "EXT"
+		},
+		{
+			"t": "MGS",
+			"perDay": 95.33333333333333,
+			"planet": "Halcyon YK-005d",
+			"rate": 4.1409,
+			"ext": 24,
+			"area": 744,
+			"permits": 2,
+			"building": "EXT"
+		},
+		{
+			"t": "BRM",
+			"perDay": 53.333333333333336,
+			"planet": "IY-206j",
+			"rate": 57.747899999999994,
+			"ext": 1,
+			"area": 31,
+			"permits": 1,
+			"building": "EXT"
+		},
+		{
+			"t": "TCO",
+			"perDay": 20.066666666666666,
+			"planet": "SE-648c",
+			"rate": 21.2823,
+			"ext": 1,
+			"area": 31,
+			"permits": 1,
+			"building": "EXT"
+		},
+		{
+			"t": "ZIR",
+			"perDay": 10.666666666666666,
+			"planet": "Kiros KI-401b",
+			"rate": 21.99492,
+			"ext": 1,
+			"area": 31,
+			"permits": 1,
+			"building": "EXT"
+		},
+		{
+			"t": "SCR",
+			"perDay": 2,
+			"planet": "Midas ZV-194d",
+			"rate": 3.62088,
+			"ext": 1,
+			"area": 31,
+			"permits": 1,
+			"building": "EXT"
+		}
+	],
+	"newPlanets": [
+		{
+			"id": "XG-452b",
+			"name": "Bathys",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"resources": {
+				"H2O": 49.67
+			}
+		},
+		{
+			"id": "AJ-135e",
+			"name": "AJ-135e",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"resources": {
+				"NE": 14.91
+			}
+		},
+		{
+			"id": "WX-031a",
+			"name": "WX-031a",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"resources": {
+				"REO": 14.29
+			}
+		},
+		{
+			"id": "KI-439d",
+			"name": "KI-439d",
+			"cogc": "ADVERTISING_METALLURGY",
+			"resources": {
+				"LIO": 19.3
+			}
+		},
+		{
+			"id": "ZV-759b",
+			"name": "Vulcan",
+			"cogc": "ADVERTISING_METALLURGY",
+			"resources": {
+				"H": 5.26,
+				"FEO": 35.4
+			}
+		},
+		{
+			"id": "SE-110d",
+			"name": "SE-110d",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"resources": {
+				"AMM": 0.91,
+				"FEO": 38.85
+			}
+		},
+		{
+			"id": "KW-358c",
+			"name": "Arrakis",
+			"cogc": "ADVERTISING_METALLURGY",
+			"resources": {
+				"FEO": 33.15,
+				"SIO": 38.56
+			}
+		},
+		{
+			"id": "ZV-896d",
+			"name": "ZV-896d",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"resources": {}
+		},
+		{
+			"id": "SE-648a",
+			"name": "SE-648a",
+			"cogc": "ADVERTISING_METALLURGY",
+			"resources": {
+				"LIO": 26.58,
+				"HE": 3.18,
+				"H2O": 1.28
+			}
+		},
+		{
+			"id": "KI-439b",
+			"name": "KI-439b",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"resources": {
+				"AMM": 2.21,
+				"LIO": 27.63,
+				"HAL": 18.22
+			}
+		},
+		{
+			"id": "WU-070b",
+			"name": "WU-070b",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"resources": {
+				"SIO": 52.12
+			}
+		},
+		{
+			"id": "YK-005d",
+			"name": "Halcyon",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"resources": {
+				"HAL": 17.85,
+				"CLI": 17.24,
+				"MGS": 2.58
+			}
+		},
+		{
+			"id": "IY-206j",
+			"name": "IY-206j",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"resources": {
+				"BRM": 35.98,
+				"HE": 10.07
+			}
+		},
+		{
+			"id": "ZV-194c",
+			"name": "ZV-194c",
+			"cogc": "ADVERTISING_METALLURGY",
+			"resources": {
+				"FEO": 33.6,
+				"O": 0.77
+			}
+		},
+		{
+			"id": "LS-934b",
+			"name": "LS-934b",
+			"cogc": "ADVERTISING_METALLURGY",
+			"resources": {
+				"FEO": 41.21,
+				"SIO": 33.15
+			}
+		},
+		{
+			"id": "BN-908b",
+			"name": "Rhenos Pater",
+			"cogc": "ADVERTISING_METALLURGY",
+			"resources": {
+				"REO": 17.06
+			}
+		}
+	]
+}
