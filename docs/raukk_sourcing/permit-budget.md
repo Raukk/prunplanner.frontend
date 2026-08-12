@@ -370,6 +370,40 @@ Only LBH and LSE fell short of 5 %. One extra PP2 for each was added to the IA-1
 
 **BDE and BTA are not produced at all** — the gate needs none of either, so any repair stock is new production and needs a target quantity. BDE is `PP1#150xPE=>1xBDE` and BTA is `PP1#1xFE 50xPE=>1xBTA`, both cheap in inputs since PE is 11.6 per unit. TRU and the R-fabs are bought, as agreed.
 
+## Buy list, settled
+
+Everything decided to buy rather than make, at 15 days. Total roughly **14.0 M per gate, 933 k per day**.
+
+| Reason | Items | Cost per gate |
+| --- | --- | --- |
+| Gases, deep markets | H 24,929 · HE 1,457 · N 3,018 · AMM 40 | 3,517,745 |
+| No market and no deposit | REO 3,376 at an assumed 2,000 | 6,752,000 |
+| Base would be under half full | ZIR 160 · TCO 301 · BRM 800 · SCR 30 · LES 4 · GAL 6 | 484,674 |
+| Shortfall from a trimmed base | ALO 2,826 · BER 1,403 · NE 2,291 · MGS 461 · LST 1,000 | 3,252,839 |
+| Too small to justify a building | S, and one of fourteen RE smelters | negligible |
+
+**NE is extracted, not bought**, despite being a gas: 10,880 per gate is 149 % of the entire monthly market. AJ-135e supplies it.
+
+**REO is the largest single line** and rests on an assumed 2,000 per unit. The public order book holds 2,870 units against a 30-day traded volume of 7, so this number is soft until a direct contract exists.
+
+## Intermediates: make, do not buy
+
+At a 5-day cadence PE and NA looked like obvious buys. At 15 days the building counts are a third of that and every candidate fails the 1.5 M per permit bar:
+
+| Item | Own production | Permits | Buy cost per gate | Per permit |
+| --- | --- | --- | --- | --- |
+| PE | 58x BMP | 3 | 12,620,777 | 4,206,926 |
+| PG | 120x POL | 5 | 27,592,802 | 5,518,560 |
+| FLX | 31x CHP | 2 | 3,639,120 | 1,819,560 |
+| NS | 10x CHP | 1 | 1,712,160 | 1,712,160 |
+| NA | co-product of the CL line | 0 | 175,298 | buying saves no buildings |
+
+NA is worth noting: it comes free alongside CL from `CHP#3xHAL 1xH2O=>2xNA 1xCL`, so buying it removes nothing.
+
+## Still to plan
+
+Chemistry 33 permits, the largest remaining block, anchored on SE-648b for its 42.16 H2O and 11.86 BER in the oxygen and steel system. Then agriculture, which should wait until the food industries and the DW and RAT consumable load are costed, since that upkeep is expected to be significant. Food industry worlds are recorded in [facts/cogc-worlds.json](facts/cogc-worlds.json).
+
 ## Verified extractor bases
 
 One single-permit base per top-5 extraction planet was created and saved in the GateBuilder empire on 2026-08-12, filled to the area limit, each with five Resource Extraction experts and the planet's RES COGC. All read 160.50 % efficiency in-app.
