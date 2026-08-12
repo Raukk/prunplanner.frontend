@@ -1,0 +1,427 @@
+{
+	"sourceDoc": "cadence-and-buy.md",
+	"cadenceDays": 5,
+	"pricesPulled": "2026-08-12",
+	"modelVerification": {
+		"note": "plans created and saved in the GateBuilder empire",
+		"baseCoreArea": 25,
+		"plans": [
+			{
+				"planet": "QJ-149c",
+				"name": "GATE INC carbon",
+				"url": "http://localhost:5173/plan/QJ-149c/5fa1d316-9751-42f6-8e67-cf5e2f41e7b2",
+				"qty": 30,
+				"expert": "Resource Extraction",
+				"appArea": "445/500",
+				"appEfficiency": "160.50"
+			},
+			{
+				"planet": "YI-715b",
+				"name": "GATE FRM grain",
+				"url": "http://localhost:5173/plan/YI-715b/be2f15fe-15e9-4204-a292-91aa92e7412f",
+				"qty": 12,
+				"expert": "Agriculture",
+				"appArea": "445/500",
+				"appEfficiency": "173.45"
+			},
+			{
+				"planet": "YK-649c",
+				"name": "GATE HYF hydroponics",
+				"url": "http://localhost:5173/plan/YK-649c/42821d8b-614d-44be-b9d6-0d1c7eec81fa",
+				"qty": 20,
+				"expert": "Agriculture",
+				"appArea": "443/500",
+				"appEfficiency": "160.50"
+			}
+		]
+	},
+	"constants": {
+		"cogc": 1.25,
+		"experts5": 1.284,
+		"fertilityFormula": "1 + f*(10/33), FRM and ORC only"
+	},
+	"cannotBuyAtCadence": {
+		"REO": "30d volume 7 units",
+		"NE": "149% of 30d volume",
+		"TAI": "292%",
+		"LIO": "89%",
+		"FEO": "54%"
+	},
+	"buyList": {
+		"H": 2891764,
+		"HE": 319083,
+		"N": 301498,
+		"SCR": 7200,
+		"AMM": 5400,
+		"LES": 3560,
+		"GAL": 1314,
+		"FE_small_consumers": 53568,
+		"totalPerGate": 3583387,
+		"perDay": 716677
+	},
+	"steel": {
+		"needPerGate": 4561,
+		"buyCost": 8665900,
+		"smeltFromBoughtInputs": 6476620,
+		"savingPerGate": 2189280,
+		"smes": 99.5,
+		"area": 2188,
+		"permits": 5,
+		"perPermitPerGate": 437856,
+		"buyShareOfMarket": "24% of 30d STL volume",
+		"feShareOfMarket": "19% of 30d FE volume"
+	},
+	"water": {
+		"planet": "SE-110c",
+		"perRigPerDay": 73,
+		"rigAreaWithHab": 13,
+		"threeSinglePermitBases": {
+			"rigs": 109,
+			"perDay": 7960,
+			"coversPercent": 54,
+			"permits": 3
+		},
+		"threeFullBases": {
+			"rigs": 225,
+			"perDay": 16431,
+			"coversPercent": 111,
+			"permits": 9
+		},
+		"fastFarmVariantInfeasible": "needs 25,229/day = 4,492 area, planet max 3,000"
+	},
+	"newPlanets": [
+		{
+			"id": "LS-231b",
+			"name": "Aratora",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"fertility": -1,
+			"resources": {
+				"SIO": 21.12,
+				"HE": 1.1,
+				"LST": 49.37,
+				"BTS": 5.37
+			}
+		},
+		{
+			"id": "ZV-896c",
+			"name": "Life",
+			"cogc": "ADVERTISING_AGRICULTURE",
+			"fertility": -1,
+			"resources": {
+				"GAL": 4.67,
+				"O": 14.68,
+				"MAG": 2.67
+			}
+		},
+		{
+			"id": "YK-649c",
+			"name": "Ganymede",
+			"cogc": "ADVERTISING_AGRICULTURE",
+			"fertility": -1,
+			"resources": {}
+		},
+		{
+			"id": "IA-335d",
+			"name": "IA-335d",
+			"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+			"fertility": -1,
+			"resources": {
+				"SCR": 2.15,
+				"BER": 12.24
+			}
+		},
+		{
+			"id": "SE-110b",
+			"name": "SE-110b",
+			"cogc": "ADVERTISING_AGRICULTURE",
+			"fertility": -1,
+			"resources": {
+				"SIO": 27.41,
+				"O": 1.6
+			}
+		},
+		{
+			"id": "KW-020d",
+			"name": "Kakrafoon Kappa",
+			"cogc": "ADVERTISING_AGRICULTURE",
+			"fertility": -1,
+			"resources": {
+				"BOR": 1.25,
+				"H": 0.74
+			}
+		}
+	],
+	"rawBuyCostIfEverythingPurchased": 68007587.4,
+	"perMaterial": [
+		{
+			"ticker": "BER",
+			"units": 10600,
+			"price": 990,
+			"cx": "CI1",
+			"cost": 10494000,
+			"vol30": 9958,
+			"supply": 2646,
+			"volCover": 0.939433962264151
+		},
+		{
+			"ticker": "ALO",
+			"units": 35654,
+			"price": 260,
+			"cx": "AI1",
+			"cost": 9270040,
+			"vol30": 671910,
+			"supply": 111525,
+			"volCover": 18.845290850956413
+		},
+		{
+			"ticker": "REO",
+			"units": 3376,
+			"price": 1980,
+			"cx": "AI1",
+			"cost": 6684480,
+			"vol30": 0,
+			"supply": 2870,
+			"volCover": 0
+		},
+		{
+			"ticker": "HAL",
+			"units": 19166,
+			"price": 347,
+			"cx": "NC1",
+			"cost": 6650602,
+			"vol30": 140308,
+			"supply": 100579,
+			"volCover": 7.320672023374726
+		},
+		{
+			"ticker": "O",
+			"units": 57280,
+			"price": 107,
+			"cx": "IC1",
+			"cost": 6128960,
+			"vol30": 353889,
+			"supply": 239917,
+			"volCover": 6.178229748603352
+		},
+		{
+			"ticker": "LIO",
+			"units": 11720,
+			"price": 366,
+			"cx": "AI1",
+			"cost": 4289520,
+			"vol30": 25264,
+			"supply": 71332,
+			"volCover": 2.1556313993174063
+		},
+		{
+			"ticker": "H2O",
+			"units": 73828,
+			"price": 57.9,
+			"cx": "AI1",
+			"cost": 4274641.2,
+			"vol30": 2590814,
+			"supply": 2857408,
+			"volCover": 35.09256650593271
+		},
+		{
+			"ticker": "NE",
+			"units": 10880,
+			"price": 374,
+			"cx": "AI1",
+			"cost": 4069120,
+			"vol30": 17029,
+			"supply": 20547,
+			"volCover": 1.5651654411764706
+		},
+		{
+			"ticker": "H",
+			"units": 24929,
+			"price": 116,
+			"cx": "IC1",
+			"cost": 2891764,
+			"vol30": 877093,
+			"supply": 247608,
+			"volCover": 35.18364154197922
+		},
+		{
+			"ticker": "CUO",
+			"units": 8711,
+			"price": 245,
+			"cx": "AI1",
+			"cost": 2134195,
+			"vol30": 68589,
+			"supply": 43148,
+			"volCover": 7.873837676500976
+		},
+		{
+			"ticker": "TIO",
+			"units": 5928,
+			"price": 347,
+			"cx": "NC1",
+			"cost": 2057016,
+			"vol30": 62049,
+			"supply": 56977,
+			"volCover": 10.467105263157896
+		},
+		{
+			"ticker": "SIO",
+			"units": 15343,
+			"price": 112,
+			"cx": "AI1",
+			"cost": 1718416,
+			"vol30": 181652,
+			"supply": 292313,
+			"volCover": 11.839405592126703
+		},
+		{
+			"ticker": "BTS",
+			"units": 2233,
+			"price": 599,
+			"cx": "CI1",
+			"cost": 1337567,
+			"vol30": 6739,
+			"supply": 13568,
+			"volCover": 3.0179131213613974
+		},
+		{
+			"ticker": "FEO",
+			"units": 11211,
+			"price": 110,
+			"cx": "NC1",
+			"cost": 1233210,
+			"vol30": 52148,
+			"supply": 76379,
+			"volCover": 4.651502988136651
+		},
+		{
+			"ticker": "TAI",
+			"units": 1800,
+			"price": 650,
+			"cx": "AI1",
+			"cost": 1170000,
+			"vol30": 1446,
+			"supply": 10899,
+			"volCover": 0.8033333333333333
+		},
+		{
+			"ticker": "AUO",
+			"units": 2740,
+			"price": 400,
+			"cx": "NC1",
+			"cost": 1096000,
+			"vol30": 35742,
+			"supply": 47770,
+			"volCover": 13.044525547445255
+		},
+		{
+			"ticker": "LST",
+			"units": 6471,
+			"price": 157,
+			"cx": "NC1",
+			"cost": 1015947,
+			"vol30": 104935,
+			"supply": 78489,
+			"volCover": 16.216195333024263
+		},
+		{
+			"ticker": "MGS",
+			"units": 1430,
+			"price": 250,
+			"cx": "NC1",
+			"cost": 357500,
+			"vol30": 32076,
+			"supply": 45163,
+			"volCover": 22.43076923076923
+		},
+		{
+			"ticker": "HE",
+			"units": 1457,
+			"price": 219,
+			"cx": "NC1",
+			"cost": 319083,
+			"vol30": 81745,
+			"supply": 83150,
+			"volCover": 56.105010295126974
+		},
+		{
+			"ticker": "N",
+			"units": 3018,
+			"price": 99.9,
+			"cx": "NC1",
+			"cost": 301498.2,
+			"vol30": 231937,
+			"supply": 520396,
+			"volCover": 76.85122597746852
+		},
+		{
+			"ticker": "TCO",
+			"units": 301,
+			"price": 754,
+			"cx": "CI1",
+			"cost": 226954,
+			"vol30": 649,
+			"supply": 2919,
+			"volCover": 2.1561461794019934
+		},
+		{
+			"ticker": "BRM",
+			"units": 800,
+			"price": 255,
+			"cx": "AI1",
+			"cost": 204000,
+			"vol30": 21253,
+			"supply": 29648,
+			"volCover": 26.56625
+		},
+		{
+			"ticker": "ZIR",
+			"units": 160,
+			"price": 410,
+			"cx": "AI1",
+			"cost": 65600,
+			"vol30": 22660,
+			"supply": 25759,
+			"volCover": 141.625
+		},
+		{
+			"ticker": "SCR",
+			"units": 30,
+			"price": 240,
+			"cx": "CI1",
+			"cost": 7200,
+			"vol30": 2969,
+			"supply": 3916,
+			"volCover": 98.96666666666667
+		},
+		{
+			"ticker": "AMM",
+			"units": 40,
+			"price": 135,
+			"cx": "CI1",
+			"cost": 5400,
+			"vol30": 165246,
+			"supply": 105237,
+			"volCover": 4131.15
+		},
+		{
+			"ticker": "LES",
+			"units": 4,
+			"price": 890,
+			"cx": "NC1",
+			"cost": 3560,
+			"vol30": 625,
+			"supply": 11753,
+			"volCover": 156.25
+		},
+		{
+			"ticker": "GAL",
+			"units": 6,
+			"price": 219,
+			"cx": "CI1",
+			"cost": 1314,
+			"vol30": 141216,
+			"supply": 39495,
+			"volCover": 23536
+		}
+	]
+}

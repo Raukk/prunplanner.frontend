@@ -417,5 +417,78 @@
 			"note": "one base is expected to be surplus for all oxygen demand"
 		}
 	},
-	"cogcIndustryBonus": 1.25
+	"cogcIndustryBonus": 1.25,
+	"additionalPlanets": {
+		"added": "2026-08-12",
+		"rows": [
+			{
+				"system": "LS-231b",
+				"name": "Aratora",
+				"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+				"fertility": -1,
+				"resources": {
+					"SIO": 21.12,
+					"HE": 1.1,
+					"LST": 49.37,
+					"BTS": 5.37
+				}
+			},
+			{
+				"system": "ZV-896c",
+				"name": "Life",
+				"cogc": "ADVERTISING_AGRICULTURE",
+				"fertility": -1,
+				"resources": {
+					"GAL": 4.67,
+					"O": 14.68,
+					"MAG": 2.67
+				}
+			},
+			{
+				"system": "YK-649c",
+				"name": "Ganymede",
+				"cogc": "ADVERTISING_AGRICULTURE",
+				"fertility": -1,
+				"resources": {}
+			},
+			{
+				"system": "IA-335d",
+				"name": "IA-335d",
+				"cogc": "ADVERTISING_RESOURCE_EXTRACTION",
+				"fertility": -1,
+				"resources": {
+					"SCR": 2.15,
+					"BER": 12.24
+				}
+			},
+			{
+				"system": "SE-110b",
+				"name": "SE-110b",
+				"cogc": "ADVERTISING_AGRICULTURE",
+				"fertility": -1,
+				"resources": {
+					"SIO": 27.41,
+					"O": 1.6
+				}
+			},
+			{
+				"system": "KW-020d",
+				"name": "Kakrafoon Kappa",
+				"cogc": "ADVERTISING_AGRICULTURE",
+				"fertility": -1,
+				"resources": {
+					"BOR": 1.25,
+					"H": 0.74
+				}
+			}
+		],
+		"purpose": {
+			"ZV-896c": "HYF candidate",
+			"SE-110b": "HYF candidate",
+			"KW-020d": "HYF candidate",
+			"YK-649c": "HYF candidate, already in pool",
+			"IA-335d": "BER source",
+			"LS-231b": "BTS source, also LST 49.37"
+		}
+	}
 }
