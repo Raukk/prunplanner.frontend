@@ -86,6 +86,26 @@ H2O is extractable on 5 of the 24. `daily` is the per-extractor daily yield from
 
 Ice Station Alpha is the best water planet by a wide margin and is infertile, which makes it a pure hydroponics site. Nemesis is the only planet with both usable fertility and usable water.
 
+## Assigned sources
+
+### Oxygen: SE-648c
+
+Decided 2026-08-12. SE-648c covers all oxygen demand on its own.
+
+| | |
+| --- | --- |
+| COGC | RESOURCE_EXTRACTION, already active |
+| O | LIQUID, 34.06/day per extractor, concentration 0.487 |
+| Also carries | TIO 19.51/day, TCO 13.26/day |
+| Infrastructure | ADM, COGC, LM, WAR, no shipyard |
+| Environment | gravity 1.44, pressure 44.82, temperature -200.8, surface |
+
+O being LIQUID means RIG at 10 area rather than COL at 15. With the RES COGC bonus of 1.25 ([bonusCalculations.ts:251-252](../../src/features/planning/calculations/bonusCalculations.ts#L251-L252)) each RIG yields 42.6 O/day. A RIG plus its prorated habitation is 13 area, so a single-permit base of 500 area holds about 38 of them for roughly **1,600 O/day**, and the planet's 3 bases could reach about 4,800/day for 3 permits.
+
+Oxygen is consumed one unit per run by the FE, AL, SI, RE and TI recipes, so demand is broad but thin. One base here is almost certainly surplus.
+
+The TIO on the same planet is worth noting: TI is needed for ASE and ATA in the gate, and `SME#4xTIO 1xC 1xO 1xNA=>2xTI` needs both TIO and O, both of which SE-648c has under a RES COGC.
+
 ## Not recorded
 
 - The empire-wide permit budget.

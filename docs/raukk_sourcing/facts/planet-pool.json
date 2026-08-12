@@ -397,5 +397,25 @@
 				0.2
 			]
 		]
-	}
+	},
+	"assignedSources": {
+		"O": {
+			"planet": "SE-648c",
+			"decided": "2026-08-12",
+			"cogc": "RESOURCE_EXTRACTION active",
+			"resourceType": "LIQUID",
+			"extractor": "RIG",
+			"dailyPerExtractor": 34.06,
+			"dailyPerExtractorWithCogc": 42.58,
+			"concentration": 0.4866,
+			"areaPerRigIncludingHabitation": 13,
+			"approxOutputPerSinglePermitBase": 1600,
+			"alsoCarries": {
+				"TIO": 19.51,
+				"TCO": 13.26
+			},
+			"note": "one base is expected to be surplus for all oxygen demand"
+		}
+	},
+	"cogcIndustryBonus": 1.25
 }
