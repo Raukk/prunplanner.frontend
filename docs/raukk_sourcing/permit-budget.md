@@ -289,6 +289,54 @@ Two products were dropped as too small to justify a base and are bought instead:
 
 Deimos, Arrakis and KI-439d each need more than three bases, so they require the 6-base allowance.
 
+## Correction: habitation for the higher workforce tiers
+
+The area model originally counted only pioneers (HB1, 10 area per 100) and settlers (HB2, 12 per 100). Buildings staffed by technicians, engineers or scientists need HB3, HB4 and HB5 at 14, 16 and 18 area per 100, and those were being ignored. The app caught it: the first construction base came out at 628/500.
+
+Buildings whose area was understated:
+
+| Building | Was | Actually | Per single-permit base |
+| --- | --- | --- | --- |
+| PP4 | 40.0 | **50.4** | 9 |
+| PP3 | 34.4 | **40.0** | 11 |
+| AML | 45.0 | **52.6** | 9 |
+| EEP | 100.0 | **116.8** | 4 |
+| AAF | 50.0 | **60.0** | 7 |
+| APF | 40.0 | **51.6** | 9 |
+| TNP | 30.0 | **41.2** | 11 |
+| ASM | 34.0 | **44.2** | 10 |
+| LAB | 27.4 | **37.2** | 12 |
+| SD, SE, SL, ELP, ECA, MCA, SCA, CLR | various | +2 to +7 each | |
+
+Extraction and the metallurgy smelters are unaffected: EXT, RIG, COL, INC, SME, GF, FS, HYF and the prefab plants PP1, PP2 and WEL are staffed by pioneers and settlers only. Every base already built came in under 500 in-app, so none of them needs revisiting.
+
+## Corrected permit budget
+
+Two corrections landed together: habitation above, which raises area, and the per-COGC faction bonuses from the 2026-08-12 faction table, which were previously only applied to metallurgy and resource extraction. The second outweighs the first.
+
+| COGC | Permits at 15 days | Faction applied |
+| --- | --- | --- |
+| METALLURGY | 32 | NEO 4 % |
+| CHEMISTRY | 32 | No faction 4 % |
+| CONSTRUCTION | 24 | NEO 6 % |
+| RESOURCE_EXTRACTION | 12 | No faction 4 % |
+| MANUFACTURING | 8 | Castillo-Ito 10 % |
+| ELECTRONICS | 7 | Antares 10 % |
+| AGRICULTURE | 4 | Insitor 6 % |
+| **Production** | **119** | |
+| **Extraction** | **23** | |
+| **Total** | **142** | was 168 |
+
+| Gate every | Total permits | Players at 21 |
+| --- | --- | --- |
+| 10 days | 199 | 10 |
+| **15 days** | **142** | **7** |
+| 20 days | 114 | 6 |
+| 25 days | 97 | 5 |
+| 30 days | 85 | 5 |
+
+A 15-day cadence is **7 players** rather than the 8 estimated earlier, and 100 permits now buys roughly a 22-day cadence rather than 30.
+
 ## Verified extractor bases
 
 One single-permit base per top-5 extraction planet was created and saved in the GateBuilder empire on 2026-08-12, filled to the area limit, each with five Resource Extraction experts and the planet's RES COGC. All read 160.50 % efficiency in-app.
