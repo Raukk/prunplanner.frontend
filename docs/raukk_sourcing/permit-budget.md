@@ -108,3 +108,23 @@ Notes on the specific questions asked:
 - **Bathys XG-452b covers all water alone** at 49.67/day, better than Ice Station Alpha's 45.5. 62 rigs, 806 area, 2 bases. Ice Station Alpha is not needed for water at 15 days.
 - **REO is bought at an assumed 2,000/unit**, 3,376 units per gate = 6,752,000 ȼ, pending a direct contract with one of the order-book sellers. The public book holds 2,870 units against asks of 1,980 to 2,000, so a contract is the only route at volume.
 - The REO planets found in search are all at infinite exchange distance, so they stay excluded.
+
+## Verified extractor bases
+
+One single-permit base per top-5 extraction planet was created and saved in the GateBuilder empire on 2026-08-12, filled to the area limit, each with five Resource Extraction experts and the planet's RES COGC. All read 160.50 % efficiency in-app.
+
+| Planet | Base | Area | Output per day | Bases needed at 15 days |
+| --- | --- | --- | --- | --- |
+| Bathys XG-452b | 36x RIG H2O | 495/500 | 2,870 | 2 |
+| SE-648c | 36x RIG O | 495/500 | 1,968 | 2 |
+| Nascent QJ-149c | 15x EXT ALO | 490/500 | 701 | 4 |
+| KI-439b | 15x EXT HAL | 490/500 | 438 | 3 |
+| IA-335d | 15x EXT BER | 490/500 | 295 | 3 |
+
+**Correction to the building sizes:** EXT carries 60 pioneers, not 30, so with habitation it is 31 area and only **15 fit** a single-permit base. COL carries 50 pioneers, 20 area, 23 per base. RIG is 30 pioneers, 13 area, 36 per base. The permit totals elsewhere in this doc used the real workforce figures and are unaffected; only the first attempt at these plans was oversized, at 525/500, and has been corrected.
+
+These five materials come to 14 permits of the 33 for extraction.
+
+## Open, pending better planets
+
+CUO, TIO and LIO are placeholders. KI-840c for copper is a CHEM COGC world so it loses the 1.25 extraction bonus, and better worlds are being sought for all three.
