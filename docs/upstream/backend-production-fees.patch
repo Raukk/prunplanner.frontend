@@ -1,0 +1,100 @@
+diff --git a/backend/gamedata/api/serializer.py b/backend/gamedata/api/serializer.py
+index cf918db..63ec20a 100644
+--- a/backend/gamedata/api/serializer.py
++++ b/backend/gamedata/api/serializer.py
+@@ -10,6 +10,7 @@ from gamedata.models import (
+     GamePlanetCOGCProgram,
+     GamePlanetCOGCProgramChoices,
+     GamePlanetInfrastructureReport,
++    GamePlanetProductionFee,
+     GamePlanetResource,
+     GameRecipe,
+     GameRecipeInput,
+@@ -88,6 +89,12 @@ class GamePlanetResourceSerializer(serializers.ModelSerializer):
+         fields = ['resource_type', 'factor', 'daily_extraction', 'material_ticker', 'max_daily_extraction']
+ 
+ 
++class GamePlanetProductionFeeSerializer(serializers.ModelSerializer):
++    class Meta:
++        model = GamePlanetProductionFee
++        fields = ['category', 'workforce_level', 'fee_amount', 'fee_currency']
++
++
+ class GamePlanetCOGCProgramSerializer(serializers.ModelSerializer):
+     class Meta:
+         model = GamePlanetCOGCProgram
+@@ -97,6 +104,7 @@ class GamePlanetCOGCProgramSerializer(serializers.ModelSerializer):
+ class GamePlanetSerializer(serializers.ModelSerializer):
+     resources = GamePlanetResourceSerializer(many=True, read_only=True)
+     cogc_programs = GamePlanetCOGCProgramSerializer(many=True, read_only=True)
++    production_fees = GamePlanetProductionFeeSerializer(many=True, read_only=True)
+ 
+     active_cogc_program_type = serializers.CharField(read_only=True)
+ 
+@@ -122,6 +130,7 @@ class GamePlanetSerializer(serializers.ModelSerializer):
+             'cogc_program_status',
+             'resources',
+             'cogc_programs',
++            'production_fees',
+             'active_cogc_program_type',
+         ]
+ 
+diff --git a/backend/gamedata/models/game_planet.py b/backend/gamedata/models/game_planet.py
+index 0d0949f..c9d70b6 100644
+--- a/backend/gamedata/models/game_planet.py
++++ b/backend/gamedata/models/game_planet.py
+@@ -27,7 +27,7 @@ def queryset_gameplanet() -> QuerySet:
+         .values('program_type')[:1]
+     )
+ 
+-    return GamePlanet.objects.prefetch_related('cogc_programs', 'resources').annotate(
++    return GamePlanet.objects.prefetch_related('cogc_programs', 'resources', 'production_fees').annotate(
+         active_cogc_program_type=Subquery(active_program_sub)
+     )
+ 
+diff --git a/backend/tests/gamedata/conftest.py b/backend/tests/gamedata/conftest.py
+index df271d3..5f9d976 100644
+--- a/backend/tests/gamedata/conftest.py
++++ b/backend/tests/gamedata/conftest.py
+@@ -48,6 +48,11 @@ def planet_factory(**kwargs):
+     return lambda **kwargs: baker.make('gamedata.GamePlanet', make_m2m=True, **kwargs)
+ 
+ 
++@pytest.fixture()
++def production_fee_factory(**kwargs):
++    return lambda **kwargs: baker.make('gamedata.GamePlanetProductionFee', **kwargs)
++
++
+ @pytest.fixture()
+ def building_cost_factory(**kwargs):
+     return lambda **kwargs: baker.make('gamedata.GameBuildingCost', **kwargs)
+diff --git a/backend/tests/gamedata/test_gamedata_api.py b/backend/tests/gamedata/test_gamedata_api.py
+index 2f78657..d16092f 100644
+--- a/backend/tests/gamedata/test_gamedata_api.py
++++ b/backend/tests/gamedata/test_gamedata_api.py
+@@ -58,6 +58,25 @@ class TestGamePlanetViewSet:
+         assert response.status_code == 200
+         assert response.data['planet_natural_id'] == planet_natural_id
+ 
++    def test_retrieve_production_fees(self, api_client, planet_factory, production_fee_factory):
++        planet_natural_id = 'OT-580b'
++        planet = planet_factory(planet_natural_id=planet_natural_id)
++        production_fee_factory(
++            planet=planet,
++            category='METALLURGY',
++            workforce_level='PIONEER',
++            fee_amount=50.0,
++            fee_currency='AIC',
++        )
++
++        url = reverse('data:planet-detail', kwargs={'planet_natural_id': planet_natural_id})
++        response = api_client.get(url)
++
++        assert response.status_code == 200
++        assert response.data['production_fees'] == [
++            {'category': 'METALLURGY', 'workforce_level': 'PIONEER', 'fee_amount': 50.0, 'fee_currency': 'AIC'}
++        ]
++
+     def test_multiple(self, api_client, planet_factory):
+         planet_natural_ids = ['OT-580b', 'ZV-759b', 'EW-688c']
+ 
