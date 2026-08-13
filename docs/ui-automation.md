@@ -74,6 +74,14 @@ await page.locator('input[max="5"]').nth(order.indexOf("Metallurgy")).fill("5");
 
 Always `fill()` then `press("Enter")`, and wait ~1.5 s: the plan recalculates on change.
 
+**Guard the expert lookup.** `order.indexOf(name)` returning -1 feeds `nth(-1)` to Playwright, which silently matches nothing rather than throwing. The plan then saves with no experts and reads 132.50 % instead of 160.50 %, which is easy to miss in a long batch. Throw on -1.
+
+## Undoing a bad batch
+
+Plans are deleted through the API, not the UI, when you have the UUIDs: `DELETE /planning/plan/<uuid>/` with the bearer token ([planData.api.ts:149-151](../src/features/api/planData.api.ts#L149-L151)). Returns 204. This is far faster than clicking through Management, and it is the only practical way to remove a batch whose plans share names with the ones you want to keep.
+
+Save the created URL for every plan a script makes. A batch that ran against the wrong input file is otherwise very hard to unpick.
+
 ## Plans
 
 - New plan: `/plan/<planetNaturalId>`. Existing: `/plan/<planetNaturalId>/<planUuid>`.
