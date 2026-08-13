@@ -404,6 +404,33 @@ NA is worth noting: it comes free alongside CL from `CHP#3xHAL 1xH2O=>2xNA 1xCL`
 
 Chemistry 33 permits, the largest remaining block, anchored on SE-648b for its 42.16 H2O and 11.86 BER in the oxygen and steel system. Then agriculture, which should wait until the food industries and the DW and RAT consumable load are costed, since that upkeep is expected to be significant. Food industry worlds are recorded in [facts/cogc-worlds.json](facts/cogc-worlds.json).
 
+## Build-out complete except consumables
+
+124 plans in the GateBuilder empire as of 2026-08-12, one permit each, covering every material the gate needs except the workforce consumables. No duplicate names, every plan has five experts set, and no base exceeds its area.
+
+| COGC | Permits |
+| --- | --- |
+| CHEMISTRY | 34 |
+| METALLURGY | 29 |
+| CONSTRUCTION | 25 |
+| RESOURCE_EXTRACTION | 14 |
+| MANUFACTURING | 10 |
+| ELECTRONICS | 8 |
+| AGRICULTURE | 4 |
+| **Total** | **124** |
+
+1,907 buildings across 56 planets. Two planets need the 6-base allowance: KI-439d with 5 forge bases and KW-358c with 4 glass bases.
+
+The 124 is below the 142 modelled because extraction is 14 permits of plans rather than 23 of bases: a planet needing four identical extractor bases holds one plan and is cloned. Counting clones, extraction is 23 and the total is 133 bases, against the 142 estimate; the difference is packing several small lines into shared bases.
+
+Agriculture collapsed to **4 bases, all HYF making HCP**. Choosing hydroponic carbon removed GRN and MAI from the tree entirely, so no farm is required and Verdant, the only planet in the pool that farms above break-even, is not needed.
+
+## Consumables, not yet planned
+
+The one block left. The 124 plans carry a workforce of **48,325 pioneers, 35,930 settlers, 17,270 technicians, 6,040 engineers and 340 scientists**, and every one of them eats.
+
+Deferred by decision on 2026-08-12 until the rest was laid out, because the load scales with the final base count and could not be sized before it was known. Food industry worlds are recorded in [facts/cogc-worlds.json](facts/cogc-worlds.json).
+
 ## Verified extractor bases
 
 One single-permit base per top-5 extraction planet was created and saved in the GateBuilder empire on 2026-08-12, filled to the area limit, each with five Resource Extraction experts and the planet's RES COGC. All read 160.50 % efficiency in-app.
