@@ -431,6 +431,52 @@ The one block left. The 124 plans carry a workforce of **48,325 pioneers, 35,930
 
 Deferred by decision on 2026-08-12 until the rest was laid out, because the load scales with the final base count and could not be sized before it was known. Food industry worlds are recorded in [facts/cogc-worlds.json](facts/cogc-worlds.json).
 
+## Consumables, planned
+
+The workforce load was sized once the base count was final. 23 plans, 22 permits, built 2026-08-12.
+
+| COGC | Permits | Planets |
+| --- | --- | --- |
+| FOOD_INDUSTRIES | 11 | SE-110a, SB-838a, XH-668c, SE-052a |
+| AGRICULTURE | 4 | Life ZV-896c, Kakrafoon KW-020d |
+| MANUFACTURING | 3 | IA-158b, WU-308a |
+| CHEMISTRY, ELECTRONICS, CONSTRUCTION, METALLURGY | 1 each | WU-974c, LS-014c, IA-151a, KI-439d |
+
+The bulk is 264 food processors covering RAT 6,559/day, DW 6,895/day, FIM and COF.
+
+**Rations need no farm.** `FP#1xMAI 1xALG 1xVEG=>10xRAT` and HYF makes all three, so the whole ration chain runs on hydroponics.
+
+**HER is the only farm-grown item, and it is bought.** Demand is 295/day, driven not by KOM but by **FIM, the engineer food**, at `FP#2xRAT 1xHER=>2xFIM` and 423 FIM/day. That needs 76 FRM, which at Verdant's 108.07 % fertility is about two Verdant-equivalents, and Verdant holds 40 FRM across its three bases. It cannot be grown on anything in the pool.
+
+Buying HER costs **952,880 per day**, 14.3 M per gate, 7 % of monthly volume. That beats buying FIM outright at 1.235 M per day and removes the entire FRM block. GIN went the same way, its 60/day needing GRN from a farm.
+
+**Verdant is therefore not in the final plan at all**, neither for carbon nor for consumables.
+
+Also bought: ALE 173/day and VG 12/day, both orchard-dependent.
+
+## Water needs re-sizing
+
+Consumables draw **16,676 H2O/day**, more than triple the gate's own 4,922/day. Bathys at two bases and the trimmed water plan do not cover it. This is the one number in the plan known to be wrong and not yet fixed.
+
+## Final state
+
+174 plans in GateBuilder, 3,011 buildings, 65 planets, workforce 91,885 pioneers, 43,380 settlers, 18,450 technicians, 6,140 engineers, 340 scientists.
+
+| COGC | Plans |
+| --- | --- |
+| METALLURGY | 40 |
+| CHEMISTRY | 35 |
+| RESOURCE_EXTRACTION | 31 |
+| CONSTRUCTION | 26 |
+| MANUFACTURING | 14 |
+| FOOD_INDUSTRIES | 11 |
+| ELECTRONICS | 9 |
+| AGRICULTURE | 8 |
+
+Six planets exceed three bases and need the wider allowance: KI-439d, Deimos ZV-759c, ZV-896d and SE-110d at 6, QJ-149a and KW-358c at 4.
+
+Clones created through `POST /planning/plan/<uuid>/clone/` are named by the server as "<name> (Clone)" regardless of the name supplied, so several share a display name. Counts were verified against the intended totals and all 13 cloned plans are correct.
+
 ## Verified extractor bases
 
 One single-permit base per top-5 extraction planet was created and saved in the GateBuilder empire on 2026-08-12, filled to the area limit, each with five Resource Extraction experts and the planet's RES COGC. All read 160.50 % efficiency in-app.
