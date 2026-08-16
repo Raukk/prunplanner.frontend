@@ -838,6 +838,18 @@ export function raukkEccentricAnomaly(
  * downstream cares; it matters only when checking output against map
  * imagery, where the angles must be negated first.
  *
+ * ACCURACY: the phase carries 5 to 20 degrees of error today, measured
+ * against live maps. The epoch is ~4,720 real days back, which is 350
+ * revolutions for a slow body and 2,135 for a fast one, so a period
+ * error is multiplied by the revolution count before it reaches today;
+ * one part in 10^5 is 7.7 degrees for KI-439a. Periods come from
+ * five-significant-figure semi-major axes, so this cannot be improved
+ * without per-body phase corrections fitted to a timestamped
+ * observation. Good enough for separations, conjunction WINDOWS and
+ * anything averaged over an orbit; not good enough to say which side of
+ * an alignment two bodies are on right now. See `star-heat-damage.md`
+ * section 9.
+ *
  * @param {string} planetNaturalId Planet natural id
  * @param {number} atEpochMs Real time, in epoch milliseconds
  * @returns {{ xAu: number; yAu: number } | null} Position, null when

@@ -18,17 +18,47 @@
 			"KI-439a is just a tad AHEAD of KI-439d"
 		],
 		"chiralityCorroboration": "All four usable statements agree with 'ahead = decreasing map angle', which is the reflected frame the joint fit had already forced. This is independent of angle precision — only the signs are used — so it corroborates the chirality without leaning on the pixel reads at all.",
-		"bracket": {
-			"window": "2026-08-16T15:50Z to 16:41Z",
-			"widthMinutes": 51,
-			"derivation": "KI-439a passes KI-439d at 15:50Z and is AHEAD only after; ZV-759a passes Agamemnon at 16:41Z and is BEHIND only before. Two near-alignments in two different systems, closing from opposite directions.",
-			"standingAgainstTheFit": "The nine-angle fit optimum is 15:04Z at 5.8 deg RMS; the bracket midpoint 16:15Z scores 7.5 deg. Compatible — the bracket lies inside the fit's own error bar and is about four times tighter, because a near-alignment on a fast pair moves 4.7 to 5.6 deg/h and so resolves far better than a general angle."
+		"timing": "LIVE — the ruler pass describes the game within 5 minutes of the message that carried it, so roughly 2026-08-16T17:40Z, not the earlier screenshots.",
+		"variance": "All relations carry about the same uncertainty, roughly the on-screen radius of a body's circle: about 4-5 deg in the original captures and about 2 deg in the zoomed KI-439 capture.",
+		"withdrawnBracket": {
+			"claim": "2026-08-16T15:50Z to 16:41Z, 51 minutes, from the model's alignment crossings for KI-439a/d and ZV-759a/Agamemnon.",
+			"status": "WITHDRAWN — wrong, and wrong in an instructive way.",
+			"why": "It treated model crossing times as exact clock edges. A crossing is only as sharp as the model's phase, and KI-439a's phase carries about 23 deg, which at 5.6 deg/h is +-4 h on the crossing. The near-alignment idea is sound for measurement and backwards for prediction: a pair sitting within the model's own error of alignment is exactly where the predicted sign is least trustworthy."
 		},
-		"tension": "KI-439b/c reads about +10 deg anywhere in the bracket, against a pixel read of +3.4 deg. That pair drifts only 1.7 deg/h, making it both the weakest constraint and the easiest to call 'a tad' when it is not.",
-		"open": [
-			"Whether the ruler pass describes the SCREENSHOT state or the live game at the moment it was written. It matters: ZV-759a reads BEHIND Agamemnon only before 16:41Z, so a live reading taken later than that contradicts the model rather than confirming it.",
-			"Shiptronia is unidentified — no name-to-natural-id data exists in this repo, and it appears in no captured map. Until it is resolved the Beanironia statement is unusable."
-		]
+		"shiptronia": "Resolved to VH-331e. Beanironia confirmed as VH-331c, which independently ratifies the VH-331 ordering that radius ratios had left as the weakest identification in the set."
+	},
+	"phaseErrorBudget": {
+		"finding": "The model's phase today carries 5-20 deg of error, and it dominates every other term including reading angles by eye.",
+		"cause": "The epoch is ~4,720 real days back — 350 revolutions for KI-439d, 2,135 for KI-439a — so any relative period error is multiplied by the revolution count before it reaches today's phase. One part in 10^5 on KI-439a's period is 7.7 deg now. Periods derive from Kepler on five-significant-figure semi-major axes plus FIO star masses of unstated precision; KI-439a's stored axis has a half-ulp worth 23 deg on its own.",
+		"evidence": [
+			{
+				"pair": "VH-331 c/e",
+				"revolutions": 680,
+				"budgetDeg": 3.6,
+				"missDeg": 2.0
+			},
+			{
+				"pair": "KI-439 b/c",
+				"revolutions": 1186,
+				"budgetDeg": 9.6,
+				"missDeg": 8.6
+			},
+			{
+				"pair": "ZV-759 a/d",
+				"revolutions": 1659,
+				"budgetDeg": 11.2,
+				"missDeg": 7.5
+			},
+			{
+				"pair": "KI-439 a/d",
+				"revolutions": 2135,
+				"budgetDeg": 23.4,
+				"missDeg": 7.0
+			}
+		],
+		"reading": "Monotone in revolution count, slowest pair matching best. That is the signature of accumulated period error, and not what a wrong epoch or a wrong frame would produce.",
+		"epochUnaffected": "The fit scores 5.8 deg; its nearest rival across 2,160 days scores 36.0 deg. Ten or twenty degrees of drift cannot reach another minimum.",
+		"fix": "Per-body phase corrections from one timestamped map per system, offset = observed - trueAnomaly(t) with the reflection applied. Absorbs the accumulated error whatever its source. Two captures days apart would further separate a constant offset from a residual period error."
 	},
 	"frame": {
 		"convention": "angles below are measured counter-clockwise from screen +x with screen y flipped to point up, i.e. ordinary math convention on the image as displayed",
@@ -38,7 +68,7 @@
 	"identification": {
 		"KI-439": "map labels ARE the natural ids, so no assignment ambiguity",
 		"ZV-759": "Vulcan = ZV-759b, Deimos = ZV-759c, Agamemnon = ZV-759d, confirmed by orbit-radius ratios 1 : 1.56 : 2.97 : 4.72 against the asset's 1 : 1.56 : 2.85 : 4.44",
-		"VH-331": "Hortus, per the CX address and the STNS panel's MS VH-331. Promitor = VH-331a, Dreamerr Prime = VH-331b, Beanironia = VH-331c, Helion Prime = VH-331d, ordered by radius. The b radius ratio reads 1.22 against the asset's 1.37, the weakest identification here; VH-331 is also the system whose prose description the fit reproduces least well."
+		"VH-331": "Hortus, per the CX address and the STNS panel's MS VH-331. Promitor = VH-331a, Dreamerr Prime = VH-331b, Beanironia = VH-331c, Helion Prime = VH-331d, ordered by radius, plus Shiptronia = VH-331e outside the captured crop. Beanironia and Shiptronia were later confirmed directly, which ratifies the ordering; it had been the weakest identification in the set because the b radius ratio reads 1.22 against the asset's 1.37."
 	},
 	"observed": {
 		"ZV-759": {
@@ -75,7 +105,7 @@
 		"uniqueness": "one minimum under 25 deg across 2,160 real days scanned at 0.01 d, from before universe commissioning through today. The 5.7182-day KI-439b/d alias lattice is broken: three systems with incommensurate synodic periods share no other common solution over the universe's whole lifetime."
 	},
 	"conclusions": {
-		"commonEpochVerified": "MEAN_ANOMALY_AT_EPOCH = 0 for every body holds. This is the first real test of it — see the note in star-heat-damage.md on why the 74-flight log could not test it at all.",
+		"commonEpochVerified": "MEAN_ANOMALY_AT_EPOCH = 0 for every body holds, to the 5-20 deg the phase error budget allows and no tighter. This is the first real test of it — see the note in star-heat-damage.md on why the 74-flight log could not test it at all. A per-body offset smaller than the accumulated period error remains invisible, and a fitted phase correction would not distinguish the two.",
 		"absoluteEpochPinned": "orbital zero is 2013-09-13T21:45Z, 4,719.72 real days before the fitted capture instant, and no longer only modulo 5.7182 days",
 		"mapNotAtZeroAtCommissioning": "universe commissioning sits 2,719.72 real days after orbital zero, i.e. 148.92 game years of orbital pre-history. At that instant the four inner KI-439 bodies span 295 deg of true longitude, where a zero start would place all four at 0."
 	}
