@@ -13,3 +13,4 @@ pnpm-lock.yaml
 
 # dont prettify certain jsons
 fio_systemstars.json
+docs/fio-rest-api.swagger.json
