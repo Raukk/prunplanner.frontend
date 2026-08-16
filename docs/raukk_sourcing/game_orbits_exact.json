@@ -1,0 +1,124 @@
+{
+	"source": "Full-precision orbital elements pulled from the game client (DATA_DATA system payloads) on 2026-08-16. This is the SEED for re-cutting raukk_orbits.json, not a replacement for it — see notIngestedYet.",
+	"units": {
+		"semiMajorAxis": "metres, as served",
+		"assetEquivalent": "raukk_orbits.json stores round(semiMajorAxis / 1e6), i.e. thousands of km",
+		"inclination": "radians",
+		"note": "Planet axes come back as whole metres; the station's does not (46807737537.4384), which suggests planets are generated on a grid and stations placed off it."
+	},
+	"notIngestedYet": "Deliberately NOT merged into raukk_orbits.json. Two systems out of 4,576 would leave the asset silently mixed — some entries precise, some rounded, with nothing marking which — and that is worse than uniformly rounded. The ingest wants a full pull. The shipped asset is untouched and the damage model still reads it.",
+	"systems": {
+		"VH-331": {
+			"name": "Hortus",
+			"star": {
+				"type": "M",
+				"luminosity": 0.002038239286151226,
+				"mass": 5.451043501996131e29,
+				"massSol": 0.27405950236280197,
+				"position": {
+					"x": -123.46186721097881,
+					"y": -99.32084354422284,
+					"z": 92.70283805793765
+				}
+			},
+			"meteoroidDensity": 0.028372448858384858,
+			"bodies": [
+				{
+					"naturalId": "VH-331a",
+					"name": "Promitor",
+					"semiMajorAxis": 23844056000,
+					"eccentricity": 0.049147968666131456,
+					"inclination": -0.016744813171602306,
+					"periodRealDays": 2.21954
+				},
+				{
+					"naturalId": "VH-331b",
+					"name": "Dreamerr Prime",
+					"semiMajorAxis": 32602582000,
+					"eccentricity": 0.023471010333215497,
+					"inclination": -0.011715145290516885,
+					"periodRealDays": 3.54872
+				},
+				{
+					"naturalId": "HRT",
+					"name": "Hortus Station",
+					"type": "station",
+					"semiMajorAxis": 46807737537.4384,
+					"eccentricity": 0.031190710459171492,
+					"inclination": 0.005501308286269612,
+					"periodRealDays": 6.10478,
+					"note": "Stations carry real orbits. raukkOrbitalPeriodDays has always needed an orbitAuOverride for stations; this removes the need to guess one."
+				},
+				{
+					"naturalId": "VH-331c",
+					"name": "Beanironia",
+					"semiMajorAxis": 51012969000,
+					"eccentricity": 0.036814287290248326,
+					"inclination": 0.023364533105581693,
+					"periodRealDays": 6.94567
+				},
+				{
+					"naturalId": "VH-331d",
+					"name": "Helion Prime",
+					"semiMajorAxis": 79371143000,
+					"eccentricity": 0.031304842720569805,
+					"inclination": 0.04813456136183696,
+					"periodRealDays": 13.47992
+				},
+				{
+					"naturalId": "VH-331e",
+					"name": "Shiptronia",
+					"semiMajorAxis": 133487790000,
+					"eccentricity": 0.046375696510855074,
+					"inclination": 0.06339441718883457,
+					"periodRealDays": 29.40057
+				},
+				{
+					"naturalId": "VH-331f",
+					"name": "Odysseus",
+					"semiMajorAxis": 249330444000,
+					"eccentricity": 0.014897594814579754,
+					"inclination": -0.05228213014401388
+				},
+				{
+					"naturalId": "VH-331g",
+					"name": "Avalon",
+					"semiMajorAxis": 440950812000,
+					"eccentricity": 0.03799026342899789,
+					"inclination": 0.06725677766867641
+				},
+				{
+					"naturalId": "VH-331h",
+					"name": "Hypoxia",
+					"semiMajorAxis": 740148893000,
+					"eccentricity": 0.04325427260636346,
+					"inclination": 0.006028222907883179
+				},
+				{
+					"naturalId": "VH-331i",
+					"name": "Hydron",
+					"semiMajorAxis": 1422513475000,
+					"eccentricity": 0.017081928622663563,
+					"inclination": -0.03134478428132322
+				},
+				{
+					"naturalId": "VH-331j",
+					"semiMajorAxis": 2595494428000,
+					"eccentricity": 0.03666186497742478,
+					"inclination": 0.06400853837138083
+				}
+			]
+		}
+	},
+	"identificationsConfirmed": "Promitor a, Dreamerr Prime b, Beanironia c, Helion Prime d, Shiptronia e — every VH-331 name inferred from map radius ratios is confirmed outright. That was the weakest identification set in the map work and it is now closed.",
+	"periodShiftsFromExactElements": {
+		"comment": "phase shift over the 4,720-day baseline when the rounded axis is replaced by the exact one",
+		"VH-331a": -2.7,
+		"VH-331b": 9.21,
+		"VH-331c": 0.22,
+		"VH-331d": -0.34,
+		"VH-331e": 0.14,
+		"reading": "Real rounding error was far kinder than the half-ulp worst case: VH-331a stores 23844 against a true 23844.056, so 0.056 rather than 0.5. VH-331b drew badly at 0.418 and carries 9.2 deg. The 24 deg worst case quoted earlier was a bound, not an estimate — the realised errors here run 0.1 to 9 deg."
+	},
+	"nextLimit": "With exact axes and exact masses the next term is the gravitational constant the engine actually uses. A relative error of 1e-5 in GM is about 19 deg of phase for VH-331a over this baseline, so G is now the floor — and it is calibratable from any timed conjunction, since it enters every body of a system the same way."
+}

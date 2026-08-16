@@ -9,14 +9,28 @@
 		"note": "Chosen well: fast relative motion makes the crossing sharp, and VH-331c's own accumulated error is small, so nearly the whole correction lands on VH-331a — the single worst-constrained body in the set at 24 deg."
 	},
 	"prediction": {
-		"uncorrected": "2026-08-16T20:56Z +- 3.1 h, straight from the shipped model",
-		"corrected": "2026-08-16T21:50Z +- 1.4 h",
-		"watchWindow": "2026-08-16T20:25Z to 23:15Z",
-		"correctionMethod": "The original three-system capture was re-dated using ZV-759c/d — the lowest-error pair available, both slow bodies, 0.5 deg of accumulated phase between them — giving T1 = 15:18Z +- 0.9 h against the nine-angle fit's 15:04Z. VH-331 a/c read -27.4 deg there against a model -23.2 deg, so the pair carries a -4.2 deg correction, worth +0.9 h on the crossing.",
+		"FINAL": "2026-08-16T21:34Z — exact game elements, no observational correction of any kind",
+		"uncorrected": "2026-08-16T20:56Z +- 3.1 h, straight from the shipped rounded asset",
+		"corrected": "2026-08-16T21:50Z +- 1.4 h, rounded asset plus an observational correction (superseded)",
+		"watchWindow": "2026-08-16T20:25Z to 23:15Z, unchanged and still comfortably containing the final value",
+		"convergence": "The exact-element answer and the observationally-corrected one agree to 16 minutes by wholly independent routes — one fitted from map angles, one derived from game data with no observation involved. That agreement is the check that matters here.",
+		"correctionMethod": "SUPERSEDED. The original three-system capture was re-dated using ZV-759c/d — the lowest-error pair available, both slow bodies, 0.5 deg of accumulated phase between them — giving T1 = 15:18Z +- 0.9 h against the nine-angle fit's 15:04Z. VH-331 a/c read -27.4 deg there against a model -23.2 deg, so the pair carries a -4.2 deg correction, worth +0.9 h on the crossing.",
+		"errorBar": "Deliberately not quoted in minutes. With VH-331's elements exact the model's own phase error for this pair is negligible, so what remains is the epoch constant and the gravitational constant the engine uses — neither boundable from data in hand, and both measured by the observation itself. A 51-minute bracket was quoted earlier in this campaign and was wrong; the lesson taken is to state the point estimate and let the observation set the bar. Expect roughly an hour.",
 		"fallbackIfMissed": "2026-08-20T03:13Z, one synodic period later"
 	},
+	"whatTheObservationNowMeasures": "The target changed when the elements did. Timing this crossing no longer measures a per-pair phase correction — with exact elements there is nothing left to correct — it measures the GLOBAL clock: the epoch, convolved with the engine's G. At 4.6 deg/h a crossing timed to +-5 min pins that combination to +-5 min against a 4,720-day baseline. Separating epoch from G needs a second conjunction in a system with a different revolution count, because G enters through the revolution count and the epoch does not.",
+	"predictedGapDegExact": {
+		"comment": "Promitor relative to Beanironia from exact elements; negative = behind and closing",
+		"17:55Z": -15.1,
+		"19:00Z": -10.6,
+		"20:00Z": -6.5,
+		"21:00Z": -2.4,
+		"22:00Z": 1.8,
+		"23:00Z": 5.9,
+		"00:00Z": 10.1
+	},
 	"predictedGapDeg": {
-		"comment": "Promitor relative to Beanironia; negative = behind and closing, zero = aligned",
+		"comment": "SUPERSEDED — from the rounded asset plus the observational correction, kept for comparison",
 		"18:00Z": -16.3,
 		"19:00Z": -12.2,
 		"20:00Z": -8.1,
