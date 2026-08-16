@@ -8,6 +8,28 @@
 		"fittedMinusClockHours": -2.4,
 		"note": "The fit was given no date. It searched 2,160 days and returned one instant, and that instant fell within 2.4 h of the real clock — the screenshots having been taken some time before the message arrived. Landing on the correct day out of 2,160 candidates is the confirmation; the 2.4 h is inside what eyeball-read angles support but sits at the edge, which is exactly why the real capture time is still worth having."
 	},
+	"rulerRefinement": {
+		"source": "A second pass over the same maps with a ruler, given as four ahead/behind relations rather than numbers.",
+		"statements": [
+			"ZV-759a is a bit BEHIND Agamemnon (ZV-759d)",
+			"Hortus Station is about the same amount BEHIND Helion Prime (VH-331d)",
+			"Beanironia (VH-331c) is just a tad BEHIND Shiptronia",
+			"KI-439b is just a tad AHEAD of KI-439c",
+			"KI-439a is just a tad AHEAD of KI-439d"
+		],
+		"chiralityCorroboration": "All four usable statements agree with 'ahead = decreasing map angle', which is the reflected frame the joint fit had already forced. This is independent of angle precision — only the signs are used — so it corroborates the chirality without leaning on the pixel reads at all.",
+		"bracket": {
+			"window": "2026-08-16T15:50Z to 16:41Z",
+			"widthMinutes": 51,
+			"derivation": "KI-439a passes KI-439d at 15:50Z and is AHEAD only after; ZV-759a passes Agamemnon at 16:41Z and is BEHIND only before. Two near-alignments in two different systems, closing from opposite directions.",
+			"standingAgainstTheFit": "The nine-angle fit optimum is 15:04Z at 5.8 deg RMS; the bracket midpoint 16:15Z scores 7.5 deg. Compatible — the bracket lies inside the fit's own error bar and is about four times tighter, because a near-alignment on a fast pair moves 4.7 to 5.6 deg/h and so resolves far better than a general angle."
+		},
+		"tension": "KI-439b/c reads about +10 deg anywhere in the bracket, against a pixel read of +3.4 deg. That pair drifts only 1.7 deg/h, making it both the weakest constraint and the easiest to call 'a tad' when it is not.",
+		"open": [
+			"Whether the ruler pass describes the SCREENSHOT state or the live game at the moment it was written. It matters: ZV-759a reads BEHIND Agamemnon only before 16:41Z, so a live reading taken later than that contradicts the model rather than confirming it.",
+			"Shiptronia is unidentified — no name-to-natural-id data exists in this repo, and it appears in no captured map. Until it is resolved the Beanironia statement is unusable."
+		]
+	},
 	"frame": {
 		"convention": "angles below are measured counter-clockwise from screen +x with screen y flipped to point up, i.e. ordinary math convention on the image as displayed",
 		"chirality": "the map frame is a REFLECTION of the model's perifocal frame — equivalently the model advances every body in the sense opposite to the map. Consistent across all three systems, so it is a rendering convention and not a per-system quirk. Reflection preserves distance, so no separation, damage figure or shipping distance is affected; it matters only when comparing model output to map imagery.",
