@@ -784,8 +784,15 @@ export function raukkSynodicPeriodDays(
  * The universe places all planets at zero: position is
  * `meanMotion x t` with no per-planet offset, so the whole geometry is
  * a closed-form function of real time carrying no free parameters at
- * all. Verified against 74 timestamped community flights (r = 0.974,
- * see `star-heat-damage.md` section 9).
+ * all.
+ *
+ * Verified against three system maps captured at one instant — twelve
+ * bodies across ZV-759, VH-331 and KI-439, fitting nine relative angles
+ * to the single unknown capture time at 5.8 degrees RMS, which is the
+ * error of reading the angles off the images. The 74-flight log does
+ * NOT test this and never could: one pair gives one observable, and any
+ * per-planet offset enters it only as a difference that an epoch shift
+ * absorbs exactly. See `star-heat-damage.md` section 9.
  */
 const MEAN_ANOMALY_AT_EPOCH: number = 0;
 
@@ -824,6 +831,12 @@ export function raukkEccentricAnomaly(
  * additionally needs that orbital plane's orientation in the galactic
  * frame, which no data source carries; see `star-heat-damage.md`
  * section 9.
+ *
+ * This frame is a REFLECTION of the one the in-game system map draws,
+ * so bodies advance here in the sense opposite to the map. Reflection
+ * preserves distance and every caller wants a distance, so nothing
+ * downstream cares; it matters only when checking output against map
+ * imagery, where the angles must be negated first.
  *
  * @param {string} planetNaturalId Planet natural id
  * @param {number} atEpochMs Real time, in epoch milliseconds

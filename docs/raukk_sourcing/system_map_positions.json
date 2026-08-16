@@ -1,0 +1,60 @@
+{
+	"source": "In-game system map screenshots of three systems, captured in one sitting. Angles were read off the images by eye, so they carry a few degrees of error each; the user flagged that several bodies sit slightly ahead of or behind the alignments described in prose. That error is real and it does not matter: twelve bodies constrain a single unknown, and the fit residual below simply reports it.",
+	"capturedOn": "2026-08-16",
+	"capturedInstantFitted": "2026-08-16T15:04Z",
+	"capturedInstantFittedNote": "NOT observed — solved for, from the nine relative angles. Stated so it can be checked against the real capture time; the fit degrades to 7.0 deg RMS at +-1 h and 9.9 deg at +-2 h, so a capture time known to the minute either confirms this or refutes the whole reconstruction.",
+	"blindClockCheck": {
+		"sessionClockAtAnalysis": "2026-08-16T17:30Z",
+		"fittedMinusClockHours": -2.4,
+		"note": "The fit was given no date. It searched 2,160 days and returned one instant, and that instant fell within 2.4 h of the real clock — the screenshots having been taken some time before the message arrived. Landing on the correct day out of 2,160 candidates is the confirmation; the 2.4 h is inside what eyeball-read angles support but sits at the edge, which is exactly why the real capture time is still worth having."
+	},
+	"frame": {
+		"convention": "angles below are measured counter-clockwise from screen +x with screen y flipped to point up, i.e. ordinary math convention on the image as displayed",
+		"chirality": "the map frame is a REFLECTION of the model's perifocal frame — equivalently the model advances every body in the sense opposite to the map. Consistent across all three systems, so it is a rendering convention and not a per-system quirk. Reflection preserves distance, so no separation, damage figure or shipping distance is affected; it matters only when comparing model output to map imagery.",
+		"fitTreatment": "each system's absolute rotation is a free parameter, so only the three relative angles per system carry information; nine relative angles against one unknown (the capture instant)"
+	},
+	"identification": {
+		"KI-439": "map labels ARE the natural ids, so no assignment ambiguity",
+		"ZV-759": "Vulcan = ZV-759b, Deimos = ZV-759c, Agamemnon = ZV-759d, confirmed by orbit-radius ratios 1 : 1.56 : 2.97 : 4.72 against the asset's 1 : 1.56 : 2.85 : 4.44",
+		"VH-331": "Hortus, per the CX address and the STNS panel's MS VH-331. Promitor = VH-331a, Dreamerr Prime = VH-331b, Beanironia = VH-331c, Helion Prime = VH-331d, ordered by radius. The b radius ratio reads 1.22 against the asset's 1.37, the weakest identification here; VH-331 is also the system whose prose description the fit reproduces least well."
+	},
+	"observed": {
+		"ZV-759": {
+			"ZV-759a": 312.5,
+			"ZV-759b": 99.8,
+			"ZV-759c": 237.4,
+			"ZV-759d": 301.3
+		},
+		"VH-331": {
+			"VH-331a": 289.9,
+			"VH-331b": 99.8,
+			"VH-331c": 262.5,
+			"VH-331d": 41.7
+		},
+		"KI-439": {
+			"KI-439a": 187.4,
+			"KI-439b": 49.4,
+			"KI-439c": 52.8,
+			"KI-439d": 189.1
+		}
+	},
+	"fit": {
+		"model": "raukkPlanetPosition at the shipped epoch, unchanged",
+		"freeParameters": 1,
+		"constraints": 9,
+		"rmsDegrees": 5.8,
+		"perSystemRmsDegrees": { "ZV-759": 4.2, "VH-331": 5.9, "KI-439": 6.9 },
+		"sensitivityDegreesRms": {
+			"+-1h": 7.0,
+			"+-2h": 9.9,
+			"+-4h": 17.2,
+			"+-8h": 33.0
+		},
+		"uniqueness": "one minimum under 25 deg across 2,160 real days scanned at 0.01 d, from before universe commissioning through today. The 5.7182-day KI-439b/d alias lattice is broken: three systems with incommensurate synodic periods share no other common solution over the universe's whole lifetime."
+	},
+	"conclusions": {
+		"commonEpochVerified": "MEAN_ANOMALY_AT_EPOCH = 0 for every body holds. This is the first real test of it — see the note in star-heat-damage.md on why the 74-flight log could not test it at all.",
+		"absoluteEpochPinned": "orbital zero is 2013-09-13T21:45Z, 4,719.72 real days before the fitted capture instant, and no longer only modulo 5.7182 days",
+		"mapNotAtZeroAtCommissioning": "universe commissioning sits 2,719.72 real days after orbital zero, i.e. 148.92 game years of orbital pre-history. At that instant the four inner KI-439 bodies span 295 deg of true longitude, where a zero start would place all four at 0."
+	}
+}
