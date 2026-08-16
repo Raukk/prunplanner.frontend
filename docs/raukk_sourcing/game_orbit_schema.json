@@ -1,0 +1,129 @@
+{
+	"source": "Raw game client payloads (messageType DATA_DATA) for one planet and one system, captured 2026-08-16. Kept for the SCHEMA, not for Aurum — QJ-650 is not a system this campaign uses. Trimmed to the orbital and stellar fields; build costs, fees, influence and workforce blocks were dropped as irrelevant here.",
+	"headline": "The game serves full-precision orbital elements. Every element the damage model derives by hand is available exactly, and the rounding in raukk_orbits.json is the single dominant error in position prediction today.",
+	"orbitObject": {
+		"fields": [
+			"semiMajorAxis (metres, full float)",
+			"eccentricity (full float)",
+			"inclination (radians, full float)",
+			"rightAscension",
+			"periapsis"
+		],
+		"absent": "No mean anomaly, no epoch, no timestamp anywhere in either payload. Position at a given instant is therefore NOT derivable from this data alone — the clock still has to come from observation, which is what the three-system map fit supplies.",
+		"allZero": "rightAscension and periapsis are 0 for all four QJ-650 planets. That directly confirms the perifocal convention raukkPlanetPosition assumes (argument of periapsis along +x) and says ascending nodes share a direction. Combined with the absent mean anomaly, the schema itself is evidence for a global clock with M = 0 at epoch — the assumption the map fit verified observationally."
+	},
+	"assetRelationship": {
+		"finding": "raukk_orbits.json stores round(game.semiMajorAxis / 1e6), i.e. the axis rounded to integer thousands of km. Verified exactly on all four QJ-650 bodies: 62179706000 -> 62180, 112176114000 -> 112176, 203667298000 -> 203667, 633129656000 -> 633130.",
+		"eccentricity": "asset rounds to 4 decimals; game carries full float",
+		"starMass": "already fine — asset 2.815068698011492e30 against game 2.8150686328867583e30, agreeing to 2.3e-8, so mass is not a contributor",
+		"meteoroidDensity": "asset rounds to 6 significant figures (2.96813 vs 2.9681285287624033)",
+		"luminosity": "NOT the same quantity — the asset's 6164.86 is the derived Sunlight x orbitAU^2, the game's 4.508031745107532 is the star's own luminosity"
+	},
+	"phaseErrorRemoved": {
+		"comment": "Phase error today from axis rounding alone, against what remains once exact elements are used (star-mass residual only)",
+		"rows": [
+			{
+				"body": "VH-331a",
+				"revolutions": 2126,
+				"shippedDeg": 24.1,
+				"exactDeg": 0.0088
+			},
+			{
+				"body": "KI-439a",
+				"revolutions": 2135,
+				"shippedDeg": 23.4,
+				"exactDeg": 0.0088
+			},
+			{
+				"body": "ZV-759a",
+				"revolutions": 1659,
+				"shippedDeg": 11.2,
+				"exactDeg": 0.0069
+			},
+			{
+				"body": "KI-439b",
+				"revolutions": 1186,
+				"shippedDeg": 8.8,
+				"exactDeg": 0.0049
+			},
+			{
+				"body": "VH-331c",
+				"revolutions": 680,
+				"shippedDeg": 3.6,
+				"exactDeg": 0.0028
+			},
+			{
+				"body": "VH-331e",
+				"revolutions": 161,
+				"shippedDeg": 0.3,
+				"exactDeg": 0.0007
+			}
+		],
+		"reading": "Roughly a 2,700x reduction on the worst bodies. The per-body phase corrections logged as the thing to build are superseded: this is a data ingest, not a fitting campaign, and it fixes every body at once rather than only observed ones."
+	},
+	"otherFieldsWorthHaving": {
+		"inclination": "Present, and small — QJ-650 spans -1.47 to +0.91 degrees. This REFUTES the standing claim that no source carries an inclination. The coplanar assumption turns out to be right to within a degree or two rather than merely assumed, and it is now measurable per body instead of being the thing that made rho computable only by fiat.",
+		"radiation": "Per-planet scalar (6.22127e-22 on QJ-650a), alongside temperature, pressure and magneticField. Bears directly on the section 7.5 defect where heat and radiation are merged into one stellar term — that defect was recorded as measurable only by differencing shielded and unshielded BTF flights, and a per-planet radiation field is a second, independent handle on it.",
+		"starPosition": "x/y/z at full precision, against fio_systemstars.json's existing PositionX/Y/Z",
+		"planetMass": "mass and massEarth per planet, not currently carried anywhere"
+	},
+	"sample": {
+		"system": {
+			"naturalId": "QJ-650",
+			"name": "Aurum",
+			"star": {
+				"type": "F",
+				"luminosity": 4.508031745107532,
+				"mass": 2.8150686328867583e30,
+				"massSol": 1.415318568570517,
+				"position": {
+					"x": 431.74456302187934,
+					"y": -278.0846211285209,
+					"z": 77.6634046144572
+				}
+			},
+			"meteoroidDensity": 2.9681285287624033
+		},
+		"planets": [
+			{
+				"naturalId": "QJ-650a",
+				"semiMajorAxis": 62179706000,
+				"eccentricity": 0.027031688601088854,
+				"inclination": -0.01904133901818685,
+				"rightAscension": 0,
+				"periapsis": 0,
+				"orbitIndex": 0,
+				"sunlight": 35685.277,
+				"radiation": 6.22127e-22,
+				"temperature": 318.26352,
+				"pressure": 5.7702622,
+				"magneticField": 0.46643242
+			},
+			{
+				"naturalId": "QJ-650b",
+				"semiMajorAxis": 112176114000,
+				"eccentricity": 0.013248148366331518,
+				"inclination": -0.025700033237021812,
+				"rightAscension": 0,
+				"periapsis": 0
+			},
+			{
+				"naturalId": "QJ-650c",
+				"name": "Origo",
+				"semiMajorAxis": 203667298000,
+				"eccentricity": 0.04394031869695128,
+				"inclination": 0.00988814435520459,
+				"rightAscension": 0,
+				"periapsis": 0
+			},
+			{
+				"naturalId": "QJ-650d",
+				"semiMajorAxis": 633129656000,
+				"eccentricity": 0.012675879296486618,
+				"inclination": 0.01582050451942611,
+				"rightAscension": 0,
+				"periapsis": 0
+			}
+		]
+	}
+}
