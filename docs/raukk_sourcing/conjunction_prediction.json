@@ -1,0 +1,36 @@
+{
+	"source": "A prediction registered BEFORE the event, so the result cannot be rationalised afterwards. Predicts the next Promitor/Beanironia alignment and states the protocol that turns observing it into a phase correction.",
+	"registeredAt": "2026-08-16T17:55Z",
+	"pair": {
+		"fast": "VH-331a (Promitor), period 2.2195 real d",
+		"slow": "VH-331c (Beanironia), period 6.9457 real d",
+		"synodicRealDays": 3.2619,
+		"closingRateDegPerHour": 4.6,
+		"note": "Chosen well: fast relative motion makes the crossing sharp, and VH-331c's own accumulated error is small, so nearly the whole correction lands on VH-331a — the single worst-constrained body in the set at 24 deg."
+	},
+	"prediction": {
+		"uncorrected": "2026-08-16T20:56Z +- 3.1 h, straight from the shipped model",
+		"corrected": "2026-08-16T21:50Z +- 1.4 h",
+		"watchWindow": "2026-08-16T20:25Z to 23:15Z",
+		"correctionMethod": "The original three-system capture was re-dated using ZV-759c/d — the lowest-error pair available, both slow bodies, 0.5 deg of accumulated phase between them — giving T1 = 15:18Z +- 0.9 h against the nine-angle fit's 15:04Z. VH-331 a/c read -27.4 deg there against a model -23.2 deg, so the pair carries a -4.2 deg correction, worth +0.9 h on the crossing.",
+		"fallbackIfMissed": "2026-08-20T03:13Z, one synodic period later"
+	},
+	"predictedGapDeg": {
+		"comment": "Promitor relative to Beanironia; negative = behind and closing, zero = aligned",
+		"18:00Z": -16.3,
+		"19:00Z": -12.2,
+		"20:00Z": -8.1,
+		"21:00Z": -3.9,
+		"22:00Z": 0.2,
+		"23:00Z": 4.4,
+		"00:00Z": 8.7,
+		"01:00Z": 12.9
+	},
+	"protocol": {
+		"doNot": "Do not try to eyeball the moment of alignment. The pair sits within a 4 deg reading error of aligned for about 1.7 h, so 'it looks lined up now' carries roughly the uncertainty the prediction already has and adds nothing.",
+		"do": "Take two or three timestamped captures spaced about an hour apart across the window, noting the clock to the minute. Each yields a gap; the crossing follows by interpolation and needs no capture near the crossing itself.",
+		"why": "At 4.6 deg/h a crossing timed to +-15 min pins the VH-331 a/c relative phase to +-1.15 deg, against the 24 deg the model carries today — roughly a twentyfold improvement, and it transfers almost entirely onto VH-331a.",
+		"generalisation": "Conjunctions are the natural calibration event for this model: the observable is a sign change rather than an angle, and the quantity moves fastest exactly where it is being measured."
+	},
+	"falsifiability": "An observed crossing outside 20:25Z-23:15Z breaks the correction chain rather than the epoch — most likely the ZV-759c/d dating of the original capture, which rests on two bodies and a 0.9 h sigma. Outside about +-5 h it would instead indict the VH-331 identifications, which came from radius ratios and one confirmed pair."
+}
