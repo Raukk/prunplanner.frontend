@@ -1,0 +1,67 @@
+{
+	"source": "In-game STNS panels for the six CX stations, six buffers read in one sitting and screenshotted. `commissionedDaysAgo` is the panel's own 'Commissioned' field, which prints whole days and carries no hour.",
+	"observedOn": "2026-08-16",
+	"observedOnPrecision": "the date this was transcribed into the repo; the screenshot's own capture instant was not recorded, and every conclusion drawn from these figures slides one KI-439b/d alias step per 5.7182 real days of error in it",
+	"conventions": {
+		"commissionedDaysAgo": "whole real days before the observation instant, as printed",
+		"tolerance": "+-1 day, the user's stated confidence, wider than the panel's own rounding"
+	},
+	"universeStart": {
+		"realDaysAgo": 2000,
+		"toleranceDays": 1,
+		"basis": "the four founding exchanges all read 2,000 days, so the figure dates the universe rather than any one station",
+		"gameYears": 109.51,
+		"note": "109.51 = 2000 x 20 / 365.25, the age in game years the 20x ratio implies"
+	},
+	"stations": [
+		{
+			"name": "Benten Station",
+			"code": "BEN",
+			"address": "Benten Station (Benten)",
+			"governingEntity": "Castillo-Ito Mercantile",
+			"commissionedDaysAgo": 2000,
+			"founding": true
+		},
+		{
+			"name": "Moria Station",
+			"code": "MOR",
+			"address": "Moria Station (Moria)",
+			"governingEntity": "NEO Charter Exploration",
+			"commissionedDaysAgo": 2000,
+			"founding": true
+		},
+		{
+			"name": "Antares Station",
+			"code": "ANT",
+			"address": "Antares Station (Antares I)",
+			"governingEntity": "Antares Initiative",
+			"commissionedDaysAgo": 2000,
+			"founding": true
+		},
+		{
+			"name": "Hortus Station",
+			"code": "HRT",
+			"address": "Hortus Station (Hortus)",
+			"governingEntity": "Insitor Cooperative",
+			"commissionedDaysAgo": 2000,
+			"founding": true
+		},
+		{
+			"name": "Hubur Station",
+			"code": "HUB",
+			"address": "Hubur Station (Hubur)",
+			"governingEntity": "NEO Charter Exploration",
+			"commissionedDaysAgo": 1643,
+			"founding": false
+		},
+		{
+			"name": "Arclight Station",
+			"code": "ARC",
+			"address": "Arclight Station (Arclight)",
+			"governingEntity": "Castillo-Ito Mercantile",
+			"commissionedDaysAgo": 1643,
+			"founding": false
+		}
+	],
+	"corroboration": "The two later stations share a single distinct value, 1,643 days, 357 days after the founding four. Two tiers rather than one flat number is what says the field is a real commissioning timestamp and not a placeholder, which is the whole reason the 2,000 can be leaned on."
+}
