@@ -63,4 +63,5 @@ Test: the reader can act on the reply without a second pass, and cannot find a s
 - `src/features/wrapper/` — view data-loading orchestration
 - `docs/raukk_sourcing/star-heat-damage.md` — hull damage model (stellar/meteoroid/jump/landing) + `shippingDamage.ts`
 - `docs/raukk_sourcing/ship-sourcing.md` — account-wide fleet sourcing (fuel + ship repair bill) + `shipSourcing.ts`
+- `docs/fio-reference.md` — FIO/FNAR external resources: `rest.fnar.net` endpoint map + vendored swagger snapshot, GitLab project group, where this app touches FIO
 - `CLAUDE.sidecar.md` — editing rules for this file + decision log
